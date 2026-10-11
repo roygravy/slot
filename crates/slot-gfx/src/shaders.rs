@@ -73,7 +73,11 @@ float dot_weight(vec2 f, vec2 o, float bloom) {
 void main() {
     vec2 uv = u_uv.xy + v_uv * u_uv.zw;
     vec2 f = fract(uv * u_src);
-    vec3 c = texture2D(u_game, uv).rgb;
+    vec2 px = max((u_rect.zw * u_fbo) / (u_uv.zw * u_src), vec2(1.0));
+    vec2 d = fract(uv * u_src) - 0.5;
+    vec2 span = 0.5 - 0.5 / px;
+    vec2 sharp = (floor(uv * u_src) + (d - clamp(d, -span, span)) * px + 0.5) / u_src;
+    vec3 c = texture2D(u_game, sharp).rgb;
     bool inside = all(greaterThanEqual(uv, u_pic.xy)) && all(lessThan(uv, u_pic.zw));
     if (!inside) {
     } else if (u_mode > 3.5) {

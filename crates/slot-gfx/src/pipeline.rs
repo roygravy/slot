@@ -4,9 +4,8 @@ use crate::quad::Quad;
 use crate::shaders::{GAME_FRAG, RECT_VERT};
 use crate::surface::{GfxError, OUT_H, OUT_W};
 
-pub const SCALE: u32 = 3;
-pub const SRC_W: u32 = OUT_W / SCALE;
-pub const SRC_H: u32 = OUT_H / SCALE;
+pub const SRC_W: u32 = 240;
+pub const SRC_H: u32 = 160;
 
 pub const WHOLE_TEXTURE: [f32; 4] = [0.0, 0.0, 1.0, 1.0];
 
@@ -32,7 +31,7 @@ pub struct GamePass {
 impl GamePass {
     pub fn new() -> Result<Self, GfxError> {
         let prog = crate::shaders::program(RECT_VERT, GAME_FRAG)?;
-        let game = crate::gl::texture(SRC_W, SRC_H, gl::NEAREST, gl::CLAMP_TO_EDGE, gl::BGRA, None);
+        let game = crate::gl::texture(SRC_W, SRC_H, gl::LINEAR, gl::CLAMP_TO_EDGE, gl::BGRA, None);
         let paper = crate::gl::texture(
             1,
             1,

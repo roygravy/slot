@@ -130,7 +130,7 @@ fn the_open_cart_starts_as_the_shelf_cart_and_lands_where_the_mockup_has_it() {
     assert_eq!(
         shelf_cart(),
         Placed {
-            x: 180.0,
+            x: 140.0,
             y: 134.0,
             w: 360.0,
             h: 212.0

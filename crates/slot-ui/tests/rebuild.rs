@@ -23,7 +23,7 @@ fn the_message_sits_in_the_middle_of_the_panel_whatever_its_shape() {
         count: Some((TexId::from_raw(2), 117, 19)),
         fraction: 0.25,
     };
-    for (panel, middle) in [((720u32, 480u32), 240.0), ((640, 480), 270.0)] {
+    for (panel, middle) in [((720u32, 480u32), 240.0), ((640, 480), 240.0)] {
         set_shelf_slack((OUT_W * panel.1 / panel.0).saturating_sub(OUT_H) as f32);
         let mut out = Vec::new();
         screen.draw(&mut out);

@@ -4,7 +4,7 @@ use libloading::Library;
 
 use crate::surface::{GfxError, Surface};
 
-const FALLBACK_PANEL: (u32, u32) = (720, 480);
+const FALLBACK_PANEL: (u32, u32) = (640, 480);
 
 const FB0: &str = "/sys/class/graphics/fb0";
 
