@@ -20,6 +20,7 @@ pub enum Toast {
     ShaderOff,
     ShaderLcd3x,
     ShaderGrid,
+    ShaderGbaLcd,
     ShaderDot,
     ShaderSimpletex,
     CardUnwritable,
@@ -27,7 +28,7 @@ pub enum Toast {
 }
 
 impl Toast {
-    const FIXED: [Toast; 15] = [
+    const FIXED: [Toast; 16] = [
         Toast::StateSaved,
         Toast::StateLoaded,
         Toast::NeedsGpsp,
@@ -40,6 +41,7 @@ impl Toast {
         Toast::ShaderOff,
         Toast::ShaderLcd3x,
         Toast::ShaderGrid,
+        Toast::ShaderGbaLcd,
         Toast::ShaderDot,
         Toast::ShaderSimpletex,
         Toast::CardUnwritable,
@@ -84,6 +86,7 @@ impl Toast {
             Toast::ShaderOff => "Shader: Off",
             Toast::ShaderLcd3x => "Shader: LCD3x",
             Toast::ShaderGrid => "Shader: Grid",
+            Toast::ShaderGbaLcd => "Shader: GBA LCD",
             Toast::ShaderDot => "Shader: Dot",
             Toast::ShaderSimpletex => "Shader: Simpletex",
             Toast::CardUnwritable => "Can't write to SD card",

@@ -15,6 +15,10 @@ pub const FF_SPEEDS: [u8; 4] = [2, 3, 4, 6];
 
 pub const FF_SPEED_DEFAULT: u8 = 6;
 
+pub const AUTO_SLEEP_OPTIONS_SECS: [u16; 4] = [0, 30, 60, 300];
+pub const AUTO_SLEEP_DEFAULT_SECS: u16 = 30;
+const AUTHENTIC_LCD_PROFILE: &str = "lcd_profile=authentic-v4";
+
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct SlotState {
     pub cart: Option<String>,
@@ -38,6 +42,9 @@ pub struct SlotState {
     pub rewind: bool,
     pub gb_palettes: bool,
     pub gb_palette: GbPalette,
+    pub auto_sleep_secs: u16,
+    pub pixel_transparency: bool,
+    pub lcd_ghosting: bool,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -45,19 +52,21 @@ pub enum Shader {
     Off,
     Lcd3x,
     Grid,
+    GbaLcd,
     Dot,
     Simpletex,
 }
 
 impl Shader {
-    pub const GBA: [Shader; 4] = [Shader::Off, Shader::Lcd3x, Shader::Grid, Shader::Dot];
-    pub const GB: [Shader; 3] = [Shader::Off, Shader::Grid, Shader::Simpletex];
+    pub const GBA: [Shader; 3] = [Shader::Off, Shader::Grid, Shader::GbaLcd];
+    pub const GB: [Shader; 2] = [Shader::Off, Shader::Grid];
 
     pub fn name(self) -> &'static str {
         match self {
             Shader::Off => "off",
             Shader::Lcd3x => "lcd3x",
             Shader::Grid => "grid",
+            Shader::GbaLcd => "gba_lcd",
             Shader::Dot => "dot",
             Shader::Simpletex => "simpletex",
         }
@@ -68,6 +77,7 @@ impl Shader {
             Shader::Off,
             Shader::Lcd3x,
             Shader::Grid,
+            Shader::GbaLcd,
             Shader::Dot,
             Shader::Simpletex,
         ]
@@ -102,14 +112,17 @@ impl Default for SlotState {
             rumble: true,
             ff_speed: FF_SPEED_DEFAULT,
             ff_sound: false,
-            colour_correction: false,
-            shader_gba: Shader::Grid,
-            shader_gb: Shader::Simpletex,
+            colour_correction: true,
+            shader_gba: Shader::GbaLcd,
+            shader_gb: Shader::Grid,
             eject_save: true,
             turbo: true,
             rewind: true,
-            gb_palettes: false,
+            gb_palettes: true,
             gb_palette: GbPalette::DEFAULT,
+            auto_sleep_secs: AUTO_SLEEP_DEFAULT_SECS,
+            pixel_transparency: true,
+            lcd_ghosting: true,
         }
     }
 }
@@ -119,16 +132,43 @@ fn state_path(root: &Path) -> PathBuf {
 }
 
 pub fn read_slot_state(root: &Path) -> SlotState {
-    std::fs::read(state_path(root))
+    let Some(text) = std::fs::read(state_path(root))
         .ok()
         .and_then(|b| String::from_utf8(b).ok())
-        .and_then(|s| parse(&s))
-        .unwrap_or_default()
+    else {
+        return SlotState::default();
+    };
+    let Some(mut state) = parse(&text) else {
+        return SlotState::default();
+    };
+    if text
+        .lines()
+        .any(|line| line.trim() == AUTHENTIC_LCD_PROFILE)
+    {
+        return state;
+    }
+
+    // Preserve settings from the previous display profile while adding the
+    // new screen options. Apply the older defaults only to unprofiled installs.
+    let had_display_profile = text
+        .lines()
+        .any(|line| line.trim().starts_with("lcd_profile="));
+    if !had_display_profile {
+        state.colour_correction = true;
+        state.gb_palettes = true;
+        state.shader_gba = Shader::GbaLcd;
+        state.shader_gb = Shader::Grid;
+        if state.auto_sleep_secs == 0 {
+            state.auto_sleep_secs = AUTO_SLEEP_DEFAULT_SECS;
+        }
+    }
+    let _ = write_slot_state(root, &state);
+    state
 }
 
 pub fn write_slot_state(root: &Path, s: &SlotState) -> std::io::Result<()> {
     let text = format!(
-        "cart={}\ncart_platform={}\nbrightness={}\nblue_light={}\nvolume={}\nvolume_hp={}\nmuted={}\nmuted_hp={}\nclock_set={}\nutc_offset_min={}\nrumble={}\nff_speed={}\nff_sound={}\ncolour_correction={}\nshader_gba={}\nshader_gb={}\neject_save={}\nturbo={}\nrewind={}\ngb_palettes={}\ngb_palette={}\n",
+        "cart={}\ncart_platform={}\nbrightness={}\nblue_light={}\nvolume={}\nvolume_hp={}\nmuted={}\nmuted_hp={}\nclock_set={}\nutc_offset_min={}\nrumble={}\nff_speed={}\nff_sound={}\ncolour_correction={}\nshader_gba={}\nshader_gb={}\neject_save={}\nturbo={}\nrewind={}\ngb_palettes={}\ngb_palette={}\nauto_sleep_secs={}\npixel_transparency={}\nlcd_ghosting={}\n{}\n",
         s.cart.as_deref().unwrap_or(""),
         s.cart_platform.map_or(String::new(), platform_key),
         s.brightness,
@@ -149,7 +189,11 @@ pub fn write_slot_state(root: &Path, s: &SlotState) -> std::io::Result<()> {
         s.turbo as u8,
         s.rewind as u8,
         s.gb_palettes as u8,
-        s.gb_palette.core_name()
+        s.gb_palette.core_name(),
+        s.auto_sleep_secs,
+        s.pixel_transparency as u8,
+        s.lcd_ghosting as u8,
+        AUTHENTIC_LCD_PROFILE
     );
     atomic_write(&state_path(root), text.as_bytes())
 }
@@ -176,6 +220,9 @@ fn parse(text: &str) -> Option<SlotState> {
     let mut rewind = None;
     let mut gb_palettes = None;
     let mut gb_palette = None;
+    let mut auto_sleep_secs = None;
+    let mut pixel_transparency = None;
+    let mut lcd_ghosting = None;
     for line in text.lines().filter(|l| !l.is_empty()) {
         let Some((key, value)) = line.split_once('=') else {
             continue;
@@ -201,6 +248,9 @@ fn parse(text: &str) -> Option<SlotState> {
             "rewind" => rewind = flag(value),
             "gb_palettes" => gb_palettes = flag(value),
             "gb_palette" => gb_palette = GbPalette::parse(value),
+            "auto_sleep_secs" => auto_sleep_secs = auto_sleep_value(value),
+            "pixel_transparency" => pixel_transparency = flag(value),
+            "lcd_ghosting" => lcd_ghosting = flag(value),
             "shader_gb" => shader_gb = Shader::parse(value).filter(|s| Shader::GB.contains(s)),
             _ => {}
         }
@@ -229,6 +279,9 @@ fn parse(text: &str) -> Option<SlotState> {
         rewind: rewind.unwrap_or(fallback.rewind),
         gb_palettes: gb_palettes.unwrap_or(fallback.gb_palettes),
         gb_palette: gb_palette.unwrap_or(fallback.gb_palette),
+        auto_sleep_secs: auto_sleep_secs.unwrap_or(fallback.auto_sleep_secs),
+        pixel_transparency: pixel_transparency.unwrap_or(fallback.pixel_transparency),
+        lcd_ghosting: lcd_ghosting.unwrap_or(fallback.lcd_ghosting),
     })
 }
 
@@ -251,6 +304,13 @@ fn offset(value: &str) -> Option<i16> {
 
 fn ff_speed_value(value: &str) -> Option<u8> {
     value.parse().ok().filter(|n| FF_SPEEDS.contains(n))
+}
+
+fn auto_sleep_value(value: &str) -> Option<u16> {
+    value
+        .parse()
+        .ok()
+        .filter(|secs| AUTO_SLEEP_OPTIONS_SECS.contains(secs))
 }
 
 fn level(value: &str, max: u8) -> Option<u8> {

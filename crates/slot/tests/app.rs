@@ -1333,7 +1333,7 @@ fn the_open_cart_rests_over_the_shelf_with_its_lid_turned() {
     );
     let (shadow_i, s) = shadows[0];
     assert!(
-        (s[0] + s[2] / 2.0 - 360.0).abs() < 0.01 && (s[1] + s[3] / 2.0 - 140.0).abs() < 0.01,
+        (s[0] + s[2] / 2.0 - 320.0).abs() < 0.01 && (s[1] + s[3] / 2.0 - 140.0).abs() < 0.01,
         "the lid's shadow is not under it: {s:?}"
     );
     assert!(shadow_i < lid_i, "the lid's shadow is drawn over the lid");
@@ -1341,15 +1341,15 @@ fn the_open_cart_rests_over_the_shelf_with_its_lid_turned() {
     let [cancel, swap, choose] = f.legend;
     let at = |tex| tex_at(&out, tex).expect("a legend hint is missing").1;
     let seen = |w: u32| (w - HINT_EDGE) as f32;
-    assert_eq!(at(cancel.0), [174.0, 386.0, cancel.1 as f32, HINT_H as f32]);
+    assert_eq!(at(cancel.0), [134.0, 386.0, cancel.1 as f32, HINT_H as f32]);
     assert_eq!(
         at(swap.0)[0] + seen(swap.1) / 2.0,
-        360.0,
+        320.0,
         "Swap is off the panel's centre"
     );
     assert_eq!(
         at(choose.0)[0] + seen(choose.1),
-        546.0,
+        506.0,
         "Choose does not end at the cart's edge"
     );
     assert_eq!((at(swap.0)[1], at(choose.0)[1]), (386.0, 386.0));

@@ -98,7 +98,11 @@ fn the_screenshot_fills_the_canvas_and_is_letterboxed_by_the_game_pass() {
     assert_eq!((photo.x, photo.y), (0.0, 0.0));
     // The shot is drawn by the game pass, letterboxed 3:2 inside the 4:3 canvas.
     let want = OUT_W as f32 * PHOTO_H as f32 / PHOTO_W as f32;
-    assert!((slot_gfx::GAME_H - want).abs() <= 1.0, "game area is {}", slot_gfx::GAME_H);
+    assert!(
+        (slot_gfx::GAME_H - want).abs() <= 1.0,
+        "game area is {}",
+        slot_gfx::GAME_H
+    );
 }
 
 #[test]

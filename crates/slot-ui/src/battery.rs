@@ -1,8 +1,11 @@
+use std::sync::OnceLock;
+
 use slot_gfx::{Draw, TexId};
 use slot_power::{Battery, Charge};
 
 use crate::footer::Printed;
 use crate::hud::HUD_INK;
+use crate::icon::{icon_glyph_box, Icon};
 use crate::plate::HINT_H;
 
 pub const BOLT_PX: f32 = 18.0;
@@ -15,8 +18,7 @@ const NUB_H: f32 = 4.0;
 pub const WALL: f32 = 1.5;
 const GAP: f32 = 7.0;
 
-const BOLT_W: f32 = 14.0;
-const BOLT_H: f32 = 14.0;
+const BOLT_MAX_SIDE: f32 = 14.0;
 const BOLT_GAP: f32 = 5.0;
 const _: () = assert!(BOLT_GAP > 0.0);
 
@@ -49,7 +51,8 @@ pub fn draw_gauge(
         });
     };
 
-    let cx = x + BOLT_W + BOLT_GAP;
+    let (bolt_w, bolt_h) = bolt_size();
+    let cx = x + BOLT_MAX_SIDE + BOLT_GAP;
 
     rect(cx, y, GAUGE_W, WALL, out);
     rect(cx, y + GAUGE_H - WALL, GAUGE_W, WALL, out);
@@ -71,10 +74,10 @@ pub fn draw_gauge(
 
     if let (Charge::Charging, Some(tex)) = (b.charge, bolt) {
         out.push(Draw::Tex {
-            x,
-            y: y + (GAUGE_H - BOLT_H) / 2.0,
-            w: BOLT_W,
-            h: BOLT_H,
+            x: x + (BOLT_MAX_SIDE - bolt_w) / 2.0,
+            y: y + (GAUGE_H - bolt_h) / 2.0,
+            w: bolt_w,
+            h: bolt_h,
             tex,
             alpha: 1.0,
         });
@@ -101,4 +104,16 @@ pub fn draw_gauge(
             },
         });
     }
+}
+
+fn bolt_size() -> (f32, f32) {
+    static SIZE: OnceLock<(f32, f32)> = OnceLock::new();
+    *SIZE.get_or_init(|| {
+        let (w, h) = icon_glyph_box(Icon::Charging, BOLT_PX);
+        if w == 0 || h == 0 {
+            return (BOLT_MAX_SIDE, BOLT_MAX_SIDE);
+        }
+        let scale = (BOLT_MAX_SIDE / w as f32).min(BOLT_MAX_SIDE / h as f32);
+        (w as f32 * scale, h as f32 * scale)
+    })
 }

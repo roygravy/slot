@@ -140,7 +140,7 @@ fn the_open_cart_starts_as_the_shelf_cart_and_lands_where_the_mockup_has_it() {
     assert_eq!(
         board_at(1.0),
         Placed {
-            x: 174.0,
+            x: 134.0,
             y: 150.0,
             w: 372.0,
             h: 209.0
@@ -156,7 +156,7 @@ fn the_lid_leaves_level_and_rests_turned() {
     assert_eq!(
         rest,
         Placed {
-            x: 288.0,
+            x: 248.0,
             y: 30.0,
             w: 144.0,
             h: 81.0
@@ -212,8 +212,8 @@ fn the_lift_starts_where_the_slide_ends() {
 #[test]
 fn board_units_land_on_the_panel_at_one_and_a_half_times() {
     let board = board_at(1.0);
-    assert_eq!(on_board(board, 0.0, 0.0), (174.0, 150.0));
-    assert_eq!(on_board(board, 240.0, 135.0), (546.0, 359.0));
+    assert_eq!(on_board(board, 0.0, 0.0), (134.0, 150.0));
+    assert_eq!(on_board(board, 240.0, 135.0), (506.0, 359.0));
 }
 
 #[test]

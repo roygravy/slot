@@ -97,7 +97,19 @@ fn open_named(
         if !path.exists() {
             continue;
         }
-        match LibretroCore::open_with(path, &bios, &saves) {
+        // Gambatte reads this option during retro_init, so it has to exist
+        // before the core is initialized (setting it afterward is too late).
+        let opened = if core == Core::Gambatte {
+            LibretroCore::open_with_options(
+                path,
+                &bios,
+                &saves,
+                &[("gambatte_gb_bootloader", "enabled")],
+            )
+        } else {
+            LibretroCore::open_with(path, &bios, &saves)
+        };
+        match opened {
             Ok(mut opened) => {
                 apply_core_options(
                     &mut opened,
@@ -155,6 +167,68 @@ pub fn colour_option(which: Core, on: bool) -> Option<(&'static str, &'static st
             "gpsp_color_correction",
             if on { "enabled" } else { "disabled" },
         )),
+        Core::Gambatte => Some((
+            "gambatte_gbc_color_correction",
+            if on { "GBC only" } else { "disabled" },
+        )),
+    }
+}
+
+pub fn lcd_ghosting_option(which: Core, on: bool) -> (&'static str, &'static str) {
+    match which {
+        Core::Mgba => (
+            "mgba_interframe_blending",
+            if on { "lcd_ghosting" } else { "OFF" },
+        ),
+        Core::Gpsp => ("gpsp_frame_mixing", if on { "enabled" } else { "disabled" }),
+        Core::Gambatte => (
+            "gambatte_mix_frames",
+            if on { "lcd_ghosting" } else { "disabled" },
+        ),
+    }
+}
+
+fn gambatte_palette_name(palette: GbPalette) -> String {
+    let name = palette.core_name();
+    let base = name
+        .split(['↑', '↓', '←', '→'])
+        .next()
+        .unwrap_or(name)
+        .trim();
+    if name.starts_with("SGB ") {
+        let digits: String = name[4..]
+            .chars()
+            .filter(char::is_ascii_alphanumeric)
+            .collect();
+        return format!("SGB - {digits}");
+    }
+    match name {
+        "DMG Green" => "GB - DMG".to_string(),
+        "GB Pocket" => "GB - Pocket".to_string(),
+        "GB Light" => "GB - Light".to_string(),
+        _ => match base {
+            "Grayscale" | "GBC Gray" | "GBC Grayscale" => "GBC - Grayscale".to_string(),
+            "GBC Reverse" => "GBC - Inverted".to_string(),
+            "GBC Pale Yellow" => "GBC - Yellow".to_string(),
+            value if value.starts_with("GBC ") => {
+                format!("GBC - {}", value.trim_start_matches("GBC "))
+            }
+            _ => "GB - DMG".to_string(),
+        },
+    }
+}
+
+pub fn gb_palette_options(which: Core, palette: GbPalette) -> Vec<(&'static str, String)> {
+    match which {
+        Core::Mgba => vec![("mgba_gb_colors", palette.core_name().to_string())],
+        Core::Gambatte => vec![
+            ("gambatte_gb_colorization", "internal".to_string()),
+            (
+                "gambatte_gb_internal_palette",
+                gambatte_palette_name(palette),
+            ),
+        ],
+        Core::Gpsp => Vec::new(),
     }
 }
 
@@ -177,6 +251,8 @@ pub fn apply_core_options(
 ) {
     core.set_option(&format!("{}_frameskip", which.as_str()), "auto");
     if which == Core::Mgba {
+        let (key, value) = lcd_ghosting_option(which, true);
+        core.set_option(key, value);
         core.set_option("mgba_sgb_borders", "OFF");
         core.set_option("mgba_force_gbp", "ON");
         match palette {
@@ -196,10 +272,30 @@ pub fn apply_core_options(
         }
     }
     if which == Core::Gpsp {
+        let (key, value) = lcd_ghosting_option(which, true);
+        core.set_option(key, value);
         core.set_option("gpsp_serial", serial);
         core.set_option("gpsp_rtc_time_source", "system");
         if bios {
             core.set_option("gpsp_boot_mode", "bios");
+        }
+        if let Some((key, value)) = colour_option(which, colour) {
+            core.set_option(key, value);
+        }
+    }
+    if which == Core::Gambatte {
+        let (key, value) = lcd_ghosting_option(which, true);
+        core.set_option(key, value);
+        core.set_option("gambatte_gb_hwmode", "Auto");
+        core.set_option("gambatte_gb_bootloader", "enabled");
+        core.set_option("gambatte_gbc_color_correction_mode", "accurate");
+        core.set_option("gambatte_gbc_frontlight_position", "central");
+        if let Some(palette) = palette {
+            for (key, value) in gb_palette_options(which, palette) {
+                core.set_option(key, &value);
+            }
+        } else {
+            core.set_option("gambatte_gb_colorization", "auto");
         }
         if let Some((key, value)) = colour_option(which, colour) {
             core.set_option(key, value);

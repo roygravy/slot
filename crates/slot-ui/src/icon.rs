@@ -120,6 +120,34 @@ pub fn icon_face(icon: Icon, px: f32, colour: [u8; 3]) -> CartFace {
     haloed(&r.cov, r.w, r.h, colour)
 }
 
+pub fn icon_glyph_face(icon: Icon, px: f32, colour: [u8; 3]) -> CartFace {
+    let Some(font) = symbols_font() else {
+        return CartFace {
+            rgba: Vec::new(),
+            w: 0,
+            h: 0,
+        };
+    };
+    let (metrics, coverage) = font.rasterize(icon.glyph(), px);
+    haloed(
+        &coverage,
+        metrics.width as u32,
+        metrics.height as u32,
+        colour,
+    )
+}
+
+pub fn icon_glyph_box(icon: Icon, px: f32) -> (u32, u32) {
+    let Some(font) = symbols_font() else {
+        return (0, 0);
+    };
+    let metrics = font.metrics(icon.glyph(), px);
+    (
+        metrics.width as u32 + 2 * HALO_PX,
+        metrics.height as u32 + 2 * HALO_PX,
+    )
+}
+
 pub fn icon_box(px: f32) -> (u32, u32) {
     match raster(Icon::Volume, px) {
         Some(r) => (r.w + 2 * HALO_PX, r.h + 2 * HALO_PX),

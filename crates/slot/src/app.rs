@@ -9,16 +9,16 @@ use slot_power::{Battery, Charge, LedState, LidPolicy, Power};
 use slot_retro::LinkChannel;
 use slot_store::{
     format_stamp, read_slot_state, scan, write_slot_state, Cart, Core, GbPalette, Platform, Shader,
-    SlotState, StateEntry, StateRing, Theme, BLUE_LIGHT_MAX, BRIGHTNESS_MAX, FF_SPEEDS, RING_MAX,
-    VOLUME_MAX,
+    SlotState, StateEntry, StateRing, Theme, AUTO_SLEEP_OPTIONS_SECS, BLUE_LIGHT_MAX,
+    BRIGHTNESS_MAX, FF_SPEEDS, RING_MAX, VOLUME_MAX,
 };
 use slot_ui::{
-    board_from, board_zoom, draw_backdrop, draw_empty_slot, draw_footer, draw_slot_name,
-    draw_sticker, ease, grown, lid_at, lid_from, lift_of, on_board, shelf_cart_at, ClockPicker,
-    Draw, FfState, GbShell, Hud, HudKind, Icon, LinkBadge, Millis, Placed, Polaroids, PowerChoice,
-    QuickMenu, QuickMenuFaces, QuickRow, QuickValue, Refusal, Shelf, SlotChrome, TexId, Toast,
-    BOARD_W, BOARD_X, CART_W, CHIP_H, CHIP_U, CHIP_V, CHIP_W, HINT_EDGE, HINT_H, HOP_LIFT,
-    SHADOW_H, SHADOW_W, SOCKET_H, SOCKET_U, SOCKET_V, SOCKET_W, TURN_PAD,
+    board_from, board_zoom, cart_box, draw_backdrop, draw_empty_slot, draw_footer, draw_slot_name,
+    draw_sticker, ease, foot_y, grown, lid_at, lid_from, lift_of, on_board, shelf_cart_at,
+    ClockPicker, Draw, FfState, GbShell, Hud, HudKind, Icon, LinkBadge, Millis, Placed, Polaroids,
+    PowerChoice, QuickMenu, QuickMenuFaces, QuickRow, QuickValue, Refusal, Shelf, SlotChrome,
+    TexId, Toast, BOARD_W, BOARD_X, CART_W, CHIP_H, CHIP_U, CHIP_V, CHIP_W, HINT_EDGE, HINT_H,
+    HOP_LIFT, SHADOW_H, SHADOW_W, SOCKET_H, SOCKET_U, SOCKET_V, SOCKET_W, TURN_PAD,
 };
 
 use crate::audio::Sfx;
@@ -302,6 +302,7 @@ pub struct App {
     snapshot: Option<Box<dyn Snapshot>>,
     core: Core,
     colour_pending: Option<bool>,
+    lcd_ghosting_pending: Option<bool>,
     palette_live: bool,
     palette_pending: Option<GbPalette>,
     link_player: Option<u8>,
@@ -331,6 +332,7 @@ pub struct App {
     lift: f32,
     game_ready: bool,
     clock: f64,
+    last_activity: Millis,
     power: Option<Power>,
     dozed_at: Millis,
     woke_on_press: bool,
@@ -378,7 +380,8 @@ impl App {
         let shelves = shelves_of(carts);
         let shelf_at = shelves
             .iter()
-            .position(|(_, s)| !s.carts.is_empty())
+            .position(|(platform, _)| *platform == Platform::Gb)
+            .or_else(|| shelves.iter().position(|(_, s)| !s.carts.is_empty()))
             .unwrap_or(0);
         let state_writer = crate::state_writer::StateWriter::spawn();
         let card_failing = state_writer.card_failing();
@@ -427,6 +430,7 @@ impl App {
             snapshot: None,
             core: Core::default(),
             colour_pending: None,
+            lcd_ghosting_pending: None,
             palette_live: false,
             palette_pending: None,
             link_player: None,
@@ -456,6 +460,7 @@ impl App {
             lift: 1.0,
             game_ready: false,
             clock: 0.0,
+            last_activity: 0,
             power: None,
             dozed_at: 0,
             woke_on_press: false,
@@ -654,12 +659,15 @@ impl App {
             QuickRow::FastForwardSound => Some(QuickValue::flag(self.state.ff_sound)),
             QuickRow::ColourCorrection => Some(QuickValue::flag(self.state.colour_correction)),
             QuickRow::GbPalettes => Some(QuickValue::flag(self.state.gb_palettes)),
+            QuickRow::PixelTransparency => Some(QuickValue::flag(self.state.pixel_transparency)),
+            QuickRow::LcdGhosting => Some(QuickValue::flag(self.state.lcd_ghosting)),
             QuickRow::GbaShader => Some(shader_value(self.state.shader_gba)),
             QuickRow::GbShader => Some(shader_value(self.state.shader_gb)),
             QuickRow::Rumble => Some(QuickValue::flag(self.state.rumble)),
             QuickRow::EjectSave => Some(QuickValue::flag(self.state.eject_save)),
             QuickRow::Turbo => Some(QuickValue::flag(self.state.turbo)),
             QuickRow::Rewind => Some(QuickValue::flag(self.state.rewind)),
+            QuickRow::AutoSleep => Some(auto_sleep_value(self.state.auto_sleep_secs)),
             QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::Game => None,
         }
     }
@@ -932,6 +940,10 @@ impl App {
         [x / sw, y / sh, (x + w as f32) / sw, (y + h as f32) / sh]
     }
 
+    pub fn platform(&self) -> Platform {
+        self.platform
+    }
+
     pub fn may_load_state(&self) -> bool {
         !self.link_active()
     }
@@ -1051,6 +1063,14 @@ impl App {
         self.state.colour_correction
     }
 
+    pub fn pixel_transparency(&self) -> bool {
+        self.state.pixel_transparency
+    }
+
+    pub fn lcd_ghosting(&self) -> bool {
+        self.state.lcd_ghosting
+    }
+
     pub fn powering_off(&self) -> bool {
         self.powering_off
     }
@@ -1112,6 +1132,10 @@ impl App {
 
     pub fn take_colour_correction(&mut self) -> Option<bool> {
         self.colour_pending.take()
+    }
+
+    pub fn take_lcd_ghosting(&mut self) -> Option<bool> {
+        self.lcd_ghosting_pending.take()
     }
 
     pub fn gb_palette(&self) -> Option<GbPalette> {
@@ -1190,6 +1214,7 @@ impl App {
     }
 
     pub fn apply(&mut self, action: Action) {
+        self.last_activity = self.now();
         if self.power_menu.is_some() {
             match action {
                 Action::LidClose => return self.doze(),
@@ -1352,7 +1377,10 @@ impl App {
             | QuickRow::GbaShader
             | QuickRow::GbShader
             | QuickRow::GbPalettes
-            | QuickRow::Rumble => {}
+            | QuickRow::PixelTransparency
+            | QuickRow::LcdGhosting
+            | QuickRow::Rumble
+            | QuickRow::AutoSleep => {}
         }
     }
 
@@ -1390,6 +1418,23 @@ impl App {
             QuickRow::Turbo => s.turbo = !s.turbo,
             QuickRow::Rewind => s.rewind = !s.rewind,
             QuickRow::GbPalettes => s.gb_palettes = !s.gb_palettes,
+            QuickRow::PixelTransparency => s.pixel_transparency = !s.pixel_transparency,
+            QuickRow::LcdGhosting => {
+                s.lcd_ghosting = !s.lcd_ghosting;
+                self.lcd_ghosting_pending = Some(s.lcd_ghosting);
+            }
+            QuickRow::AutoSleep => {
+                let at = AUTO_SLEEP_OPTIONS_SECS
+                    .iter()
+                    .position(|secs| *secs == s.auto_sleep_secs)
+                    .unwrap_or(0);
+                let next = if right {
+                    (at + 1) % AUTO_SLEEP_OPTIONS_SECS.len()
+                } else {
+                    (at + AUTO_SLEEP_OPTIONS_SECS.len() - 1) % AUTO_SLEEP_OPTIONS_SECS.len()
+                };
+                s.auto_sleep_secs = AUTO_SLEEP_OPTIONS_SECS[next];
+            }
             QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::Game => return,
         }
         self.persist();
@@ -1413,6 +1458,7 @@ impl App {
             Shader::Off => Toast::ShaderOff,
             Shader::Lcd3x => Toast::ShaderLcd3x,
             Shader::Grid => Toast::ShaderGrid,
+            Shader::GbaLcd => Toast::ShaderGbaLcd,
             Shader::Dot => Toast::ShaderDot,
             Shader::Simpletex => Toast::ShaderSimpletex,
         };
@@ -1743,6 +1789,9 @@ impl App {
         let offer = self.undo_label();
         if let Some(p) = &mut self.polaroids {
             p.set_undo(offer);
+        }
+        if self.auto_sleep_expired() {
+            self.doze();
         }
         if self.doze_expired() {
             self.on_doze_timeout();
@@ -2221,6 +2270,14 @@ impl App {
 
     fn draw_core_picker(&self, picker: &CorePicker, out: &mut Vec<Draw>) {
         let now = self.now();
+        if let Some(stem) = self.selected_stem() {
+            if let Some((cart, face)) = self.shelf().find(stem) {
+                if matches!(cart.platform, Platform::Gb | Platform::Gbc) {
+                    self.draw_handheld_core_picker(picker, cart.platform, face, now, out);
+                    return;
+                }
+            }
+        }
         let progress = picker.openness(now);
         let lift = lift_of(progress);
         let (rest, scale) = self.shelf().selected_at();
@@ -2240,8 +2297,11 @@ impl App {
                     alpha: 1.0,
                 });
             }
-            for (i, tex) in self.core_socket_faces.iter().copied().enumerate() {
-                let (x, y) = on_board(board, SOCKET_U[i], SOCKET_V);
+            for (side, core) in picker.choices().iter().copied().enumerate() {
+                let Some(tex) = self.core_socket_faces.get(core.index()).copied() else {
+                    continue;
+                };
+                let (x, y) = on_board(board, SOCKET_U[side], SOCKET_V);
                 out.push(Draw::Tex {
                     x: x.round(),
                     y: y.round(),
@@ -2352,6 +2412,138 @@ impl App {
                     h: HINT_H as f32,
                     tex,
                     alpha: lift,
+                });
+            }
+        }
+    }
+
+    fn draw_handheld_core_picker(
+        &self,
+        picker: &CorePicker,
+        platform: Platform,
+        face: Option<TexId>,
+        now: Millis,
+        out: &mut Vec<Draw>,
+    ) {
+        let progress = picker.openness(now);
+        let movement = ease(progress);
+        let reveal = lift_of(progress);
+        let (rest_x, rest_scale) = self.shelf().selected_at();
+        let (cart_w, cart_h) = cart_box(platform);
+        let source = Placed {
+            x: rest_x,
+            y: foot_y(cart_h as f32) - cart_h as f32 * rest_scale,
+            w: cart_w as f32 * rest_scale,
+            h: cart_h as f32 * rest_scale,
+        };
+        let scale = 0.56;
+        let target = Placed {
+            x: (OUT_W as f32 - cart_w as f32 * scale) / 2.0,
+            y: 30.0,
+            w: cart_w as f32 * scale,
+            h: cart_h as f32 * scale,
+        };
+        let cart = Placed {
+            x: source.x + (target.x - source.x) * movement,
+            y: source.y + (target.y - source.y) * movement,
+            w: source.w + (target.w - source.w) * movement,
+            h: source.h + (target.h - source.h) * movement,
+        };
+
+        out.push(Draw::Rect {
+            x: 0.0,
+            y: 0.0,
+            w: OUT_W as f32,
+            h: OUT_H as f32,
+            colour: [0.0, 0.0, 0.0, 0.32 * movement],
+        });
+        if let Some(tex) = face {
+            out.push(Draw::Tex {
+                x: cart.x,
+                y: cart.y,
+                w: cart.w,
+                h: cart.h,
+                tex,
+                alpha: 1.0,
+            });
+        }
+
+        if reveal > 0.0 {
+            let scale = 2.1;
+            let centres = [215.0_f32, 425.0_f32];
+            let socket_w = SOCKET_W as f32 * scale;
+            let socket_h = SOCKET_H as f32 * scale;
+            let socket_y = 267.0;
+            for (side, core) in picker.choices().iter().copied().enumerate() {
+                let Some(tex) = self.core_socket_faces.get(core.index()).copied() else {
+                    continue;
+                };
+                out.push(Draw::Tex {
+                    x: centres[side] - socket_w / 2.0,
+                    y: socket_y,
+                    w: socket_w,
+                    h: socket_h,
+                    tex,
+                    alpha: reveal,
+                });
+            }
+
+            let chip = picker.chip(now);
+            let centre_x = centres[0] + (centres[1] - centres[0]) * chip.across;
+            let body = Placed {
+                x: centre_x - CHIP_W as f32 * scale / 2.0 + chip.shake,
+                y: socket_y + (socket_h - CHIP_H as f32 * scale) / 2.0
+                    - HOP_LIFT * scale * chip.lift,
+                w: CHIP_W as f32 * scale,
+                h: CHIP_H as f32 * scale,
+            };
+            if chip.lift > 0.0 {
+                if let Some(tex) = self.core_chip_shadow_face {
+                    let w = SHADOW_W as f32 * scale;
+                    let h = SHADOW_H as f32 * scale;
+                    out.push(Draw::Tex {
+                        x: centre_x - w / 2.0,
+                        y: socket_y + socket_h + 8.0 - h / 2.0,
+                        w,
+                        h,
+                        tex,
+                        alpha: 0.6 * chip.lift * reveal,
+                    });
+                }
+            }
+            let face = match chip.seated {
+                Some(core) => self.core_chip_faces.get(core.index()).copied(),
+                None => self.core_blank_chip_face,
+            };
+            if let Some(tex) = face {
+                let at = grown(body, TURN_PAD as f32 * scale);
+                out.push(Draw::Turned {
+                    x: at.x,
+                    y: at.y,
+                    w: at.w,
+                    h: at.h,
+                    tex,
+                    alpha: reveal,
+                    turn: chip.tip,
+                });
+            }
+        }
+
+        if let [cancel, swap, choose] = self.core_legend_faces.as_slice() {
+            let right = BOARD_X + BOARD_W as f32;
+            let seen = |w: u32| w.saturating_sub(HINT_EDGE) as f32;
+            for (tex, w, x) in [
+                (cancel.0, cancel.1, BOARD_X),
+                (swap.0, swap.1, (OUT_W as f32 - seen(swap.1)) / 2.0),
+                (choose.0, choose.1, right - seen(choose.1)),
+            ] {
+                out.push(Draw::Tex {
+                    x: x.round(),
+                    y: CORE_LEGEND_Y,
+                    w: w as f32,
+                    h: HINT_H as f32,
+                    tex,
+                    alpha: reveal,
                 });
             }
         }
@@ -2544,6 +2736,7 @@ impl App {
             self.end_link();
         }
         self.close_game_menu();
+        self.power_menu = None;
         self.core_picker = None;
         if matches!(self.phase, Phase::Doze { .. }) {
             return;
@@ -2643,9 +2836,10 @@ impl App {
         if cart.platform != Platform::Gba {
             return;
         }
-        let seat = slot_store::core_for(&root, &cart.stem);
+        let choices = [Core::Mgba, Core::Gpsp];
+        let seat = slot_store::core_for_platform(&root, &cart.stem, cart.platform);
         let now = self.now();
-        let mut picker = CorePicker::open(seat, now);
+        let mut picker = CorePicker::open_for(seat, choices, now);
         if self.core_faces_ready() {
             picker.start(now);
         }
@@ -3016,6 +3210,15 @@ impl App {
             return false;
         };
         self.now().saturating_sub(self.dozed_at) >= power.timeout().as_millis() as Millis
+    }
+
+    fn auto_sleep_expired(&self) -> bool {
+        let timeout = Millis::from(self.state.auto_sleep_secs) * 1_000;
+        timeout > 0
+            && !self.powering_off
+            && !self.link_active()
+            && !matches!(self.phase, Phase::Doze { .. })
+            && self.now().saturating_sub(self.last_activity) >= timeout
     }
 
     pub fn settle_saves(&mut self) {
@@ -3390,8 +3593,18 @@ fn shader_value(shader: Shader) -> QuickValue {
         Shader::Off => QuickValue::Off,
         Shader::Lcd3x => QuickValue::Lcd3x,
         Shader::Grid => QuickValue::Grid,
+        Shader::GbaLcd => QuickValue::GbaLcd,
         Shader::Dot => QuickValue::Dot,
         Shader::Simpletex => QuickValue::Simpletex,
+    }
+}
+
+fn auto_sleep_value(secs: u16) -> QuickValue {
+    match secs {
+        30 => QuickValue::Sleep30s,
+        60 => QuickValue::Sleep1m,
+        300 => QuickValue::Sleep5m,
+        _ => QuickValue::Off,
     }
 }
 

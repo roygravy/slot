@@ -191,7 +191,10 @@ fn a_press_slides_the_row_rather_than_redrawing_it() {
             .zip(which)
             .map(|(d, i)| {
                 let (x, w) = xw(d);
-                (((x + w / 2.0 - OUT_W as f32 / 2.0) / 240.0 * 1000.0).round() as i64, i)
+                (
+                    ((x + w / 2.0 - OUT_W as f32 / 2.0) / 240.0 * 1000.0).round() as i64,
+                    i,
+                )
             })
             .collect();
         row.sort();

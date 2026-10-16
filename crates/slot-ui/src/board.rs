@@ -141,7 +141,7 @@ fn shade(c: [u8; 3], f: f32) -> [u8; 3] {
 const SOCKET_SVG: &str = include_str!("../assets/socket.svg");
 const CHIP_SVG: &str = include_str!("../assets/chip.svg");
 
-pub const BOARD_X: f32 = 174.0;
+pub const BOARD_X: f32 = (OUT_W as f32 - BOARD_W as f32) / 2.0;
 pub const BOARD_Y: f32 = 150.0;
 
 pub const TURN_PAD: u32 = 2;
@@ -180,7 +180,7 @@ const SOCKET_INK: [u8; 3] = [0xee, 0xf5, 0xe6];
 const CHIP_INK: [u8; 3] = [0xf2, 0xf2, 0xf2];
 
 const LID_REST: Placed = Placed {
-    x: 288.0,
+    x: (OUT_W as f32 - 144.0) / 2.0,
     y: 30.0,
     w: 144.0,
     h: 81.0,
