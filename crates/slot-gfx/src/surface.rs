@@ -1,7 +1,7 @@
 use std::ffi::c_void;
 use std::fmt;
 
-pub const OUT_W: u32 = 720;
+pub const OUT_W: u32 = 640;
 pub const OUT_H: u32 = 480;
 
 #[derive(Debug)]

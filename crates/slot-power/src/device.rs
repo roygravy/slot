@@ -418,6 +418,78 @@ fn backlight_value(step: u8, max: u32) -> u32 {
     (BACKLIGHT_FLOOR + span * t.powf(BACKLIGHT_CURVE)).round() as u32
 }
 
+fn run_shutdown_command(action: &str) -> bool {
+    let candidates = [
+        format!("/sbin/{action}"),
+        format!("/usr/sbin/{action}"),
+        format!("/bin/{action}"),
+        format!("/usr/bin/{action}"),
+        action.to_string(),
+    ];
+    for program in candidates {
+        match Command::new(&program).status() {
+            Ok(status) if status.success() => return true,
+            Ok(status) => eprintln!("slot: {action}: {program} exited with {status}"),
+            Err(error) => eprintln!("slot: {action}: {program}: {error}"),
+        }
+    }
+    for busybox in [
+        "/bin/busybox",
+        "/sbin/busybox",
+        "/usr/bin/busybox",
+        "busybox",
+    ] {
+        match Command::new(busybox).arg(action).status() {
+            Ok(status) if status.success() => return true,
+            Ok(status) => eprintln!("slot: {action}: {busybox} exited with {status}"),
+            Err(error) => eprintln!("slot: {action}: {busybox}: {error}"),
+        }
+    }
+    false
+}
+
+fn sync_filesystems() {
+    #[cfg(target_os = "linux")]
+    unsafe {
+        libc::sync();
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = run_shutdown_command("sync");
+    }
+}
+
+fn request_kernel_shutdown(action: &str) {
+    #[cfg(target_os = "linux")]
+    {
+        const RB_AUTOBOOT: libc::c_int = 0x0123_4567;
+        const RB_POWER_OFF: libc::c_int = 0x4321_fedc_u32 as libc::c_int;
+        let command = if action == "reboot" {
+            RB_AUTOBOOT
+        } else {
+            RB_POWER_OFF
+        };
+        let result = unsafe { libc::reboot(command) };
+        eprintln!(
+            "slot: {action}: kernel reboot request returned {result}: {}",
+            std::io::Error::last_os_error()
+        );
+    }
+    #[cfg(not(target_os = "linux"))]
+    let _ = action;
+}
+
+fn shutdown_until_system_acts(action: &str) -> ! {
+    loop {
+        sync_filesystems();
+        request_kernel_shutdown(action);
+        if run_shutdown_command(action) {
+            eprintln!("slot: {action}: helper returned; waiting for system action");
+        }
+        std::thread::sleep(Duration::from_secs(5));
+    }
+}
+
 impl Platform for DevicePlatform {
     fn headphones(&self) -> bool {
         fs::read_to_string(self.sysfs.join("kernel/debug/gpio")).is_ok_and(|g| headphones_in(&g))
@@ -503,19 +575,13 @@ impl Platform for DevicePlatform {
         self.breadcrumb("restart: WiFi driver unloaded, about to sync");
         let _ = Command::new("sync").status();
         self.breadcrumb("restart: sync returned, about to signal init");
-        let _ = Command::new("reboot").status();
-        std::thread::sleep(Duration::from_secs(10));
-        std::process::exit(0)
+        shutdown_until_system_acts("reboot")
     }
 
     fn poweroff(&mut self) -> ! {
         self.breadcrumb("poweroff: reached slot, about to sync");
-        let _ = Command::new("sync").status();
         self.breadcrumb("poweroff: sync returned, about to signal init");
-        let _ = Command::new("poweroff").status();
-        self.breadcrumb("poweroff: signalled init, waiting for it to take the machine down");
-        std::thread::sleep(Duration::from_secs(10));
-        std::process::exit(0)
+        shutdown_until_system_acts("poweroff")
     }
 
     fn root(&self) -> &Path {

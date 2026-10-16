@@ -1901,6 +1901,7 @@ version = "0.1.0"
 name = "slot-power"
 version = "0.1.0"
 dependencies = [
+ "libc",
  "tempfile",
 ]
 

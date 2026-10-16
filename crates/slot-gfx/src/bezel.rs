@@ -1,7 +1,7 @@
 use crate::surface::{OUT_H, OUT_W};
 
-pub fn framed(panel: (u32, u32)) -> bool {
-    panel.0 > 0 && panel.0 * 3 == panel.1 * 4
+pub fn framed(_panel: (u32, u32)) -> bool {
+    false
 }
 
 pub fn screen_rect(panel: (u32, u32)) -> (i32, i32, i32, i32) {

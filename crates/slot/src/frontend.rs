@@ -3,6 +3,7 @@ use std::time::{Duration, Instant};
 use slot_gfx::{Compositor, Draw, ScreenEffect, TexId, OUT_H, OUT_W};
 
 const PAPER: &[u8] = include_bytes!("../assets/paper.png");
+const GBA_LCD_OVERLAY: &[u8] = include_bytes!("../assets/gba_lcd_overlay.png");
 use slot_input::{InputSource, Millis};
 use slot_power::{Platform, Power};
 use slot_store::{format_stamp, BezelPick, Platform as Console};
@@ -28,7 +29,7 @@ use crate::link_screen::{LinkSprites, Sprite};
 use crate::link_start::{LinkFail, LinkStep};
 use crate::session::Session;
 
-const DOZE_TIMEOUT: Duration = Duration::from_secs(180);
+const DOZE_TIMEOUT: Duration = Duration::from_secs(300);
 
 const ALERT_INK: [u8; 3] = [0xf0, 0xb4, 0x3c];
 
@@ -203,6 +204,22 @@ impl Frontend {
         compositor.set_paper(info.width, &buf[..info.buffer_size()]);
     }
 
+    fn upload_gba_lcd_overlay(compositor: &mut Compositor) {
+        let mut dec = png::Decoder::new(std::io::Cursor::new(GBA_LCD_OVERLAY));
+        dec.set_transformations(png::Transformations::normalize_to_color8());
+        let Ok(mut reader) = dec.read_info() else {
+            return;
+        };
+        let mut buf = vec![0u8; reader.output_buffer_size()];
+        let Ok(info) = reader.next_frame(&mut buf) else {
+            return;
+        };
+        if info.color_type != png::ColorType::Rgba || (info.width, info.height) != (OUT_W, OUT_H) {
+            return;
+        }
+        compositor.set_lcd_overlay(info.width, info.height, &buf[..info.buffer_size()]);
+    }
+
     pub fn upload_faces(&mut self, compositor: &mut Compositor) {
         self.upload_boot_faces(compositor);
         if let Some(faces) = self.ui_faces.take().and_then(|rx| rx.recv().ok()) {
@@ -212,6 +229,7 @@ impl Frontend {
 
     pub fn upload_boot_faces(&mut self, compositor: &mut Compositor) {
         Self::upload_paper(compositor);
+        Self::upload_gba_lcd_overlay(compositor);
         crate::boot_time::mark("paper");
         if self.rebuild.is_none() {
             self.cart_faces.sync(self.session.app_mut(), compositor);
@@ -494,12 +512,25 @@ impl Frontend {
     pub fn compose(&mut self, compositor: &mut Compositor) {
         compositor.set_blue_light(self.session.app().blue_light());
         compositor.set_picture(self.session.app().picture_rect());
+        let platform = self.session.app().playing_platform();
+        let gb = platform == slot_store::Platform::Gb;
+        let gbc = platform == slot_store::Platform::Gbc;
+        compositor.set_picture_appearance(gb, if gb { 0.03 } else { 0.0 });
+        compositor.set_grid_opacity(if gb {
+            0.50
+        } else if gbc {
+            0.20
+        } else {
+            0.30
+        });
+        compositor.set_pixel_transparency(self.session.app().pixel_transparency());
         compositor.set_screen_effect(match self.session.app().screen_shader() {
             slot_store::Shader::Off => ScreenEffect::None,
             slot_store::Shader::Lcd3x => ScreenEffect::Lcd3x,
             slot_store::Shader::Grid => ScreenEffect::Grid,
             slot_store::Shader::Dot => ScreenEffect::Dot,
             slot_store::Shader::Simpletex => ScreenEffect::Simpletex,
+            slot_store::Shader::GbaLcd => ScreenEffect::GbaLcd,
         });
         compositor.set_shake(self.session.app().screen_shake());
         compositor.set_screen_power(self.session.app().screen_power());

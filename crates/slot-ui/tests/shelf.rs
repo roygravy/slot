@@ -146,7 +146,7 @@ fn one_cart_stands_alone_in_the_middle() {
     assert!((w - CART_W as f32).abs() < 0.5, "the lone cart is {w} wide");
     let centre = x + w / 2.0;
     assert!(
-        (centre - 360.0).abs() < 0.5,
+        (centre - OUT_W as f32 / 2.0).abs() < 0.5,
         "the lone cart sits at {centre}"
     );
 }
@@ -165,7 +165,7 @@ fn two_carts_repeat_around_the_ring() {
     let row = placed(&s);
     let centres: Vec<f32> = row.iter().map(|(x, w)| x + w / 2.0).collect();
     assert!(
-        (centres[1] - 360.0).abs() < 0.5,
+        (centres[1] - OUT_W as f32 / 2.0).abs() < 0.5,
         "the selected cart sits at {}, not the middle of the screen",
         centres[1]
     );
@@ -195,7 +195,10 @@ fn a_press_slides_the_row_rather_than_redrawing_it() {
             .zip(which)
             .map(|(d, i)| {
                 let (x, w) = xw(d);
-                (((x + w / 2.0 - 360.0) / 240.0 * 1000.0).round() as i64, i)
+                (
+                    ((x + w / 2.0 - OUT_W as f32 / 2.0) / 240.0 * 1000.0).round() as i64,
+                    i,
+                )
             })
             .collect();
         row.sort();
@@ -340,7 +343,7 @@ fn a_row_of_three_or_more_is_centred_on_its_selection() {
             .fold((0.0, 0.0), |a, b| if b.1 > a.1 { b } else { a });
         let centre = x + w / 2.0;
         assert!(
-            (centre - 360.0).abs() < 0.5,
+            (centre - OUT_W as f32 / 2.0).abs() < 0.5,
             "{n} carts: the selected cart sits at {centre}"
         );
     }
@@ -393,7 +396,7 @@ fn the_selected_cart_is_centred_and_full_size() {
     assert!((w - CART_W as f32).abs() < 0.5, "selected cart is {w} wide");
     let centre = x + w / 2.0;
     assert!(
-        (centre - 360.0).abs() < 0.5,
+        (centre - OUT_W as f32 / 2.0).abs() < 0.5,
         "selected cart centre is {centre}"
     );
 }
@@ -677,7 +680,7 @@ fn carts_past_the_edges_of_the_row_are_not_drawn() {
     settle(&mut s);
     let n = placed(&s).len();
     assert!(n > 1, "only {n} carts drawn, the neighbours should peek in");
-    assert!(n <= 5, "{n} carts drawn into a 720 px row");
+    assert!(n <= 5, "{n} carts drawn into a 640 px row");
 }
 
 #[test]
@@ -725,7 +728,9 @@ fn the_row_parts_for_the_cart_going_in() {
         out
     };
     let start = at(0.0);
-    let part = at(0.5);
+    // A 640 px canvas is narrower than the old 720 px one, so the side carts reach
+    // the edge sooner. Stay early in the parting, before they leave the screen.
+    let part = at(0.25);
     assert_eq!(start.len(), part.len(), "a cart left the row early");
 
     let centre = OUT_W as f32 / 2.0;

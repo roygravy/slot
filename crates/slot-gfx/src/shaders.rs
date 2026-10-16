@@ -54,7 +54,10 @@ precision mediump float;
 #endif
 uniform sampler2D u_game;
 uniform sampler2D u_paper;
+uniform sampler2D u_lcd_overlay;
 uniform vec2 u_src;
+uniform vec2 u_output_size;
+uniform vec2 u_lcd_overlay_size;
 uniform vec4 u_uv;
 uniform float u_bright;
 uniform float u_mode;
@@ -63,6 +66,10 @@ uniform vec2 u_origin;
 uniform vec4 u_rect;
 uniform vec2 u_fbo;
 uniform vec4 u_pic;
+uniform vec3 u_bg;
+uniform float u_picture_dim;
+uniform float u_grid_opacity;
+uniform float u_pixel_transparency;
 varying vec2 v_uv;
 const vec3 offsets = vec3(3.141592654) * vec3(1.0 / 2.0, 1.0 / 2.0 - 2.0 / 3.0, 1.0 / 2.0 - 4.0 / 3.0);
 const vec3 luma_coeff = vec3(0.2126, 0.7152, 0.0722);
@@ -75,9 +82,21 @@ float dot_weight(vec2 f, vec2 o, float bloom) {
 void main() {
     vec2 uv = u_uv.xy + v_uv * u_uv.zw;
     vec2 f = fract(uv * u_src);
-    vec3 c = texture2D(u_game, uv).rgb;
+    vec2 px = max((u_rect.zw * u_fbo) / (u_uv.zw * u_src), vec2(1.0));
+    vec2 d = fract(uv * u_src) - 0.5;
+    vec2 span = 0.5 - 0.5 / px;
+    vec2 sharp = (floor(uv * u_src) + (d - clamp(d, -span, span)) * px + 0.5) / u_src;
+    vec3 c = texture2D(u_game, sharp).rgb;
+    vec4 lcd = vec4(0.0);
     bool inside = all(greaterThanEqual(uv, u_pic.xy)) && all(lessThan(uv, u_pic.zw));
     if (!inside) {
+        c = u_bg;
+    } else if (u_mode > 4.5) {
+        vec2 screen_px = floor(gl_FragCoord.xy / u_fbo);
+        vec2 overlay_px = floor(screen_px * u_lcd_overlay_size / u_output_size);
+        vec2 overlay_uv = (overlay_px + 0.5) / u_lcd_overlay_size;
+        lcd = texture2D(u_lcd_overlay, overlay_uv);
+        c = mix(c, lcd.rgb, lcd.a);
     } else if (u_mode > 3.5) {
         c = pow(c, vec3(1.05));
         vec2 d = abs(f - 0.5);
@@ -104,12 +123,37 @@ void main() {
     } else if (u_mode > 1.5) {
         vec2 hp = 0.5 * u_uv.zw * u_src / (u_rect.zw * u_fbo);
         vec2 edge = (grid_band(f + hp) - grid_band(f - hp)) / (2.0 * hp);
-        c *= 1.0 - 0.75 * max(edge.x, edge.y);
+        float line = clamp(max(edge.x, edge.y), 0.0, 1.0);
+        c = mix(c, u_bg, line * u_grid_opacity);
     } else if (u_mode > 0.5) {
         vec2 angle = f * 6.283185307;
         float yfactor = (16.0 + sin(angle.y)) / 17.0;
         vec3 xfactors = (4.0 + sin(angle.x + offsets)) / 5.0;
         c *= yfactor * xfactors;
+    }
+    if (inside) {
+        c *= 1.0 - u_picture_dim;
+    }
+    if (inside && u_pixel_transparency > 0.5) {
+        vec3 panel = u_mode > 4.5 ? lcd.rgb : u_bg;
+        float luma = clamp(dot(c, luma_coeff), 0.0, 1.0);
+        float ink = 1.0 - smoothstep(0.05, 0.88, luma);
+        float opacity = mix(0.62, 0.97, ink);
+        c = mix(panel, c, opacity);
+
+        vec2 texel = vec2(1.0 / u_src.x, 1.0 / u_src.y);
+        vec2 edge_distance = min((uv - u_pic.xy) / texel, (u_pic.zw - uv) / texel);
+        bool away_from_edge = all(greaterThan(edge_distance, vec2(1.0)));
+        vec2 shadow_uv = sharp - texel;
+        float shadow_luma = dot(texture2D(u_game, shadow_uv).rgb, luma_coeff) * 0.60;
+        shadow_luma += dot(texture2D(u_game, shadow_uv - vec2(texel.x * 0.55, 0.0)).rgb, luma_coeff) * 0.10;
+        shadow_luma += dot(texture2D(u_game, shadow_uv + vec2(texel.x * 0.55, 0.0)).rgb, luma_coeff) * 0.10;
+        shadow_luma += dot(texture2D(u_game, shadow_uv - vec2(0.0, texel.y * 0.55)).rgb, luma_coeff) * 0.10;
+        shadow_luma += dot(texture2D(u_game, shadow_uv + vec2(0.0, texel.y * 0.55)).rgb, luma_coeff) * 0.10;
+        float shadow_ink = 1.0 - smoothstep(0.05, 0.45, shadow_luma);
+        float exposed_panel = smoothstep(0.08, 0.70, luma);
+        float shadow = away_from_edge ? shadow_ink * exposed_panel * 0.16 : 0.0;
+        c = mix(c, vec3(0.0), shadow);
     }
     FRAG_COLOR = vec4(c * u_bright, 1.0);
 }

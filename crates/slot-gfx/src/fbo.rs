@@ -217,8 +217,24 @@ impl Compositor {
             .set_target(Canvas::of(self.layout, self.window));
     }
 
+    pub fn set_picture_appearance(&mut self, sample_background: bool, dim: f32) {
+        self.game.set_picture_appearance(sample_background, dim);
+    }
+
+    pub fn set_grid_opacity(&mut self, opacity: f32) {
+        self.game.set_grid_opacity(opacity);
+    }
+
+    pub fn set_pixel_transparency(&mut self, enabled: bool) {
+        self.game.set_pixel_transparency(enabled);
+    }
+
     pub fn set_paper(&mut self, size: u32, gray: &[u8]) {
         self.game.set_paper(size, gray);
+    }
+
+    pub fn set_lcd_overlay(&mut self, w: u32, h: u32, rgba: &[u8]) {
+        self.game.set_lcd_overlay(w, h, rgba);
     }
 
     pub fn fit(&mut self, window: (u32, u32)) {

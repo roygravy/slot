@@ -46,10 +46,15 @@ pub enum QuickRow {
     GbaBezel,
     ScreenGbc,
     ScreenGb,
+    AutoSleep,
+    PixelTransparency,
+    LcdGhosting,
+    InGameMenu,
+    RememberPosition,
 }
 
 impl QuickRow {
-    pub const ALL: [QuickRow; 40] = [
+    pub const ALL: [QuickRow; 45] = [
         QuickRow::FastForward,
         QuickRow::FastForwardSound,
         QuickRow::Screen,
@@ -90,26 +95,34 @@ impl QuickRow {
         QuickRow::GbaBezel,
         QuickRow::ScreenGbc,
         QuickRow::ScreenGb,
+        QuickRow::AutoSleep,
+        QuickRow::PixelTransparency,
+        QuickRow::LcdGhosting,
+        QuickRow::InGameMenu,
+        QuickRow::RememberPosition,
     ];
 
-    pub const MAIN: [QuickRow; 4] = [
-        QuickRow::General,
-        QuickRow::Screen,
-        QuickRow::Game,
-        QuickRow::About,
-    ];
+    pub const MAIN: [QuickRow; 3] = [QuickRow::General, QuickRow::Screen, QuickRow::Game];
 
-    pub const GENERAL: [QuickRow; 6] = [
+    pub const GENERAL: [QuickRow; 9] = [
         QuickRow::Wallpaper,
         QuickRow::WallpaperTint,
         QuickRow::Theme,
         QuickRow::Recents,
         QuickRow::ShowTitles,
         QuickRow::DateTime,
+        QuickRow::AutoSleep,
+        QuickRow::InGameMenu,
+        QuickRow::RememberPosition,
     ];
 
-    pub const SCREEN: [QuickRow; 3] =
-        [QuickRow::ScreenGba, QuickRow::ScreenGbc, QuickRow::ScreenGb];
+    pub const SCREEN: [QuickRow; 5] = [
+        QuickRow::ScreenGba,
+        QuickRow::ScreenGbc,
+        QuickRow::ScreenGb,
+        QuickRow::PixelTransparency,
+        QuickRow::LcdGhosting,
+    ];
 
     pub const SCREEN_GBA: [QuickRow; 3] = [
         QuickRow::GbaShader,
@@ -173,6 +186,7 @@ impl QuickRow {
             | QuickRow::GbColourCorrection
             | QuickRow::GbPalettes
             | QuickRow::GbBezel => &QuickRow::SCREEN_GB,
+            QuickRow::PixelTransparency | QuickRow::LcdGhosting => &QuickRow::SCREEN,
             QuickRow::FastForward
             | QuickRow::FastForwardSound
             | QuickRow::Rewind
@@ -185,7 +199,10 @@ impl QuickRow {
             | QuickRow::DateTime
             | QuickRow::Theme
             | QuickRow::Recents
-            | QuickRow::ShowTitles => &QuickRow::GENERAL,
+            | QuickRow::ShowTitles
+            | QuickRow::AutoSleep
+            | QuickRow::InGameMenu
+            | QuickRow::RememberPosition => &QuickRow::GENERAL,
             QuickRow::Resume | QuickRow::States | QuickRow::Settings | QuickRow::ExitGame => {
                 &QuickRow::PLAY
             }
@@ -205,6 +222,8 @@ impl QuickRow {
             QuickRow::GbShader => Some(QuickRow::ScreenGb),
             QuickRow::FastForward => Some(QuickRow::Game),
             QuickRow::Wallpaper => Some(QuickRow::General),
+            QuickRow::AutoSleep => Some(QuickRow::General),
+            QuickRow::InGameMenu | QuickRow::RememberPosition => Some(QuickRow::General),
             QuickRow::PlayScreen => Some(QuickRow::Settings),
             QuickRow::Shader => Some(QuickRow::PlayScreen),
             _ => None,
@@ -284,6 +303,11 @@ impl QuickRow {
             QuickRow::Recents => "Recents",
             QuickRow::ShowTitles => "Game Titles",
             QuickRow::WallpaperTint => "Wallpaper Tint",
+            QuickRow::AutoSleep => "Auto Sleep",
+            QuickRow::PixelTransparency => "Pixel Transparency",
+            QuickRow::LcdGhosting => "LCD Ghosting",
+            QuickRow::InGameMenu => "In-Game Menu",
+            QuickRow::RememberPosition => "Remember Shelf Position",
             QuickRow::Resume => "Resume",
             QuickRow::States => "States",
             QuickRow::Settings => "Settings",
@@ -343,6 +367,7 @@ pub enum QuickValue {
     On,
     Off,
     Lcd3x,
+    GbaLcd,
     Grid,
     Dot,
     Simpletex,
@@ -354,10 +379,13 @@ pub enum QuickValue {
     Low,
     Medium,
     High,
+    Sleep30s,
+    Sleep1m,
+    Sleep5m,
 }
 
 impl QuickValue {
-    pub const ALL: [QuickValue; 18] = [
+    pub const ALL: [QuickValue; 22] = [
         QuickValue::Speed2,
         QuickValue::Speed3,
         QuickValue::Speed4,
@@ -365,6 +393,7 @@ impl QuickValue {
         QuickValue::On,
         QuickValue::Off,
         QuickValue::Lcd3x,
+        QuickValue::GbaLcd,
         QuickValue::Grid,
         QuickValue::Dot,
         QuickValue::Simpletex,
@@ -376,6 +405,9 @@ impl QuickValue {
         QuickValue::Low,
         QuickValue::Medium,
         QuickValue::High,
+        QuickValue::Sleep30s,
+        QuickValue::Sleep1m,
+        QuickValue::Sleep5m,
     ];
 
     pub fn index(self) -> usize {
@@ -391,6 +423,7 @@ impl QuickValue {
             QuickValue::On => "On",
             QuickValue::Off => "Off",
             QuickValue::Lcd3x => "LCD3x",
+            QuickValue::GbaLcd => "GBA LCD",
             QuickValue::Grid => "Grid",
             QuickValue::Dot => "Dot",
             QuickValue::Simpletex => "Simpletex",
@@ -402,6 +435,9 @@ impl QuickValue {
             QuickValue::Low => "25%",
             QuickValue::Medium => "45%",
             QuickValue::High => "65%",
+            QuickValue::Sleep30s => "30 sec",
+            QuickValue::Sleep1m => "1 min",
+            QuickValue::Sleep5m => "5 min",
         }
     }
 

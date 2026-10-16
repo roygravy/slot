@@ -46,6 +46,7 @@ struct Close {
 #[derive(Copy, Clone)]
 pub struct CorePicker {
     seat: Core,
+    choices: [Core; 2],
     opened: Millis,
     started: Option<Millis>,
     hop: Option<Hop>,
@@ -55,8 +56,18 @@ pub struct CorePicker {
 
 impl CorePicker {
     pub fn open(seat: Core, now: Millis) -> Self {
+        Self::open_for(seat, [Core::Mgba, Core::Gpsp], now)
+    }
+
+    pub fn open_for(seat: Core, choices: [Core; 2], now: Millis) -> Self {
+        let seat = if choices.contains(&seat) {
+            seat
+        } else {
+            choices[0]
+        };
         CorePicker {
             seat,
+            choices,
             opened: now,
             started: None,
             hop: None,
@@ -79,6 +90,17 @@ impl CorePicker {
 
     pub fn seat(&self) -> Core {
         self.seat
+    }
+
+    pub fn choices(&self) -> [Core; 2] {
+        self.choices
+    }
+
+    fn position(&self, core: Core) -> usize {
+        self.choices
+            .iter()
+            .position(|choice| *choice == core)
+            .unwrap_or(0)
     }
 
     pub fn closing(&self) -> bool {
@@ -112,8 +134,8 @@ impl CorePicker {
                 self.begin_close(now);
                 return Outcome::Nothing;
             }
-            Press::Left => Core::Mgba,
-            Press::Right => Core::Gpsp,
+            Press::Left => self.choices[0],
+            Press::Right => self.choices[1],
         };
         if self.waiting() {
             return Outcome::Nothing;
@@ -148,7 +170,7 @@ impl CorePicker {
         let shake = self.refusal.map_or(0.0, |r| r.offset(now));
         match (self.hop, self.hop_progress(now)) {
             (Some(hop), Some(q)) => {
-                let rightward = hop.from == Core::Mgba;
+                let rightward = self.position(hop.from) < self.position(self.seat);
                 let lean = if rightward { 1.0 } else { -1.0 };
                 let arc = (std::f32::consts::PI * q).sin();
                 Chip {
@@ -160,7 +182,7 @@ impl CorePicker {
                 }
             }
             _ => Chip {
-                across: self.seat.index() as f32,
+                across: self.position(self.seat) as f32,
                 lift: 0.0,
                 tip: 0.0,
                 seated: Some(self.seat),
