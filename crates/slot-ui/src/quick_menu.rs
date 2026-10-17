@@ -1,7 +1,7 @@
 use crate::draw::{Canvas, Draw, TexId, OUT_H, OUT_W};
 use crate::plate::{arrows_hint_face, centred_hints, hint_face, UndoFace, HINT_H, LEGEND_GAP};
 use crate::power_menu::{MENU_H, MENU_INK, MENU_PAD};
-use crate::slot_chrome::opening;
+use crate::slot_chrome::{edge, opening};
 use crate::text;
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -51,10 +51,11 @@ pub enum QuickRow {
     LcdGhosting,
     InGameMenu,
     RememberPosition,
+    FavoriteMark,
 }
 
 impl QuickRow {
-    pub const ALL: [QuickRow; 45] = [
+    pub const ALL: [QuickRow; 46] = [
         QuickRow::FastForward,
         QuickRow::FastForwardSound,
         QuickRow::Screen,
@@ -100,15 +101,17 @@ impl QuickRow {
         QuickRow::LcdGhosting,
         QuickRow::InGameMenu,
         QuickRow::RememberPosition,
+        QuickRow::FavoriteMark,
     ];
 
     pub const MAIN: [QuickRow; 3] = [QuickRow::General, QuickRow::Screen, QuickRow::Game];
 
-    pub const GENERAL: [QuickRow; 9] = [
+    pub const GENERAL: [QuickRow; 10] = [
         QuickRow::Wallpaper,
         QuickRow::WallpaperTint,
         QuickRow::Theme,
         QuickRow::Recents,
+        QuickRow::FavoriteMark,
         QuickRow::ShowTitles,
         QuickRow::DateTime,
         QuickRow::AutoSleep,
@@ -199,6 +202,7 @@ impl QuickRow {
             | QuickRow::DateTime
             | QuickRow::Theme
             | QuickRow::Recents
+            | QuickRow::FavoriteMark
             | QuickRow::ShowTitles
             | QuickRow::AutoSleep
             | QuickRow::InGameMenu
@@ -301,6 +305,7 @@ impl QuickRow {
             QuickRow::Wallpaper => "Wallpaper",
             QuickRow::General => "General",
             QuickRow::Recents => "Recents",
+            QuickRow::FavoriteMark => "Favorites",
             QuickRow::ShowTitles => "Game Titles",
             QuickRow::WallpaperTint => "Wallpaper Tint",
             QuickRow::AutoSleep => "Auto Sleep",
@@ -382,10 +387,13 @@ pub enum QuickValue {
     Sleep30s,
     Sleep1m,
     Sleep5m,
+    GoldGlow,
+    WhiteGlow,
+    StarMark,
 }
 
 impl QuickValue {
-    pub const ALL: [QuickValue; 22] = [
+    pub const ALL: [QuickValue; 25] = [
         QuickValue::Speed2,
         QuickValue::Speed3,
         QuickValue::Speed4,
@@ -408,6 +416,9 @@ impl QuickValue {
         QuickValue::Sleep30s,
         QuickValue::Sleep1m,
         QuickValue::Sleep5m,
+        QuickValue::GoldGlow,
+        QuickValue::WhiteGlow,
+        QuickValue::StarMark,
     ];
 
     pub fn index(self) -> usize {
@@ -438,6 +449,9 @@ impl QuickValue {
             QuickValue::Sleep30s => "30 sec",
             QuickValue::Sleep1m => "1 min",
             QuickValue::Sleep5m => "5 min",
+            QuickValue::GoldGlow => "Gold Glow",
+            QuickValue::WhiteGlow => "White Glow",
+            QuickValue::StarMark => "Star",
         }
     }
 
@@ -482,6 +496,8 @@ const POINTER: [&str; 11] = [
 const POINTER_BLEED: u32 = 4;
 const GROUND_SCRIM: f32 = 0.65;
 const TYPE_DROP: f32 = 4.0;
+const BAR_INSET: f32 = 4.0;
+const QUICK_ROOM: f32 = 411.0;
 const CARET_GAP: f32 = 14.0;
 const CARET_PX: f32 = 24.0;
 const LEGEND_Y: f32 = 427.0;
@@ -639,6 +655,15 @@ impl QuickMenu<'_> {
                 });
             }
         }
+        let rows = self.row.shown(self.hidden).len();
+        let pitch = quick_pitch(rows);
+        out.push(Draw::Rect {
+            x: 0.0,
+            y: quick_row_top(self.row, self.hidden) + BAR_INSET,
+            w: self.canvas.w,
+            h: pitch - 2.0 * BAR_INSET,
+            colour: edge(),
+        });
         let Some(faces) = self.faces else {
             return;
         };
@@ -652,7 +677,7 @@ impl QuickMenu<'_> {
             .max()
             .unwrap_or(0);
         for row in self.row.shown(self.hidden) {
-            let y = quick_row_top(row, self.hidden) + TYPE_DROP;
+            let y = quick_row_top(row, self.hidden) + TYPE_DROP + (pitch - QUICK_PITCH) / 2.0;
             let lit = row == self.row;
             if let Some(&(tex, w, h)) = faces.labels.get(row.index()).map(|l| &l[lit as usize]) {
                 let x = match row.centred() {
@@ -730,13 +755,22 @@ pub fn draw_menu_ground(canvas: Canvas, ground: Option<TexId>, out: &mut Vec<Dra
     }
 }
 
+/// The row height: the full pitch while the page fits, squeezed so a longer page still does.
+pub fn quick_pitch(rows: usize) -> f32 {
+    if rows == 0 {
+        return QUICK_PITCH;
+    }
+    (QUICK_ROOM / rows as f32).floor().clamp(MENU_H as f32, QUICK_PITCH)
+}
+
 pub fn quick_row_top(row: QuickRow, hidden: &[QuickRow]) -> f32 {
-    let rows = QUICK_PITCH * row.shown(hidden).len() as f32;
+    let pitch = quick_pitch(row.shown(hidden).len());
+    let rows = pitch * row.shown(hidden).len() as f32;
     let top = match row.page() == QuickRow::PLAY_SCREEN {
         true => LEGEND_Y - PANEL_GAP - rows,
         false => (LEGEND_Y - rows) / 2.0,
     };
-    top + QUICK_PITCH * row.position(hidden) as f32
+    top + pitch * row.position(hidden) as f32
 }
 
 fn push(out: &mut Vec<Draw>, tex: TexId, x: f32, y: f32, w: u32, h: u32) {

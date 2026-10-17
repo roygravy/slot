@@ -64,6 +64,40 @@ impl Appearance {
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Default)]
+pub enum FavoriteMark {
+    #[default]
+    GoldGlow,
+    WhiteGlow,
+    Star,
+}
+
+impl FavoriteMark {
+    pub const ALL: [FavoriteMark; 3] = [
+        FavoriteMark::GoldGlow,
+        FavoriteMark::WhiteGlow,
+        FavoriteMark::Star,
+    ];
+
+    pub fn key(self) -> &'static str {
+        match self {
+            FavoriteMark::GoldGlow => "gold_glow",
+            FavoriteMark::WhiteGlow => "white_glow",
+            FavoriteMark::Star => "star",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<FavoriteMark> {
+        FavoriteMark::ALL.into_iter().find(|m| m.key() == value)
+    }
+
+    pub fn step(self, right: bool) -> FavoriteMark {
+        let n = FavoriteMark::ALL.len();
+        let at = FavoriteMark::ALL.iter().position(|m| *m == self).unwrap_or(0);
+        FavoriteMark::ALL[if right { (at + 1) % n } else { (at + n - 1) % n }]
+    }
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Default)]
 pub enum WallpaperTint {
     #[default]
     Off,
@@ -225,6 +259,7 @@ pub struct SlotState {
     pub appearance: Appearance,
     pub wallpaper: WallpaperPick,
     pub wallpaper_tint: WallpaperTint,
+    pub favorite_mark: FavoriteMark,
     pub show_recents: bool,
     pub show_titles: bool,
     pub bezel_gba: BezelPick,
@@ -355,6 +390,7 @@ impl Default for SlotState {
             appearance: Appearance::Dark,
             wallpaper: WallpaperPick::Default,
             wallpaper_tint: WallpaperTint::Off,
+            favorite_mark: FavoriteMark::GoldGlow,
             show_recents: false,
             show_titles: false,
             bezel_gba: BezelPick::Ags102,
@@ -476,6 +512,7 @@ pub fn write_slot_state(root: &Path, s: &SlotState) -> std::io::Result<()> {
     ));
     text.push_str(&format!("shader_gbc={}\n", s.shader_gbc.name()));
     text.push_str(&format!("wallpaper_tint={}\n", s.wallpaper_tint.key()));
+    text.push_str(&format!("favorite_mark={}\n", s.favorite_mark.key()));
     text.push_str(&format!("auto_sleep_secs={}\n", s.auto_sleep_secs));
     text.push_str(&format!(
         "pixel_transparency={}\n",
@@ -538,6 +575,7 @@ fn parse(text: &str) -> Option<SlotState> {
     let mut appearance = None;
     let mut wallpaper = None;
     let mut wallpaper_tint = None;
+    let mut favorite_mark = None;
     let mut show_recents = None;
     let mut show_titles = None;
     let mut bezel_gba = None;
@@ -582,6 +620,7 @@ fn parse(text: &str) -> Option<SlotState> {
             "appearance" => appearance = Appearance::parse(value),
             "wallpaper" => wallpaper = Some(WallpaperPick::parse(value)),
             "wallpaper_tint" => wallpaper_tint = WallpaperTint::parse(value),
+            "favorite_mark" => favorite_mark = FavoriteMark::parse(value),
             "show_recents" => show_recents = flag(value),
             "show_titles" => show_titles = flag(value),
             "bezel_gba" => bezel_gba = Some(BezelPick::parse(value)),
@@ -637,6 +676,7 @@ fn parse(text: &str) -> Option<SlotState> {
         appearance: appearance.unwrap_or(fallback.appearance),
         wallpaper: wallpaper.unwrap_or(fallback.wallpaper),
         wallpaper_tint: wallpaper_tint.unwrap_or(fallback.wallpaper_tint),
+        favorite_mark: favorite_mark.unwrap_or(fallback.favorite_mark),
         show_recents: show_recents.unwrap_or(fallback.show_recents),
         show_titles: show_titles.unwrap_or(fallback.show_titles),
         bezel_gba: bezel_gba.unwrap_or(fallback.bezel_gba),

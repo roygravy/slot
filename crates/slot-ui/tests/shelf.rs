@@ -1254,7 +1254,7 @@ fn a_mixed_row_does_not_jump_when_the_selection_moves() {
 fn only_a_starred_cart_glows_behind_its_face() {
     let glow = TexId::from_raw(9);
     let mut s = shelf_with(3);
-    s.set_glow(None, glow);
+    s.set_glow(slot_store::FavoriteMark::GoldGlow, None, glow);
     s.mark_starred(|c| c.stem == "Game 1");
     s.select(1);
     settle(&mut s);

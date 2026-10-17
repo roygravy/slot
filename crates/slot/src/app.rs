@@ -7,6 +7,7 @@ use slot_input::{Action, Btn, MENU_DOUBLE_TAP_MS, MUTE_CHORD_MS};
 use slot_power::{Battery, Charge, LedState, LidPolicy, Power};
 use slot_retro::LinkChannel;
 use slot_store::{
+    FavoriteMark,
     format_stamp, read_slot_state, scan, write_slot_state, BezelPick, Cart, Core, GbPalette,
     Platform, Recent, Shader, SlotState, StateEntry, StateRing, WallpaperPick, WallpaperTint,
     AUTO_SLEEP_OPTIONS_SECS, BLUE_LIGHT_MAX, BRIGHTNESS_MAX, FF_SPEEDS, RING_MAX, RUN_AHEAD_MAX,
@@ -910,6 +911,11 @@ impl App {
                 WallpaperTint::Medium => QuickValue::Medium,
                 WallpaperTint::High => QuickValue::High,
             }),
+            QuickRow::FavoriteMark => Some(match self.state.favorite_mark {
+                FavoriteMark::GoldGlow => QuickValue::GoldGlow,
+                FavoriteMark::WhiteGlow => QuickValue::WhiteGlow,
+                FavoriteMark::Star => QuickValue::StarMark,
+            }),
             QuickRow::Theme => Some(if self.light() {
                 QuickValue::Light
             } else {
@@ -1159,18 +1165,29 @@ impl App {
         self.clock_faces = Some((line, hint));
     }
 
-    pub fn set_glow_faces(&mut self, gba: TexId, notched: TexId, rounded: TexId) {
+    pub fn set_mark_faces(
+        &mut self,
+        gold: [TexId; 3],
+        white: [TexId; 3],
+        star: (TexId, u32, u32),
+    ) {
         for (_, shelf) in &mut self.shelves {
-            shelf.set_glow(None, gba);
-            shelf.set_glow(Some(GbShell::Notched), notched);
-            shelf.set_glow(Some(GbShell::Rounded), rounded);
+            for (style, faces) in [(FavoriteMark::GoldGlow, gold), (FavoriteMark::WhiteGlow, white)] {
+                shelf.set_glow(style, None, faces[0]);
+                shelf.set_glow(style, Some(GbShell::Notched), faces[1]);
+                shelf.set_glow(style, Some(GbShell::Rounded), faces[2]);
+            }
+            shelf.set_star(star.0, star.1, star.2);
         }
     }
 
     fn mark_stars(&mut self) {
         let state = &self.state;
-        for (_, shelf) in &mut self.shelves {
-            shelf.mark_starred(|c| state.is_favorite(c.platform, &c.stem));
+        for (rack, shelf) in &mut self.shelves {
+            shelf.set_mark(state.favorite_mark);
+            // The Favorites shelf is all favourites already: marking each one only adds noise.
+            let on_favorites = *rack == Rack::Favorites;
+            shelf.mark_starred(|c| !on_favorites && state.is_favorite(c.platform, &c.stem));
         }
     }
 
@@ -2078,6 +2095,7 @@ impl App {
             | QuickRow::Rumble
             | QuickRow::Theme
             | QuickRow::Recents
+            | QuickRow::FavoriteMark
             | QuickRow::ShowTitles
             | QuickRow::Wallpaper
             | QuickRow::WallpaperTint
@@ -2132,6 +2150,12 @@ impl App {
         if row == QuickRow::Recents {
             self.state.show_recents = !self.state.show_recents;
             self.restock_recents();
+            self.persist();
+            return;
+        }
+        if row == QuickRow::FavoriteMark {
+            self.state.favorite_mark = self.state.favorite_mark.step(right);
+            self.mark_stars();
             self.persist();
             return;
         }
@@ -2197,6 +2221,7 @@ impl App {
             QuickRow::WallpaperTint => s.wallpaper_tint = s.wallpaper_tint.step(right),
             QuickRow::Wallpaper
             | QuickRow::Recents
+            | QuickRow::FavoriteMark
             | QuickRow::ShowTitles
             | QuickRow::DateTime
             | QuickRow::About

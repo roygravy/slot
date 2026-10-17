@@ -1,10 +1,10 @@
 use slot_gfx::{Canvas, Draw, TexId, OUT_H};
-use slot_store::{Cart, Platform};
+use slot_store::{Cart, FavoriteMark, Platform};
 use std::sync::OnceLock;
 
 use crate::board::{board_in, Placed};
 use crate::cart::{
-    cart_box, gb_shell_of, is_clear, label_colour, label_text, CART_H, CART_W,
+    cart_box, gb_shell_of, is_clear, label_colour, label_rect, label_text, CART_H, CART_W,
 };
 use crate::hud::Millis;
 use crate::silhouette::GbShell;
@@ -34,8 +34,11 @@ const SLOTS: i32 = 3;
 
 pub const REPEAT_DELAY_MS: Millis = 400;
 
-pub const GLOW_MARGIN: u32 = 26;
-pub const GLOW_INK: [u8; 3] = [0xf6, 0xc3, 0x2c];
+pub const GLOW_MARGIN: u32 = 34;
+pub const GLOW_GOLD: [u8; 3] = [0xf6, 0xc3, 0x2c];
+pub const GLOW_WHITE: [u8; 3] = [0xff, 0xff, 0xff];
+pub const STAR_PX: u32 = 22;
+const STAR_INSET: f32 = 5.0;
 const REPEAT_MS: [Millis; 4] = [110, 85, 65, 50];
 
 pub fn repeat_gap(fired: usize) -> Millis {
@@ -57,9 +60,9 @@ pub struct Shelf {
     shells: Vec<OnceLock<Option<GbShell>>>,
     clears: Vec<OnceLock<bool>>,
     starred: Vec<bool>,
-    glow: Option<TexId>,
-    gb_glow: Option<TexId>,
-    gbc_glow: Option<TexId>,
+    glows: [[Option<TexId>; 3]; 2],
+    star: Option<(TexId, f32, f32)>,
+    mark: FavoriteMark,
     ride: f32,
     vel: f32,
     held: Option<(i32, Millis, usize)>,
@@ -73,9 +76,9 @@ impl Shelf {
             faces: vec![None; carts.len()],
             interiors: vec![None; carts.len()],
             starred: vec![false; carts.len()],
-            glow: None,
-            gb_glow: None,
-            gbc_glow: None,
+            glows: [[None; 3]; 2],
+            star: None,
+            mark: FavoriteMark::default(),
             carts,
             index: 0,
             scroll: 0.0,
@@ -130,12 +133,22 @@ impl Shelf {
         self.vel = 0.0;
     }
 
-    pub fn set_glow(&mut self, shell: Option<GbShell>, face: TexId) {
-        match shell {
-            None => self.glow = Some(face),
-            Some(GbShell::Notched) => self.gb_glow = Some(face),
-            Some(GbShell::Rounded) => self.gbc_glow = Some(face),
-        }
+    pub fn set_glow(&mut self, style: FavoriteMark, shell: Option<GbShell>, face: TexId) {
+        let row = (style == FavoriteMark::WhiteGlow) as usize;
+        let col = match shell {
+            None => 0,
+            Some(GbShell::Notched) => 1,
+            Some(GbShell::Rounded) => 2,
+        };
+        self.glows[row][col] = Some(face);
+    }
+
+    pub fn set_star(&mut self, face: TexId, w: u32, h: u32) {
+        self.star = Some((face, w as f32, h as f32));
+    }
+
+    pub fn set_mark(&mut self, mark: FavoriteMark) {
+        self.mark = mark;
     }
 
     pub fn mark_starred(&mut self, starred: impl Fn(&Cart) -> bool) {
@@ -479,13 +492,14 @@ impl Shelf {
                     });
                 }
             }
-            if self.starred.get(i) == Some(&true) {
-                let halo = match self.shell(i) {
-                    None => self.glow,
-                    Some(GbShell::Notched) => self.gb_glow,
-                    Some(GbShell::Rounded) => self.gbc_glow,
+            if self.starred.get(i) == Some(&true) && self.mark != FavoriteMark::Star {
+                let row = (self.mark == FavoriteMark::WhiteGlow) as usize;
+                let col = match self.shell(i) {
+                    None => 0,
+                    Some(GbShell::Notched) => 1,
+                    Some(GbShell::Rounded) => 2,
                 };
-                if let Some(tex) = halo {
+                if let Some(tex) = self.glows[row][col] {
                     let m = GLOW_MARGIN as f32 * scale;
                     out.push(Draw::Tex {
                         x: x - m,
@@ -563,6 +577,19 @@ impl Shelf {
                     }
                 }
             });
+            if let (FavoriteMark::Star, Some(true), Some((tex, sw, sh))) =
+                (self.mark, self.starred.get(i).copied(), self.star)
+            {
+                let (lx, ly, lw, _) = label_rect(self.shell(i));
+                out.push(Draw::Tex {
+                    x: (x + (lx + lw) * w - sw - STAR_INSET).round(),
+                    y: (y + ly * h + STAR_INSET).round(),
+                    w: sw,
+                    h: sh,
+                    tex,
+                    alpha: alpha * dim,
+                });
+            }
         }
     }
 }

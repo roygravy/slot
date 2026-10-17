@@ -171,9 +171,9 @@ impl Badge {
 }
 
 
-/// A soft golden halo for a favourite cart: a rounded box `cw` x `ch` with `margin` px of glow
+/// A soft halo for a favourite cart: a rounded box `cw` x `ch` with `margin` px of glow
 /// around it, drawn behind the cart. Built at half resolution and smoothed when stretched.
-pub fn glow_face(cw: u32, ch: u32, margin: u32, colour: [u8; 3]) -> CartFace {
+pub fn glow_face(cw: u32, ch: u32, margin: u32, colour: [u8; 3], peak: f32) -> CartFace {
     let (w, h) = ((cw + 2 * margin).div_ceil(2), (ch + 2 * margin).div_ceil(2));
     let (m, radius) = (margin as f32, 16.0_f32);
     let (cx, cy) = (m + cw as f32 / 2.0, m + ch as f32 / 2.0);
@@ -185,12 +185,68 @@ pub fn glow_face(cw: u32, ch: u32, margin: u32, colour: [u8; 3]) -> CartFace {
             let (qx, qy) = ((x - cx).abs() - hw, (y - cy).abs() - hh);
             let outside = (qx.max(0.0).powi(2) + qy.max(0.0).powi(2)).sqrt();
             let d = outside + qx.max(qy).min(0.0) - radius;
-            let fall = (d.max(0.0) / (m * 0.42)).powi(2);
-            let t = ((d - m * 0.6) / (m * 0.4)).clamp(0.0, 1.0);
+            let fall = (d.max(0.0) / (m * 0.5)).powi(2);
+            let t = ((d - m * 0.5) / (m * 0.5)).clamp(0.0, 1.0);
             let window = 1.0 - t * t * (3.0 - 2.0 * t);
-            let a = 0.9 * (-fall).exp() * window;
+            let a = peak * (-fall).exp() * window;
             let o = ((py * w + px) * 4) as usize;
-            rgba[o..o + 4].copy_from_slice(&[colour[0], colour[1], colour[2], (a * 255.0).round() as u8]);
+            rgba[o..o + 4].copy_from_slice(&[
+                colour[0],
+                colour[1],
+                colour[2],
+                (a * 255.0).round() as u8,
+            ]);
+        }
+    }
+    CartFace { rgba, w, h }
+}
+
+/// A smooth white five-point star with a soft dark rim, `px` wide, anti-aliased.
+pub fn star_mark_face(px: u32) -> CartFace {
+    let pad = 3.0_f32;
+    let size = px as f32 + 2.0 * pad;
+    let (w, h) = (size.ceil() as u32, size.ceil() as u32);
+    let (cx, cy) = (w as f32 / 2.0, h as f32 / 2.0 + px as f32 * 0.04);
+    let (outer, inner) = (px as f32 / 2.0, px as f32 / 2.0 * 0.46);
+    let pts: Vec<(f32, f32)> = (0..10)
+        .map(|k| {
+            let a = -std::f32::consts::FRAC_PI_2 + k as f32 * std::f32::consts::PI / 5.0;
+            let r = if k % 2 == 0 { outer } else { inner };
+            (cx + r * a.cos(), cy + r * a.sin())
+        })
+        .collect();
+    let dist = |x: f32, y: f32| -> f32 {
+        let mut best = f32::MAX;
+        let mut inside = false;
+        for k in 0..10 {
+            let (a, b) = (pts[k], pts[(k + 1) % 10]);
+            let (ex, ey) = (b.0 - a.0, b.1 - a.1);
+            let t = (((x - a.0) * ex + (y - a.1) * ey) / (ex * ex + ey * ey)).clamp(0.0, 1.0);
+            let (qx, qy) = (a.0 + t * ex - x, a.1 + t * ey - y);
+            best = best.min((qx * qx + qy * qy).sqrt());
+            if (a.1 > y) != (b.1 > y) && x < a.0 + (y - a.1) / (b.1 - a.1) * ex {
+                inside = !inside;
+            }
+        }
+        if inside {
+            -best
+        } else {
+            best
+        }
+    };
+    let mut rgba = vec![0u8; (w * h * 4) as usize];
+    for py in 0..h {
+        for pxl in 0..w {
+            let d = dist(pxl as f32 + 0.5, py as f32 + 0.5);
+            let fill = (0.5 - d).clamp(0.0, 1.0);
+            let rim = ((2.4 - d) / 1.8).clamp(0.0, 1.0) * 0.5;
+            let a = fill + rim * (1.0 - fill);
+            if a <= 0.0 {
+                continue;
+            }
+            let c = 255.0 * fill / a;
+            let o = ((py * w + pxl) * 4) as usize;
+            rgba[o..o + 4].copy_from_slice(&[c as u8, c as u8, c as u8, (a * 255.0).round() as u8]);
         }
     }
     CartFace { rgba, w, h }

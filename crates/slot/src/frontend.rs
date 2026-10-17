@@ -260,12 +260,20 @@ impl Frontend {
         self.session.app_mut().set_legend_faces(legend);
         let hint = set_clock_hint_face();
         self.clocks.hint = Some(compositor.create_texture(hint.w, hint.h, &hint.rgba));
-        let [gba, notched, rounded] = [Console::Gba, Console::Gb, Console::Gbc].map(|p| {
-            let (cw, ch) = slot_ui::cart_box(p);
-            let halo = slot_ui::glow_face(cw, ch, slot_ui::GLOW_MARGIN, slot_ui::GLOW_INK);
-            compositor.create_texture(halo.w, halo.h, &halo.rgba)
-        });
-        self.session.app_mut().set_glow_faces(gba, notched, rounded);
+        let mut halos = |colour: [u8; 3], peak: f32| {
+            [Console::Gba, Console::Gb, Console::Gbc].map(|p| {
+                let (cw, ch) = slot_ui::cart_box(p);
+                let halo = slot_ui::glow_face(cw, ch, slot_ui::GLOW_MARGIN, colour, peak);
+                compositor.create_texture(halo.w, halo.h, &halo.rgba)
+            })
+        };
+        let gold = halos(slot_ui::GLOW_GOLD, 0.30);
+        let white = halos(slot_ui::GLOW_WHITE, 0.26);
+        let star = slot_ui::star_mark_face(slot_ui::STAR_PX);
+        let star_id = compositor.create_texture(star.w, star.h, &star.rgba);
+        self.session
+            .app_mut()
+            .set_mark_faces(gold, white, (star_id, star.w, star.h));
         let shadow = cart_shadow();
         let id = compositor.create_texture(shadow.w, shadow.h, &shadow.rgba);
         self.session.app_mut().set_cart_shadow(id);
