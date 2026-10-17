@@ -273,8 +273,8 @@ impl Frontend {
                 compositor.create_texture(halo.w, halo.h, &halo.rgba)
             })
         };
-        let gold = halos(slot_ui::GLOW_GOLD, 1.0);
-        let white = halos(slot_ui::GLOW_WHITE, 0.9);
+        let gold = halos(slot_ui::GLOW_GOLD, 0.38);
+        let white = halos(slot_ui::GLOW_GOLD, 0.38);
         let star = slot_ui::star_mark_face(slot_ui::STAR_PX);
         let star_id = compositor.create_texture(star.w, star.h, &star.rgba);
         self.session
@@ -821,7 +821,7 @@ struct UiFaces {
     quick_pointer: UndoFace,
     quick_values: Vec<[UndoFace; 2]>,
     quick_carets: [UndoFace; 2],
-    quick_legend: [UndoFace; 4],
+    quick_legend: [UndoFace; 5],
     quick_switches: [UndoFace; 2],
     quick_help: Vec<Option<UndoFace>>,
     button_tabs: Vec<UndoFace>,

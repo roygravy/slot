@@ -43,7 +43,7 @@ const LIFT: f32 = 10.0;
 pub const DROP_MARGIN: u32 = 22;
 const DROP_FALL: f32 = 10.0;
 const DROP_ALPHA: f32 = 0.22;
-pub const GLOW_GOLD: [u8; 3] = [0xf6, 0xc3, 0x2c];
+pub const GLOW_GOLD: [u8; 3] = [0xff, 0xdc, 0x9a];
 pub const GLOW_WHITE: [u8; 3] = [0xff, 0xff, 0xff];
 pub const STAR_PX: u32 = 22;
 const STAR_INSET: f32 = 5.0;
@@ -174,27 +174,6 @@ impl Shelf {
 
     pub fn set_light_ground(&mut self, light: bool) {
         self.light_ground = light;
-    }
-
-    fn glow(&self, x: f32, y: f32, w: f32, h: f32, tex: TexId, alpha: f32) -> Draw {
-        match self.light_ground {
-            true => Draw::Tex {
-                x,
-                y,
-                w,
-                h,
-                tex,
-                alpha: alpha * 0.75,
-            },
-            false => Draw::Light {
-                x,
-                y,
-                w,
-                h,
-                tex,
-                alpha,
-            },
-        }
     }
 
     pub fn set_spotlight(&mut self, on: bool) {
@@ -518,25 +497,6 @@ impl Shelf {
         let recede = recede.clamp(0.0, 1.0);
         let dim = dim.clamp(0.0, 1.0);
         let target = self.scroll_target();
-        if self.spotlight && self.mark != FavoriteMark::Star && !self.carts.is_empty() {
-            // Still, behind the middle: the carts slide through the light rather than carry it.
-            let i = self.index.min(self.carts.len() - 1);
-            if let Some(tex) = self.glow_for(i) {
-                let (cw, ch) = cart_box(self.carts[i].platform);
-                let (w, h) = (cw as f32 * CAROUSEL, ch as f32 * CAROUSEL);
-                let m = GLOW_MARGIN as f32 * CAROUSEL;
-                let x = canvas.w / 2.0 - w / 2.0;
-                let y = foot_y(ch as f32) - h - LIFT * CAROUSEL;
-                out.push(self.glow(
-                    x - m,
-                    y - m,
-                    w + 2.0 * m,
-                    h + 2.0 * m,
-                    tex,
-                    (1.0 - recede) * dim,
-                ));
-            }
-        }
         for slot in -SLOTS..=SLOTS {
             let Some(i) = self.cart_at_offset(slot) else {
                 continue;
@@ -599,19 +559,6 @@ impl Shelf {
                     tex,
                     alpha: DROP_ALPHA * alpha * dim * (1.0 + lift / LIFT * 0.3),
                 });
-            }
-            if self.starred.get(i) == Some(&true) && self.mark != FavoriteMark::Star {
-                if let Some(tex) = self.glow_for(i) {
-                    let m = GLOW_MARGIN as f32 * scale;
-                    out.push(self.glow(
-                        x - m,
-                        y - m,
-                        w + 2.0 * m,
-                        h + 2.0 * m,
-                        tex,
-                        alpha * dim,
-                    ));
-                }
             }
             if self.clear(i) && self.face(i).is_some() {
                 let board = match self.shell(i) {
@@ -679,6 +626,20 @@ impl Shelf {
                     }
                 }
             });
+            // The spotlight falls on the cart: added over it, after its face.
+            if self.starred.get(i) == Some(&true) && self.mark != FavoriteMark::Star {
+                if let Some(tex) = self.glow_for(i) {
+                    let m = GLOW_MARGIN as f32 * scale;
+                    out.push(Draw::Light {
+                        x: x - m,
+                        y: y - m,
+                        w: w + 2.0 * m,
+                        h: h + 2.0 * m,
+                        tex,
+                        alpha: alpha * dim,
+                    });
+                }
+            }
             if let (FavoriteMark::Star, Some(true), Some((tex, sw, sh))) =
                 (self.mark, self.starred.get(i).copied(), self.star)
             {
@@ -690,6 +651,25 @@ impl Shelf {
                     h: sh,
                     tex,
                     alpha: alpha * dim,
+                });
+            }
+        }
+        if self.spotlight && self.mark != FavoriteMark::Star && !self.carts.is_empty() {
+            // Still, over the middle: the carts slide through the light rather than carry it.
+            let i = self.index.min(self.carts.len() - 1);
+            if let Some(tex) = self.glow_for(i) {
+                let (cw, ch) = cart_box(self.carts[i].platform);
+                let (w, h) = (cw as f32 * CAROUSEL, ch as f32 * CAROUSEL);
+                let m = GLOW_MARGIN as f32 * CAROUSEL;
+                let x = canvas.w / 2.0 - w / 2.0;
+                let y = foot_y(ch as f32) - h - LIFT * CAROUSEL;
+                out.push(Draw::Light {
+                    x: x - m,
+                    y: y - m,
+                    w: w + 2.0 * m,
+                    h: h + 2.0 * m,
+                    tex,
+                    alpha: (1.0 - recede) * dim,
                 });
             }
         }

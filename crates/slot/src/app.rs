@@ -70,8 +70,6 @@ const PLAY_HOLD_MS: Millis = 500;
 
 const SHUTDOWN_SHOW_MS: Millis = 250;
 
-const POWER_MENU_PITCH: f32 = 44.0;
-const POWER_MENU_BAR_INSET: f32 = 4.0;
 const CORE_PICKER_RECEDE: f32 = 0.26;
 
 const SLOT_NAME_IN_MS: Millis = 200;
@@ -925,8 +923,7 @@ impl App {
                 WallpaperTint::High => QuickValue::High,
             }),
             QuickRow::FavoriteMark => Some(match self.state.favorite_mark {
-                FavoriteMark::GoldGlow => QuickValue::GoldGlow,
-                FavoriteMark::WhiteGlow => QuickValue::WhiteGlow,
+                FavoriteMark::GoldGlow | FavoriteMark::WhiteGlow => QuickValue::GoldGlow,
                 FavoriteMark::Star => QuickValue::StarMark,
             }),
             QuickRow::Theme => Some(match self.state.appearance {
@@ -953,7 +950,10 @@ impl App {
             | QuickRow::GbcBezel
             | QuickRow::GbaBezel
             | QuickRow::Bezel
-            | QuickRow::Buttons => None,
+            | QuickRow::Buttons
+            | QuickRow::Sleep
+            | QuickRow::Restart
+            | QuickRow::PowerOff => None,
             QuickRow::AutoSleep => Some(auto_sleep_value(self.state.auto_sleep_secs)),
             QuickRow::InGameMenu => Some(if self.state.in_game_menu {
                 QuickValue::Show
@@ -2185,6 +2185,9 @@ impl App {
             | QuickRow::AutoSleep
             | QuickRow::InGameMenu
             | QuickRow::RememberPosition
+            | QuickRow::Sleep
+            | QuickRow::Restart
+            | QuickRow::PowerOff
             | QuickRow::ScreenLook => {
                 // A on a switch flips it, as Left / Right do.
                 if self.quick_value(row).and_then(QuickValue::switch).is_some() {
@@ -2371,7 +2374,10 @@ impl App {
             | QuickRow::GbaBezel
             | QuickRow::Bezel
             | QuickRow::Buttons
-            | QuickRow::ScreenLook => return,
+            | QuickRow::ScreenLook
+            | QuickRow::Sleep
+            | QuickRow::Restart
+            | QuickRow::PowerOff => return,
 
             QuickRow::PixelTransparency => s.pixel_transparency = !s.pixel_transparency,
             QuickRow::LcdGhosting => {
@@ -3462,20 +3468,24 @@ impl App {
     }
 
     fn draw_power_menu(&self, index: usize, out: &mut Vec<Draw>) {
-        out.push(Draw::Rect {
-            x: 0.0,
-            y: 0.0,
-            w: self.canvas().w,
-            h: OUT_H as f32,
-            colour: slot_ui::opening(),
-        });
-        draw_menu_rows(
-            self.canvas(),
-            &self.power_menu_faces,
-            Some(index),
-            centred_top(self.power_menu_faces.len()),
-            out,
-        );
+        QuickMenu {
+            row: QuickRow::POWER[index.min(QuickRow::POWER.len() - 1)],
+            hidden: &[],
+            values: QuickRow::ALL.map(|_| None),
+            clock: None,
+            wallpaper: None,
+            faces: self.quick_menu_faces.as_ref(),
+            ground: self.menu_ground(),
+            palette: None,
+            gba_bezel: None,
+            gb_bezel: None,
+            gbc_bezel: None,
+            bezel: None,
+            over_game: false,
+            canvas: self.canvas(),
+            ink: self.menu_ink(),
+        }
+        .draw(out);
     }
 
     fn core_picker_shown(&self) -> Option<CorePicker> {
@@ -4056,7 +4066,7 @@ impl App {
         let Some(index) = self.power_menu else {
             return;
         };
-        let last = PowerChoice::ALL.len() - 1;
+        let last = QuickRow::POWER.len() - 1;
         match action {
             Action::GbaDown(Btn::Up) => {
                 self.power_menu = Some(if index == 0 { last } else { index - 1 })
@@ -4067,15 +4077,19 @@ impl App {
             Action::GbaDown(Btn::B) => self.power_menu = None,
             Action::GbaDown(Btn::A) => {
                 self.power_menu = None;
-                self.close_game_menu();
-                match PowerChoice::ALL[index] {
-                    PowerChoice::Restart => {
+                match QuickRow::POWER[index.min(last)] {
+                    QuickRow::Sleep => self.doze(),
+                    QuickRow::Restart => {
+                        self.close_game_menu();
                         self.remember_shelf();
                         self.restarting = true;
                         self.act_at = self.now() + SHUTDOWN_SHOW_MS;
                         self.set_led(LedState::Off);
                     }
-                    PowerChoice::PowerOff => self.begin_power_off(),
+                    _ => {
+                        self.close_game_menu();
+                        self.begin_power_off()
+                    }
                 }
             }
             _ => {}
@@ -4918,40 +4932,6 @@ fn free_stamp(ring: &StateRing, now: i64) -> String {
         stamp = format_stamp(secs);
     }
     stamp
-}
-
-fn centred_top(rows: usize) -> f32 {
-    (OUT_H as f32 - POWER_MENU_PITCH * rows as f32) / 2.0
-}
-
-fn draw_menu_rows(
-    canvas: Canvas,
-    faces: &[(TexId, u32, u32)],
-    index: Option<usize>,
-    top: f32,
-    out: &mut Vec<Draw>,
-) {
-    for (row, (tex, w, h)) in faces.iter().copied().enumerate() {
-        let y = top + POWER_MENU_PITCH * row as f32;
-        let x = canvas.centred(w as f32).round();
-        if index == Some(row) {
-            out.push(Draw::Rect {
-                x,
-                y: y + POWER_MENU_BAR_INSET,
-                w: w as f32,
-                h: POWER_MENU_PITCH - 2.0 * POWER_MENU_BAR_INSET,
-                colour: slot_ui::edge(),
-            });
-        }
-        out.push(Draw::Tex {
-            x,
-            y: y + (POWER_MENU_PITCH - h as f32) / 2.0,
-            w: w as f32,
-            h: h as f32,
-            tex,
-            alpha: 1.0,
-        });
-    }
 }
 
 fn bezel_slot(platform: Platform) -> usize {

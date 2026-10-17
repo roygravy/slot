@@ -56,10 +56,13 @@ pub enum QuickRow {
     FavoriteMark,
     ScreenLook,
     Buttons,
+    Sleep,
+    Restart,
+    PowerOff,
 }
 
 impl QuickRow {
-    pub const ALL: [QuickRow; 48] = [
+    pub const ALL: [QuickRow; 51] = [
         QuickRow::FastForward,
         QuickRow::FastForwardSound,
         QuickRow::Screen,
@@ -108,7 +111,13 @@ impl QuickRow {
         QuickRow::FavoriteMark,
         QuickRow::ScreenLook,
         QuickRow::Buttons,
+        QuickRow::Sleep,
+        QuickRow::Restart,
+        QuickRow::PowerOff,
     ];
+
+    /// The power menu, held POWER.
+    pub const POWER: [QuickRow; 3] = [QuickRow::Sleep, QuickRow::Restart, QuickRow::PowerOff];
 
     pub const MAIN: [QuickRow; 4] = [
         QuickRow::General,
@@ -215,6 +224,7 @@ impl QuickRow {
                 &QuickRow::PLAY
             }
             QuickRow::PlayScreen | QuickRow::PlayGameplay => &QuickRow::SETTINGS,
+            QuickRow::Sleep | QuickRow::Restart | QuickRow::PowerOff => &QuickRow::POWER,
             QuickRow::Shader | QuickRow::ColourCorrection | QuickRow::Palette | QuickRow::Bezel => {
                 &QuickRow::PLAY_SCREEN
             }
@@ -246,7 +256,13 @@ impl QuickRow {
     }
 
     pub fn centred(self) -> bool {
-        [&QuickRow::MAIN[..], &QuickRow::PLAY, &QuickRow::SETTINGS].contains(&self.page())
+        [
+            &QuickRow::MAIN[..],
+            &QuickRow::PLAY,
+            &QuickRow::SETTINGS,
+            &QuickRow::POWER,
+        ]
+        .contains(&self.page())
     }
 
     pub fn child(self) -> Option<QuickRow> {
@@ -325,6 +341,9 @@ impl QuickRow {
             QuickRow::GbBezel | QuickRow::GbcBezel | QuickRow::GbaBezel | QuickRow::Bezel => "Bezel",
             QuickRow::ScreenLook => "Screen Look",
             QuickRow::Buttons => "Buttons",
+            QuickRow::Sleep => "Sleep",
+            QuickRow::Restart => "Restart",
+            QuickRow::PowerOff => "Power Off",
         }
     }
 
@@ -361,13 +380,16 @@ impl QuickRow {
             QuickRow::Wallpaper => "Default follows the theme. Off is plain black.",
             QuickRow::Theme => "Dark or light housing, shelves and menus.",
             QuickRow::Recents => "A shelf with the last 10 games you played.",
-            QuickRow::FavoriteMark => "How favorites stand out. Press Y on a cart to star it.",
+            QuickRow::FavoriteMark => "How favorites stand out. Press Y on a cart to mark it.",
             QuickRow::ShowTitles => "Show the selected game's name under the shelf.",
             QuickRow::DateTime => "Set the clock.",
             QuickRow::AutoSleep => "Sleep after this long without a button press.",
             QuickRow::RememberPosition => "Start where you left off on the shelf.",
             QuickRow::PlayScreen => "How the game picture looks.",
             QuickRow::PlayGameplay => "Speed, rewind, turbo and saving.",
+            QuickRow::Sleep => "Screen off, game paused. Press POWER to wake.",
+            QuickRow::Restart => "Save your place and start again.",
+            QuickRow::PowerOff => "Save your place and switch off.",
             _ => return None,
         })
     }
@@ -390,6 +412,9 @@ impl QuickRow {
                 | QuickRow::ScreenGbc
                 | QuickRow::ScreenGb
                 | QuickRow::Buttons
+                | QuickRow::Sleep
+                | QuickRow::Restart
+                | QuickRow::PowerOff
         )
     }
 
@@ -496,7 +521,7 @@ impl QuickValue {
             QuickValue::Sleep30s => "30 sec",
             QuickValue::Sleep1m => "1 min",
             QuickValue::Sleep5m => "5 min",
-            QuickValue::GoldGlow => "Gold Glow",
+            QuickValue::GoldGlow => "Spotlight",
             QuickValue::WhiteGlow => "White Glow",
             QuickValue::StarMark => "Star",
             QuickValue::Authentic => "Authentic",
@@ -740,12 +765,13 @@ pub fn quick_caret_face(right: bool) -> UndoFace {
     UndoFace { rgba, w, h }
 }
 
-pub fn quick_legend_faces() -> [UndoFace; 4] {
+pub fn quick_legend_faces() -> [UndoFace; 5] {
     [
         tint_mask(hint_face("B", "Back")),
         tint_mask(arrows_hint_face("Change")),
         tint_mask(hint_face("A", "Open")),
         tint_mask(hint_face("B", "Resume")),
+        tint_mask(hint_face("A", "Select")),
     ]
 }
 
@@ -754,7 +780,7 @@ pub struct QuickMenuFaces {
     pub pointer: (TexId, u32, u32),
     pub values: Vec<[(TexId, u32, u32); 2]>,
     pub carets: [(TexId, u32, u32); 2],
-    pub legend: [(TexId, u32); 4],
+    pub legend: [(TexId, u32); 5],
     /// Off, on.
     pub switches: [(TexId, u32, u32); 2],
     pub help: Vec<Option<(TexId, u32, u32)>>,
@@ -873,12 +899,16 @@ impl QuickMenu<'_> {
                 ink.dim,
             );
         }
-        let [back, change, open, resume] = faces.legend;
+        let [back, change, open, resume, select] = faces.legend;
         let back = match self.row.page() == QuickRow::PLAY {
             true => resume,
             false => back,
         };
-        let other = if self.row.opens() { open } else { change };
+        let other = match (self.row.page() == QuickRow::POWER, self.row.opens()) {
+            (true, _) => select,
+            (false, true) => open,
+            (false, false) => change,
+        };
         for (tex, w, x) in centred_hints(self.canvas, &[back, other], LEGEND_GAP) {
             tint(out, tex, x, LEGEND_Y, w, HINT_H, ink.text);
         }

@@ -88,13 +88,19 @@ impl FavoriteMark {
     }
 
     pub fn parse(value: &str) -> Option<FavoriteMark> {
+        // The white glow is gone; a card set to it gets the spotlight.
+        if value == "white_glow" {
+            return Some(FavoriteMark::GoldGlow);
+        }
         FavoriteMark::ALL.into_iter().find(|m| m.key() == value)
     }
 
-    pub fn step(self, right: bool) -> FavoriteMark {
-        let n = FavoriteMark::ALL.len();
-        let at = FavoriteMark::ALL.iter().position(|m| *m == self).unwrap_or(0);
-        FavoriteMark::ALL[if right { (at + 1) % n } else { (at + n - 1) % n }]
+    /// Spotlight and Star: the white glow is no longer offered.
+    pub fn step(self, _right: bool) -> FavoriteMark {
+        match self {
+            FavoriteMark::Star => FavoriteMark::GoldGlow,
+            _ => FavoriteMark::Star,
+        }
     }
 }
 

@@ -171,50 +171,29 @@ impl Badge {
 }
 
 
-/// A backlight for a favourite cart, meant to be added onto the ground as light: a small hot
-/// core of warm white close behind the cart, and a wide soft bloom in `colour` that fades out
-/// round, so the light reads as a lamp behind the cart rather than an outline. `cw` x `ch` is
-/// the cart; the face is `margin` px larger all round, built at half resolution.
+/// A spotlight for a favourite cart, added over the cart as light: a soft warm pool centred
+/// on the cart's upper half that lights the cart itself and fades out over the ground around it,
+/// with no edge and no beam. `cw` x `ch` is the cart; the face is `margin` px larger all round,
+/// built at half resolution.
 pub fn glow_face(cw: u32, ch: u32, margin: u32, colour: [u8; 3], peak: f32) -> CartFace {
     let (fw, fh) = (cw + 2 * margin, ch + 2 * margin);
     let (w, h) = (fw.div_ceil(2), fh.div_ceil(2));
-    let (cx, cy) = (fw as f32 / 2.0, fh as f32 / 2.0);
-    let (cw, ch) = (cw as f32, ch as f32);
-    const HOT: [f32; 3] = [255.0, 244.0, 226.0];
-    const BLOOM: f32 = 0.50;
-    let smooth = |e0: f32, e1: f32, v: f32| {
-        let t = ((v - e0) / (e1 - e0)).clamp(0.0, 1.0);
-        t * t * (3.0 - 2.0 * t)
-    };
+    let (cx, cy) = (fw as f32 / 2.0, fh as f32 / 2.0 - ch as f32 * 0.12);
+    let (sx, sy) = (cw as f32 * 0.46, ch as f32 * 0.46);
     let mut rgba = vec![0u8; (w * h * 4) as usize];
     for py in 0..h {
         for px in 0..w {
             let (x, y) = ((px as f32 + 0.5) * 2.0 - cx, (py as f32 + 0.5) * 2.0 - cy);
-            // Distance out from the cart, as an oval through its sides: 1 at the cart's edge.
-            let r = ((x / (cw * 0.5)).abs().powi(3) + (y / (ch * 0.5)).abs().powi(3)).powf(1.0 / 3.0);
-            let out = (r - 1.0).max(0.0);
-            // Light falls away from the cart with no edge anywhere: a quick warm-white core and
-            // a long soft bloom, both easing to nothing before the face's border.
-            let fade = smooth(1.0 + margin as f32 / (cw.min(ch) * 0.5), 1.0, r);
-            // The hot core sits wholly behind the cart; only its haze shows, in full colour.
-            let core = 0.0_f32;
-            // Its brightest point lies well behind the cart, so what shows beside it is only
-            // the tail of a soft bell: a haze with no solid band anywhere.
-            let _ = out;
-            let bell = ((r - 0.55).max(0.0) / 0.30).powi(2);
-            let bloom = ((-bell).exp() * 6.0).min(1.0) * BLOOM * fade;
-            let a = (core + bloom).min(1.0);
+            let r2 = (x / sx).powi(2) + (y / sy).powi(2);
+            // A bell, eased to nothing before the face's border.
+            let edge = ((px.min(w - 1 - px).min(py).min(h - 1 - py)) as f32 / 6.0).min(1.0);
+            let a = (-r2).exp() * peak * edge;
             let o = ((py * w + px) * 4) as usize;
-            if a <= 0.0 {
-                continue;
-            }
-            let k = core / (core + bloom);
-            let rgb = [0, 1, 2].map(|c| HOT[c] * k + colour[c] as f32 * (1.0 - k));
             rgba[o..o + 4].copy_from_slice(&[
-                rgb[0].round() as u8,
-                rgb[1].round() as u8,
-                rgb[2].round() as u8,
-                (a * peak * 255.0).round().min(255.0) as u8,
+                colour[0],
+                colour[1],
+                colour[2],
+                (a * 255.0).round().min(255.0) as u8,
             ]);
         }
     }

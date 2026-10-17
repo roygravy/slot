@@ -28,6 +28,7 @@ fn btn(name: &str) -> Btn {
         "start" => Btn::Start,
         "select" => Btn::Select,
         "menu" => Btn::Menu,
+        "power" => Btn::Power,
         other => panic!("unknown button {other}"),
     }
 }
@@ -54,6 +55,7 @@ fn write_png(path: &str, rgba: &[u8]) {
     w.write_image_data(&px).unwrap();
 }
 
+#[allow(unused_assignments)]
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let [root, script, out] = args.as_slice() else {
@@ -84,7 +86,8 @@ fn main() {
         frontend.compose(&mut compositor);
         compositor.read_frame()
     };
-    let mut last;
+    #[allow(unused_assignments)]
+    let mut last: Vec<u8>;
     for line in script.lines() {
         let words: Vec<&str> = line.split('#').next().unwrap().split_whitespace().collect();
         let n = |i: usize, d: u32| words.get(i).map_or(d, |w| w.parse().unwrap());
