@@ -93,6 +93,7 @@ pub fn gb_shell_of(cart: &Cart) -> Option<GbShell> {
     }
 }
 
+#[allow(dead_code)]
 pub fn label_rect(shell: Option<GbShell>) -> (f32, f32, f32, f32) {
     let s = spec(match shell {
         None => Shape::Gba,

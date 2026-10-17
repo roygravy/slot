@@ -170,40 +170,27 @@ impl Badge {
     }
 }
 
-const STAR: [&str; 9] = [
-    "....#....",
-    "...###...",
-    "...###...",
-    "#########",
-    ".#######.",
-    "..#####..",
-    "..#####..",
-    ".###.###.",
-    ".##...##.",
-];
 
-pub fn star_face(scale: u32, colour: [u8; 3]) -> CartFace {
-    let (gw, gh) = (STAR[0].len() as i32, STAR.len() as i32);
-    let ink = |x: i32, y: i32| {
-        (0..gw).contains(&x)
-            && (0..gh).contains(&y)
-            && STAR[y as usize].as_bytes()[x as usize] == b'#'
-    };
-    let (w, h) = ((gw + 2) as u32 * scale, (gh + 2) as u32 * scale);
+/// A soft golden halo for a favourite cart: a rounded box `cw` x `ch` with `margin` px of glow
+/// around it, drawn behind the cart. Built at half resolution and smoothed when stretched.
+pub fn glow_face(cw: u32, ch: u32, margin: u32, colour: [u8; 3]) -> CartFace {
+    let (w, h) = ((cw + 2 * margin).div_ceil(2), (ch + 2 * margin).div_ceil(2));
+    let (m, radius) = (margin as f32, 16.0_f32);
+    let (cx, cy) = (m + cw as f32 / 2.0, m + ch as f32 / 2.0);
+    let (hw, hh) = (cw as f32 / 2.0 - radius, ch as f32 / 2.0 - radius);
     let mut rgba = vec![0u8; (w * h * 4) as usize];
     for py in 0..h {
         for px in 0..w {
-            let (x, y) = ((px / scale) as i32 - 1, (py / scale) as i32 - 1);
-            let rim = [(0, -1), (0, 1), (-1, 0), (1, 0)]
-                .iter()
-                .any(|(dx, dy)| ink(x + dx, y + dy));
-            let c = match (ink(x, y), rim) {
-                (true, _) => [colour[0], colour[1], colour[2], 255],
-                (false, true) => [HALO[0], HALO[1], HALO[2], 255],
-                _ => continue,
-            };
+            let (x, y) = ((px as f32 + 0.5) * 2.0, (py as f32 + 0.5) * 2.0);
+            let (qx, qy) = ((x - cx).abs() - hw, (y - cy).abs() - hh);
+            let outside = (qx.max(0.0).powi(2) + qy.max(0.0).powi(2)).sqrt();
+            let d = outside + qx.max(qy).min(0.0) - radius;
+            let fall = (d.max(0.0) / (m * 0.42)).powi(2);
+            let t = ((d - m * 0.6) / (m * 0.4)).clamp(0.0, 1.0);
+            let window = 1.0 - t * t * (3.0 - 2.0 * t);
+            let a = 0.9 * (-fall).exp() * window;
             let o = ((py * w + px) * 4) as usize;
-            rgba[o..o + 4].copy_from_slice(&c);
+            rgba[o..o + 4].copy_from_slice(&[colour[0], colour[1], colour[2], (a * 255.0).round() as u8]);
         }
     }
     CartFace { rgba, w, h }

@@ -260,9 +260,12 @@ impl Frontend {
         self.session.app_mut().set_legend_faces(legend);
         let hint = set_clock_hint_face();
         self.clocks.hint = Some(compositor.create_texture(hint.w, hint.h, &hint.rgba));
-        let star = slot_ui::star_face(slot_ui::STAR_SCALE, slot_ui::STAR_INK);
-        let id = compositor.create_texture_nearest(star.w, star.h, &star.rgba);
-        self.session.app_mut().set_star_face(id, star.w, star.h);
+        let [gba, notched, rounded] = [Console::Gba, Console::Gb, Console::Gbc].map(|p| {
+            let (cw, ch) = slot_ui::cart_box(p);
+            let halo = slot_ui::glow_face(cw, ch, slot_ui::GLOW_MARGIN, slot_ui::GLOW_INK);
+            compositor.create_texture(halo.w, halo.h, &halo.rgba)
+        });
+        self.session.app_mut().set_glow_faces(gba, notched, rounded);
         let shadow = cart_shadow();
         let id = compositor.create_texture(shadow.w, shadow.h, &shadow.rgba);
         self.session.app_mut().set_cart_shadow(id);

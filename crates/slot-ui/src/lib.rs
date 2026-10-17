@@ -58,7 +58,7 @@ pub use hud::{
     HUD_ICON_PX, HUD_INK, HUD_MS, LINK_HOST_INK, LINK_JOIN_INK, PLATE_H,
 };
 pub use icon::{
-    badge_face, icon_box, icon_face, icon_glyph_box, icon_glyph_face, star_face, warm_fonts, Badge,
+    badge_face, icon_box, icon_face, icon_glyph_box, icon_glyph_face, glow_face, warm_fonts, Badge,
     Icon,
 };
 pub use link_art::{
@@ -81,7 +81,7 @@ pub use quick_menu::{
 };
 pub use rebuild::{rebuild_count_face, rebuild_title_face, RebuildScreen};
 pub use refusal::Refusal;
-pub use shelf::{foot_y, repeat_gap, rest_y, Shelf, REPEAT_DELAY_MS, STAR_INK, STAR_SCALE};
+pub use shelf::{foot_y, repeat_gap, rest_y, Shelf, GLOW_INK, GLOW_MARGIN, REPEAT_DELAY_MS};
 pub use shell::{
     gb_plastics, gb_table_shells, gba_plastics, gba_shell_for,
     lookup_order_is_exact_then_family_then_default, shell_for, shell_presets, table_keys, Finish,

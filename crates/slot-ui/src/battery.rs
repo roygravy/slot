@@ -9,12 +9,12 @@ use crate::plate::HINT_H;
 
 pub const BOLT_PX: f32 = 18.0;
 
-pub const GAUGE_W: f32 = 22.0;
-pub const GAUGE_H: f32 = 11.0;
+pub const GAUGE_W: f32 = 24.0;
+pub const GAUGE_H: f32 = 12.0;
 const _: () = assert!(GAUGE_H < GAUGE_W);
-const NUB_W: f32 = 2.5;
-const NUB_H: f32 = 4.0;
-pub const WALL: f32 = 1.5;
+const NUB_W: f32 = 3.0;
+const NUB_H: f32 = 6.0;
+pub const WALL: f32 = 2.0;
 const GAP: f32 = 7.0;
 
 const BOLT_MAX_SIDE: f32 = 14.0;
@@ -33,6 +33,8 @@ pub fn draw_gauge(
     let Some(b) = battery else {
         return;
     };
+    // The panel is 1:1, so every edge sits on a whole pixel.
+    let (x, y) = (x.round(), y.round());
     let colour = [
         ink[0] as f32 / 255.0,
         ink[1] as f32 / 255.0,
@@ -54,7 +56,7 @@ pub fn draw_gauge(
     rect(cx + GAUGE_W, y + (GAUGE_H - NUB_H) / 2.0, NUB_W, NUB_H, out);
 
     let inner = GAUGE_W - 4.0 * WALL;
-    let fill = inner * f32::from(b.percent.min(100)) / 100.0;
+    let fill = (inner * f32::from(b.percent.min(100)) / 100.0).round();
     if fill > 0.0 {
         rect(
             cx + 2.0 * WALL,
@@ -67,8 +69,8 @@ pub fn draw_gauge(
 
     if let (Charge::Charging, Some(tex)) = (b.charge, bolt) {
         out.push(Draw::Tex {
-            x: x + (BOLT_MAX_SIDE - bolt_w) / 2.0,
-            y: y + (GAUGE_H - bolt_h) / 2.0,
+            x: (x + (BOLT_MAX_SIDE - bolt_w) / 2.0).round(),
+            y: (y + (GAUGE_H - bolt_h) / 2.0).round(),
             w: bolt_w,
             h: bolt_h,
             tex,
@@ -78,7 +80,7 @@ pub fn draw_gauge(
 
     if percent.w > 0 {
         let px = cx + GAUGE_W + NUB_W + GAP;
-        let py = y + (GAUGE_H - HINT_H as f32) / 2.0;
+        let py = (y + (GAUGE_H - HINT_H as f32) / 2.0).round();
         out.push(match percent.face {
             Some(tex) => Draw::Tex {
                 x: px,
@@ -107,6 +109,6 @@ fn bolt_size() -> (f32, f32) {
             return (BOLT_MAX_SIDE, BOLT_MAX_SIDE);
         }
         let scale = (BOLT_MAX_SIDE / w as f32).min(BOLT_MAX_SIDE / h as f32);
-        (w as f32 * scale, h as f32 * scale)
+        ((w as f32 * scale).round(), (h as f32 * scale).round())
     })
 }

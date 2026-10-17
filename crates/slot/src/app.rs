@@ -1159,9 +1159,11 @@ impl App {
         self.clock_faces = Some((line, hint));
     }
 
-    pub fn set_star_face(&mut self, face: TexId, w: u32, h: u32) {
+    pub fn set_glow_faces(&mut self, gba: TexId, notched: TexId, rounded: TexId) {
         for (_, shelf) in &mut self.shelves {
-            shelf.set_star(face, w, h);
+            shelf.set_glow(None, gba);
+            shelf.set_glow(Some(GbShell::Notched), notched);
+            shelf.set_glow(Some(GbShell::Rounded), rounded);
         }
     }
 

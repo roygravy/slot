@@ -286,8 +286,8 @@ pub enum Shader {
 }
 
 impl Shader {
-    pub const GBA: [Shader; 4] = [Shader::Off, Shader::Grid, Shader::GbaLcd, Shader::Lcd3x];
-    pub const GB: [Shader; 4] = [Shader::Off, Shader::Lcd3x, Shader::Grid, Shader::Simpletex];
+    pub const GBA: [Shader; 2] = [Shader::Off, Shader::GbaLcd];
+    pub const GB: [Shader; 2] = [Shader::Off, Shader::Grid];
 
     pub fn name(self) -> &'static str {
         match self {

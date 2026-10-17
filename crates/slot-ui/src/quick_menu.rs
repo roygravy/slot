@@ -1,6 +1,6 @@
 use crate::draw::{Canvas, Draw, TexId, OUT_H, OUT_W};
 use crate::plate::{arrows_hint_face, centred_hints, hint_face, UndoFace, HINT_H, LEGEND_GAP};
-use crate::power_menu::{MENU_H, MENU_INK, MENU_PAD, MENU_PX};
+use crate::power_menu::{MENU_H, MENU_INK, MENU_PAD};
 use crate::slot_chrome::opening;
 use crate::text;
 
@@ -470,8 +470,10 @@ impl QuickValue {
 
 pub const QUICK_PITCH: f32 = 52.0;
 pub const QUICK_EDGE: f32 = 32.0;
-pub const QUICK_LABEL_X: f32 = 64.0;
-const POINTER_GAP: f32 = 14.0;
+pub const QUICK_LABEL_X: f32 = QUICK_EDGE;
+
+/// The 1.6 menu look: a smaller face than the power menu, so a label and its value never run into each other.
+const QUICK_PX: f32 = 26.0;
 const POINTER_SCALE: usize = 4;
 const POINTER: [&str; 11] = [
     "X.......", "XX......", "XoX.....", "XooX....", "XoooX...", "XooooX..", "XoooX...", "XooX....",
@@ -491,10 +493,10 @@ pub fn quick_label_face(row: QuickRow, lit: bool) -> UndoFace {
 }
 
 fn cap_centre(label: &fontdue::Font, h: u32) -> f32 {
-    match label.horizontal_line_metrics(MENU_PX) {
+    match label.horizontal_line_metrics(QUICK_PX) {
         Some(v) => {
             (h as f32 - v.new_line_size) / 2.0 + v.ascent
-                - label.metrics('H', MENU_PX).height as f32 / 2.0
+                - label.metrics('H', QUICK_PX).height as f32 / 2.0
         }
         None => h as f32 / 2.0,
     }
@@ -545,7 +547,7 @@ fn quick_text_face(label: &str, colour: [u8; 3]) -> UndoFace {
             h: 0,
         };
     };
-    let layout = text::fit(font, label, OUT_W as f32, 1, MENU_PX, MENU_PX);
+    let layout = text::fit(font, label, OUT_W as f32, 1, QUICK_PX, QUICK_PX);
     let set = layout
         .lines
         .iter()
@@ -658,11 +660,6 @@ impl QuickMenu<'_> {
                     false => QUICK_LABEL_X - pad,
                 };
                 push(out, tex, x, y, w, h);
-                if lit {
-                    let (tex, pw, ph) = faces.pointer;
-                    let px = x + pad - POINTER_GAP - pw as f32;
-                    push(out, tex, px, y - POINTER_BLEED as f32, pw, ph);
-                }
             }
             let value = match row {
                 QuickRow::DateTime => self.clock.map(|c| c[lit as usize]),
