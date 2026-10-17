@@ -1101,6 +1101,7 @@ impl App {
             (at + n - 1) % n
         };
         self.state.wallpaper = choices[next].clone();
+        self.mark_stars();
     }
 
     /// The wallpaper behind the shelf and menus: the theme's own default, or none (black) when
@@ -1202,6 +1203,7 @@ impl App {
             let on_favorites = *rack == Rack::Favorites;
             shelf.mark_starred(|c| !on_favorites && state.is_favorite(c.platform, &c.stem));
             shelf.set_spotlight(on_favorites);
+            shelf.set_light_ground(state.appearance.light() && state.wallpaper != WallpaperPick::None);
         }
     }
 
@@ -2390,6 +2392,9 @@ impl App {
             }
             QuickRow::InGameMenu => s.in_game_menu = !s.in_game_menu,
             QuickRow::RememberPosition => s.remember_position = !s.remember_position,
+        }
+        if matches!(row, QuickRow::Theme) {
+            self.mark_stars();
         }
         self.persist();
     }

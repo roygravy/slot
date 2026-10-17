@@ -57,6 +57,15 @@ pub enum Draw {
         tex: TexId,
         colour: [f32; 4],
     },
+    /// A texture added onto what is below it, as light is: it brightens, never paints over.
+    Light {
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+        tex: TexId,
+        alpha: f32,
+    },
     Game,
     Shot {
         tex: TexId,
@@ -164,8 +173,19 @@ impl Sprites {
             gl::UseProgram(self.prog);
             gl::ActiveTexture(gl::TEXTURE0);
         }
+        let mut adding = false;
         for item in items {
             let whole = [0.0, 0.0, 1.0, 1.0];
+            let light = matches!(item, Draw::Light { .. });
+            if light != adding {
+                adding = light;
+                unsafe {
+                    match light {
+                        true => gl::BlendFunc(gl::SRC_ALPHA, gl::ONE),
+                        false => gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA),
+                    }
+                }
+            }
             let (x, y, w, h, tex, colour, turn, uv) = match *item {
                 Draw::Rect { x, y, w, h, colour } => (x, y, w, h, self.white, colour, 0.0, whole),
                 Draw::Tex {
@@ -214,6 +234,17 @@ impl Sprites {
                     Some(t) => (x, y, w, h, *t, colour, 0.0, whole),
                     None => continue,
                 },
+                Draw::Light {
+                    x,
+                    y,
+                    w,
+                    h,
+                    tex,
+                    alpha,
+                } => match self.textures.get(tex.0) {
+                    Some(t) => (x, y, w, h, *t, [1.0, 1.0, 1.0, alpha], 0.0, whole),
+                    None => continue,
+                },
                 Draw::Game | Draw::Shot { .. } => continue,
             };
             let (cos, sin) = if turn == 0.0 {
@@ -230,7 +261,10 @@ impl Sprites {
             }
             quad.draw();
         }
-        unsafe { gl::Disable(gl::BLEND) };
+        unsafe {
+            gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
+            gl::Disable(gl::BLEND);
+        }
     }
 }
 

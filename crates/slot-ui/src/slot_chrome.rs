@@ -241,7 +241,7 @@ fn strip(canvas: Canvas, tex: TexId, alpha: f32) -> Draw {
 
 /// The console's shadow on the ground just above its top edge, for depth.
 const CONSOLE_SHADOW: f32 = 16.0;
-const CONSOLE_SHADOW_ALPHA: f32 = 0.34;
+const CONSOLE_SHADOW_ALPHA: f32 = 0.18;
 
 fn draw_console_shadow(canvas: Canvas, alpha: f32, out: &mut Vec<Draw>) {
     const STEPS: usize = 8;
