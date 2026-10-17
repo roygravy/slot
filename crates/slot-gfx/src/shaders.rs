@@ -96,7 +96,7 @@ void main() {
         vec2 overlay_px = floor(screen_px * u_lcd_overlay_size / u_output_size);
         vec2 overlay_uv = (overlay_px + 0.5) / u_lcd_overlay_size;
         lcd = texture2D(u_lcd_overlay, overlay_uv);
-        c = mix(c, lcd.rgb, lcd.a * 0.7);
+        c = mix(c, lcd.rgb, lcd.a * 0.45);
     } else if (u_mode > 3.5) {
         c = pow(c, vec3(1.05));
         vec2 d = abs(f - 0.5);

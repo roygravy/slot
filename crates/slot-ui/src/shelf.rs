@@ -34,7 +34,11 @@ const SLOTS: i32 = 3;
 
 pub const REPEAT_DELAY_MS: Millis = 400;
 
-pub const GLOW_MARGIN: u32 = 34;
+pub const GLOW_MARGIN: u32 = 26;
+/// How far a cart's drop shadow spreads, and how far below the cart it falls.
+pub const DROP_MARGIN: u32 = 22;
+const DROP_FALL: f32 = 10.0;
+const DROP_ALPHA: f32 = 0.42;
 pub const GLOW_GOLD: [u8; 3] = [0xf6, 0xc3, 0x2c];
 pub const GLOW_WHITE: [u8; 3] = [0xff, 0xff, 0xff];
 pub const STAR_PX: u32 = 22;
@@ -63,6 +67,9 @@ pub struct Shelf {
     glows: [[Option<TexId>; 3]; 2],
     star: Option<(TexId, f32, f32)>,
     mark: FavoriteMark,
+    /// One still backlight behind the middle of the shelf, for the Favorites shelf.
+    spotlight: bool,
+    drops: [Option<TexId>; 3],
     ride: f32,
     vel: f32,
     held: Option<(i32, Millis, usize)>,
@@ -79,6 +86,8 @@ impl Shelf {
             glows: [[None; 3]; 2],
             star: None,
             mark: FavoriteMark::default(),
+            spotlight: false,
+            drops: [None; 3],
             carts,
             index: 0,
             scroll: 0.0,
@@ -145,6 +154,29 @@ impl Shelf {
 
     pub fn set_star(&mut self, face: TexId, w: u32, h: u32) {
         self.star = Some((face, w as f32, h as f32));
+    }
+
+    pub fn set_drop(&mut self, shell: Option<GbShell>, face: TexId) {
+        let col = match shell {
+            None => 0,
+            Some(GbShell::Notched) => 1,
+            Some(GbShell::Rounded) => 2,
+        };
+        self.drops[col] = Some(face);
+    }
+
+    pub fn set_spotlight(&mut self, on: bool) {
+        self.spotlight = on;
+    }
+
+    fn glow_for(&self, i: usize) -> Option<TexId> {
+        let row = (self.mark == FavoriteMark::WhiteGlow) as usize;
+        let col = match self.shell(i) {
+            None => 0,
+            Some(GbShell::Notched) => 1,
+            Some(GbShell::Rounded) => 2,
+        };
+        self.glows[row][col]
     }
 
     pub fn set_mark(&mut self, mark: FavoriteMark) {
@@ -454,6 +486,25 @@ impl Shelf {
         let recede = recede.clamp(0.0, 1.0);
         let dim = dim.clamp(0.0, 1.0);
         let target = self.scroll_target();
+        if self.spotlight && self.mark != FavoriteMark::Star && !self.carts.is_empty() {
+            // Still, behind the middle: the carts slide through the light rather than carry it.
+            let i = self.index.min(self.carts.len() - 1);
+            if let Some(tex) = self.glow_for(i) {
+                let (cw, ch) = cart_box(self.carts[i].platform);
+                let (w, h) = (cw as f32, ch as f32);
+                let m = GLOW_MARGIN as f32;
+                let x = canvas.w / 2.0 - w / 2.0;
+                let y = foot_y(h) - h;
+                out.push(Draw::Tex {
+                    x: x - m,
+                    y: y - m,
+                    w: w + 2.0 * m,
+                    h: h + 2.0 * m,
+                    tex,
+                    alpha: (1.0 - recede) * dim,
+                });
+            }
+        }
         for slot in -SLOTS..=SLOTS {
             let Some(i) = self.cart_at_offset(slot) else {
                 continue;
@@ -492,14 +543,24 @@ impl Shelf {
                     });
                 }
             }
+            let col = match self.shell(i) {
+                None => 0,
+                Some(GbShell::Notched) => 1,
+                Some(GbShell::Rounded) => 2,
+            };
+            if let Some(tex) = self.drops[col] {
+                let m = DROP_MARGIN as f32 * scale;
+                out.push(Draw::Tex {
+                    x: x - m,
+                    y: y - m + DROP_FALL * scale,
+                    w: w + 2.0 * m,
+                    h: h + 2.0 * m,
+                    tex,
+                    alpha: DROP_ALPHA * alpha * dim,
+                });
+            }
             if self.starred.get(i) == Some(&true) && self.mark != FavoriteMark::Star {
-                let row = (self.mark == FavoriteMark::WhiteGlow) as usize;
-                let col = match self.shell(i) {
-                    None => 0,
-                    Some(GbShell::Notched) => 1,
-                    Some(GbShell::Rounded) => 2,
-                };
-                if let Some(tex) = self.glows[row][col] {
+                if let Some(tex) = self.glow_for(i) {
                     let m = GLOW_MARGIN as f32 * scale;
                     out.push(Draw::Tex {
                         x: x - m,

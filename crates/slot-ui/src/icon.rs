@@ -171,13 +171,52 @@ impl Badge {
 }
 
 
-/// A soft halo for a favourite cart: a rounded box `cw` x `ch` with `margin` px of glow
-/// around it, drawn behind the cart. Built at half resolution and smoothed when stretched.
+/// A backlight for a favourite cart: a light behind the cart's middle that spills past its
+/// edges, brightest where the sides are closest to it and fading out within `margin` px, so
+/// the corners stay dark. `cw` x `ch` is the cart; the face is `margin` px larger all round,
+/// built at half resolution and smoothed when stretched.
 pub fn glow_face(cw: u32, ch: u32, margin: u32, colour: [u8; 3], peak: f32) -> CartFace {
-    let (w, h) = ((cw + 2 * margin).div_ceil(2), (ch + 2 * margin).div_ceil(2));
-    let (m, radius) = (margin as f32, 16.0_f32);
-    let (cx, cy) = (m + cw as f32 / 2.0, m + ch as f32 / 2.0);
-    let (hw, hh) = (cw as f32 / 2.0 - radius, ch as f32 / 2.0 - radius);
+    let (fw, fh) = (cw + 2 * margin, ch + 2 * margin);
+    let (w, h) = (fw.div_ceil(2), fh.div_ceil(2));
+    let (cx, cy) = (fw as f32 / 2.0, fh as f32 / 2.0);
+    // A squircle just larger than the cart: past the sides, short of the corners.
+    let (rx, ry) = (cw as f32 / 2.0 + margin as f32, ch as f32 / 2.0 + margin as f32);
+    let inner = ((cw as f32 / 2.0) / rx).min((ch as f32 / 2.0) / ry) - 0.06;
+    // Hot light whitens a little where it is brightest.
+    let hot = [
+        colour[0] as f32 + (255.0 - colour[0] as f32) * 0.55,
+        colour[1] as f32 + (255.0 - colour[1] as f32) * 0.55,
+        colour[2] as f32 + (255.0 - colour[2] as f32) * 0.55,
+    ];
+    let mut rgba = vec![0u8; (w * h * 4) as usize];
+    for py in 0..h {
+        for px in 0..w {
+            let (x, y) = ((px as f32 + 0.5) * 2.0, (py as f32 + 0.5) * 2.0);
+            let (nx, ny) = (((x - cx) / rx).abs(), ((y - cy) / ry).abs());
+            let r = (nx.powi(4) + ny.powi(4)).powf(0.25);
+            let u = ((1.0 - r) / (1.0 - inner)).clamp(0.0, 1.0);
+            let a = peak * u.powf(1.7);
+            let heat = u.powi(3);
+            let o = ((py * w + px) * 4) as usize;
+            rgba[o..o + 4].copy_from_slice(&[
+                (colour[0] as f32 + (hot[0] - colour[0] as f32) * heat).round() as u8,
+                (colour[1] as f32 + (hot[1] - colour[1] as f32) * heat).round() as u8,
+                (colour[2] as f32 + (hot[2] - colour[2] as f32) * heat).round() as u8,
+                (a.min(1.0) * 255.0).round() as u8,
+            ]);
+        }
+    }
+    CartFace { rgba, w, h }
+}
+
+/// A soft drop shadow for a cart: a black rounded box `cw` x `ch` blurred over `margin` px,
+/// built at half resolution and smoothed when stretched.
+pub fn drop_shadow_face(cw: u32, ch: u32, margin: u32) -> CartFace {
+    let (fw, fh) = (cw + 2 * margin, ch + 2 * margin);
+    let (w, h) = (fw.div_ceil(2), fh.div_ceil(2));
+    let (m, radius) = (margin as f32, 14.0_f32);
+    let (cx, cy) = (fw as f32 / 2.0, fh as f32 / 2.0);
+    let (hw, hh) = (cw as f32 / 2.0 - radius - 4.0, ch as f32 / 2.0 - radius - 4.0);
     let mut rgba = vec![0u8; (w * h * 4) as usize];
     for py in 0..h {
         for px in 0..w {
@@ -185,17 +224,11 @@ pub fn glow_face(cw: u32, ch: u32, margin: u32, colour: [u8; 3], peak: f32) -> C
             let (qx, qy) = ((x - cx).abs() - hw, (y - cy).abs() - hh);
             let outside = (qx.max(0.0).powi(2) + qy.max(0.0).powi(2)).sqrt();
             let d = outside + qx.max(qy).min(0.0) - radius;
-            let fall = (d.max(0.0) / (m * 0.5)).powi(2);
-            let t = ((d - m * 0.5) / (m * 0.5)).clamp(0.0, 1.0);
-            let window = 1.0 - t * t * (3.0 - 2.0 * t);
-            let a = peak * (-fall).exp() * window;
+            // A smooth fall from full at the box's edge to nothing `margin` px out.
+            let t = ((d + m * 0.35) / (m * 1.2)).clamp(0.0, 1.0);
+            let a = 1.0 - t * t * (3.0 - 2.0 * t);
             let o = ((py * w + px) * 4) as usize;
-            rgba[o..o + 4].copy_from_slice(&[
-                colour[0],
-                colour[1],
-                colour[2],
-                (a * 255.0).round() as u8,
-            ]);
+            rgba[o..o + 4].copy_from_slice(&[0, 0, 0, (a * 255.0).round() as u8]);
         }
     }
     CartFace { rgba, w, h }

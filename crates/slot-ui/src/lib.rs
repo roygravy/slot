@@ -1,8 +1,9 @@
 mod art;
 pub use art::cover;
 mod bitmaps;
+mod buttons_help;
 pub use bitmaps::{
-    link_port, link_port_light, slot_back, slot_back_light, slot_front, slot_front_light, Mould,
+    link_port, link_port_light, slot_back, slot_back_gb, slot_back_light, slot_front, slot_front_gb, slot_front_light, Mould,
     SLOT_H, SLOT_W,
 };
 mod backdrop;
@@ -28,10 +29,11 @@ mod silhouette;
 mod slot_chrome;
 mod sticker;
 pub mod text;
+pub mod theme;
 mod toast;
 
 pub use backdrop::{
-    bezel_face, blur_background, default_background, default_game_bezel_face, draw_backdrop,
+    bezel_face, default_background, light_background, default_game_bezel_face, draw_backdrop,
     draw_ground, game_bezel_face, wallpaper_face,
 };
 pub use barcode::{code39, CODE39_NARROW, CODE39_WIDE};
@@ -58,7 +60,7 @@ pub use hud::{
     HUD_ICON_PX, HUD_INK, HUD_MS, LINK_HOST_INK, LINK_JOIN_INK, PLATE_H,
 };
 pub use icon::{
-    badge_face, icon_box, icon_face, icon_glyph_box, icon_glyph_face, glow_face, star_mark_face, warm_fonts, Badge,
+    badge_face, icon_box, icon_face, icon_glyph_box, icon_glyph_face, glow_face, drop_shadow_face, star_mark_face, warm_fonts, Badge,
     Icon,
 };
 pub use link_art::{
@@ -69,19 +71,23 @@ pub use link_art::{
 pub use plate::{
     arrows_hint_coloured, arrows_hint_face, arrows_hint_width, cap_width, centred_hints,
     hint_coloured, hint_face, hint_quad, hint_row, hint_width, title_face, title_line_face,
-    word_face, word_ink, word_width, Hint, UndoFace, ARROW_GAP, CAP, CAP_GAP, HINT_EDGE, HINT_GAP,
+    tint_mask, word_face, word_ink, word_width, Hint, UndoFace, ARROW_GAP, CAP, CAP_GAP, HINT_EDGE, HINT_GAP,
     HINT_H, LEGEND_GAP, TITLE_H, TITLE_LINE_H, TITLE_W,
 };
 pub use polaroids::{photo_face, PhotoFace, Polaroids, DOT, LEGEND, PHOTO_H, PHOTO_W};
 pub use power_menu::{menu_face, PowerChoice, MENU_PAD};
+pub use buttons_help::{
+    buttons_body_face, buttons_tab_face, ButtonsFaces, ButtonsHelp, BUTTON_PAGES,
+};
 pub use quick_menu::{
-    draw_menu_ground, quick_caret_face, quick_label_face, quick_legend_faces, quick_pointer_face,
+    draw_menu_ground, quick_caret_face, quick_help_face, quick_label_face, quick_legend_faces,
+    quick_pointer_face, quick_switch_face,
     quick_row_top, quick_value_face, QuickMenu, QuickMenuFaces, QuickRow, QuickValue, QUICK_EDGE,
     quick_pitch, QUICK_LABEL_X, QUICK_PITCH,
 };
 pub use rebuild::{rebuild_count_face, rebuild_title_face, RebuildScreen};
 pub use refusal::Refusal;
-pub use shelf::{foot_y, repeat_gap, rest_y, Shelf, GLOW_GOLD, GLOW_MARGIN, GLOW_WHITE, REPEAT_DELAY_MS, STAR_PX};
+pub use shelf::{foot_y, repeat_gap, rest_y, Shelf, DROP_MARGIN, GLOW_GOLD, GLOW_MARGIN, GLOW_WHITE, REPEAT_DELAY_MS, STAR_PX};
 pub use shell::{
     gb_plastics, gb_table_shells, gba_plastics, gba_shell_for,
     lookup_order_is_exact_then_family_then_default, shell_for, shell_presets, table_keys, Finish,
@@ -89,6 +95,7 @@ pub use shell::{
 };
 pub use silhouette::{gb_silhouette, silhouette, GbShell};
 pub use slot_chrome::{
+    GB_SEAT_LIFT,
     draw_empty_slot, draw_slot_name, draw_slot_title, ease, edge, housing, opening, recess,
     slot_name_y, SlotChrome, ALERT_PX, LIP_H, MOUTH_H, MOUTH_W,
 };

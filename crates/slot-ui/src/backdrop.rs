@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::sync::OnceLock;
 
 use slot_gfx::{Canvas, Draw, TexId, OUT_H, OUT_W};
 
@@ -27,15 +28,20 @@ pub fn default_game_bezel_face(colour: bool) -> Option<Vec<u8>> {
 }
 
 const DEFAULT_PNG: &[u8] = include_bytes!("../../../assets/background_default.png");
+const LIGHT_PNG: &[u8] = include_bytes!("../../../assets/background_light.png");
 
-/// The dark-grey wallpaper that ships with this build.
+/// The charcoal wallpaper the dark theme ships with, decoded to OUT_W x OUT_H RGBA.
 pub fn default_background() -> Option<&'static [u8]> {
-    Some(DEFAULT_PNG)
+    static P: OnceLock<Option<Vec<u8>>> = OnceLock::new();
+    P.get_or_init(|| art::cover_bytes(DEFAULT_PNG, OUT_W, OUT_H))
+        .as_deref()
 }
 
-/// There is no blurred variant: the default wallpaper is used as it is.
-pub fn blur_background() -> Option<&'static [u8]> {
-    None
+/// The warm Game Boy grey wallpaper the light theme ships with, decoded the same way.
+pub fn light_background() -> Option<&'static [u8]> {
+    static P: OnceLock<Option<Vec<u8>>> = OnceLock::new();
+    P.get_or_init(|| art::cover_bytes(LIGHT_PNG, OUT_W, OUT_H))
+        .as_deref()
 }
 
 pub fn draw_ground(canvas: Canvas, face: Option<TexId>, out: &mut Vec<Draw>) {

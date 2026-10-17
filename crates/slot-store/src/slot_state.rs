@@ -50,7 +50,8 @@ impl Appearance {
     pub fn parse(name: &str) -> Option<Appearance> {
         match name {
             "dark" => Some(Appearance::Dark),
-            "light" => Some(Appearance::Light),
+            // A card set to the DMG theme of a test build reads as light.
+            "light" | "dmg" => Some(Appearance::Light),
             _ => None,
         }
     }

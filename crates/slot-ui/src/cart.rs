@@ -258,7 +258,10 @@ pub fn cart_face_with(cart: &Cart, art: Option<Vec<u8>>) -> CartFace {
     let mut face = shell_face(&s, &shell_for(cart));
     let label = match art {
         Some(rgba) => rgba,
-        None => generated_label(&s, &label_text(cart)),
+        None => {
+            plastic_label_bed(&s, &mut face);
+            generated_label(&s, &label_text(cart))
+        }
     };
     paste_label(&s, &mut face, &label);
     clip_to_silhouette(&s, &mut face);
@@ -594,43 +597,85 @@ fn lerp(a: [u8; 3], b: [u8; 3], num: u32, den: u32) -> [u8; 3] {
     out
 }
 
-fn generated_label(s: &Spec, title: &str) -> Vec<u8> {
-    let (_, _, lw, lh) = s.label;
-    let bg = label_colour(title);
-    let mut rgba = Vec::with_capacity((lw * lh * 4) as usize);
-    for _ in 0..lw * lh {
-        rgba.extend_from_slice(&[bg[0], bg[1], bg[2], 255]);
-    }
-
-    if let Some(font) = text::label_font() {
-        let (max_px, max_h) = match s.mould {
-            Mould::Gba => (lh as f32 / (MAX_LINES as f32 * 1.36), f32::INFINITY),
-            Mould::Notched | Mould::Rounded => {
-                let room = (lh - 2 * PAD) as f32;
-                (room / MAX_LINES as f32, room)
+/// With no sticker, the label recess is bare plastic: the shell's own colour, grain and
+/// see-through-ness, a shade darker, with a shadow along its top and left walls.
+fn plastic_label_bed(s: &Spec, face: &mut CartFace) {
+    let (lx, ly, lw, lh) = s.label;
+    let on_label = |x: u32, y: u32| (lx..lx + lw).contains(&x) && (ly..ly + lh).contains(&y);
+    let (mut sum, mut n) = ([0u64; 4], 0u64);
+    for y in 0..s.h {
+        for x in 0..s.w {
+            let i = (y * s.w + x) as usize;
+            if on_label(x, y) || s.mask[i] < 250 {
+                continue;
             }
-        };
-        let layout = text::fit_box(
-            font,
-            title,
-            (lw - 2 * PAD) as f32,
-            max_h,
-            MAX_LINES,
-            max_px,
-            MIN_PX,
-        );
-        text::draw_centred(&mut rgba, lw, lh, &layout, ink(bg));
+            for c in 0..4 {
+                sum[c] += face.rgba[i * 4 + c] as u64;
+            }
+            n += 1;
+        }
     }
-    rgba
+    if n == 0 {
+        return;
+    }
+    let mean = sum.map(|v| (v / n) as f32);
+    let mut grain: u64 = 0x2545_f491_4f6c_dd1d;
+    for y in 0..lh {
+        for x in 0..lw {
+            grain ^= grain << 13;
+            grain ^= grain >> 7;
+            grain ^= grain << 17;
+            let noise = (grain % 11) as f32 - 5.0;
+            let wall = match (x.min(y), (lw - 1 - x).min(lh - 1 - y)) {
+                (0..=1, _) => 0.84,
+                (2..=3, _) => 0.90,
+                (_, 0) => 1.05,
+                _ => 0.95,
+            };
+            let d = (((y + ly) * s.w + x + lx) * 4) as usize;
+            for c in 0..3 {
+                face.rgba[d + c] = (mean[c] * wall + noise).clamp(0.0, 255.0) as u8;
+            }
+            face.rgba[d + 3] = mean[3] as u8;
+        }
+    }
 }
 
-fn ink(bg: [u8; 3]) -> [u8; 3] {
-    let luma = 0.2126 * bg[0] as f32 + 0.7152 * bg[1] as f32 + 0.0722 * bg[2] as f32;
-    if luma > 140.0 {
-        [0x1a, 0x18, 0x16]
-    } else {
-        [0xf4, 0xf1, 0xea]
+/// A cart with no label art has no sticker at all: its title is written straight onto the
+/// plastic in marker, dark on a Game Boy pak and white on a GBA cart's dark shell.
+fn generated_label(s: &Spec, title: &str) -> Vec<u8> {
+    let (_, _, lw, lh) = s.label;
+    let mut seed: u64 = 0x9e37_79b9_7f4a_7c15;
+    for b in title.as_bytes() {
+        seed = (seed ^ *b as u64).wrapping_mul(0x0000_0100_0000_01b3);
     }
+    let mut rgba = vec![0u8; (lw * lh * 4) as usize];
+    let Some(font) = text::marker_font() else {
+        return rgba;
+    };
+    let room_w = (lw - 2 * PAD) as f32;
+    let room_h = (lh - 2 * PAD) as f32;
+    let max_px = match s.mould {
+        Mould::Gba => lh as f32 / 2.1,
+        Mould::Notched | Mould::Rounded => room_h / 2.6,
+    };
+    let mut layout = text::fit_box(font, title, room_w, room_h, MAX_LINES, max_px, MIN_PX);
+    layout.tracking = 0.0;
+    let (ink, strength) = match s.mould {
+        Mould::Gba => ([0xf2, 0xf0, 0xea], 245),
+        Mould::Notched | Mould::Rounded => ([0x1b, 0x1c, 0x24], 235),
+    };
+    for (i, a) in text::marker_coverage(lw, lh, &layout, seed)
+        .into_iter()
+        .enumerate()
+    {
+        if a == 0 {
+            continue;
+        }
+        let a = (a as u32 * strength / 255) as u8;
+        rgba[i * 4..i * 4 + 4].copy_from_slice(&[ink[0], ink[1], ink[2], a]);
+    }
+    rgba
 }
 
 fn paste_label(s: &Spec, face: &mut CartFace, label: &[u8]) {

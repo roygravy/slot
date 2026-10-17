@@ -3,6 +3,8 @@ use std::sync::OnceLock;
 use fontdue::{Font, FontSettings};
 
 const LABEL_TTF: &[u8] = include_bytes!("../assets/label.ttf");
+/// Permanent Marker by Font Diner, Apache 2.0: a title written on a blank label by hand.
+const MARKER_TTF: &[u8] = include_bytes!("../assets/marker.ttf");
 
 pub struct Layout {
     pub lines: Vec<String>,
@@ -14,6 +16,55 @@ pub fn label_font() -> Option<&'static Font> {
     static FONT: OnceLock<Option<Font>> = OnceLock::new();
     FONT.get_or_init(|| Font::from_bytes(LABEL_TTF, FontSettings::default()).ok())
         .as_ref()
+}
+
+pub fn marker_font() -> Option<&'static Font> {
+    static FONT: OnceLock<Option<Font>> = OnceLock::new();
+    FONT.get_or_init(|| Font::from_bytes(MARKER_TTF, FontSettings::default()).ok())
+        .as_ref()
+}
+
+/// Lines of `layout` set in the marker font, centred in the box, each line climbing a little
+/// to the right and nudged off centre, as a hand writes. Returns coverage per pixel.
+pub fn marker_coverage(dst_w: u32, dst_h: u32, layout: &Layout, seed: u64) -> Vec<u8> {
+    let mut out = vec![0u8; (dst_w * dst_h) as usize];
+    let Some(font) = marker_font() else { return out };
+    let Some(vm) = font.horizontal_line_metrics(layout.px) else {
+        return out;
+    };
+    let line_h = vm.new_line_size * 0.86;
+    let block_h = line_h * layout.lines.len() as f32;
+    let mut baseline = (dst_h as f32 - block_h) / 2.0 + vm.ascent * 0.92;
+    let mut h = seed | 1;
+    let mut jitter = || {
+        h ^= h << 13;
+        h ^= h >> 7;
+        h ^= h << 17;
+        (h % 1000) as f32 / 1000.0 - 0.5
+    };
+    let slope = -0.035 + 0.02 * jitter();
+    for line in &layout.lines {
+        let w = line_width(font, line, layout.px, layout.tracking);
+        let mut pen = (dst_w as f32 - w) / 2.0 + jitter() * layout.px * 0.3;
+        let start = pen;
+        for ch in line.chars() {
+            let (m, cov) = font.rasterize(ch, layout.px);
+            let lift = (pen - start - w / 2.0) * slope;
+            stamp(
+                &mut out,
+                dst_w,
+                dst_h,
+                (pen + m.xmin as f32).round() as i32,
+                (baseline + lift - (m.height as f32 + m.ymin as f32)).round() as i32,
+                &cov,
+                m.width as u32,
+                m.height as u32,
+            );
+            pen += m.advance_width + layout.tracking;
+        }
+        baseline += line_h;
+    }
+    out
 }
 
 pub fn fit(

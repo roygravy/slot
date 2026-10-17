@@ -47,6 +47,16 @@ pub enum Draw {
         alpha: f32,
         turn: f32,
     },
+    /// A texture multiplied by a colour: white art takes the colour, so one face serves
+    /// every theme.
+    Tint {
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+        tex: TexId,
+        colour: [f32; 4],
+    },
     Game,
     Shot {
         tex: TexId,
@@ -191,6 +201,17 @@ impl Sprites {
                     turn,
                 } => match self.textures.get(tex.0) {
                     Some(t) => (x, y, w, h, *t, [1.0, 1.0, 1.0, alpha], turn, whole),
+                    None => continue,
+                },
+                Draw::Tint {
+                    x,
+                    y,
+                    w,
+                    h,
+                    tex,
+                    colour,
+                } => match self.textures.get(tex.0) {
+                    Some(t) => (x, y, w, h, *t, colour, 0.0, whole),
                     None => continue,
                 },
                 Draw::Game | Draw::Shot { .. } => continue,

@@ -24,9 +24,9 @@ const LABEL_MIN_PX: f32 = 10.0;
 const TITLE_PX: f32 = 20.0;
 const TITLE_MIN_PX: f32 = 12.0;
 
-pub const TITLE_LINE_H: u32 = 32;
-const TITLE_LINE_PX: f32 = 24.0;
-const TITLE_LINE_MIN_PX: f32 = 14.0;
+pub const TITLE_LINE_H: u32 = HINT_H;
+const TITLE_LINE_PX: f32 = LABEL_PX;
+const TITLE_LINE_MIN_PX: f32 = LABEL_MIN_PX;
 const TITLE_LINE_MAX_W: f32 = 560.0;
 
 pub struct UndoFace {
@@ -96,6 +96,20 @@ pub fn hint_coloured(key: &str, label: &str, ink: [u8; 3]) -> UndoFace {
     blit(&mut rgba, w, &band, text_w, HINT_H, cap_w + CAP_GAP, 0);
 
     UndoFace { rgba, w, h: HINT_H }
+}
+
+/// Turn a face into a white mask for `Draw::Tint`: dark ink inside a key cap becomes a hole,
+/// so the cap reads in any theme's colour with the key letter knocked out of it.
+pub fn tint_mask(mut face: UndoFace) -> UndoFace {
+    for px in face.rgba.chunks_exact_mut(4) {
+        let lum = (px[0] as u32 * 54 + px[1] as u32 * 183 + px[2] as u32 * 19) / 256;
+        let lum = (lum * 255 / INK[1] as u32).min(255);
+        px[3] = (px[3] as u32 * lum / 255) as u8;
+        px[0] = 0xff;
+        px[1] = 0xff;
+        px[2] = 0xff;
+    }
+    face
 }
 
 pub fn word_width(text: &str) -> u32 {

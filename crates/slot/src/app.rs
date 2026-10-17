@@ -261,6 +261,9 @@ pub enum Phase {
         cart: String,
     },
     About,
+    Buttons {
+        page: usize,
+    },
     Doze {
         cart: Option<String>,
     },
@@ -363,6 +366,7 @@ pub struct App {
     undo_face: Option<TexId>,
     clock_faces: Option<(TexId, TexId)>,
     quick_menu_faces: Option<QuickMenuFaces>,
+    buttons_faces: Option<slot_ui::ButtonsFaces>,
     quick_clock_faces: Option<[(TexId, u32, u32); 2]>,
     quick_wallpaper_faces: Option<[(TexId, u32, u32); 2]>,
     quick_palette_faces: Option<[(TexId, u32, u32); 2]>,
@@ -373,13 +377,14 @@ pub struct App {
     menu_tap: Option<(Millis, Option<QuickRow>)>,
     sticker_face: Option<TexId>,
     ground: Option<TexId>,
-    blur: Option<TexId>,
+    ground_light: Option<TexId>,
     wallpaper: Option<TexId>,
     random_wallpaper: Option<Option<String>>,
     battery_percent: slot_ui::Printed,
     bolt: Option<TexId>,
     hud_bolt: Option<TexId>,
-    slot_faces: Option<(TexId, TexId)>,
+    /// GBA dark, GBA light, Game Boy dark, Game Boy light.
+    slot_sets: Option<[(TexId, TexId); 4]>,
     shelf_platform: slot_ui::Printed,
     shelf_title: slot_ui::Printed,
     name_pending: bool,
@@ -515,6 +520,7 @@ impl App {
             quick_menu_faces: None,
             quick_clock_faces: None,
             quick_wallpaper_faces: None,
+            buttons_faces: None,
             quick_palette_faces: None,
             quick_bezel_faces: [None, None, None],
             game_bezel: None,
@@ -523,13 +529,13 @@ impl App {
             menu_tap: None,
             sticker_face: None,
             ground: None,
-            blur: None,
+            ground_light: None,
             wallpaper: None,
             random_wallpaper: None,
             battery_percent: slot_ui::Printed::default(),
             bolt: None,
             hud_bolt: None,
-            slot_faces: None,
+            slot_sets: None,
             shelf_platform: slot_ui::Printed::default(),
             shelf_title: slot_ui::Printed::default(),
             name_pending: false,
@@ -888,15 +894,20 @@ impl App {
             QuickRow::GbPalettes => Some(QuickValue::flag(self.state.gb_palettes)),
             QuickRow::PixelTransparency => Some(QuickValue::flag(self.state.pixel_transparency)),
             QuickRow::LcdGhosting => Some(QuickValue::flag(self.state.lcd_ghosting)),
-            QuickRow::GbaShader => Some(shader_value(self.state.shader_gba)),
-            QuickRow::GbShader => Some(shader_value(self.state.shader_gb)),
-            QuickRow::GbcShader => Some(shader_value(self.state.shader_gbc)),
+            QuickRow::GbaShader => Some(QuickValue::flag(self.state.shader_gba != Shader::Off)),
+            QuickRow::GbShader => Some(QuickValue::flag(self.state.shader_gb != Shader::Off)),
+            QuickRow::GbcShader => Some(QuickValue::flag(self.state.shader_gbc != Shader::Off)),
+            QuickRow::ScreenLook => Some(match self.screen_look() {
+                Some(true) => QuickValue::Authentic,
+                Some(false) => QuickValue::Clean,
+                None => QuickValue::Custom,
+            }),
             QuickRow::Rumble => Some(QuickValue::flag(self.state.rumble)),
             QuickRow::EjectSave => Some(QuickValue::flag(self.state.eject_save)),
             QuickRow::Turbo => Some(QuickValue::flag(self.state.turbo)),
             QuickRow::Rewind => Some(QuickValue::flag(self.state.rewind)),
 
-            QuickRow::RunAhead => QuickValue::frames(self.state.runahead),
+            QuickRow::RunAhead => Some(QuickValue::flag(self.state.runahead > 0)),
             QuickRow::Recents => Some(if self.state.show_recents {
                 QuickValue::Show
             } else {
@@ -918,10 +929,9 @@ impl App {
                 FavoriteMark::WhiteGlow => QuickValue::WhiteGlow,
                 FavoriteMark::Star => QuickValue::StarMark,
             }),
-            QuickRow::Theme => Some(if self.light() {
-                QuickValue::Light
-            } else {
-                QuickValue::Dark
+            QuickRow::Theme => Some(match self.state.appearance {
+                slot_store::Appearance::Dark => QuickValue::Dark,
+                slot_store::Appearance::Light => QuickValue::Light,
             }),
             QuickRow::DateTime
             | QuickRow::About
@@ -942,7 +952,8 @@ impl App {
             | QuickRow::GbBezel
             | QuickRow::GbcBezel
             | QuickRow::GbaBezel
-            | QuickRow::Bezel => None,
+            | QuickRow::Bezel
+            | QuickRow::Buttons => None,
             QuickRow::AutoSleep => Some(auto_sleep_value(self.state.auto_sleep_secs)),
             QuickRow::InGameMenu => Some(if self.state.in_game_menu {
                 QuickValue::Show
@@ -955,6 +966,10 @@ impl App {
                 QuickValue::Hide
             }),
         }
+    }
+
+    pub fn set_buttons_faces(&mut self, faces: slot_ui::ButtonsFaces) {
+        self.buttons_faces = Some(faces);
     }
 
     pub fn set_quick_menu_faces(&mut self, faces: QuickMenuFaces) {
@@ -1088,18 +1103,35 @@ impl App {
         self.state.wallpaper = choices[next].clone();
     }
 
-    fn menu_ground(&self) -> Option<TexId> {
+    /// The wallpaper behind the shelf and menus: the theme's own default, or none (black) when
+    /// Wallpaper is Off.
+    fn ground_face(&self) -> Option<TexId> {
         match &self.state.wallpaper {
             WallpaperPick::None => None,
+            _ if self.light() => self.ground_light.or(self.ground),
             _ => self.ground,
         }
     }
 
+    fn menu_ground(&self) -> Option<TexId> {
+        self.ground_face()
+    }
+
+    /// Dark ink on the light themes' grey wallpaper; with Wallpaper Off the ground is black, so
+    /// the ink stays light.
+    pub fn menu_ink(&self) -> slot_ui::theme::Ink {
+        slot_ui::theme::ink(self.light() && self.ground_face().is_some())
+    }
+
     fn draw_background(&self, out: &mut Vec<Draw>) {
-        let face = match &self.state.wallpaper {
-            WallpaperPick::None => None,
-            _ => self.ground,
-        };
+        let face = self.ground_face();
+        out.push(Draw::Rect {
+            x: 0.0,
+            y: 0.0,
+            w: self.canvas().w,
+            h: OUT_H as f32,
+            colour: [0.0, 0.0, 0.0, 1.0],
+        });
         draw_ground(self.canvas(), face, out);
         let alpha = tint_alpha(self.state.wallpaper_tint);
         if alpha > 0.0 && self.own_wallpaper_shown() {
@@ -1169,6 +1201,15 @@ impl App {
             // The Favorites shelf is all favourites already: marking each one only adds noise.
             let on_favorites = *rack == Rack::Favorites;
             shelf.mark_starred(|c| !on_favorites && state.is_favorite(c.platform, &c.stem));
+            shelf.set_spotlight(on_favorites);
+        }
+    }
+
+    pub fn set_drop_shadows(&mut self, faces: [TexId; 3]) {
+        for (_, shelf) in &mut self.shelves {
+            shelf.set_drop(None, faces[0]);
+            shelf.set_drop(Some(GbShell::Notched), faces[1]);
+            shelf.set_drop(Some(GbShell::Rounded), faces[2]);
         }
     }
 
@@ -1202,8 +1243,8 @@ impl App {
         self.ground = Some(face);
     }
 
-    pub fn set_blur(&mut self, face: TexId) {
-        self.blur = Some(face);
+    pub fn set_ground_light(&mut self, face: TexId) {
+        self.ground_light = Some(face);
     }
 
     pub fn set_wallpaper(&mut self, face: TexId) {
@@ -1218,8 +1259,8 @@ impl App {
         self.hud_bolt = Some(bolt);
     }
 
-    pub fn set_slot_faces(&mut self, back: TexId, front: TexId) {
-        self.slot_faces = Some((back, front));
+    pub fn set_slot_sets(&mut self, sets: [(TexId, TexId); 4]) {
+        self.slot_sets = Some(sets);
     }
 
     pub fn set_shelf_platform_face(&mut self, face: TexId, w: u32) {
@@ -1670,6 +1711,26 @@ impl App {
         self.state.appearance.light()
     }
 
+    /// The platform whose slot is showing: the cart in it, else the one picked on the shelf.
+    fn slot_platform(&self) -> Platform {
+        if let Some(cart) = self.seated_cart() {
+            return cart.platform;
+        }
+        let shelf = self.shelf();
+        match shelf.carts.get(shelf.index) {
+            Some(cart) => cart.platform,
+            None => self.shelves[self.shelf_at].0.platform().unwrap_or(self.platform),
+        }
+    }
+
+    /// The slot art for the platform showing: the GBA slot, or the Game Boy's for GB and GBC
+    /// carts, in the theme's housing.
+    fn slot_faces(&self) -> Option<(TexId, TexId)> {
+        let sets = self.slot_sets?;
+        let gb = self.slot_platform() != Platform::Gba;
+        Some(sets[usize::from(gb) * 2 + usize::from(self.light())])
+    }
+
     pub fn status_ink(&self) -> [u8; 3] {
         match self.phase {
             Phase::Playing { .. } | Phase::Polaroids { .. } => footer_ink(false),
@@ -1952,6 +2013,29 @@ impl App {
                     row: QuickRow::About,
                 }
             }
+            Phase::Buttons { page } => {
+                let n = slot_ui::BUTTON_PAGES.len();
+                match action {
+                    Action::ShelfLeft | Action::GbaDown(Btn::Left) | Action::GbaDown(Btn::L1) => {
+                        self.phase = Phase::Buttons {
+                            page: (page + n - 1) % n,
+                        }
+                    }
+                    Action::ShelfRight
+                    | Action::GbaDown(Btn::Right)
+                    | Action::GbaDown(Btn::R1) => {
+                        self.phase = Phase::Buttons {
+                            page: (page + 1) % n,
+                        }
+                    }
+                    Action::GbaDown(Btn::B) | Action::QuickMenu => {
+                        self.phase = Phase::QuickMenu {
+                            row: QuickRow::Buttons,
+                        }
+                    }
+                    _ => {}
+                }
+            }
             Phase::QuickMenu { row } => self.quick_menu_input(row, action),
             _ => {}
         }
@@ -2049,6 +2133,7 @@ impl App {
                 self.phase = clock_screen(self.utc_secs(), self.state.utc_offset_min, true);
             }
             QuickRow::About => self.phase = Phase::About,
+            QuickRow::Buttons => self.phase = Phase::Buttons { page: 0 },
             QuickRow::Screen
             | QuickRow::Game
             | QuickRow::General
@@ -2097,8 +2182,57 @@ impl App {
             | QuickRow::LcdGhosting
             | QuickRow::AutoSleep
             | QuickRow::InGameMenu
-            | QuickRow::RememberPosition => {}
+            | QuickRow::RememberPosition
+            | QuickRow::ScreenLook => {
+                // A on a switch flips it, as Left / Right do.
+                if self.quick_value(row).and_then(QuickValue::switch).is_some() {
+                    self.change_setting(row, true);
+                }
+            }
         }
+    }
+
+    /// The bundle of picture effects that make the screen look like the original hardware:
+    /// Some(true) when every one is on, Some(false) when every one is off.
+    fn screen_look(&self) -> Option<bool> {
+        let s = &self.state;
+        let all = [
+            s.shader_gba != Shader::Off,
+            s.shader_gb != Shader::Off,
+            s.shader_gbc != Shader::Off,
+            s.colour_correction_gba,
+            s.colour_correction_gb,
+            s.colour_correction_gbc,
+            s.pixel_transparency,
+            s.lcd_ghosting,
+        ];
+        if all.iter().all(|on| *on) {
+            Some(true)
+        } else if all.iter().all(|on| !*on) {
+            Some(false)
+        } else {
+            None
+        }
+    }
+
+    fn set_screen_look(&mut self, on: bool) {
+        let s = &mut self.state;
+        let (gba, gb) = match on {
+            true => (Shader::GbaLcd, Shader::Grid),
+            false => (Shader::Off, Shader::Off),
+        };
+        s.shader_gba = gba;
+        s.shader_gb = gb;
+        s.shader_gbc = gb;
+        s.colour_correction_gba = on;
+        s.colour_correction_gb = on;
+        s.colour_correction_gbc = on;
+        s.pixel_transparency = on;
+        if s.lcd_ghosting != on {
+            s.lcd_ghosting = on;
+            self.lcd_ghosting_pending = Some(on);
+        }
+        self.colour_pending = Some(self.colour_correction());
     }
 
     fn change_setting(&mut self, row: QuickRow, right: bool) {
@@ -2137,6 +2271,15 @@ impl App {
         if row == QuickRow::FavoriteMark {
             self.state.favorite_mark = self.state.favorite_mark.step(right);
             self.mark_stars();
+            self.persist();
+            return;
+        }
+        if row == QuickRow::ScreenLook {
+            let to = match self.screen_look() {
+                Some(on) => !on,
+                None => right,
+            };
+            self.set_screen_look(to);
             self.persist();
             return;
         }
@@ -2224,7 +2367,9 @@ impl App {
             | QuickRow::GbBezel
             | QuickRow::GbcBezel
             | QuickRow::GbaBezel
-            | QuickRow::Bezel => return,
+            | QuickRow::Bezel
+            | QuickRow::Buttons
+            | QuickRow::ScreenLook => return,
 
             QuickRow::PixelTransparency => s.pixel_transparency = !s.pixel_transparency,
             QuickRow::LcdGhosting => {
@@ -3004,6 +3149,7 @@ impl App {
                 bezel: None,
                 over_game: false,
                 canvas: self.canvas(),
+                ink: self.menu_ink(),
             }
             .draw(out),
             Phase::Shelf => {
@@ -3020,21 +3166,23 @@ impl App {
                             dim,
                             out,
                         );
-                        draw_empty_slot(self.canvas(), self.slot_faces, out);
+                        draw_empty_slot(self.canvas(), self.slot_faces(), out);
                     }
                     _ => {
                         self.shelf()
-                            .draw(self.canvas(), self.shelf_shake(), self.slot_faces, out);
+                            .draw(self.canvas(), self.shelf_shake(), self.slot_faces(), out);
                         draw_slot_name(
                             self.canvas(),
                             self.shelf_platform,
                             self.slot_name_alpha(),
+                            self.menu_ink().text,
                             out,
                         );
                         slot_ui::draw_slot_title(
                             self.canvas(),
                             self.shelf_title,
                             self.title_alpha(),
+                            self.menu_ink().text,
                             out,
                         );
                     }
@@ -3049,8 +3197,19 @@ impl App {
                     out,
                 );
             }
+            Phase::Buttons { page } => {
+                slot_ui::ButtonsHelp {
+                    page: *page,
+                    faces: self.buttons_faces.as_ref(),
+                    ground: self.menu_ground(),
+                    canvas: self.canvas(),
+                    ink: self.menu_ink(),
+                }
+                .draw(out);
+                return;
+            }
             Phase::About => {
-                slot_ui::draw_menu_ground(self.canvas(), self.menu_ground(), out);
+                slot_ui::draw_menu_ground(self.canvas(), self.menu_ground(), self.menu_ink(), out);
                 draw_sticker(self.canvas(), self.sticker_face, out);
                 return;
             }
@@ -3123,6 +3282,7 @@ impl App {
                 bezel: self.quick_bezel_faces[bezel_slot(self.playing_platform())],
                 over_game: true,
                 canvas: self.canvas(),
+                ink: slot_ui::theme::DARK,
             }
             .draw(out);
             if row.page() != QuickRow::PLAY_SCREEN {
@@ -3193,8 +3353,12 @@ impl App {
                     | Phase::Ejecting { .. }
             ),
             behind: self.shelf().behind(stem),
-            slot: self.slot_faces,
+            slot: self.slot_faces(),
             canvas: self.canvas(),
+            lift: match cart.platform {
+                Platform::Gba => 0.0,
+                Platform::Gb | Platform::Gbc => slot_ui::GB_SEAT_LIFT,
+            },
         }
         .draw(out);
     }
@@ -4678,17 +4842,6 @@ fn trusted_write(
 
 fn up(level: u8, step: u8, max: u8) -> u8 {
     level.saturating_add(step).min(max)
-}
-
-fn shader_value(shader: Shader) -> QuickValue {
-    match shader {
-        Shader::Off => QuickValue::Off,
-        Shader::Lcd3x => QuickValue::Lcd3x,
-        Shader::Grid => QuickValue::Grid,
-        Shader::GbaLcd => QuickValue::GbaLcd,
-        Shader::Dot => QuickValue::Dot,
-        Shader::Simpletex => QuickValue::Simpletex,
-    }
 }
 
 pub fn runahead_for(core: Core, platform: Platform, frames: u8) -> u8 {

@@ -127,7 +127,7 @@ struct Clocks {
 }
 
 struct ShelfLook {
-    slot: [[TexId; 2]; 2],
+    slot: [(TexId, TexId); 4],
     bolt: [TexId; 2],
     port: [Option<TexId>; 2],
     legend: [Vec<(TexId, u32)>; 2],
@@ -260,6 +260,12 @@ impl Frontend {
         self.session.app_mut().set_legend_faces(legend);
         let hint = set_clock_hint_face();
         self.clocks.hint = Some(compositor.create_texture(hint.w, hint.h, &hint.rgba));
+        let drops = [Console::Gba, Console::Gb, Console::Gbc].map(|p| {
+            let (cw, ch) = slot_ui::cart_box(p);
+            let f = slot_ui::drop_shadow_face(cw, ch, slot_ui::DROP_MARGIN);
+            compositor.create_texture(f.w, f.h, &f.rgba)
+        });
+        self.session.app_mut().set_drop_shadows(drops);
         let mut halos = |colour: [u8; 3], peak: f32| {
             [Console::Gba, Console::Gb, Console::Gbc].map(|p| {
                 let (cw, ch) = slot_ui::cart_box(p);
@@ -267,8 +273,8 @@ impl Frontend {
                 compositor.create_texture(halo.w, halo.h, &halo.rgba)
             })
         };
-        let gold = halos(slot_ui::GLOW_GOLD, 0.30);
-        let white = halos(slot_ui::GLOW_WHITE, 0.26);
+        let gold = halos(slot_ui::GLOW_GOLD, 0.95);
+        let white = halos(slot_ui::GLOW_WHITE, 0.85);
         let star = slot_ui::star_mark_face(slot_ui::STAR_PX);
         let star_id = compositor.create_texture(star.w, star.h, &star.rgba);
         self.session
@@ -296,8 +302,16 @@ impl Frontend {
             let mut upload =
                 |bytes: &[u8]| compositor.create_texture(slot_ui::SLOT_W, slot_ui::SLOT_H, bytes);
             [
-                [upload(slot_back()), upload(slot_front())],
-                [upload(slot_back_light()), upload(slot_front_light())],
+                (upload(slot_back()), upload(slot_front())),
+                (upload(slot_back_light()), upload(slot_front_light())),
+                (
+                    upload(slot_ui::slot_back_gb(false)),
+                    upload(slot_ui::slot_front_gb(false)),
+                ),
+                (
+                    upload(slot_ui::slot_back_gb(true)),
+                    upload(slot_ui::slot_front_gb(true)),
+                ),
             ]
         };
         let dark_bolt = icon_face(Icon::Charging, BOLT_PX, footer_ink(false));
@@ -324,9 +338,9 @@ impl Frontend {
         };
         let id = compositor.create_texture(OUT_W, OUT_H, rgba);
         self.session.app_mut().set_ground(id);
-        if let Some(rgba) = slot_ui::blur_background() {
+        if let Some(rgba) = slot_ui::light_background() {
             let id = compositor.create_texture(OUT_W, OUT_H, rgba);
-            self.session.app_mut().set_blur(id);
+            self.session.app_mut().set_ground_light(id);
         }
     }
 
@@ -338,7 +352,7 @@ impl Frontend {
             let port_ready = look.port[i].is_some();
             (
                 look.applied == Some((light, legend_ready, port_ready)),
-                look.slot[i],
+                look.slot,
                 look.bolt[i],
                 look.bolt[0],
                 look.port[i],
@@ -354,7 +368,7 @@ impl Frontend {
         if done {
             return;
         }
-        self.session.app_mut().set_slot_faces(slot[0], slot[1]);
+        self.session.app_mut().set_slot_sets(slot);
         self.session.app_mut().set_bolt_face(bolt);
         self.session.app_mut().set_hud_bolt_face(hud_bolt);
         if let Some(tex) = port {
@@ -406,6 +420,18 @@ impl Frontend {
             .map(|v| v.map(&mut up))
             .collect();
         let carets = faces.quick_carets.map(&mut up);
+        let switches = faces.quick_switches.map(&mut up);
+        let button_tabs = faces.button_tabs.into_iter().map(&mut up).collect();
+        let button_bodies = faces.button_bodies.into_iter().map(&mut up).collect();
+        let button_legend = faces.button_legend.map(|f| {
+            let (tex, w, _) = up(f);
+            (tex, w)
+        });
+        let help = faces
+            .quick_help
+            .into_iter()
+            .map(|f| f.map(&mut up))
+            .collect();
         let legend = faces.quick_legend.map(|f| {
             let (tex, w, _) = up(f);
             (tex, w)
@@ -447,6 +473,13 @@ impl Frontend {
             values,
             carets,
             legend,
+            switches,
+            help,
+        });
+        app.set_buttons_faces(slot_ui::ButtonsFaces {
+            tabs: button_tabs,
+            bodies: button_bodies,
+            legend: button_legend,
         });
         app.set_core_part_faces(sockets, chips, blank, shadow);
         app.set_core_legend_faces(core_legend);
@@ -789,6 +822,11 @@ struct UiFaces {
     quick_values: Vec<[UndoFace; 2]>,
     quick_carets: [UndoFace; 2],
     quick_legend: [UndoFace; 4],
+    quick_switches: [UndoFace; 2],
+    quick_help: Vec<Option<UndoFace>>,
+    button_tabs: Vec<UndoFace>,
+    button_bodies: Vec<UndoFace>,
+    button_legend: [UndoFace; 2],
     sockets: Vec<CartFace>,
     chips: Vec<CartFace>,
     blank_chip: CartFace,
@@ -840,6 +878,21 @@ impl UiFaces {
                 .collect(),
             quick_carets: [false, true].map(quick_caret_face),
             quick_legend: quick_legend_faces(),
+            quick_switches: [false, true].map(slot_ui::quick_switch_face),
+            quick_help: QuickRow::ALL
+                .iter()
+                .map(|r| slot_ui::quick_help_face(*r))
+                .collect(),
+            button_tabs: (0..slot_ui::BUTTON_PAGES.len())
+                .map(slot_ui::buttons_tab_face)
+                .collect(),
+            button_bodies: (0..slot_ui::BUTTON_PAGES.len())
+                .map(slot_ui::buttons_body_face)
+                .collect(),
+            button_legend: [
+                slot_ui::tint_mask(arrows_hint_face("Page")),
+                slot_ui::tint_mask(hint_face("B", "Back")),
+            ],
             sockets: slot_store::Core::ALL
                 .iter()
                 .map(|c| socket_face(*c))

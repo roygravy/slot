@@ -46,6 +46,10 @@ const SLOT_BACK_DARK_PNG: &[u8] = include_bytes!("../../../assets/slot_back_dark
 const SLOT_BACK_LIGHT_PNG: &[u8] = include_bytes!("../../../assets/slot_back_light.png");
 const SLOT_FRONT_DARK_PNG: &[u8] = include_bytes!("../../../assets/slot_front_dark.png");
 const SLOT_FRONT_LIGHT_PNG: &[u8] = include_bytes!("../../../assets/slot_front_light.png");
+const SLOT_BACK_GB_DARK_PNG: &[u8] = include_bytes!("../../../assets/slot_back_gb_dark.png");
+const SLOT_FRONT_GB_DARK_PNG: &[u8] = include_bytes!("../../../assets/slot_front_gb_dark.png");
+const SLOT_BACK_GB_LIGHT_PNG: &[u8] = include_bytes!("../../../assets/slot_back_gb_light.png");
+const SLOT_FRONT_GB_LIGHT_PNG: &[u8] = include_bytes!("../../../assets/slot_front_gb_light.png");
 const PORT_DARK_PNG: &[u8] = include_bytes!("../../../assets/link_port_dark.png");
 const PORT_LIGHT_PNG: &[u8] = include_bytes!("../../../assets/link_port_light.png");
 const PLUG_HOST_PNG: &[u8] = include_bytes!("../../../assets/link_plug_host.png");
@@ -186,6 +190,27 @@ pub fn slot_back_light() -> &'static [u8] {
 pub fn slot_front() -> &'static [u8] {
     static P: OnceLock<Vec<u8>> = OnceLock::new();
     load(SLOT_FRONT_DARK_PNG, SLOT_W, SLOT_H, &P)
+}
+
+/// The Game Boy and Game Boy Color slot, behind the cart: the original Game Boy's top edge,
+/// in the dark or the light housing.
+pub fn slot_back_gb(light: bool) -> &'static [u8] {
+    static D: OnceLock<Vec<u8>> = OnceLock::new();
+    static L: OnceLock<Vec<u8>> = OnceLock::new();
+    match light {
+        false => load(SLOT_BACK_GB_DARK_PNG, SLOT_W, SLOT_H, &D),
+        true => load(SLOT_BACK_GB_LIGHT_PNG, SLOT_W, SLOT_H, &L),
+    }
+}
+
+/// The Game Boy slot in front of the cart, with the mouth open.
+pub fn slot_front_gb(light: bool) -> &'static [u8] {
+    static D: OnceLock<Vec<u8>> = OnceLock::new();
+    static L: OnceLock<Vec<u8>> = OnceLock::new();
+    match light {
+        false => load(SLOT_FRONT_GB_DARK_PNG, SLOT_W, SLOT_H, &D),
+        true => load(SLOT_FRONT_GB_LIGHT_PNG, SLOT_W, SLOT_H, &L),
+    }
 }
 
 pub fn slot_front_light() -> &'static [u8] {

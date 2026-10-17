@@ -637,6 +637,8 @@ fn fake_faces(a: &mut App) {
             .collect(),
         carets: [(id(300), 10, 40), (id(301), 10, 40)],
         legend: [(id(400), 70), (id(401), 110), (id(402), 80), (id(403), 90)],
+        switches: [(id(600), 52, 30), (id(601), 52, 30)],
+        help: vec![None; QuickRow::ALL.len()],
     });
     a.set_quick_clock_faces((id(500), 150, 40), (id(501), 150, 40));
 }
@@ -853,6 +855,8 @@ fn no_row_in_hand_runs_its_arrows_into_its_label() {
             (id(300 + right as usize), f.w, f.h)
         }),
         legend: [(id(400), 70), (id(401), 110), (id(402), 80), (id(403), 90)],
+        switches: [(id(600), 52, 30), (id(601), 52, 30)],
+        help: vec![None; QuickRow::ALL.len()],
     });
     for page in [
         &QuickRow::SCREEN_GBA[..],
@@ -888,15 +892,15 @@ fn the_about_label_sits_on_the_same_tinted_ground_as_the_menu() {
     let (_d, mut a, _) = on_carousel();
     fake_faces(&mut a);
     a.set_ground(TexId::from_raw(800));
-    a.set_blur(TexId::from_raw(801));
+    a.set_ground_light(TexId::from_raw(801));
     open_at(&mut a, QuickRow::About);
     let menu = frame(&a);
     press(&mut a, Btn::A);
     assert!(matches!(a.phase(), Phase::About), "{:?}", a.phase());
     let about = frame(&a);
     assert!(
-        matches!(menu[0], Draw::Part { tex, .. } if tex == TexId::from_raw(801)),
-        "the menu is not on the blurred wallpaper"
+        matches!(menu[0], Draw::Part { tex, .. } if tex == TexId::from_raw(800)),
+        "the menu is not on the theme's wallpaper"
     );
     assert!(
         matches!(menu[1], Draw::Rect { colour, .. } if colour[..3] == [0.0; 3] && colour[3] > 0.5),
