@@ -26,12 +26,14 @@ pub fn default_game_bezel_face(colour: bool) -> Option<Vec<u8>> {
     art::cover_bytes(png, OUT_W, OUT_H)
 }
 
-/// No wallpaper ships with this build: a plain ground is used until the player picks one.
+const DEFAULT_PNG: &[u8] = include_bytes!("../../../assets/background_default.png");
+
+/// The dark-grey wallpaper that ships with this build.
 pub fn default_background() -> Option<&'static [u8]> {
-    None
+    Some(DEFAULT_PNG)
 }
 
-/// No blurred wallpaper ships with this build either.
+/// There is no blurred variant: the default wallpaper is used as it is.
 pub fn blur_background() -> Option<&'static [u8]> {
     None
 }

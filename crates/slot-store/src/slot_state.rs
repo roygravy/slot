@@ -19,7 +19,7 @@ pub const RUN_AHEAD_MAX: u8 = 1;
 
 pub const RECENTS_MAX: usize = 10;
 pub const AUTO_SLEEP_OPTIONS_SECS: [u16; 4] = [0, 30, 60, 300];
-pub const AUTO_SLEEP_DEFAULT_SECS: u16 = 30;
+pub const AUTO_SLEEP_DEFAULT_SECS: u16 = 60;
 const AUTHENTIC_LCD_PROFILE: &str = "lcd_profile=authentic-v4";
 
 #[derive(Clone, PartialEq, Eq, Debug)]

@@ -577,6 +577,8 @@ impl App {
                 app.shelf_at = at;
                 app.shelves[at].1.select(i);
             }
+        } else if !app.shelves[FAVORITES_AT].1.carts.is_empty() {
+            app.shelf_at = FAVORITES_AT;
         } else if app.state.show_recents && !app.shelves[RECENTS_AT].1.carts.is_empty() {
             app.shelf_at = RECENTS_AT;
         }
@@ -986,16 +988,8 @@ impl App {
         }
     }
 
-    fn bezel_choices(&self, platform: Platform) -> Vec<BezelPick> {
-        let mut choices = vec![BezelPick::None];
-        if platform != Platform::Gba {
-            choices.push(BezelPick::Default);
-        }
-        if self.framed_panel() {
-            choices.push(BezelPick::Ags102);
-        }
-        choices.extend(self.bezel_files(platform).into_iter().map(BezelPick::File));
-        choices
+    fn bezel_choices(&self, _platform: Platform) -> Vec<BezelPick> {
+        vec![BezelPick::None]
     }
 
     fn bezel_pick(&mut self, platform: Platform) -> &mut BezelPick {
@@ -1056,10 +1050,8 @@ impl App {
 
     pub fn resolved_wallpaper(&self) -> WallpaperPick {
         match &self.state.wallpaper {
-            WallpaperPick::File(name) if !self.wallpaper_files().iter().any(|n| n == name) => {
-                WallpaperPick::Default
-            }
-            other => other.clone(),
+            WallpaperPick::None => WallpaperPick::None,
+            _ => WallpaperPick::Default,
         }
     }
 
@@ -1084,15 +1076,9 @@ impl App {
     }
 
     fn cycle_wallpaper(&mut self, right: bool) {
-        let mut choices = vec![
-            WallpaperPick::None,
-            WallpaperPick::Random,
-            WallpaperPick::Default,
-            WallpaperPick::Blur,
-        ];
-        choices.extend(self.wallpaper_files().into_iter().map(WallpaperPick::File));
+        let choices = vec![WallpaperPick::Default, WallpaperPick::None];
         let key = self.resolved_wallpaper().key();
-        let at = choices.iter().position(|c| c.key() == key).unwrap_or(2);
+        let at = choices.iter().position(|c| c.key() == key).unwrap_or(0);
         let n = choices.len();
         let next = if right {
             (at + 1) % n
@@ -1105,19 +1091,14 @@ impl App {
     fn menu_ground(&self) -> Option<TexId> {
         match &self.state.wallpaper {
             WallpaperPick::None => None,
-            WallpaperPick::Default | WallpaperPick::Blur => self.blur.or(self.ground),
-            WallpaperPick::Random if !self.random_drawn() => self.blur.or(self.ground),
-            WallpaperPick::File(_) | WallpaperPick::Random => self.wallpaper.or(self.ground),
+            _ => self.ground,
         }
     }
 
     fn draw_background(&self, out: &mut Vec<Draw>) {
         let face = match &self.state.wallpaper {
             WallpaperPick::None => None,
-            WallpaperPick::Default => self.ground,
-            WallpaperPick::Random if !self.random_drawn() => self.ground,
-            WallpaperPick::Blur => self.blur.or(self.ground),
-            WallpaperPick::File(_) | WallpaperPick::Random => self.wallpaper.or(self.ground),
+            _ => self.ground,
         };
         draw_ground(self.canvas(), face, out);
         let alpha = tint_alpha(self.state.wallpaper_tint);

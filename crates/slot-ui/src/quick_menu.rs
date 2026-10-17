@@ -106,53 +106,43 @@ impl QuickRow {
 
     pub const MAIN: [QuickRow; 3] = [QuickRow::General, QuickRow::Screen, QuickRow::Game];
 
-    pub const GENERAL: [QuickRow; 10] = [
+    pub const GENERAL: [QuickRow; 8] = [
         QuickRow::Wallpaper,
-        QuickRow::WallpaperTint,
         QuickRow::Theme,
         QuickRow::Recents,
         QuickRow::FavoriteMark,
         QuickRow::ShowTitles,
         QuickRow::DateTime,
         QuickRow::AutoSleep,
-        QuickRow::InGameMenu,
         QuickRow::RememberPosition,
     ];
 
     pub const SCREEN: [QuickRow; 5] = [
-        QuickRow::ScreenGba,
-        QuickRow::ScreenGbc,
         QuickRow::ScreenGb,
+        QuickRow::ScreenGbc,
+        QuickRow::ScreenGba,
         QuickRow::PixelTransparency,
         QuickRow::LcdGhosting,
     ];
 
-    pub const SCREEN_GBA: [QuickRow; 3] = [
-        QuickRow::GbaShader,
-        QuickRow::GbaColourCorrection,
-        QuickRow::GbaBezel,
-    ];
+    pub const SCREEN_GBA: [QuickRow; 2] = [QuickRow::GbaShader, QuickRow::GbaColourCorrection];
 
-    pub const SCREEN_GBC: [QuickRow; 3] = [
-        QuickRow::GbcShader,
-        QuickRow::GbcColourCorrection,
-        QuickRow::GbcBezel,
-    ];
+    pub const SCREEN_GBC: [QuickRow; 2] = [QuickRow::GbcShader, QuickRow::GbcColourCorrection];
 
-    pub const SCREEN_GB: [QuickRow; 4] = [
+    pub const SCREEN_GB: [QuickRow; 3] = [
         QuickRow::GbShader,
         QuickRow::GbColourCorrection,
         QuickRow::GbPalettes,
-        QuickRow::GbBezel,
     ];
 
-    pub const GAME: [QuickRow; 7] = [
+    pub const GAME: [QuickRow; 8] = [
         QuickRow::FastForward,
         QuickRow::FastForwardSound,
         QuickRow::Rewind,
         QuickRow::RunAhead,
         QuickRow::Turbo,
         QuickRow::Rumble,
+        QuickRow::InGameMenu,
         QuickRow::EjectSave,
     ];
 
@@ -165,11 +155,10 @@ impl QuickRow {
 
     pub const SETTINGS: [QuickRow; 2] = [QuickRow::PlayScreen, QuickRow::PlayGameplay];
 
-    pub const PLAY_SCREEN: [QuickRow; 4] = [
+    pub const PLAY_SCREEN: [QuickRow; 3] = [
         QuickRow::Shader,
         QuickRow::ColourCorrection,
         QuickRow::Palette,
-        QuickRow::Bezel,
     ];
 
     pub fn index(self) -> usize {
@@ -196,6 +185,7 @@ impl QuickRow {
             | QuickRow::RunAhead
             | QuickRow::Turbo
             | QuickRow::Rumble
+            | QuickRow::InGameMenu
             | QuickRow::EjectSave => &QuickRow::GAME,
             QuickRow::Wallpaper
             | QuickRow::WallpaperTint
@@ -205,7 +195,6 @@ impl QuickRow {
             | QuickRow::FavoriteMark
             | QuickRow::ShowTitles
             | QuickRow::AutoSleep
-            | QuickRow::InGameMenu
             | QuickRow::RememberPosition => &QuickRow::GENERAL,
             QuickRow::Resume | QuickRow::States | QuickRow::Settings | QuickRow::ExitGame => {
                 &QuickRow::PLAY
@@ -220,14 +209,14 @@ impl QuickRow {
 
     pub fn parent(self) -> Option<QuickRow> {
         match self.page()[0] {
-            QuickRow::ScreenGba => Some(QuickRow::Screen),
+            QuickRow::ScreenGb => Some(QuickRow::Screen),
             QuickRow::GbaShader => Some(QuickRow::ScreenGba),
             QuickRow::GbcShader => Some(QuickRow::ScreenGbc),
             QuickRow::GbShader => Some(QuickRow::ScreenGb),
             QuickRow::FastForward => Some(QuickRow::Game),
             QuickRow::Wallpaper => Some(QuickRow::General),
             QuickRow::AutoSleep => Some(QuickRow::General),
-            QuickRow::InGameMenu | QuickRow::RememberPosition => Some(QuickRow::General),
+            QuickRow::RememberPosition => Some(QuickRow::General),
             QuickRow::PlayScreen => Some(QuickRow::Settings),
             QuickRow::Shader => Some(QuickRow::PlayScreen),
             _ => None,
