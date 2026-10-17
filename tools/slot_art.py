@@ -21,11 +21,11 @@ W, H, SS = 720, 58, 4
 PAD = 12 * SS                 # rows above the strip, outside the housing: its top edge is an edge
 GB_MOUTH = (246, 474)         # snug around a seated Game Boy pak, whose art is 225 px wide
 CORNER = 7.0                  # convex corners of the outline are rounded this much
-BEVEL = 6.0                   # the moulded edge: crisp, not pillowy
+BEVEL = 9.0                   # the moulded edge: rounded enough to read as plastic
 
 # Dark: the charcoal of the original GBA slot. Light: a tint lighter than a Game Boy cart.
 LOOKS = {
-    "dark": np.array([33, 33, 35], np.float32),
+    "dark": np.array([42, 42, 45], np.float32),
     "light": np.array([184, 181, 175], np.float32),
 }
 
@@ -84,7 +84,7 @@ def draw(mouth: np.ndarray, plastic: np.ndarray, front: bool) -> np.ndarray:
 
     c = plastic[None, None, :] * shade[..., None]
     # A catch-light is added, not multiplied, so it shows on dark plastic as well as light.
-    c += (spec * 38.0)[..., None]
+    c += (spec * 16.0)[..., None]
     a = inside.astype(np.float32)
 
     cols = np.where(mouth.any(axis=0))[0]

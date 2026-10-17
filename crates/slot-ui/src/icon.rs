@@ -185,9 +185,10 @@ pub fn glow_face(cw: u32, ch: u32, margin: u32, colour: [u8; 3], peak: f32) -> C
         for px in 0..w {
             let (x, y) = ((px as f32 + 0.5) * 2.0 - cx, (py as f32 + 0.5) * 2.0 - cy);
             let r2 = (x / sx).powi(2) + (y / sy).powi(2);
-            // A bell, eased to nothing before the face's border.
-            let edge = ((px.min(w - 1 - px).min(py).min(h - 1 - py)) as f32 / 6.0).min(1.0);
-            let a = (-r2).exp() * peak * edge;
+            // A soft bell that reaches exactly nothing well inside the face, so no edge of
+            // the face ever shows, however the cart is scaled.
+            const REACH2: f32 = 1.6 * 1.6;
+            let a = (1.0 - r2 / REACH2).max(0.0).powi(3) * peak;
             let o = ((py * w + px) * 4) as usize;
             rgba[o..o + 4].copy_from_slice(&[
                 colour[0],
