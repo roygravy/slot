@@ -1,5 +1,7 @@
 use crate::lcd3x::ScreenEffect;
-use crate::power::{gba_custom_game_rect, integer_game_rect, screen_brightness, screen_rect};
+use crate::power::{
+    fullscreen_game_rect, gba_custom_game_rect, integer_game_rect, screen_brightness, screen_rect,
+};
 use crate::quad::Quad;
 use crate::shaders::{GAME_FRAG, RECT_VERT};
 use crate::surface::{GfxError, OUT_H, OUT_W};
@@ -297,7 +299,7 @@ impl GamePass {
             );
             (x, y, w, h, screen_brightness(self.power))
         } else {
-            let (x, y, w, h) = screen_rect(self.power);
+            let (x, y, w, h) = fullscreen_game_rect(self.power);
             (x, y, w, h, screen_brightness(self.power))
         };
         unsafe {

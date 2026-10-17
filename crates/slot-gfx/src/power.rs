@@ -33,6 +33,12 @@ pub fn screen_rect(t: f32) -> (f32, f32, f32, f32) {
     ((OUT_W as f32 - w) / 2.0, (OUT_H as f32 - h) / 2.0, w, h)
 }
 
+pub fn fullscreen_game_rect(t: f32) -> (f32, f32, f32, f32) {
+    let w = OUT_W as f32 * screen_width_for(t, OUT_W as f32);
+    let h = OUT_H as f32 * screen_scale_for(t, OUT_H as f32);
+    ((OUT_W as f32 - w) / 2.0, (OUT_H as f32 - h) / 2.0, w, h)
+}
+
 pub fn integer_game_rect(
     t: f32,
     source_size: [f32; 2],

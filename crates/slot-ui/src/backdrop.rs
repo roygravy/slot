@@ -1,14 +1,11 @@
 use std::path::Path;
-use std::sync::OnceLock;
 
 use slot_gfx::{Canvas, Draw, TexId, OUT_H, OUT_W};
 
 use crate::art;
 
-const DEFAULT_PNG: &[u8] = include_bytes!("../../../assets/background_default.png");
 const BEZEL_GB_PNG: &[u8] = include_bytes!("../../../assets/bezel_gb.png");
 const BEZEL_GBC_PNG: &[u8] = include_bytes!("../../../assets/bezel_gbc.png");
-const BLUR_PNG: &[u8] = include_bytes!("../../../assets/background_default_blur.png");
 
 const SCRIM: f32 = 0.62;
 
@@ -29,18 +26,14 @@ pub fn default_game_bezel_face(colour: bool) -> Option<Vec<u8>> {
     art::cover_bytes(png, OUT_W, OUT_H)
 }
 
-/// The carousel ground, scaled to cover the whole screen, including behind the footer.
+/// No wallpaper ships with this build: a plain ground is used until the player picks one.
 pub fn default_background() -> Option<&'static [u8]> {
-    static P: OnceLock<Option<Vec<u8>>> = OnceLock::new();
-    P.get_or_init(|| art::cover_bytes(DEFAULT_PNG, OUT_W, OUT_H))
-        .as_deref()
+    None
 }
 
-/// The blurred carousel ground, scaled to cover the whole screen the same way as the default.
+/// No blurred wallpaper ships with this build either.
 pub fn blur_background() -> Option<&'static [u8]> {
-    static P: OnceLock<Option<Vec<u8>>> = OnceLock::new();
-    P.get_or_init(|| art::cover_bytes(BLUR_PNG, OUT_W, OUT_H))
-        .as_deref()
+    None
 }
 
 pub fn draw_ground(canvas: Canvas, face: Option<TexId>, out: &mut Vec<Draw>) {
