@@ -15,7 +15,7 @@ use slot_store::{
 };
 use slot_ui::{
     board_from, board_x, board_zoom, cart_box, draw_empty_slot, draw_footer, draw_ground,
-    draw_slot_name, draw_sticker, ease, foot_y, footer_ink, grown, lid_at, lid_from, lift_of,
+    draw_slot_name, ease, foot_y, footer_ink, grown, lid_at, lid_from, lift_of,
     on_board, repeat_gap, shelf_cart_at, ClockPicker, Draw, FfState, GbShell, Hud, HudKind, Icon,
     LinkBadge, Millis, Placed, Polaroids, PowerChoice, QuickMenu, QuickMenuFaces, QuickRow,
     QuickValue, Refusal, Shelf, SlotChrome, TexId, Toast, BOARD_W, CART_W, CHIP_H, CHIP_U, CHIP_V,
@@ -3223,8 +3223,7 @@ impl App {
                 return;
             }
             Phase::About => {
-                slot_ui::draw_menu_ground(self.canvas(), self.menu_ground(), self.menu_ink(), out);
-                draw_sticker(self.canvas(), self.sticker_face, out);
+                slot_ui::draw_about(self.canvas(), self.sticker_face, out);
                 return;
             }
             Phase::Inserting { cart, resumed, .. } => {

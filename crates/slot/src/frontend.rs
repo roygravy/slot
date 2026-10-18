@@ -13,9 +13,9 @@ use slot_ui::{
     gb_cart_shadow, hhmm, hint_coloured, hint_face, icon_face, menu_face, photo_face,
     quick_caret_face, quick_label_face, quick_legend_faces, quick_pointer_face, quick_value_face,
     rebuild_count_face, rebuild_title_face, set_clock_hint_face, slot_back, slot_back_light,
-    slot_front, slot_front_light, socket_face, sticker_face, title_face, toast_face,
+    slot_front, slot_front_light, socket_face, title_face, toast_face,
     wallpaper_face, word_ink, CartFace, GbShell, Icon, LinkBadge, PowerChoice, QuickMenuFaces,
-    QuickRow, QuickValue, RebuildScreen, StickerFields, Toast, UndoFace, ALERT_PX, BOLT_PX,
+    QuickRow, QuickValue, RebuildScreen, Toast, UndoFace, ALERT_PX, BOLT_PX,
     HUD_ICON_PX, HUD_INK, LEGEND,
 };
 
@@ -107,7 +107,7 @@ struct WallpaperSync {
 #[derive(Default)]
 struct AboutFace {
     tex: Option<TexId>,
-    battery: Option<u8>,
+    light: Option<bool>,
 }
 
 #[derive(Default)]
@@ -1169,17 +1169,14 @@ fn sync_about(app: &mut App, compositor: &mut Compositor, state: &mut AboutFace)
     if !matches!(app.phase(), Phase::About) {
         return;
     }
-    let battery = app.battery().map(|b| b.percent);
-    if state.tex.is_some() && state.battery == battery {
+    let light = app.light();
+    if state.tex.is_some() && state.light == Some(light) {
         return;
     }
-    state.battery = battery;
+    state.light = Some(light);
     let build = Build::current();
-    let face = sticker_face(&StickerFields {
-        battery,
-        serial: &build.serial(),
-        dirty_digit: build.dirty_digit(),
-    });
+    let serial = format!("{} {}", build.serial(), build.dirty_digit());
+    let face = slot_ui::about_face(light, &serial);
     let id = upload(compositor, &mut state.tex, face);
     app.set_sticker_face(id);
 }

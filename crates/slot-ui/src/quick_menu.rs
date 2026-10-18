@@ -119,11 +119,12 @@ impl QuickRow {
     /// The power menu, held POWER.
     pub const POWER: [QuickRow; 3] = [QuickRow::Sleep, QuickRow::Restart, QuickRow::PowerOff];
 
-    pub const MAIN: [QuickRow; 4] = [
+    pub const MAIN: [QuickRow; 5] = [
         QuickRow::General,
         QuickRow::Screen,
         QuickRow::Game,
         QuickRow::Buttons,
+        QuickRow::About,
     ];
 
     pub const GENERAL: [QuickRow; 8] = [
@@ -354,6 +355,7 @@ impl QuickRow {
             QuickRow::Screen => "How the game picture looks.",
             QuickRow::Game => "Speed, rewind, turbo and saving.",
             QuickRow::Buttons => "Every button and shortcut, explained.",
+            QuickRow::About => "Who made this, and what it runs on.",
             QuickRow::ScreenLook => "Authentic: like the real screen. Clean: sharp and bright.",
             QuickRow::ScreenGb | QuickRow::ScreenGbc | QuickRow::ScreenGba => {
                 "Settings for this console only."

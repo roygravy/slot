@@ -1,3 +1,4 @@
+mod about;
 mod art;
 pub use art::cover;
 mod bitmaps;
@@ -76,6 +77,7 @@ pub use plate::{
 };
 pub use polaroids::{photo_face, PhotoFace, Polaroids, DOT, LEGEND, PHOTO_H, PHOTO_W};
 pub use power_menu::{menu_face, PowerChoice, MENU_PAD};
+pub use about::{about_face, draw_about};
 pub use buttons_help::{
     buttons_body_face, buttons_tab_face, ButtonsFaces, ButtonsHelp, BUTTON_PAGES,
 };
