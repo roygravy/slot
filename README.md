@@ -1,6 +1,6 @@
 <div align="center">
 
-# GRAVY
+# slot × GRAVY
 
 **A Game Boy–centric frontend for the Anbernic RG35XX Plus, built on [slot](https://github.com/BrandonKowalski/slot).**
 
@@ -8,7 +8,7 @@ Real cartridges on a shelf. A real cartridge slot. Just pick a game and push it 
 
 <img src=".github/resources/gravy/carousel.gif" width="640" alt="Scrolling the Game Boy shelf and pushing Mud Warriors into the slot">
 
-[**Download GRAVY 1.0**](https://github.com/roygravy/slot/releases) · [Install](#install) · [What's new](#whats-new) · [Controls](#controls)
+[**Download slot-x-gravy-v1.0**](https://github.com/roygravy/slot/releases) · [Install](#install) · [What's new](#whats-new) · [Controls](#controls)
 
 </div>
 
@@ -86,8 +86,8 @@ A **Buttons** page in the menu lists every shortcut, everywhere. Hold **POWER** 
 
 ## Install
 
-1. Download **gravy-v1.0.zip** from the [releases](https://github.com/roygravy/slot/releases).
-2. Unzip it and copy the **contents** of the `gravy-v1.0` folder onto the second SD card of your RG35XX Plus.
+1. Download **slot-x-gravy-v1.0.zip** from the [releases](https://github.com/roygravy/slot/releases).
+2. Unzip it and copy the **contents** of the `slot-x-gravy-v1.0` folder onto the second SD card of your RG35XX Plus.
 3. Put your games in `Games/GB`, `Games/GBC` and `Games/GBA`, and optional label art (PNG, named like the ROM) in the matching `Labels` folders.
 4. Put the BIOS files (`gb_bios.bin`, `gbc_bios.bin`, `gba_bios.bin`) in `BIOS/` if you have them.
 
