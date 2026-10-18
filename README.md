@@ -73,6 +73,12 @@ A **Buttons** page in the menu lists every shortcut, everywhere. Hold **POWER** 
 
 <img src=".github/resources/gravy/buttons_power.png" width="100%" alt="The Buttons page and the power menu">
 
+### About
+
+The back of an original Game Boy, with the credits moulded into the plastic and this build's serial on a silver sticker, stuck on a little crooked.
+
+<img src=".github/resources/gravy/about.png" width="100%" alt="The About page in dark and light">
+
 ### Play
 
 <img src=".github/resources/gravy/gameplay.png" width="100%" alt="Goodboy Galaxy on mGBA and Mud Warriors on Gambatte">
