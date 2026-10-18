@@ -23,6 +23,7 @@ GB_MOUTH = (246, 474)         # snug around a seated Game Boy pak, whose art is 
 CORNER = 3.0                  # convex corners of the outline: crisp, barely rounded
 BEVEL = 2.5                   # the moulded edge: a tight radius, as on thin hard plastic
 WALL = 2.2                    # the wall's own thickness, seen going down into the slot
+INNER = 5.5                   # how deep the inner walls read on the back strip
 
 # Dark: the charcoal of the original GBA slot. Light: a tint lighter than a Game Boy cart.
 LOOKS = {
@@ -113,12 +114,26 @@ def draw(mouth: np.ndarray, plastic: np.ndarray, front: bool) -> np.ndarray:
         c[wall] = plastic[None, :] * wall_shade[wall][..., None]
         a[wall] = 1.0
     else:
-        # Inside: the same plastic in the housing's shadow.
-        deep = 0.76 + 0.10 * np.clip(y / 30.0, 0, 1)
-        deep = np.broadcast_to(deep, (hs, ws))
+        # Inside, a real recess: thick inner walls lit from the left, the far wall's top edge
+        # catching light, and shadow that deepens toward the walls and down into the slot.
+        def smooth(e0, e1, v):
+            t = np.clip((v - e0) / (e1 - e0), 0, 1)
+            return t * t * (3 - 2 * t)
+        yy = np.broadcast_to(y, (hs, ws))
+        deep = 0.60 + 0.12 * smooth(3.0, 30.0, yy)
+        deep = deep * (0.80 + 0.20 * smooth(INNER, INNER + 8.0, d_out_px))
+        rim = yy < 2.5
+        deep = np.where(rim, 0.92 - 0.10 * (yy / 2.5), deep)
+        side = d_out_px < INNER
+        t = d_out_px / INNER
+        side_shade = np.where(left_side, 0.46 + 0.12 * t, 0.70 - 0.06 * t)
+        side_shade = np.where(rim, np.maximum(side_shade, 0.85), side_shade)
+        deep = np.where(side, side_shade, deep)
         c[gap] = plastic[None, :] * deep[gap][..., None]
         a[gap] = 1.0
-        c[wall] = plastic[None, :] * wall_shade[wall][..., None]
+        # The wall's lit top edge, a hair inside the housing's line.
+        edge = gap & (d_out_px < 0.9)
+        c[edge] = plastic[None, :] * np.where(left_side, 0.66, 0.92)[edge][..., None]
 
     c = c.reshape(H, SS, W, SS, 3).mean(axis=(1, 3))
     a = a.reshape(H, SS, W, SS).mean(axis=(1, 3))
