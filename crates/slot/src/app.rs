@@ -4041,7 +4041,12 @@ impl App {
             return;
         };
         self.phase = match cart.take() {
-            Some(cart) => Phase::Playing { cart },
+            Some(cart) => {
+                // Waking straight back into the game: no power-on animation, the screen is
+                // simply on again.
+                self.screen = 1.0;
+                Phase::Playing { cart }
+            }
             None => Phase::Shelf,
         };
         if let Some(power) = &mut self.power {
