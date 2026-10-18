@@ -1,8 +1,8 @@
 <div align="center">
 
-# slot x GRAVY
+# slot. x GRAVY
 
-**A Game Boy–centric frontend for the Anbernic RG35XX Plus, built on [slot](https://github.com/BrandonKowalski/slot).**
+**A Game Boy–centric frontend for the Anbernic RG35XX Plus, built on [slot.](https://github.com/BrandonKowalski/slot)**
 
 Real cartridges on a shelf. A real cartridge slot. Just pick a game and push it in.
 
@@ -14,11 +14,11 @@ Real cartridges on a shelf. A real cartridge slot. Just pick a game and push it 
 
 ---
 
-## What is slot x GRAVY?
+## What is slot. x GRAVY?
 
-slot x GRAVY is a custom build of [slot](https://github.com/BrandonKowalski/slot), Brandon Kowalski's bespoke Game Boy, Game Boy Color and Game Boy Advance frontend, tuned for the **Anbernic RG35XX Plus** and its 640×480 screen.
+slot. x GRAVY is a custom build of [slot.](https://github.com/BrandonKowalski/slot), Brandon Kowalski's bespoke Game Boy, Game Boy Color and Game Boy Advance frontend, tuned for the **Anbernic RG35XX Plus** and its 640×480 screen.
 
-Where slot is modelled on the GBA SP, slot x GRAVY leans into the handheld it runs on: the RG35XX Plus is a love letter to the original Game Boy, so Game Boy carts go into a Game Boy slot, the plastic looks like plastic, and every menu is written for people who just want to play.
+Where slot. is modelled on the GBA SP, slot. x GRAVY leans into the handheld it runs on: the RG35XX Plus is a love letter to the original Game Boy, so Game Boy carts go into a Game Boy slot, the plastic looks like plastic, and every menu is written for people who just want to play.
 
 It plays GB, GBC and GBA games only (unzipped ROMs), on mGBA, gpSP and Gambatte.
 
@@ -113,23 +113,23 @@ The full list is on the **Buttons** page in the menu. The essentials:
 | Double tap MENU | Save state switcher |
 | Hold L2 / Hold R2 | Rewind / fast-forward |
 | SELECT + Up / Down | Brightness |
-| SELECT + MENU | Link cable to another slot device |
+| SELECT + MENU | Link cable to another slot. device |
 
 ---
 
 ## Building
 
-slot x GRAVY builds the same way slot does; see [the slot README](SLOT_README.md) and `taskfile.yml`. The cartridge slots are drawn by `tools/slot_art.py`. Screenshots in this page were rendered headless with `cargo run --release -p slot --no-default-features --example shoot`.
+slot. x GRAVY builds the same way slot. does; see [the slot. README](SLOT_README.md) and `taskfile.yml`. The cartridge slots are drawn by `tools/slot_art.py`. Screenshots in this page were rendered headless with `cargo run --release -p slot --no-default-features --example shoot`.
 
 ---
 
 ## Credits
 
-- **[slot](https://github.com/BrandonKowalski/slot)** by Brandon Kowalski, the frontend slot x GRAVY is built on, with artwork by Markus and contributions from its community
+- **[slot.](https://github.com/BrandonKowalski/slot)** by Brandon Kowalski, the frontend slot. x GRAVY is built on, with artwork by Markus and contributions from its community
 - **mGBA**, **gpSP** and **Gambatte**, the emulator cores (their licenses and sources ship in `System/licenses`)
 - **Permanent Marker** by Font Diner (Apache 2.0) for the handwritten titles
 - **Goodboy Galaxy** (demo) and **Mud Warriors**, the free games in the screenshots
 
-Like slot, slot x GRAVY was put together with help from Claude.
+Like slot., slot. x GRAVY was put together with help from Claude.
 
-Licensed under the same terms as slot; see [LICENSE](LICENSE).
+Licensed under the same terms as slot.; see [LICENSE](LICENSE).
