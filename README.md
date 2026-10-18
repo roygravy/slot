@@ -76,7 +76,7 @@ A **Buttons** page in the menu lists every shortcut, everywhere. Hold **POWER** 
 ### Play
 
 <img src=".github/resources/gravy/gameplay.png" width="100%" alt="Goodboy Galaxy on mGBA and Hauntsfield in the original Game Boy green">
-<img src=".github/resources/gravy/ingame.png" width="100%" alt="The in-game menu, and the Game Boy Color shelf in light">
+<img src=".github/resources/gravy/ingame.png" width="100%" alt="Hauntsfield in its own colours and on the DMG Green palette">
 
 ### And more
 
