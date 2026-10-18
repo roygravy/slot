@@ -19,9 +19,10 @@ from scipy.ndimage import distance_transform_edt as edt
 ROOT = Path(__file__).resolve().parents[1]
 W, H, SS = 720, 58, 4
 PAD = 12 * SS                 # rows above the strip, outside the housing: its top edge is an edge
-GB_MOUTH = (246, 474)         # snug around a seated Game Boy pak, whose art is 225 px wide
+GB_MOUTH = (244, 476)         # a seated Game Boy pak (225 px of art) with a hair to spare each side
 CORNER = 3.0                  # convex corners of the outline: crisp, barely rounded
-BEVEL = 2.5                   # the moulded edge: a tight radius, as on thin hard plastic
+BEVEL = 2.5                   # the slot's moulded edge: a tight radius, as on thin hard plastic
+TOP_BEVEL = 7.0               # the housing's top edge rounds over softly
 WALL = 2.2                    # the wall's own thickness, seen going down into the slot
 INNER = 5.5                   # how deep the inner walls read on the back strip
 
@@ -84,9 +85,17 @@ def draw(mouth: np.ndarray, plastic: np.ndarray, front: bool) -> np.ndarray:
     housing = edt(~core) <= r
     d_in = edt(housing)[PAD:] / SS          # depth into the housing, in px
     inside = housing[PAD:]
+    # The slot's walls alone (the space above the strip counted as housing), for a crisp
+    # edge there, and the top edge on its own, for a soft round-over.
+    walls = housing.copy()
+    walls[:PAD] = True
+    d_wall = edt(walls)[PAD:] / SS
+    d_top = np.broadcast_to((np.arange(hs)[:, None] + 0.5) / SS, (hs, ws))
 
-    t = np.clip(d_in / BEVEL, 0, 1)
-    height = np.sqrt(1 - (1 - t) ** 2) * BEVEL
+    def quarter(d, r):
+        t = np.clip(d / r, 0, 1)
+        return np.sqrt(1 - (1 - t) ** 2) * r
+    height = np.minimum(quarter(d_wall, BEVEL) + TOP_BEVEL, quarter(d_top, TOP_BEVEL) + BEVEL)
     gy, gx = np.gradient(height * SS)
     n = np.dstack([-gx, -gy, np.ones_like(height)])
     n /= np.linalg.norm(n, axis=2, keepdims=True)
