@@ -42,7 +42,7 @@ A **Dark** and a **Light** housing, each with its own clean wallpaper. Game Boy 
 
 Press **Y** on any cart to make it a favorite. Favorites stand a little taller on their shelf under a soft, warm spotlight, and get a shelf of their own where the light stays put in the middle as you scroll through it. Prefer something quieter? Pick **Star** instead.
 
-<img src=".github/resources/gravy/favorites.png" width="100%" alt="The Favorites shelf in dark and the GBA shelf in light">
+<img src=".github/resources/gravy/favorites.png" width="100%" alt="The Favorites shelf in dark and light">
 
 ### Carts without label art
 
@@ -72,12 +72,6 @@ Every settings page lists its options on the left with the value on the right, f
 A **Buttons** page in the menu lists every shortcut, everywhere. Hold **POWER** for **Sleep**, **Restart** or **Power Off**.
 
 <img src=".github/resources/gravy/buttons_power.png" width="100%" alt="The Buttons page and the power menu">
-
-### About
-
-The back of an original Game Boy, with the credits moulded into the plastic and this build's serial on a silver sticker, stuck on a little crooked.
-
-<img src=".github/resources/gravy/about.png" width="100%" alt="The About page in dark and light">
 
 ### Play
 
