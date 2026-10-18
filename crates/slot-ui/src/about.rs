@@ -11,7 +11,7 @@ const LIGHT_PNG: &[u8] = include_bytes!("../../../assets/about_light.png");
 
 /// The paper label, as tools/about_art.py draws it.
 const LABEL: (u32, u32, u32, u32) = (200, 34, 440, 92);
-const SERIAL_PX: f32 = 28.0;
+const SERIAL_PX: f32 = 34.0;
 const INK: [u8; 3] = [0x1c, 0x1c, 0x1e];
 /// The sticker's tilt, as tools/about_art.py sticks it on (degrees, PIL's sense:
 /// positive turns anticlockwise).
@@ -22,12 +22,12 @@ pub fn about_face(light: bool, serial: &str) -> UndoFace {
     let png = if light { LIGHT_PNG } else { DARK_PNG };
     let (mut rgba, w, h) =
         decode_png_bytes(png).unwrap_or_else(|| (vec![0; (OUT_W * OUT_H * 4) as usize], OUT_W, OUT_H));
-    if let Some(font) = text::label_font() {
+    if let Some(font) = text::serial_font() {
         let (lx, ly, lx1, ly1) = LABEL;
         let (lw, lh) = (lx1 - lx, ly1 - ly);
         let layout = text::fit(font, serial, lw as f32 - 32.0, 1, SERIAL_PX, 14.0);
         let mut label = vec![0u8; (lw * lh * 4) as usize];
-        text::draw_centred(&mut label, lw, lh, &layout, INK);
+        text::draw_centred_in(font, &mut label, lw, lh, &layout, INK);
         // Print it turned with the sticker: map each screen pixel back into the flat label.
         let (sin, cos) = STICKER_DEG.to_radians().sin_cos();
         let (cx, cy) = (lw as f32 / 2.0, lh as f32 / 2.0);

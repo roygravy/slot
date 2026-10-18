@@ -132,6 +132,7 @@ slot. x GRAVY builds the same way slot. does; see [the slot. README](SLOT_README
 - **[slot.](https://github.com/BrandonKowalski/slot)** by Brandon Kowalski, the frontend slot. x GRAVY is built on, with artwork by Markus and contributions from its community
 - **mGBA**, **gpSP** and **Gambatte**, the emulator cores (their licenses and sources ship in `System/licenses`)
 - **Permanent Marker** by Font Diner (Apache 2.0) for the handwritten titles
+- **Liberation Sans** by Red Hat (SIL OFL 1.1), subset as "slot Serial", for the serial sticker on the About page
 - **Goodboy Galaxy** (demo) and **Mud Warriors**, the free games in the screenshots
 
 Like slot., slot. x GRAVY was put together with help from Claude.
