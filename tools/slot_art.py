@@ -52,9 +52,25 @@ def gb_mouth() -> np.ndarray:
 
 
 def gba_mouth() -> np.ndarray:
-    a = np.asarray(Image.open(ROOT / "tools" / "gba_mouth_mask.png").convert("RGBA"))[..., 3]
-    big = Image.fromarray(a).resize((W * SS, H * SS), Image.BILINEAR)
-    return np.asarray(big) < 128
+    """The GBA slot's mouth: a straight-walled band with tight corners where it steps in to
+    the finger scoop, whose curve follows the original slot art."""
+    ys, xs = np.mgrid[0 : H * SS, 0 : W * SS].astype(np.float32)
+    x, y = (xs + 0.5) / SS, (ys + 0.5) / SS
+    left, right, band_bottom, r = 233.0, 487.0, 28.5, 3.0
+    band = (x >= left) & (x < right) & (y < band_bottom)
+    for cx in (left + r, right - r):
+        corner = (y > band_bottom - r) & (np.abs(x - cx) > 0) & (
+            ((x < left + r) & (cx == left + r)) | ((x > right - r) & (cx == right - r))
+        )
+        band &= ~(corner & (np.hypot(x - cx, y - (band_bottom - r)) > r))
+    # The scoop's left edge, row by row from the original art; mirrored for the right.
+    rows = np.arange(29, 44) + 0.5
+    lefts = np.array([269, 270, 271, 274, 275, 276, 278, 280, 282, 284, 287, 289, 293, 298, 308],
+                     np.float32)
+    xl = np.interp(y, rows, lefts, left=np.inf, right=np.inf)
+    xl = np.where((y >= band_bottom - 0.5) & (y < 44.0), np.interp(y, rows, lefts), np.inf)
+    scoop = (x >= xl) & (x < 720.0 - xl)
+    return band | scoop
 
 
 def draw(mouth: np.ndarray, plastic: np.ndarray, front: bool) -> np.ndarray:
