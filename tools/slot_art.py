@@ -25,6 +25,8 @@ BEVEL = 2.5                   # the slot's moulded edge: a tight radius, as on t
 TOP_BEVEL = 7.0               # the housing's top edge rounds over softly
 WALL = 2.2                    # the wall's own thickness, seen going down into the slot
 INNER = 5.5                   # how deep the inner walls read on the back strip
+RIB_W = 6.0                   # the raised ribs on the slot's back wall
+RIB_TOP = 9.0
 
 # Dark: the charcoal of the original GBA slot. Light: a tint lighter than a Game Boy cart.
 LOOKS = {
@@ -159,6 +161,22 @@ def draw(mouth: np.ndarray, plastic: np.ndarray, front: bool) -> np.ndarray:
         # The wall's lit top edge, a hair inside the housing's line.
         edge = gap & (d_out_px < 0.9)
         c[edge] = plastic[None, :] * np.where(left_side, 0.66, 0.92)[edge][..., None]
+        # Two raised ribs moulded into the slot's back wall, as on the real hardware: long
+        # pills with a lit left flank, a shaded right one and a soft shadow beside them.
+        xs_ = np.broadcast_to(x, (hs, ws)) / SS
+        lo, hi = cols.min() / SS, cols.max() / SS
+        for cx in (lo + (hi - lo) * 0.24, lo + (hi - lo) * 0.76):
+            r = RIB_W / 2
+            top = RIB_TOP + r
+            dy = np.maximum(top - yy, 0)
+            d = np.hypot(xs_ - cx, dy)
+            rib = gap & (d < r)
+            t = np.clip((xs_ - cx) / r, -1, 1)
+            rib_shade = np.where(dy > 0, 1.0 - 0.25 * np.clip(-(yy - top) / r, 0, 1), 1.0)
+            rib_shade = rib_shade * (1.06 - 0.20 * (t + 1) / 2)
+            shadow = gap & ~rib & (xs_ > cx) & (xs_ < cx + r + 2.5) & (yy > RIB_TOP + 1)
+            c[shadow] *= 0.90
+            c[rib] = plastic[None, :] * (deep[rib] * 1.12 * rib_shade[rib])[..., None]
 
     c = c.reshape(H, SS, W, SS, 3).mean(axis=(1, 3))
     a = a.reshape(H, SS, W, SS).mean(axis=(1, 3))
