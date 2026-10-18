@@ -11,8 +11,11 @@ const LIGHT_PNG: &[u8] = include_bytes!("../../../assets/about_light.png");
 
 /// The paper label, as tools/about_art.py draws it.
 const LABEL: (u32, u32, u32, u32) = (200, 34, 440, 92);
-const SERIAL_PX: f32 = 30.0;
-const INK: [u8; 3] = [0x1e, 0x1e, 0x20];
+const SERIAL_PX: f32 = 28.0;
+const INK: [u8; 3] = [0x1c, 0x1c, 0x1e];
+/// The sticker's tilt, as tools/about_art.py sticks it on (degrees, PIL's sense:
+/// positive turns anticlockwise).
+const STICKER_DEG: f32 = -0.9;
 
 /// The whole About screen for a theme, with `serial` printed on the label.
 pub fn about_face(light: bool, serial: &str) -> UndoFace {
@@ -22,13 +25,31 @@ pub fn about_face(light: bool, serial: &str) -> UndoFace {
     if let Some(font) = text::label_font() {
         let (lx, ly, lx1, ly1) = LABEL;
         let (lw, lh) = (lx1 - lx, ly1 - ly);
-        let layout = text::fit(font, serial, lw as f32 - 16.0, 1, SERIAL_PX, 14.0);
+        let layout = text::fit(font, serial, lw as f32 - 32.0, 1, SERIAL_PX, 14.0);
         let mut label = vec![0u8; (lw * lh * 4) as usize];
         text::draw_centred(&mut label, lw, lh, &layout, INK);
+        // Print it turned with the sticker: map each screen pixel back into the flat label.
+        let (sin, cos) = STICKER_DEG.to_radians().sin_cos();
+        let (cx, cy) = (lw as f32 / 2.0, lh as f32 / 2.0);
+        let alpha_at = |x: i32, y: i32| -> f32 {
+            if x < 0 || y < 0 || x >= lw as i32 || y >= lh as i32 {
+                return 0.0;
+            }
+            label[((y as u32 * lw + x as u32) * 4 + 3) as usize] as f32
+        };
         for y in 0..lh {
             for x in 0..lw {
-                let s = ((y * lw + x) * 4) as usize;
-                let a = label[s + 3] as u32;
+                let (dx, dy) = (x as f32 + 0.5 - cx, y as f32 + 0.5 - cy);
+                let sx = cos * dx - sin * dy + cx - 0.5;
+                let sy = sin * dx + cos * dy + cy - 0.5;
+                let (fx, fy) = (sx.floor(), sy.floor());
+                let (tx, ty) = (sx - fx, sy - fy);
+                let (ix, iy) = (fx as i32, fy as i32);
+                let a = alpha_at(ix, iy) * (1.0 - tx) * (1.0 - ty)
+                    + alpha_at(ix + 1, iy) * tx * (1.0 - ty)
+                    + alpha_at(ix, iy + 1) * (1.0 - tx) * ty
+                    + alpha_at(ix + 1, iy + 1) * tx * ty;
+                let a = (a * 0.92).round() as u32;
                 if a == 0 || x + lx >= w || y + ly >= h {
                     continue;
                 }
