@@ -3369,10 +3369,8 @@ impl App {
             behind: self.shelf().behind(stem),
             slot: self.slot_faces(),
             canvas: self.canvas(),
-            lift: match cart.platform {
-                Platform::Gba => 0.0,
-                Platform::Gb | Platform::Gbc => slot_ui::GB_SEAT_LIFT,
-            },
+            // Every cart seats with its top level with the slot's top edge.
+            lift: slot_ui::GB_SEAT_LIFT,
         }
         .draw(out);
     }
