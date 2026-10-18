@@ -243,7 +243,18 @@ fn strip(canvas: Canvas, tex: TexId, alpha: f32) -> Draw {
 const CONSOLE_SHADOW: f32 = 16.0;
 const CONSOLE_SHADOW_ALPHA: f32 = 0.18;
 
+static LIGHT_GROUND: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// On a light wallpaper the console's shadow is lighter.
+pub fn set_light_ground(light: bool) {
+    LIGHT_GROUND.store(light, std::sync::atomic::Ordering::Relaxed);
+}
+
 fn draw_console_shadow(canvas: Canvas, alpha: f32, out: &mut Vec<Draw>) {
+    let alpha = match LIGHT_GROUND.load(std::sync::atomic::Ordering::Relaxed) {
+        true => alpha * 0.55,
+        false => alpha,
+    };
     const STEPS: usize = 8;
     let step = CONSOLE_SHADOW / STEPS as f32;
     for k in 0..STEPS {

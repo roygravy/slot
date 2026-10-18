@@ -557,7 +557,11 @@ impl Shelf {
                     w: w + 2.0 * m,
                     h: h + 2.0 * m,
                     tex,
-                    alpha: DROP_ALPHA * alpha * dim * (1.0 + lift / LIFT * 0.3),
+                    alpha: DROP_ALPHA
+                        * alpha
+                        * dim
+                        * (1.0 + lift / LIFT * 0.3)
+                        * if self.light_ground { 0.55 } else { 1.0 },
                 });
             }
             if self.clear(i) && self.face(i).is_some() {

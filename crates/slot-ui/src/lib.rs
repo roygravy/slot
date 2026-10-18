@@ -95,7 +95,7 @@ pub use shell::{
 };
 pub use silhouette::{gb_silhouette, silhouette, GbShell};
 pub use slot_chrome::{
-    GB_SEAT_LIFT,
+    set_light_ground, GB_SEAT_LIFT,
     draw_empty_slot, draw_slot_name, draw_slot_title, ease, edge, housing, opening, recess,
     slot_name_y, SlotChrome, ALERT_PX, LIP_H, MOUTH_H, MOUTH_W,
 };

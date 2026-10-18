@@ -1196,6 +1196,9 @@ impl App {
     }
 
     fn mark_stars(&mut self) {
+        slot_ui::set_light_ground(
+            self.state.appearance.light() && self.state.wallpaper != WallpaperPick::None,
+        );
         let state = &self.state;
         for (rack, shelf) in &mut self.shelves {
             shelf.set_mark(state.favorite_mark);

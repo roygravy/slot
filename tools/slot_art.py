@@ -20,8 +20,9 @@ ROOT = Path(__file__).resolve().parents[1]
 W, H, SS = 720, 58, 4
 PAD = 12 * SS                 # rows above the strip, outside the housing: its top edge is an edge
 GB_MOUTH = (246, 474)         # snug around a seated Game Boy pak, whose art is 225 px wide
-CORNER = 7.0                  # convex corners of the outline are rounded this much
-BEVEL = 9.0                   # the moulded edge: rounded enough to read as plastic
+CORNER = 3.0                  # convex corners of the outline: crisp, barely rounded
+BEVEL = 2.5                   # the moulded edge: a tight radius, as on thin hard plastic
+WALL = 2.2                    # the wall's own thickness, seen going down into the slot
 
 # Dark: the charcoal of the original GBA slot. Light: a tint lighter than a Game Boy cart.
 LOOKS = {
@@ -82,6 +83,9 @@ def draw(mouth: np.ndarray, plastic: np.ndarray, front: bool) -> np.ndarray:
     y = (np.arange(hs)[:, None] + 0.5) / SS
     shade = shade * (1.03 - 0.08 * np.clip(y / H, 0, 1))
 
+    # A thin bright line where the top face meets the edge, as moulded plastic catches light.
+    lip = (d_in > 0.2) & (d_in < 1.1)
+    shade = np.where(lip, shade * 1.10, shade)
     c = plastic[None, None, :] * shade[..., None]
     # A catch-light is added, not multiplied, so it shows on dark plastic as well as light.
     c += (spec * 16.0)[..., None]
@@ -92,18 +96,29 @@ def draw(mouth: np.ndarray, plastic: np.ndarray, front: bool) -> np.ndarray:
     near = (x > cols.min() - (CORNER + 1) * SS) & (x < cols.max() + (CORNER + 1) * SS)
     near = np.repeat(near, hs, axis=0)
     gap = near & ~inside
+    # The wall's face: the plastic's thickness going down into the slot, in shade, with the
+    # left wall darker than the right one under the light from the left.
+    d_out_px = edt(~inside) / SS
+    wall = gap & (d_out_px < WALL)
+    left_side = x < (cols.min() + cols.max()) / 2
+    left_side = np.repeat(left_side, hs, axis=0)
+    wall_shade = np.where(left_side, 0.58, 0.74)
+    wall_shade = np.where(y.repeat(ws, axis=1) < WALL + 1, 0.80, wall_shade)
     if front:
         # The walls' shadow on the cart standing in the slot.
         d_out = edt(~inside) / SS
-        cast = 0.58 * np.exp(-d_out / 5.0)
+        cast = 0.50 * np.exp(-(d_out - WALL).clip(0) / 3.5)
         c[gap] = np.array([18, 17, 16], np.float32)
         a[gap] = np.clip(cast[gap], 0, 0.65)
+        c[wall] = plastic[None, :] * wall_shade[wall][..., None]
+        a[wall] = 1.0
     else:
         # Inside: the same plastic in the housing's shadow.
         deep = 0.76 + 0.10 * np.clip(y / 30.0, 0, 1)
         deep = np.broadcast_to(deep, (hs, ws))
         c[gap] = plastic[None, :] * deep[gap][..., None]
         a[gap] = 1.0
+        c[wall] = plastic[None, :] * wall_shade[wall][..., None]
 
     c = c.reshape(H, SS, W, SS, 3).mean(axis=(1, 3))
     a = a.reshape(H, SS, W, SS).mean(axis=(1, 3))
