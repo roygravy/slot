@@ -24,7 +24,7 @@ It plays GB, GBC and GBA games only (unzipped ROMs), on mGBA, gpSP and Gambatte.
 
 ### Ridiculously fast
 
-Power on, and you're looking at your shelf in **3 to 5 seconds**. No splash screens, no launcher behind a launcher, no waiting for a big frontend to wake up: slot. is a single native Rust program that draws straight to the screen with OpenGL, so the console is ready about as fast as you can pick it up. Games start just as quickly: push a cart in and you're playing, right where your last save state left off.
+Power on and your shelf is there in **3 to 5 seconds**. Push a cart in and you're playing, right where your last save state left off.
 
 ---
 
