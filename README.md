@@ -6,7 +6,7 @@
 
 Real cartridges on a shelf. A real cartridge slot. On your shelf in 3–5 seconds. Just pick a game and push it in.
 
-<img src=".github/resources/gravy/carousel.gif" width="640" alt="Scrolling the Game Boy shelf and pushing Mud Warriors into the slot">
+<img src=".github/resources/gravy/carousel.gif" width="640" alt="Scrolling the Game Boy shelf and pushing Hauntsfield into the slot">
 
 [**Download slot-x-gravy-v1.0**](https://github.com/roygravy/slot/releases) · [Install](#install) · [What's new](#whats-new) · [Controls](#controls)
 
@@ -75,7 +75,7 @@ A **Buttons** page in the menu lists every shortcut, everywhere. Hold **POWER** 
 
 ### Play
 
-<img src=".github/resources/gravy/gameplay.png" width="100%" alt="Goodboy Galaxy on mGBA and Mud Warriors on Gambatte">
+<img src=".github/resources/gravy/gameplay.png" width="100%" alt="Goodboy Galaxy on mGBA and Hauntsfield in the original Game Boy green">
 <img src=".github/resources/gravy/ingame.png" width="100%" alt="The in-game menu, and the Game Boy Color shelf in light">
 
 ### And more
@@ -133,7 +133,7 @@ slot. x GRAVY builds the same way slot. does; see [the slot. README](SLOT_README
 - **mGBA**, **gpSP** and **Gambatte**, the emulator cores (their licenses and sources ship in `System/licenses`)
 - **Permanent Marker** by Font Diner (Apache 2.0) for the handwritten titles
 - **Liberation Sans** by Red Hat (SIL OFL 1.1), subset as "slot Serial", for the serial sticker on the About page
-- **Goodboy Galaxy** (demo) and **Mud Warriors**, the free games in the screenshots
+- **Goodboy Galaxy** (demo), **Hauntsfield** and **Mud Warriors**, the free games in the screenshots
 
 Like slot., slot. x GRAVY was put together with help from Claude.
 
