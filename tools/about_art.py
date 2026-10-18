@@ -14,8 +14,8 @@ FONT = ROOT / "crates" / "slot-ui" / "assets" / "label.ttf"
 W, H, SS = 640, 480, 3
 
 # The paper serial label, in screen pixels; crates/slot-ui/src/about.rs prints on it.
-LABEL = (200, 44, 440, 100)
-PANEL = (52, 140, 588, 418)
+LABEL = (200, 34, 440, 92)
+PANEL = (60, 124, 580, 408)
 
 BIG = [
     "slot.  BY BRANDON T. KOWALSKI",
@@ -23,13 +23,12 @@ BIG = [
     "MODEL NO.  DMG-01",
     "© 2026  MADE ALL OVER THE WORLD",
 ]
-SMALL = [
-    "THE EXQUISITE SKEUOMORPHIC ARTWORK MADE BY MARKUS.",
-    "EMULATION POWERED BY MGBA, GPSP AND GAMBATTE.",
-    "UNDERLYING OS IS BASEOS BY PVAIBHAV. TYPE IS OPEN",
-    "SANS, PERMANENT MARKER BY FONT DINER AND NERD FONTS",
-    "SYMBOLS BY RYAN L MCINTYRE.",
-]
+SMALL = (
+    "THE EXQUISITE SKEUOMORPHIC ARTWORK MADE BY MARKUS. EMULATION POWERED BY MGBA, GPSP "
+    "AND GAMBATTE. UNDERLYING OS IS BASEOS BY PVAIBHAV. TYPE IS OPEN SANS, PERMANENT MARKER "
+    "BY FONT DINER AND NERD FONTS SYMBOLS BY RYAN L MCINTYRE."
+)
+SMALL_PX, SMALL_W = 12, 378
 
 LOOKS = {
     "light": np.array([184, 181, 175], np.float32),
@@ -60,20 +59,34 @@ def render(plastic):
     panel = mask(lambda d: d.rounded_rectangle(sc(PANEL), radius=6 * SS, fill=255))
     label = mask(lambda d: d.rounded_rectangle(sc(LABEL), radius=3 * SS, fill=255))
 
+    def wrap(text, f, width):
+        lines, line = [], ""
+        for w in text.split():
+            t = f"{line} {w}".strip()
+            if line and f.getlength(t) > width * SS:
+                lines.append(line)
+                t = w
+            line = t
+        return lines + [line]
+
     def letters(d):
+        x = (PANEL[0] + 24) * SS
         y = (PANEL[1] + 20) * SS
         for s in BIG:
-            d.text(((PANEL[0] + 24) * SS, y), s, font=font(21), fill=255)
-            y += int(29 * SS)
-        y += 8 * SS
-        for s in SMALL:
-            d.text(((PANEL[0] + 24) * SS, y), s, font=font(13.5), fill=255)
-            y += int(19 * SS)
-        bx0, by0, bx1, by1 = PANEL[2] - 112, PANEL[1] + 22, PANEL[2] - 22, PANEL[1] + 104
+            d.text((x, y), s, font=font(20), fill=255)
+            y += int(31 * SS)
+        y += 4 * SS
+        small = font(SMALL_PX)
+        for s in wrap(SMALL, small, SMALL_W):
+            d.text((x, y), s, font=small, fill=255)
+            y += int(16 * SS)
+        # The slot. badge, bottom right in the panel.
+        bx1, by1 = PANEL[2] - 20, PANEL[3] - 20
+        bx0, by0 = bx1 - 90, by1 - 86
         d.rounded_rectangle(sc((bx0, by0, bx1, by1)), radius=8 * SS, outline=255, width=4 * SS)
-        d.rounded_rectangle(sc((bx0 + 11, by0 + 11, bx1 - 11, by1 - 11)), radius=4 * SS,
+        d.rounded_rectangle(sc((bx0 + 10, by0 + 10, bx1 - 10, by1 - 10)), radius=4 * SS,
                             outline=255, width=3 * SS)
-        d.text(((bx0 + bx1) * SS // 2, (by0 + by1) * SS // 2), "slot.", font=font(24),
+        d.text(((bx0 + bx1) * SS // 2, (by0 + by1) * SS // 2), "slot.", font=font(23),
                fill=255, anchor="mm")
 
     text = mask(letters)

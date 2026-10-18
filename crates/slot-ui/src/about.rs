@@ -10,7 +10,7 @@ const DARK_PNG: &[u8] = include_bytes!("../../../assets/about_dark.png");
 const LIGHT_PNG: &[u8] = include_bytes!("../../../assets/about_light.png");
 
 /// The paper label, as tools/about_art.py draws it.
-const LABEL: (u32, u32, u32, u32) = (200, 44, 440, 100);
+const LABEL: (u32, u32, u32, u32) = (200, 34, 440, 92);
 const SERIAL_PX: f32 = 30.0;
 const INK: [u8; 3] = [0x1e, 0x1e, 0x20];
 

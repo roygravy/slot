@@ -3224,6 +3224,21 @@ impl App {
             }
             Phase::About => {
                 slot_ui::draw_about(self.canvas(), self.sticker_face, out);
+                if let Some(back) = self.buttons_faces.as_ref().map(|f| [f.legend[1]]) {
+                    let ink = self.menu_ink();
+                    for (tex, w, x) in
+                        slot_ui::centred_hints(self.canvas(), &back, slot_ui::LEGEND_GAP)
+                    {
+                        out.push(Draw::Tint {
+                            x,
+                            y: slot_ui::MENU_LEGEND_Y,
+                            w: w as f32,
+                            h: slot_ui::HINT_H as f32,
+                            tex,
+                            colour: ink.text,
+                        });
+                    }
+                }
                 return;
             }
             Phase::Inserting { cart, resumed, .. } => {
