@@ -1201,6 +1201,39 @@ fn help_line_face(line: &str) -> slot_ui::UndoFace {
     slot_ui::UndoFace { rgba, w, h }
 }
 
+/// A cheat's name in the menu rows' type, shrinking to leave room for its switch.
+fn cheat_name_face(name: &str) -> slot_ui::UndoFace {
+    use slot_ui::text;
+    let Some(font) = text::label_font() else {
+        return slot_ui::UndoFace { rgba: Vec::new(), w: 0, h: 0 };
+    };
+    // Shrink to fit; past the smallest size, drop words from the end behind an ellipsis.
+    let words: Vec<&str> = name.split_whitespace().collect();
+    let mut layout = text::fit(font, name, slot_ui::NAME_MAX_W, 1, 26.0, 15.0);
+    for n in (1..=words.len()).rev() {
+        let candidate = match n == words.len() {
+            true => words.join(" "),
+            false => format!("{}…", words[..n].join(" ")),
+        };
+        let l = text::fit(font, &candidate, slot_ui::NAME_MAX_W, 1, 26.0, 15.0);
+        let whole = l.lines.len() == 1 && l.lines[0] == candidate.to_uppercase();
+        layout = l;
+        if whole {
+            break;
+        }
+    }
+    let set = layout
+        .lines
+        .iter()
+        .map(|l| text::line_width(font, l, layout.px, layout.tracking))
+        .fold(0.0, f32::max);
+    let reference = quick_value_face("Hg", false);
+    let (w, h) = ((set.ceil() as u32 + 4).min(slot_ui::NAME_MAX_W as u32 + 4).max(1), reference.h);
+    let mut rgba = vec![0u8; (w * h * 4) as usize];
+    text::draw_centred(&mut rgba, w, h, &layout, [0xff, 0xff, 0xff]);
+    slot_ui::UndoFace { rgba, w, h }
+}
+
 /// Turn a face a quarter: clockwise when `cw`.
 fn quarter_turn(f: slot_ui::UndoFace, cw: bool) -> slot_ui::UndoFace {
     let (w, h) = (f.w, f.h);
@@ -1236,7 +1269,7 @@ fn sync_cheats(app: &mut App, compositor: &mut Compositor, state: &mut CheatText
         }
         let mut faces = Vec::with_capacity(names.len());
         for (i, name) in names.iter().enumerate() {
-            let f = quick_value_face(name, false);
+            let f = cheat_name_face(name);
             let (w, h) = (f.w, f.h);
             faces.push((upload(compositor, &mut state.names[i], f), w, h));
         }

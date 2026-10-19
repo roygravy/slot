@@ -9,14 +9,15 @@ use crate::plate::{centred_hints, UndoFace, HINT_H, LEGEND_GAP};
 use crate::theme::DARK;
 
 /// Rows on screen at once, and their pitch: the settings pages' own.
-pub const CHEAT_ROWS: usize = 8;
-const PITCH: f32 = 46.0;
-const TOP: f32 = 8.0;
+pub const CHEAT_ROWS: usize = 6;
+const PITCH: f32 = 52.0;
+/// The rows sit centred above the help line, as the in-game menu's do.
+const TOP: f32 = (384.0 - PITCH * CHEAT_ROWS as f32) / 2.0;
 const BAR_INSET: f32 = 4.0;
-const LABEL_X: f32 = 15.0;
-const LABEL_DROP: f32 = 1.0;
+const LABEL_X: f32 = 33.0;
+const LABEL_DROP: f32 = 4.0;
 const SWITCH_RIGHT: f32 = 32.0;
-const SWITCH_DROP: f32 = 7.0;
+const SWITCH_DROP: f32 = 10.0;
 const HELP_Y: f32 = 392.0;
 const LEGEND_Y: f32 = 427.0;
 const EMPTY_Y: f32 = 170.0;
@@ -134,7 +135,7 @@ impl CheatPage<'_> {
         let rows_bottom = TOP + PITCH * CHEAT_ROWS as f32;
         if first > 0 {
             let f = faces.more[0];
-            tint(out, f, self.canvas.centred(f.1 as f32), 0.0, ink.dim);
+            tint(out, f, self.canvas.centred(f.1 as f32), TOP - f.2 as f32 + 2.0, ink.dim);
         }
         if last < count {
             let f = faces.more[1];
@@ -146,6 +147,9 @@ impl CheatPage<'_> {
         legend(&faces.legend, out);
     }
 }
+
+/// How wide a cheat's name may run before it shrinks, leaving room for its switch.
+pub const NAME_MAX_W: f32 = 500.0;
 
 /// The robber in white with its dark one-pixel rim, `h` pixels tall.
 pub fn cheat_badge_face(h: u32) -> UndoFace {

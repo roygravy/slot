@@ -81,7 +81,7 @@ pub use power_menu::{menu_face, PowerChoice, MENU_PAD};
 pub use about::{about_face, draw_about};
 pub use cheat_page::{
     cheat_badge_face, draw_cheat_badge_in_game, draw_cheat_badge_in_menu, first_shown, CheatFaces,
-    CheatPage, BADGE_GAME_H, BADGE_MENU_H, CHEAT_ROWS,
+    CheatPage, BADGE_GAME_H, BADGE_MENU_H, CHEAT_ROWS, NAME_MAX_W,
 };
 pub use buttons_help::{
     buttons_body_face, buttons_tab_face, ButtonsFaces, ButtonsHelp, BUTTON_PAGES,
