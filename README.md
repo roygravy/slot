@@ -8,7 +8,7 @@ slot.'s real cartridges on a shelf and its real cartridge slot, with a little ex
 
 <img src=".github/resources/gravy/carousel.gif" width="640" alt="Scrolling the GBA shelf and pushing Goodboy Galaxy into the slot">
 
-[**Download slot-x-gravy-v1.0**](https://github.com/roygravy/slot/releases) · [Install](#install) · [What GRAVY adds](#what-gravy-adds) · [Controls](#controls)
+[**Download slot-x-gravy-v1.0.1**](https://github.com/roygravy/slot/releases) · [Install](#install) · [What GRAVY adds](#what-gravy-adds) · [Controls](#controls)
 
 </div>
 
@@ -82,6 +82,10 @@ A **Buttons** page in the menu lists every shortcut slot. answers to. Holding **
 <img src=".github/resources/gravy/gameplay.png" width="100%" alt="Goodboy Galaxy on mGBA and Hauntsfield in the original Game Boy green">
 <img src=".github/resources/gravy/ingame.png" width="100%" alt="Hauntsfield in its own colours and on the DMG Green palette">
 
+### Cheats
+
+The in-game menu gets a **Cheats** page: switch a game's cheats on and off while you play, and they stay on next time. The whole RetroArch cheat collection for GB, GBC and GBA comes along in the `Cheats` folder, and you can add your own `.cht` files there. While any cheat is on, a little masked robber sits by the battery; the **Cheat Icon** switch hides it.
+
 ### And more
 
 - Carts sit a little smaller on the carousel, with soft drop shadows that lift them off the wallpaper
@@ -90,13 +94,14 @@ A **Buttons** page in the menu lists every shortcut slot. answers to. Holding **
 - Gambatte as the Game Boy core
 - An About page in the style of a Game Boy's back
 - Sleep after 1 minute by default, power off after 5 minutes asleep
+- Black-and-white menus: main menus centred, sub-pages six rows at a time
 
 ---
 
 ## Install
 
-1. Download **slot-x-gravy-v1.0.zip** from the [releases](https://github.com/roygravy/slot/releases).
-2. Unzip it and copy the **contents** of the `slot-x-gravy-v1.0` folder onto the second SD card of your RG35XX Plus.
+1. Download **slot-x-gravy-v1.0.1.zip** from the [releases](https://github.com/roygravy/slot/releases).
+2. Unzip it and copy the **contents** of the `slot-x-gravy-v1.0.1` folder onto the second SD card of your RG35XX Plus.
 3. Put your games in `Games/GB`, `Games/GBC` and `Games/GBA`, and optional label art (PNG, named like the ROM) in the matching `Labels` folders.
 4. Put the BIOS files (`gb_bios.bin`, `gbc_bios.bin`, `gba_bios.bin`) in `BIOS/` if you have them.
 
@@ -138,6 +143,7 @@ slot. x GRAVY builds the same way slot. does; see [the slot. README](SLOT_README
 - **mGBA**, **gpSP** and **Gambatte**, the emulator cores (their licenses and sources ship in `System/licenses`)
 - **Permanent Marker** by Font Diner (Apache 2.0) for the handwritten titles
 - **Liberation Sans** by Red Hat (SIL OFL 1.1), subset as "slot Serial", for the serial sticker on the About page
+- The cheats from the **[libretro-database](https://github.com/libretro/libretro-database)** by the libretro team and contributors (CC BY-SA 4.0)
 - **Goodboy Galaxy** (demo), **Hauntsfield** and **Mud Warriors**, the free games in the screenshots
 
 Like slot., slot. x GRAVY was put together with help from Claude.
