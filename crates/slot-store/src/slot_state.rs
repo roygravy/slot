@@ -289,6 +289,8 @@ pub struct SlotState {
     pub shelf_cart: Option<Recent>,
     pub auto_sleep_secs: u16,
     pub pixel_transparency: bool,
+    /// Show the masked robber while cheats are on.
+    pub cheat_icon: bool,
     pub lcd_ghosting: bool,
     pub in_game_menu: bool,
     pub remember_position: bool,
@@ -420,6 +422,7 @@ impl Default for SlotState {
             shelf_cart: None,
             auto_sleep_secs: AUTO_SLEEP_DEFAULT_SECS,
             pixel_transparency: true,
+            cheat_icon: true,
             lcd_ghosting: true,
             in_game_menu: false,
             remember_position: false,
@@ -537,6 +540,7 @@ pub fn write_slot_state(root: &Path, s: &SlotState) -> std::io::Result<()> {
         s.pixel_transparency as u8
     ));
     text.push_str(&format!("lcd_ghosting={}\n", s.lcd_ghosting as u8));
+    text.push_str(&format!("cheat_icon={}\n", s.cheat_icon as u8));
     text.push_str(&format!("in_game_menu={}\n", s.in_game_menu as u8));
     text.push_str(&format!(
         "remember_position={}\n",
@@ -603,6 +607,7 @@ fn parse(text: &str) -> Option<SlotState> {
     let mut shelf_cart = None;
     let mut auto_sleep_secs = None;
     let mut pixel_transparency = None;
+    let mut cheat_icon = None;
     let mut lcd_ghosting = None;
     let mut in_game_menu = None;
     let mut remember_position = None;
@@ -648,6 +653,7 @@ fn parse(text: &str) -> Option<SlotState> {
             "shelf_cart" => shelf_cart = recent_value(value),
             "auto_sleep_secs" => auto_sleep_secs = auto_sleep_value(value),
             "pixel_transparency" => pixel_transparency = flag(value),
+            "cheat_icon" => cheat_icon = flag(value),
             "lcd_ghosting" => lcd_ghosting = flag(value),
             "in_game_menu" => in_game_menu = flag(value),
             "remember_position" => remember_position = flag(value),
@@ -706,6 +712,7 @@ fn parse(text: &str) -> Option<SlotState> {
         shelf_cart,
         auto_sleep_secs: auto_sleep_secs.unwrap_or(fallback.auto_sleep_secs),
         pixel_transparency: pixel_transparency.unwrap_or(fallback.pixel_transparency),
+        cheat_icon: cheat_icon.unwrap_or(fallback.cheat_icon),
         lcd_ghosting: lcd_ghosting.unwrap_or(fallback.lcd_ghosting),
         in_game_menu: in_game_menu.unwrap_or(fallback.in_game_menu),
         remember_position: remember_position.unwrap_or(fallback.remember_position),

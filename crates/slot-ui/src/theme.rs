@@ -33,6 +33,16 @@ pub const DARK: Ink = Ink {
     wash: [0.0, 0.0, 0.0, 0.65],
 };
 
+/// Over a paused game: the game dimmed a little more, the selection a band of see-through
+/// black, and light text throughout.
+pub const OVER_GAME: Ink = Ink {
+    text: [0xf6 as f32 / 255.0, 0xf4 as f32 / 255.0, 0xef as f32 / 255.0, 1.0],
+    dim: [0xa8 as f32 / 255.0, 0xa8 as f32 / 255.0, 0xb0 as f32 / 255.0, 1.0],
+    bar: [0.0, 0.0, 0.0, 0.62],
+    on_bar: [0xf6 as f32 / 255.0, 0xf4 as f32 / 255.0, 0xef as f32 / 255.0, 1.0],
+    wash: [0.0, 0.0, 0.0, 0.70],
+};
+
 /// Light theme: the Game Boy's charcoal print on its warm grey plastic, with the
 /// bar in the darker grey of its screen surround.
 pub fn light() -> Ink {

@@ -921,6 +921,7 @@ impl App {
                 None => QuickValue::Custom,
             }),
             QuickRow::Rumble => Some(QuickValue::flag(self.state.rumble)),
+            QuickRow::CheatIcon => Some(QuickValue::flag(self.state.cheat_icon)),
             QuickRow::EjectSave => Some(QuickValue::flag(self.state.eject_save)),
             QuickRow::Turbo => Some(QuickValue::flag(self.state.turbo)),
             QuickRow::Rewind => Some(QuickValue::flag(self.state.rewind)),
@@ -2191,6 +2192,11 @@ impl App {
         self.cheats_pending.take()
     }
 
+    /// Whether the robber shows: a cheat is on and the Cheat Icon setting allows it.
+    fn cheat_icon_shown(&self) -> bool {
+        self.state.cheat_icon && self.cheats_on()
+    }
+
     pub fn cheats_on(&self) -> bool {
         self.cheats_for.is_some()
             && self.cart_in_slot() == self.cheats_for
@@ -2341,6 +2347,7 @@ impl App {
             | QuickRow::GbPalettes
             | QuickRow::RunAhead
             | QuickRow::Rumble
+            | QuickRow::CheatIcon
             | QuickRow::Theme
             | QuickRow::Recents
             | QuickRow::FavoriteMark
@@ -2518,6 +2525,7 @@ impl App {
                 s.shader_gbc = to;
             }
             QuickRow::Rumble => s.rumble = !s.rumble,
+            QuickRow::CheatIcon => s.cheat_icon = !s.cheat_icon,
             QuickRow::EjectSave => s.eject_save = !s.eject_save,
             QuickRow::Turbo => s.turbo = !s.turbo,
             QuickRow::Rewind => s.rewind = !s.rewind,
@@ -3505,7 +3513,9 @@ impl App {
                 ink: slot_ui::theme::DARK,
             }
             .draw(out);
-            if row.page() != QuickRow::PLAY_SCREEN {
+            // The settings pages fill the screen; only the centred menu leaves room for the
+            // battery and clock.
+            if row.centred() {
                 slot_ui::draw_corners(
                     self.canvas(),
                     self.battery,
@@ -3514,8 +3524,8 @@ impl App {
                     self.shelf_clock,
                     out,
                 );
-                if let (true, Some([menu, _])) = (self.cheats_on(), self.cheat_badges) {
-                    let x = slot_ui::corner_gauge_end(self.battery_percent) + MENU_BADGE_GAP;
+                if let (true, Some([menu, _])) = (self.cheat_icon_shown(), self.cheat_badges) {
+                    let x = slot_ui::corner_gauge_end(self.battery, self.battery_percent) + MENU_BADGE_GAP;
                     slot_ui::draw_cheat_badge_in_menu(x, menu, out);
                 }
             }
@@ -3523,7 +3533,7 @@ impl App {
         if let (Phase::Playing { .. }, None, true, Some([_, game])) = (
             &self.phase,
             self.in_game_menu_shown(),
-            self.cheats_on(),
+            self.cheat_icon_shown(),
             self.cheat_badges,
         ) {
             if self.screen >= 1.0 && self.game_menu.is_none() {

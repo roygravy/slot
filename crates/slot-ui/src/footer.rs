@@ -54,8 +54,8 @@ pub fn draw_corners(
 }
 
 /// Where the corner gauge's percentage ends, for anything set beside it.
-pub fn corner_gauge_end(percent: Printed) -> f32 {
-    CORNER_MARGIN + crate::battery::gauge_width(percent.w)
+pub fn corner_gauge_end(battery: Option<slot_power::Battery>, percent: Printed) -> f32 {
+    CORNER_MARGIN + crate::battery::gauge_width(battery, percent.w)
 }
 
 pub(crate) fn draw_printed(x: f32, y: f32, p: Printed, out: &mut Vec<Draw>) {

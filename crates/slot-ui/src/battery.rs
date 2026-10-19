@@ -21,9 +21,21 @@ const BOLT_MAX_SIDE: f32 = 14.0;
 const BOLT_GAP: f32 = 5.0;
 const _: () = assert!(BOLT_GAP > 0.0);
 
-/// How wide the gauge draws, bolt slot to the end of its percentage.
-pub fn gauge_width(percent_w: u32) -> f32 {
-    BOLT_MAX_SIDE + BOLT_GAP + GAUGE_W + NUB_W + GAP + percent_w as f32
+/// The gauge's ink starts this far in from where it is placed, matching the clock's margin.
+const INK_INSET: f32 = 2.0;
+
+/// How far the battery body sits from the gauge's start: past the bolt while charging, and
+/// right at the start otherwise, so no empty slot is left for a bolt that is not there.
+fn lead(battery: Option<Battery>) -> f32 {
+    match battery.map(|b| b.charge) {
+        Some(Charge::Charging) => INK_INSET + bolt_size().0 + BOLT_GAP,
+        _ => INK_INSET,
+    }
+}
+
+/// How wide the gauge draws, from where it is placed to the end of its percentage.
+pub fn gauge_width(battery: Option<Battery>, percent_w: u32) -> f32 {
+    lead(battery) + GAUGE_W + NUB_W + GAP + percent_w as f32
 }
 
 pub fn draw_gauge(
@@ -52,7 +64,7 @@ pub fn draw_gauge(
     };
 
     let (bolt_w, bolt_h) = bolt_size();
-    let cx = x + BOLT_MAX_SIDE + BOLT_GAP;
+    let cx = x + lead(battery);
 
     rect(cx, y, GAUGE_W, WALL, out);
     rect(cx, y + GAUGE_H - WALL, GAUGE_W, WALL, out);
@@ -74,7 +86,7 @@ pub fn draw_gauge(
 
     if let (Charge::Charging, Some(tex)) = (b.charge, bolt) {
         out.push(Draw::Tex {
-            x: (x + (BOLT_MAX_SIDE - bolt_w) / 2.0).round(),
+            x: (x + INK_INSET).round(),
             y: (y + (GAUGE_H - bolt_h) / 2.0).round(),
             w: bolt_w,
             h: bolt_h,

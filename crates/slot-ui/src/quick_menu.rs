@@ -12,6 +12,7 @@ pub enum QuickRow {
     FastForwardSound,
     Screen,
     Rumble,
+    CheatIcon,
     DateTime,
     About,
     GbaShader,
@@ -63,11 +64,12 @@ pub enum QuickRow {
 }
 
 impl QuickRow {
-    pub const ALL: [QuickRow; 52] = [
+    pub const ALL: [QuickRow; 53] = [
         QuickRow::FastForward,
         QuickRow::FastForwardSound,
         QuickRow::Screen,
         QuickRow::Rumble,
+        QuickRow::CheatIcon,
         QuickRow::DateTime,
         QuickRow::About,
         QuickRow::GbaShader,
@@ -159,7 +161,7 @@ impl QuickRow {
         QuickRow::GbPalettes,
     ];
 
-    pub const GAME: [QuickRow; 8] = [
+    pub const GAME: [QuickRow; 9] = [
         QuickRow::FastForward,
         QuickRow::FastForwardSound,
         QuickRow::Rewind,
@@ -168,6 +170,7 @@ impl QuickRow {
         QuickRow::Rumble,
         QuickRow::InGameMenu,
         QuickRow::EjectSave,
+        QuickRow::CheatIcon,
     ];
 
     pub const PLAY: [QuickRow; 5] = [
@@ -213,6 +216,7 @@ impl QuickRow {
             | QuickRow::RunAhead
             | QuickRow::Turbo
             | QuickRow::Rumble
+            | QuickRow::CheatIcon
             | QuickRow::InGameMenu
             | QuickRow::EjectSave => &QuickRow::GAME,
             QuickRow::Wallpaper
@@ -307,6 +311,7 @@ impl QuickRow {
             QuickRow::FastForwardSound => "Fast Forward Sound",
             QuickRow::Screen => "Screen",
             QuickRow::Rumble => "Rumble",
+            QuickRow::CheatIcon => "Cheat Icon",
             QuickRow::DateTime => "Date & Time",
             QuickRow::About => "About",
             QuickRow::GbaShader | QuickRow::GbShader | QuickRow::GbcShader | QuickRow::Shader => {
@@ -383,6 +388,7 @@ impl QuickRow {
             QuickRow::RunAhead => "Buttons respond one frame sooner. Uses more battery.",
             QuickRow::Turbo => "Hold X for rapid A, hold Y for rapid B.",
             QuickRow::Rumble => "Let games that support it shake the device.",
+            QuickRow::CheatIcon => "Show a masked robber while any cheat is on.",
             QuickRow::InGameMenu => "Tap MENU in a game to pause and open a menu.",
             QuickRow::EjectSave => "Save your place when you eject a cart.",
             QuickRow::Wallpaper => "Dark, Light, or your own from the Wallpapers folder.",
@@ -602,6 +608,7 @@ const HELP_MAX_W: f32 = 600.0;
 const ROWS_BOTTOM: f32 = HELP_Y - 8.0;
 const QUICK_ROOM: f32 = ROWS_BOTTOM - 12.0;
 const PANEL_GAP: f32 = 12.0;
+const GAME_MENU_CENTRE: f32 = 228.0;
 /// Faces are rendered white and tinted with the theme's ink when drawn.
 const FACE_INK: [u8; 3] = [0xff, 0xff, 0xff];
 
@@ -815,7 +822,7 @@ pub struct QuickMenu<'a> {
 
 impl QuickMenu<'_> {
     pub fn draw(&self, out: &mut Vec<Draw>) {
-        let ink = if self.over_game { theme::DARK } else { self.ink };
+        let ink = if self.over_game { theme::OVER_GAME } else { self.ink };
         match (self.over_game, self.row.page() == QuickRow::PLAY_SCREEN) {
             (false, _) => draw_menu_ground(self.canvas, self.ground, ink, out),
             (true, panel) => {
@@ -828,7 +835,7 @@ impl QuickMenu<'_> {
                     y,
                     w: self.canvas.w,
                     h: OUT_H as f32 - y,
-                    colour: theme::DARK.wash,
+                    colour: ink.wash,
                 });
             }
         }
@@ -968,9 +975,14 @@ pub fn quick_pitch(rows: usize) -> f32 {
 pub fn quick_row_top(row: QuickRow, hidden: &[QuickRow]) -> f32 {
     let pitch = quick_pitch(row.shown(hidden).len());
     let rows = pitch * row.shown(hidden).len() as f32;
-    let top = match row.page() == QuickRow::PLAY_SCREEN {
-        true => HELP_Y - PANEL_GAP - rows,
-        false => (ROWS_BOTTOM - rows) / 2.0,
+    let page = row.page();
+    let top = if page == QuickRow::PLAY_SCREEN {
+        HELP_Y - PANEL_GAP - rows
+    } else if page == QuickRow::PLAY || page == QuickRow::SETTINGS {
+        // The in-game menu sits centred on the screen, a touch above the middle for its legend.
+        GAME_MENU_CENTRE - rows / 2.0
+    } else {
+        (ROWS_BOTTOM - rows) / 2.0
     };
     top + pitch * row.position(hidden) as f32
 }

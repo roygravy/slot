@@ -6,7 +6,7 @@
 use crate::draw::{Canvas, Draw, TexId, OUT_H};
 use crate::icon::{icon_glyph_face, Icon};
 use crate::plate::{centred_hints, UndoFace, HINT_H, LEGEND_GAP};
-use crate::theme::DARK;
+use crate::theme::OVER_GAME;
 
 /// Rows on screen at once, and their pitch: the settings pages' own.
 pub const CHEAT_ROWS: usize = 6;
@@ -23,7 +23,7 @@ const LEGEND_Y: f32 = 427.0;
 const EMPTY_Y: f32 = 170.0;
 
 /// The robber's height in the menu corner (a pixel taller than the battery) and in play.
-pub const BADGE_MENU_H: u32 = 14;
+pub const BADGE_MENU_H: u32 = 16;
 pub const BADGE_GAME_H: u32 = 22;
 /// In play the robber mirrors the fast-forward badge: this far in from the bottom left.
 const BADGE_GAME_X: f32 = 14.0;
@@ -79,7 +79,7 @@ pub struct CheatPage<'a> {
 
 impl CheatPage<'_> {
     pub fn draw(&self, out: &mut Vec<Draw>) {
-        let ink = DARK;
+        let ink = OVER_GAME;
         out.push(Draw::Rect {
             x: 0.0,
             y: 0.0,
