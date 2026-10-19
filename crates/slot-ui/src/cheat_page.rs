@@ -9,10 +9,9 @@ use crate::plate::{centred_hints, UndoFace, HINT_H, LEGEND_GAP};
 use crate::theme::OVER_GAME;
 
 /// Rows on screen at once, and their pitch: the settings pages' own.
-pub const CHEAT_ROWS: usize = 6;
-const PITCH: f32 = 52.0;
-/// The rows sit centred above the help line, as the in-game menu's do.
-const TOP: f32 = (384.0 - PITCH * CHEAT_ROWS as f32) / 2.0;
+pub const CHEAT_ROWS: usize = crate::quick_menu::SUB_ROWS;
+const PITCH: f32 = crate::quick_menu::QUICK_PITCH;
+const MORE_GAP: f32 = crate::quick_menu::MORE_GAP;
 const BAR_INSET: f32 = 4.0;
 const LABEL_X: f32 = 33.0;
 const LABEL_DROP: f32 = 4.0;
@@ -47,15 +46,7 @@ pub struct CheatFaces {
 
 /// The first row shown so that `sel` is on screen, keeping the list still while it can.
 pub fn first_shown(sel: usize, count: usize, first: usize) -> usize {
-    let rows = CHEAT_ROWS.min(count);
-    let mut first = first.min(count.saturating_sub(rows));
-    if sel < first {
-        first = sel;
-    }
-    if sel >= first + rows {
-        first = sel + 1 - rows;
-    }
-    first
+    crate::quick_menu::window_first(sel, count, first, CHEAT_ROWS)
 }
 
 fn tint(out: &mut Vec<Draw>, f: (TexId, u32, u32), x: f32, y: f32, colour: [f32; 4]) {
@@ -113,8 +104,10 @@ impl CheatPage<'_> {
         }
         let first = first_shown(self.sel, count, self.first);
         let last = (first + CHEAT_ROWS).min(count);
+        // Fewer rows than a full page sit centred, as on the settings pages.
+        let page_top = crate::quick_menu::MENU_CENTRE - PITCH * (last - first) as f32 / 2.0;
         for (row, i) in (first..last).enumerate() {
-            let top = TOP + PITCH * row as f32;
+            let top = page_top + PITCH * row as f32;
             let lit = i == self.sel;
             if lit {
                 out.push(Draw::Rect {
@@ -132,14 +125,14 @@ impl CheatPage<'_> {
             tint(out, sw, x, top + SWITCH_DROP, colour);
         }
         // Small arrows where the list carries on.
-        let rows_bottom = TOP + PITCH * CHEAT_ROWS as f32;
+        let rows_bottom = page_top + PITCH * (last - first) as f32;
         if first > 0 {
             let f = faces.more[0];
-            tint(out, f, self.canvas.centred(f.1 as f32), TOP - f.2 as f32 + 2.0, ink.dim);
+            tint(out, f, self.canvas.centred(f.1 as f32), page_top - MORE_GAP - f.2 as f32, ink.dim);
         }
         if last < count {
             let f = faces.more[1];
-            tint(out, f, self.canvas.centred(f.1 as f32), rows_bottom - 2.0, ink.dim);
+            tint(out, f, self.canvas.centred(f.1 as f32), rows_bottom + MORE_GAP, ink.dim);
         }
         if let Some(h) = faces.help {
             tint(out, h, self.canvas.centred(h.1 as f32), HELP_Y, ink.dim);

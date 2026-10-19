@@ -387,6 +387,9 @@ pub struct App {
     cheat_faces: Option<slot_ui::CheatFaces>,
     /// The robber: in the menu corner, and in play.
     cheat_badges: Option<[(TexId, u32, u32); 2]>,
+    /// Which page scrolled last, and the first row it showed, so a list stays still while
+    /// the selection moves within it.
+    menu_scroll: std::cell::Cell<(usize, usize)>,
     ground: Option<TexId>,
     ground_light: Option<TexId>,
     wallpaper: Option<TexId>,
@@ -546,6 +549,7 @@ impl App {
             cheats_rev: 0,
             cheat_faces: None,
             cheat_badges: None,
+            menu_scroll: std::cell::Cell::new((usize::MAX, 0)),
             ground: None,
             ground_light: None,
             wallpaper: None,
@@ -3351,6 +3355,7 @@ impl App {
                 over_game: false,
                 canvas: self.canvas(),
                 ink: self.menu_ink(),
+                first: self.menu_first(*row, self.hidden_rows()),
             }
             .draw(out),
             Phase::Shelf => {
@@ -3511,6 +3516,7 @@ impl App {
                 over_game: true,
                 canvas: self.canvas(),
                 ink: slot_ui::theme::DARK,
+                first: self.menu_first(row, self.in_game_hidden()),
             }
             .draw(out);
             // The settings pages fill the screen; only the centred menu leaves room for the
@@ -3715,8 +3721,19 @@ impl App {
             over_game: false,
             canvas: self.canvas(),
             ink: self.menu_ink(),
+            first: 0,
         }
         .draw(out);
+    }
+
+    /// The first row to show for `row`'s page, remembering it for the next frame.
+    fn menu_first(&self, row: QuickRow, hidden: &[QuickRow]) -> usize {
+        let page = row.page()[0].index();
+        let (last_page, prev) = self.menu_scroll.get();
+        let prev = if last_page == page { prev } else { 0 };
+        let first = slot_ui::quick_first(row, hidden, prev);
+        self.menu_scroll.set((page, first));
+        first
     }
 
     fn core_picker_shown(&self) -> Option<CorePicker> {

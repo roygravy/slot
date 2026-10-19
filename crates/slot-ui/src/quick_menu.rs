@@ -605,10 +605,47 @@ const HELP_PX: f32 = 17.0;
 const HELP_MIN_PX: f32 = 12.0;
 const HELP_MAX_W: f32 = 600.0;
 /// Rows fill the space above the help line.
-const ROWS_BOTTOM: f32 = HELP_Y - 8.0;
-const QUICK_ROOM: f32 = ROWS_BOTTOM - 12.0;
 const PANEL_GAP: f32 = 12.0;
-const GAME_MENU_CENTRE: f32 = 228.0;
+/// Every menu sits centred on this line, between the top and the help line.
+pub(crate) const MENU_CENTRE: f32 = 202.0;
+/// A sub-page shows this many rows at once and scrolls the rest.
+pub const SUB_ROWS: usize = 6;
+/// Room between a scroll arrow and the rows it points past.
+pub(crate) const MORE_GAP: f32 = 8.0;
+
+/// The first row of a scrolling list shown so that `sel` is on screen, keeping the list still
+/// while it can.
+pub fn window_first(sel: usize, count: usize, first: usize, rows: usize) -> usize {
+    let rows = rows.min(count);
+    let mut first = first.min(count.saturating_sub(rows));
+    if sel < first {
+        first = sel;
+    }
+    if sel >= first + rows {
+        first = sel + 1 - rows;
+    }
+    first
+}
+
+/// Which row of `row`'s page shows first, given the one shown first last time.
+pub fn quick_first(row: QuickRow, hidden: &[QuickRow], prev: usize) -> usize {
+    if row.centred() || row.page() == QuickRow::PLAY_SCREEN {
+        return 0;
+    }
+    let n = row.shown(hidden).len();
+    window_first(row.position(hidden), n, prev, SUB_ROWS)
+}
+
+/// The top of the first row shown, and how many rows show, for `row`'s page.
+fn page_layout(row: QuickRow, hidden: &[QuickRow]) -> (f32, usize) {
+    let n = row.shown(hidden).len();
+    let page = row.page();
+    if page == QuickRow::PLAY_SCREEN {
+        return (HELP_Y - PANEL_GAP - QUICK_PITCH * n as f32, n);
+    }
+    let shown = if row.centred() { n } else { n.min(SUB_ROWS) };
+    (MENU_CENTRE - QUICK_PITCH * shown as f32 / 2.0, shown)
+}
 /// Faces are rendered white and tinted with the theme's ink when drawn.
 const FACE_INK: [u8; 3] = [0xff, 0xff, 0xff];
 
@@ -800,6 +837,8 @@ pub struct QuickMenuFaces {
     /// Off, on.
     pub switches: [(TexId, u32, u32); 2],
     pub help: Vec<Option<(TexId, u32, u32)>>,
+    /// Pointing up and down, where a page carries on.
+    pub more: [(TexId, u32, u32); 2],
 }
 
 pub struct QuickMenu<'a> {
@@ -818,6 +857,8 @@ pub struct QuickMenu<'a> {
     pub over_game: bool,
     pub canvas: Canvas,
     pub ink: Ink,
+    /// The first row shown on a page that scrolls (see `quick_first`).
+    pub first: usize,
 }
 
 impl QuickMenu<'_> {
@@ -839,11 +880,14 @@ impl QuickMenu<'_> {
                 });
             }
         }
-        let rows = self.row.shown(self.hidden).len();
-        let pitch = quick_pitch(rows);
+        let shown_rows = self.row.shown(self.hidden);
+        let pitch = QUICK_PITCH;
+        let (top, visible) = page_layout(self.row, self.hidden);
+        let first = quick_first(self.row, self.hidden, self.first);
+        let sel = self.row.position(self.hidden);
         out.push(Draw::Rect {
             x: 0.0,
-            y: quick_row_top(self.row, self.hidden) + BAR_INSET,
+            y: top + pitch * (sel - first) as f32 + BAR_INSET,
             w: self.canvas.w,
             h: pitch - 2.0 * BAR_INSET,
             colour: ink.bar,
@@ -853,8 +897,21 @@ impl QuickMenu<'_> {
         };
         let (right, pad) = (self.canvas.w - QUICK_EDGE, MENU_PAD as f32);
         let centre = row_cap_centre();
-        for row in self.row.shown(self.hidden) {
-            let y = quick_row_top(row, self.hidden) + TYPE_DROP + (pitch - QUICK_PITCH) / 2.0;
+        // Arrows where the page carries on above or below.
+        let [up, down] = faces.more;
+        if first > 0 {
+            let y = top - MORE_GAP - up.2 as f32;
+            tint(out, up.0, self.canvas.centred(up.1 as f32), y, up.1, up.2, ink.dim);
+        }
+        if first + visible < shown_rows.len() {
+            let y = top + pitch * visible as f32 + MORE_GAP;
+            tint(out, down.0, self.canvas.centred(down.1 as f32), y, down.1, down.2, ink.dim);
+        }
+        for (i, row) in shown_rows.iter().copied().enumerate() {
+            if i < first || i >= first + visible {
+                continue;
+            }
+            let y = top + pitch * (i - first) as f32 + TYPE_DROP;
             let lit = row == self.row;
             let colour = if lit { ink.on_bar } else { ink.dim };
             if let Some(&(tex, w, h)) = faces.labels.get(row.index()).map(|l| &l[lit as usize]) {
@@ -964,27 +1021,15 @@ pub fn draw_menu_ground(canvas: Canvas, ground: Option<TexId>, ink: Ink, out: &m
     }
 }
 
-/// The row height: the full pitch while the page fits, squeezed so a longer page still does.
-pub fn quick_pitch(rows: usize) -> f32 {
-    if rows == 0 {
-        return QUICK_PITCH;
-    }
-    (QUICK_ROOM / rows as f32).floor().clamp(MENU_H as f32, QUICK_PITCH)
+/// The row height: every menu uses the full pitch; longer pages scroll instead.
+pub fn quick_pitch(_rows: usize) -> f32 {
+    QUICK_PITCH
 }
 
+/// Where `row` sits with its page scrolled to the top.
 pub fn quick_row_top(row: QuickRow, hidden: &[QuickRow]) -> f32 {
-    let pitch = quick_pitch(row.shown(hidden).len());
-    let rows = pitch * row.shown(hidden).len() as f32;
-    let page = row.page();
-    let top = if page == QuickRow::PLAY_SCREEN {
-        HELP_Y - PANEL_GAP - rows
-    } else if page == QuickRow::PLAY || page == QuickRow::SETTINGS {
-        // The in-game menu sits centred on the screen, a touch above the middle for its legend.
-        GAME_MENU_CENTRE - rows / 2.0
-    } else {
-        (ROWS_BOTTOM - rows) / 2.0
-    };
-    top + pitch * row.position(hidden) as f32
+    let (top, _) = page_layout(row, hidden);
+    top + QUICK_PITCH * row.position(hidden) as f32
 }
 
 fn tint(out: &mut Vec<Draw>, tex: TexId, x: f32, y: f32, w: u32, h: u32, colour: [f32; 4]) {

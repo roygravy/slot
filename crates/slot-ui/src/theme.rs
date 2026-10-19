@@ -38,9 +38,9 @@ pub const DARK: Ink = Ink {
 pub const OVER_GAME: Ink = Ink {
     text: [0xf6 as f32 / 255.0, 0xf4 as f32 / 255.0, 0xef as f32 / 255.0, 1.0],
     dim: [0xa8 as f32 / 255.0, 0xa8 as f32 / 255.0, 0xb0 as f32 / 255.0, 1.0],
-    bar: [0.0, 0.0, 0.0, 0.62],
-    on_bar: [0xf6 as f32 / 255.0, 0xf4 as f32 / 255.0, 0xef as f32 / 255.0, 1.0],
-    wash: [0.0, 0.0, 0.0, 0.70],
+    bar: [0xf6 as f32 / 255.0, 0xf4 as f32 / 255.0, 0xef as f32 / 255.0, 1.0],
+    on_bar: [0x1a as f32 / 255.0, 0x19 as f32 / 255.0, 0x17 as f32 / 255.0, 1.0],
+    wash: [0.0, 0.0, 0.0, 0.55],
 };
 
 /// Light theme: the Game Boy's charcoal print on its warm grey plastic, with the

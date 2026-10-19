@@ -91,7 +91,7 @@ pub use quick_menu::{
     draw_menu_ground, quick_caret_face, quick_help_face, quick_label_face, quick_legend_faces,
     quick_pointer_face, quick_switch_face,
     quick_row_top, quick_value_face, QuickMenu, QuickMenuFaces, QuickRow, QuickValue, QUICK_EDGE,
-    quick_pitch, QUICK_LABEL_X, QUICK_PITCH,
+    quick_first, quick_pitch, window_first, QUICK_LABEL_X, QUICK_PITCH, SUB_ROWS,
 };
 pub use rebuild::{rebuild_count_face, rebuild_title_face, RebuildScreen};
 pub use refusal::Refusal;
