@@ -82,6 +82,8 @@ pub trait RetroCore: Send {
         self.run_frame(p1);
     }
     fn set_option(&mut self, _key: &str, _value: &str) {}
+    /// Replace the core's cheats with these codes, all switched on. An empty list clears them.
+    fn set_cheats(&mut self, _codes: &[String]) {}
     fn set_frame_skip(&mut self, _skip: bool) {}
     fn video_xrgb8888(&self) -> &[u8];
     fn take_audio(&mut self) -> Vec<i16>;

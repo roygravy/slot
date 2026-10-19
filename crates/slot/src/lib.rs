@@ -7,6 +7,7 @@ pub mod build_info;
 pub mod cable;
 pub mod card_log;
 pub mod cart_faces;
+pub mod cheats;
 pub mod core;
 pub mod core_picker;
 #[cfg(unix)]

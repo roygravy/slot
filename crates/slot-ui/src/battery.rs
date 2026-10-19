@@ -21,6 +21,11 @@ const BOLT_MAX_SIDE: f32 = 14.0;
 const BOLT_GAP: f32 = 5.0;
 const _: () = assert!(BOLT_GAP > 0.0);
 
+/// How wide the gauge draws, bolt slot to the end of its percentage.
+pub fn gauge_width(percent_w: u32) -> f32 {
+    BOLT_MAX_SIDE + BOLT_GAP + GAUGE_W + NUB_W + GAP + percent_w as f32
+}
+
 pub fn draw_gauge(
     x: f32,
     y: f32,

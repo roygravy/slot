@@ -34,6 +34,7 @@ pub enum QuickRow {
     GbcColourCorrection,
     Resume,
     States,
+    Cheats,
     Settings,
     ExitGame,
     PlayScreen,
@@ -62,7 +63,7 @@ pub enum QuickRow {
 }
 
 impl QuickRow {
-    pub const ALL: [QuickRow; 51] = [
+    pub const ALL: [QuickRow; 52] = [
         QuickRow::FastForward,
         QuickRow::FastForwardSound,
         QuickRow::Screen,
@@ -89,6 +90,7 @@ impl QuickRow {
         QuickRow::GbcColourCorrection,
         QuickRow::Resume,
         QuickRow::States,
+        QuickRow::Cheats,
         QuickRow::Settings,
         QuickRow::ExitGame,
         QuickRow::PlayScreen,
@@ -168,9 +170,10 @@ impl QuickRow {
         QuickRow::EjectSave,
     ];
 
-    pub const PLAY: [QuickRow; 4] = [
+    pub const PLAY: [QuickRow; 5] = [
         QuickRow::Resume,
         QuickRow::States,
+        QuickRow::Cheats,
         QuickRow::Settings,
         QuickRow::ExitGame,
     ];
@@ -221,9 +224,11 @@ impl QuickRow {
             | QuickRow::ShowTitles
             | QuickRow::AutoSleep
             | QuickRow::RememberPosition => &QuickRow::GENERAL,
-            QuickRow::Resume | QuickRow::States | QuickRow::Settings | QuickRow::ExitGame => {
-                &QuickRow::PLAY
-            }
+            QuickRow::Resume
+            | QuickRow::States
+            | QuickRow::Cheats
+            | QuickRow::Settings
+            | QuickRow::ExitGame => &QuickRow::PLAY,
             QuickRow::PlayScreen | QuickRow::PlayGameplay => &QuickRow::SETTINGS,
             QuickRow::Sleep | QuickRow::Restart | QuickRow::PowerOff => &QuickRow::POWER,
             QuickRow::Shader | QuickRow::ColourCorrection | QuickRow::Palette | QuickRow::Bezel => {
@@ -331,6 +336,7 @@ impl QuickRow {
             QuickRow::RememberPosition => "Remember Shelf Position",
             QuickRow::Resume => "Resume",
             QuickRow::States => "States",
+            QuickRow::Cheats => "Cheats",
             QuickRow::Settings => "Settings",
             QuickRow::ExitGame => "Exit Game",
             QuickRow::PlayScreen => "Screen",
@@ -406,6 +412,7 @@ impl QuickRow {
                 | QuickRow::General
                 | QuickRow::Resume
                 | QuickRow::States
+                | QuickRow::Cheats
                 | QuickRow::Settings
                 | QuickRow::ExitGame
                 | QuickRow::PlayScreen

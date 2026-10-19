@@ -55,6 +55,7 @@ pub struct Frontend {
     switcher: Switcher,
     clocks: Clocks,
     about: AboutFace,
+    cheats: CheatTextures,
     quick_clock: QuickClock,
     quick_palette: QuickPalette,
     wallpaper: WallpaperSync,
@@ -102,6 +103,21 @@ struct WallpaperSync {
     label: String,
     dim: Option<TexId>,
     lit: Option<TexId>,
+}
+
+/// The Cheats page's textures, reused from one game to the next.
+#[derive(Default)]
+struct CheatTextures {
+    rev: Option<u64>,
+    counts: Option<(usize, usize)>,
+    names: Vec<Option<TexId>>,
+    help: Option<TexId>,
+    empty: Option<TexId>,
+    empty_help: Option<TexId>,
+    legend: [Option<TexId>; 3],
+    switches: [Option<TexId>; 2],
+    more: [Option<TexId>; 2],
+    badges: [Option<TexId>; 2],
 }
 
 #[derive(Default)]
@@ -177,6 +193,7 @@ impl Frontend {
             switcher: Switcher::default(),
             clocks: Clocks::default(),
             about: AboutFace::default(),
+            cheats: CheatTextures::default(),
             quick_clock: QuickClock::default(),
             quick_palette: QuickPalette::default(),
             wallpaper: WallpaperSync::default(),
@@ -592,6 +609,7 @@ impl Frontend {
         self.cart_faces.sync(self.session.app_mut(), compositor);
         sync_clock(self.session.app_mut(), compositor, &mut self.clocks);
         sync_about(self.session.app_mut(), compositor, &mut self.about);
+        sync_cheats(self.session.app_mut(), compositor, &mut self.cheats);
         sync_quick_clock(self.session.app_mut(), compositor, &mut self.quick_clock);
         sync_quick_palette(self.session.app_mut(), compositor, &mut self.quick_palette);
         sync_wallpaper(self.session.app_mut(), compositor, &mut self.wallpaper);
@@ -1163,6 +1181,113 @@ fn sync_quick_palette(app: &mut App, compositor: &mut Compositor, state: &mut Qu
     let lit = upload(compositor, &mut state.lit, lit);
     app.set_quick_palette_faces((dim, dim_size.0, dim_size.1), (lit, lit_size.0, lit_size.1));
     state.shown = text;
+}
+
+/// A help-line face: the settings pages' small centred line, in white.
+fn help_line_face(line: &str) -> slot_ui::UndoFace {
+    use slot_ui::text;
+    let Some(font) = text::label_font() else {
+        return slot_ui::UndoFace { rgba: Vec::new(), w: 0, h: 0 };
+    };
+    let layout = text::fit(font, line, 600.0, 1, 17.0, 12.0);
+    let set = layout
+        .lines
+        .iter()
+        .map(|l| text::line_width(font, l, layout.px, layout.tracking))
+        .fold(0.0, f32::max);
+    let (w, h) = ((set.ceil() as u32 + 4).min(600), 24);
+    let mut rgba = vec![0u8; (w * h * 4) as usize];
+    text::draw_centred(&mut rgba, w, h, &layout, [0xff, 0xff, 0xff]);
+    slot_ui::UndoFace { rgba, w, h }
+}
+
+/// Turn a face a quarter: clockwise when `cw`.
+fn quarter_turn(f: slot_ui::UndoFace, cw: bool) -> slot_ui::UndoFace {
+    let (w, h) = (f.w, f.h);
+    let mut rgba = vec![0u8; f.rgba.len()];
+    for y in 0..h {
+        for x in 0..w {
+            let (nx, ny) = if cw { (h - 1 - y, x) } else { (y, w - 1 - x) };
+            let from = ((y * w + x) * 4) as usize;
+            let to = ((ny * h + nx) * 4) as usize;
+            rgba[to..to + 4].copy_from_slice(&f.rgba[from..from + 4]);
+        }
+    }
+    slot_ui::UndoFace { rgba, w: h, h: w }
+}
+
+fn sync_cheats(app: &mut App, compositor: &mut Compositor, state: &mut CheatTextures) {
+    if state.badges[0].is_none() {
+        let menu = slot_ui::cheat_badge_face(slot_ui::BADGE_MENU_H);
+        let game = slot_ui::cheat_badge_face(slot_ui::BADGE_GAME_H);
+        let (mw, mh, gw, gh) = (menu.w, menu.h, game.w, game.h);
+        let m = upload(compositor, &mut state.badges[0], menu);
+        let g = upload(compositor, &mut state.badges[1], game);
+        app.set_cheat_badges([(m, mw, mh), (g, gw, gh)]);
+    }
+    let rev = app.cheats_rev();
+    let counts = app.cheat_counts();
+    if state.rev != Some(rev) {
+        state.rev = Some(rev);
+        state.counts = None;
+        let names = app.cheat_names();
+        if state.names.len() < names.len() {
+            state.names.resize(names.len(), None);
+        }
+        let mut faces = Vec::with_capacity(names.len());
+        for (i, name) in names.iter().enumerate() {
+            let f = quick_value_face(name, false);
+            let (w, h) = (f.w, f.h);
+            faces.push((upload(compositor, &mut state.names[i], f), w, h));
+        }
+        let mut up = |slot: &mut Option<TexId>, f: slot_ui::UndoFace| {
+            let (w, h) = (f.w, f.h);
+            (upload(compositor, slot, f), w, h)
+        };
+        let empty = up(&mut state.empty, quick_value_face("No cheats for this game", false));
+        let line = format!(
+            "Put a .cht file named like this game in Cheats/{}.",
+            app.cheat_platform().dir_name()
+        );
+        let empty_help = up(&mut state.empty_help, help_line_face(&line));
+        let off = up(&mut state.switches[0], slot_ui::quick_switch_face(false));
+        let on = up(&mut state.switches[1], slot_ui::quick_switch_face(true));
+        let more_up = up(&mut state.more[0], quarter_turn(quick_caret_face(true), false));
+        let more_down = up(&mut state.more[1], quarter_turn(quick_caret_face(true), true));
+        let mut hint = |slot: &mut Option<TexId>, key: &str, label: &str| {
+            let f = slot_ui::tint_mask(hint_face(key, label));
+            let w = f.w;
+            (upload(compositor, slot, f), w)
+        };
+        let [l0, l1, l2] = &mut state.legend;
+        let back = hint(l0, "B", "Back");
+        let toggle = hint(l1, "A", "Toggle");
+        let all_off = hint(l2, "Y", "All Off");
+        app.set_cheat_faces(slot_ui::CheatFaces {
+            names: faces,
+            help: None,
+            empty,
+            empty_help,
+            legend: vec![back, toggle, all_off],
+            legend_empty: vec![back],
+            switches: [off, on],
+            more: [more_up, more_down],
+        });
+    }
+    if state.counts != Some(counts) {
+        state.counts = Some(counts);
+        let (on, total) = counts;
+        let line = match on {
+            0 => format!("{total} cheats. A turns one on, right away."),
+            _ => format!("{on} of {total} cheats on. Changes apply right away."),
+        };
+        let f = help_line_face(&line);
+        let (w, h) = (f.w, f.h);
+        let id = upload(compositor, &mut state.help, f);
+        if let Some(faces) = app.cheat_faces_mut() {
+            faces.help = Some((id, w, h));
+        }
+    }
 }
 
 fn sync_about(app: &mut App, compositor: &mut Compositor, state: &mut AboutFace) {

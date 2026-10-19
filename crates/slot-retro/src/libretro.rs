@@ -573,6 +573,17 @@ impl RetroCore for LibretroCore {
         LibretroCore::set_option(self, key, value);
     }
 
+    fn set_cheats(&mut self, codes: &[String]) {
+        let _a = Active::bind(&mut self.host);
+        unsafe { (self.api.cheat_reset)() };
+        for (i, code) in codes.iter().enumerate() {
+            let Ok(c) = CString::new(code.as_str()) else {
+                continue;
+            };
+            unsafe { (self.api.cheat_set)(i as c_uint, true, c.as_ptr()) };
+        }
+    }
+
     fn load(&mut self, rom: &Path) -> Result<(), CoreError> {
         self.unload();
         self.rom = std::fs::read(rom)?;
