@@ -28,6 +28,24 @@ It plays GB, GBC and GBA games only (unzipped ROMs), on mGBA, gpSP and Gambatte.
 
 Power on and your shelf is there in **3 to 5 seconds**. Push a cart in and you're playing, right where your last save state left off.
 
+### A screen that looks like the real thing
+
+Out of the box, every game looks the way it did on the original hardware: a fine LCD grid between the pixels, the softer colors of the old screens, and Game Boy games in the green of the original DMG. Pale pixels let the screen behind them show through, and moving pixels leave a faint trail, like an old LCD.
+
+<img src=".github/resources/gravy/screen.png" width="100%" alt="Close-ups of Goodboy Galaxy and Hauntsfield with the default screen settings">
+
+Prefer it sharp and bright? **Screen Look** in the Screen menu switches everything at once between *Authentic* (the default) and *Clean*. Or pick and choose:
+
+| Setting | Consoles | What it does |
+|---|---|---|
+| LCD Grid | GB, GBC, GBA | Thin lines between the pixels, like the real screen |
+| Original Colors | GB, GBC, GBA | Softer colors, the way the original screen showed them |
+| Color Palettes | GB | Tint Game Boy games: 48 palettes, from DMG Green and Game Boy Pocket to the Game Boy Color and Super Game Boy sets. SELECT + L2 / R2 flips through them in a game |
+| See-Through Pixels | All | Pale pixels let the screen behind them show through |
+| Motion Blur | All | Moving pixels fade out slowly, like an old LCD |
+
+In a game, **SELECT + B / A** turns the LCD grid on or off and **SELECT + Y** the original colors.
+
 ---
 
 ## What's new
@@ -58,16 +76,6 @@ Every settings page lists its options on the left with the value on the right, f
 
 <img src=".github/resources/gravy/menus.png" width="100%" alt="The main menu and the General page">
 <img src=".github/resources/gravy/menus2.png" width="100%" alt="The Screen and Gameplay pages">
-
-**Screen Look** sets the whole picture in one go: *Authentic* turns on everything that makes the screen look like the real hardware, *Clean* turns it all off. Or fine-tune it per console:
-
-| Setting | What it does |
-|---|---|
-| LCD Grid | Thin lines between the pixels, like the real screen |
-| Original Colors | Softer colors, the way the original screen showed them |
-| Color Palettes | Tint Game Boy games; SELECT + L2 / R2 picks a palette |
-| See-Through Pixels | Pale pixels let the screen behind them show through |
-| Motion Blur | Moving pixels fade out slowly, like an old LCD |
 
 ### Every button, explained — and a proper power menu
 
