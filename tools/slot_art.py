@@ -4,7 +4,8 @@ housing, in one moulded-plastic style.
 Each housing is a height field built from its outline (the strip under the top of the screen
 with the slot's mouth cut out of it, convex corners rounded), lit from above. The Game Boy's
 mouth is a snug straight-sided slot running past the bottom of the screen; the GBA's is the
-shape of its slot with the finger scoop, read from tools/gba_mouth_mask.png. Inside the mouth the
+shape of the GBA SP's slot, with a smooth finger scoop and the metal plate showing at the bottom
+of its back. Inside the mouth the
 back strip is the same plastic in shadow, and the front strip lays the walls' shadow on the cart.
 
 Writes assets/slot_{back,front}_{dark,light}.png (GBA) and
@@ -27,6 +28,8 @@ WALL = 2.2                    # the wall's own thickness, seen going down into t
 INNER = 5.5                   # how deep the inner walls read on the back strip
 RIB_W = 6.0                   # the raised ribs on the slot's back wall
 RIB_TOP = 9.0
+SCOOP = (263.0, 44.5)           # the scoop: where its arc leaves the floor, and its deepest y
+METAL_TOP = 33.0                # below this the slot's back is the metal plate, not plastic
 
 # Dark: the charcoal of the original GBA slot. Light: a tint lighter than a Game Boy cart.
 LOOKS = {
@@ -66,17 +69,16 @@ def gba_mouth() -> np.ndarray:
             ((x < left + r) & (cx == left + r)) | ((x > right - r) & (cx == right - r))
         )
         band &= ~(corner & (np.hypot(x - cx, y - (band_bottom - r)) > r))
-    # The scoop's left edge, row by row from the original art; mirrored for the right.
-    rows = np.arange(29, 44) + 0.5
-    lefts = np.array([269, 270, 271, 274, 275, 276, 278, 280, 282, 284, 287, 289, 293, 298, 308],
-                     np.float32)
-    xl = np.interp(y, rows, lefts, left=np.inf, right=np.inf)
-    xl = np.where((y >= band_bottom - 0.5) & (y < 44.0), np.interp(y, rows, lefts), np.inf)
-    scoop = (x >= xl) & (x < 720.0 - xl)
+    # The finger scoop: a bite out of the straight floor, taken by one huge perfect circle
+    # whose arc leaves the floor at x=SCOOP[0] (and its mirror) and dips to SCOOP[1].
+    xa, y1 = SCOOP
+    half, sag = 360.0 - xa, y1 - band_bottom
+    radius = (half * half + sag * sag) / (2 * sag)
+    scoop = (np.hypot(x - 360.0, y - (y1 - radius)) < radius) & (y >= band_bottom - 0.5)
     return band | scoop
 
 
-def draw(mouth: np.ndarray, plastic: np.ndarray, front: bool) -> np.ndarray:
+def draw(mouth: np.ndarray, plastic: np.ndarray, front: bool, metal: bool) -> np.ndarray:
     hs, ws = H * SS, W * SS
     # The housing, with room above it so its top edge is an edge too.
     housing = np.zeros((hs + PAD, ws), bool)
@@ -128,9 +130,12 @@ def draw(mouth: np.ndarray, plastic: np.ndarray, front: bool) -> np.ndarray:
     # left wall darker than the right one under the light from the left.
     d_out_px = edt(~inside) / SS
     wall = gap & (d_out_px < WALL)
-    left_side = x < (cols.min() + cols.max()) / 2
-    left_side = np.repeat(left_side, hs, axis=0)
-    wall_shade = np.where(left_side, 0.58, 0.74)
+    # How much a point reads as the left side (lit from the left), blended across the middle
+    # so the shading has no seam along the slot's floor.
+    mid = (cols.min() + cols.max()) / 2
+    left_w = np.clip(0.5 - (x - mid) / (80.0 * SS), 0, 1)
+    left_w = np.repeat(left_w, hs, axis=0)
+    wall_shade = 0.74 - 0.16 * left_w
     wall_shade = np.where(y.repeat(ws, axis=1) < WALL + 1, 0.80, wall_shade)
     if front:
         # The walls' shadow on the cart standing in the slot.
@@ -153,19 +158,21 @@ def draw(mouth: np.ndarray, plastic: np.ndarray, front: bool) -> np.ndarray:
         deep = np.where(rim, 0.92 - 0.10 * (yy / 2.5), deep)
         side = d_out_px < INNER
         t = d_out_px / INNER
-        side_shade = np.where(left_side, 0.46 + 0.12 * t, 0.70 - 0.06 * t)
+        side_shade = left_w * (0.46 + 0.12 * t) + (1 - left_w) * (0.70 - 0.06 * t)
         side_shade = np.where(rim, np.maximum(side_shade, 0.85), side_shade)
         deep = np.where(side, side_shade, deep)
         c[gap] = plastic[None, :] * deep[gap][..., None]
         a[gap] = 1.0
         # The wall's lit top edge, a hair inside the housing's line.
         edge = gap & (d_out_px < 0.9)
-        c[edge] = plastic[None, :] * np.where(left_side, 0.66, 0.92)[edge][..., None]
+        c[edge] = plastic[None, :] * (0.92 - 0.26 * left_w)[edge][..., None]
         # Two raised ribs moulded into the slot's back wall, as on the real hardware: long
         # pills with a lit left flank, a shaded right one and a soft shadow beside them.
         xs_ = np.broadcast_to(x, (hs, ws)) / SS
         lo, hi = cols.min() / SS, cols.max() / SS
-        for cx in (lo + (hi - lo) * 0.24, lo + (hi - lo) * 0.76):
+        # On the GBA SP the ribs stand a little closer together than on the Game Boy.
+        at = 0.30 if metal else 0.24
+        for cx in (lo + (hi - lo) * at, lo + (hi - lo) * (1 - at)):
             r = RIB_W / 2
             top = RIB_TOP + r
             dy = np.maximum(top - yy, 0)
@@ -177,6 +184,20 @@ def draw(mouth: np.ndarray, plastic: np.ndarray, front: bool) -> np.ndarray:
             shadow = gap & ~rib & (xs_ > cx) & (xs_ < cx + r + 2.5) & (yy > RIB_TOP + 1)
             c[shadow] *= 0.90
             c[rib] = plastic[None, :] * (deep[rib] * 1.12 * rib_shade[rib])[..., None]
+        if metal:
+            # Below the plastic back wall, the metal plate: brushed steel, its top edge catching
+            # a line of light under a thin shadow from the plastic above it.
+            below = yy - METAL_TOP
+            plate = gap & (below >= 0)
+            steel = np.array([158, 160, 164], np.float32) if plastic.mean() > 80 else np.array(
+                [96, 98, 102], np.float32)
+            grain = np.random.default_rng(5).normal(0, 1, (1, ws)).repeat(hs, axis=0) * 0.03
+            tone = 0.86 + 0.10 * smooth(0.0, 9.0, below) + grain
+            tone = np.where(below < 0.9, 1.18, tone)
+            tone = tone * (0.80 + 0.20 * smooth(0.0, 4.0, d_out_px))
+            c[plate] = steel[None, :] * tone[plate][..., None]
+            seam = gap & (below < 0) & (below > -1.2)
+            c[seam] *= 0.70
 
     c = c.reshape(H, SS, W, SS, 3).mean(axis=(1, 3))
     a = a.reshape(H, SS, W, SS).mean(axis=(1, 3))
@@ -184,9 +205,9 @@ def draw(mouth: np.ndarray, plastic: np.ndarray, front: bool) -> np.ndarray:
     return np.dstack([np.clip(c, 0, 255), a * 255]).round().astype(np.uint8)
 
 
-for shape, mouth in [("", gba_mouth()), ("_gb", gb_mouth())]:
+for shape, mouth, metal in [("", gba_mouth(), True), ("_gb", gb_mouth(), False)]:
     for look, plastic in LOOKS.items():
         for part, front in [("back", False), ("front", True)]:
             out = ROOT / "assets" / f"slot_{part}{shape}_{look}.png"
-            Image.fromarray(draw(mouth, plastic, front), "RGBA").save(out, optimize=True)
+            Image.fromarray(draw(mouth, plastic, front, metal), "RGBA").save(out, optimize=True)
             print("wrote", out.name)
