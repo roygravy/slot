@@ -18,6 +18,8 @@ Real cartridges on a shelf. A real cartridge slot. On your shelf in 3–5 second
 
 slot. x GRAVY is a custom build of [slot.](https://github.com/BrandonKowalski/slot), Brandon Kowalski's bespoke Game Boy, Game Boy Color and Game Boy Advance frontend, tuned for the **Anbernic RG35XX Plus** and its 640×480 screen.
 
+New to slot.? Everything you need to know first (what it is, how it works, the full guide) is on **[slot-cfw.fyi](https://slot-cfw.fyi)**. slot. x GRAVY only changes the look and a few menus; the rest works the same.
+
 Where slot. is modelled on the GBA SP, slot. x GRAVY leans into the handheld it runs on: the RG35XX Plus is a love letter to the original Game Boy, so Game Boy carts go into a Game Boy slot, the plastic looks like plastic, and every menu is written for people who just want to play.
 
 It plays GB, GBC and GBA games only (unzipped ROMs), on mGBA, gpSP and Gambatte.
