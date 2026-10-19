@@ -2,13 +2,13 @@
 
 # slot. x GRAVY
 
-**A Game Boy–centric frontend for the Anbernic RG35XX Plus, built on [slot.](https://github.com/BrandonKowalski/slot)**
+**My own take on [slot.](https://github.com/BrandonKowalski/slot), Brandon Kowalski's Game Boy–centric frontend, for the Anbernic RG35XX Plus**
 
-Real cartridges on a shelf. A real cartridge slot. On your shelf in 3–5 seconds. Just pick a game and push it in.
+slot.'s real cartridges on a shelf and its real cartridge slot, with a little extra gravy on top.
 
 <img src=".github/resources/gravy/carousel.gif" width="640" alt="Scrolling the Game Boy shelf and pushing Hauntsfield into the slot">
 
-[**Download slot-x-gravy-v1.0**](https://github.com/roygravy/slot/releases) · [Install](#install) · [What's new](#whats-new) · [Controls](#controls)
+[**Download slot-x-gravy-v1.0**](https://github.com/roygravy/slot/releases) · [Install](#install) · [What GRAVY adds](#what-gravy-adds) · [Controls](#controls)
 
 </div>
 
@@ -16,43 +16,37 @@ Real cartridges on a shelf. A real cartridge slot. On your shelf in 3–5 second
 
 ## What is slot. x GRAVY?
 
-slot. x GRAVY is a custom build of [slot.](https://github.com/BrandonKowalski/slot), Brandon Kowalski's bespoke Game Boy, Game Boy Color and Game Boy Advance frontend, tuned for the **Anbernic RG35XX Plus** and its 640×480 screen.
+slot. x GRAVY is a personal modification of [slot.](https://github.com/BrandonKowalski/slot), Brandon Kowalski's bespoke Game Boy, Game Boy Color and Game Boy Advance frontend. Everything that makes it special is slot.'s: the shelf of cartridges, pushing a cart into the slot to play, save states, rewind, the link cable, Markus's artwork, and how ridiculously fast it is (power on and your shelf is there in **3 to 5 seconds**).
 
-New to slot.? Everything you need to know first (what it is, how it works, the full guide) is on **[slot-cfw.fyi](https://slot-cfw.fyi)**. slot. x GRAVY only changes the look and a few menus; the rest works the same.
+New to slot.? Everything you need to know first (what it is, how it works, the full guide) is on **[slot-cfw.fyi](https://slot-cfw.fyi)**.
 
-Where slot. is modelled on the GBA SP, slot. x GRAVY leans into the handheld it runs on: the RG35XX Plus is a love letter to the original Game Boy, so Game Boy carts go into a Game Boy slot, the plastic looks like plastic, and every menu is written for people who just want to play.
+On top of that, slot. x GRAVY adds a few things of my own, tuned for the RG35XX Plus: since that handheld is a love letter to the original Game Boy, Game Boy carts get a Game Boy slot, there's a little more screen authenticity, and a handful of menu changes. Everything else works exactly like slot.
 
 It plays GB, GBC and GBA games only (unzipped ROMs), on mGBA, gpSP and Gambatte.
 
-### Ridiculously fast
-
-Power on and your shelf is there in **3 to 5 seconds**. Push a cart in and you're playing, right where your last save state left off.
-
 ### A screen that looks like the real thing
 
-Out of the box, every game looks the way it did on the original hardware: a fine LCD grid between the pixels, the softer colors of the old screens, and Game Boy games in the green of the original DMG. Pale pixels let the screen behind them show through, and moving pixels leave a faint trail, like an old LCD.
+slot. already offers an LCD grid, the softer colors of the original screens and mGBA's 48 Game Boy palettes. slot. x GRAVY turns them all on out of the box, with Game Boy games in the green of the original DMG, and adds two effects of its own: pale pixels let the screen behind them show through, and moving pixels leave a faint trail, like an old LCD.
 
 <img src=".github/resources/gravy/screen.png" width="100%" alt="Close-ups of Goodboy Galaxy and Hauntsfield with the default screen settings">
 
-Prefer it sharp and bright? **Screen Look** in the Screen menu switches everything at once between *Authentic* (the default) and *Clean*. Or pick and choose:
+Prefer it sharp and bright? GRAVY's **Screen Look** setting switches everything at once between *Authentic* (the default) and *Clean*. Or pick and choose:
 
-| Setting | Consoles | What it does |
-|---|---|---|
-| LCD Grid | GB, GBC, GBA | Thin lines between the pixels, like the real screen |
-| Original Colors | GB, GBC, GBA | Softer colors, the way the original screen showed them |
-| Color Palettes | GB | Tint Game Boy games: 48 palettes, from DMG Green and Game Boy Pocket to the Game Boy Color and Super Game Boy sets. SELECT + L2 / R2 flips through them in a game |
-| See-Through Pixels | All | Pale pixels let the screen behind them show through |
-| Motion Blur | All | Moving pixels fade out slowly, like an old LCD |
-
-In a game, **SELECT + B / A** turns the LCD grid on or off and **SELECT + Y** the original colors.
+| Setting | Consoles | What it does | From |
+|---|---|---|---|
+| LCD Grid | GB, GBC, GBA | Thin lines between the pixels, like the real screen | slot. |
+| Original Colors | GB, GBC, GBA | Softer colors, the way the original screen showed them | slot. |
+| Color Palettes | GB | Tint Game Boy games with one of mGBA's 48 palettes; SELECT + L2 / R2 flips through them in a game | slot. |
+| See-Through Pixels | All | Pale pixels let the screen behind them show through | GRAVY |
+| Motion Blur | All | Moving pixels fade out slowly, like an old LCD | GRAVY |
 
 ---
 
-## What's new
+## What GRAVY adds
 
-### Two themes, two slots
+### Two slots, new wallpapers
 
-A **Dark** and a **Light** housing, each with its own clean wallpaper. Mix and match as you like: either wallpaper goes with either theme, or drop your own PNGs in the `Wallpapers` folder and pick one by name. Game Boy and GBA games each get their own cartridge slot.
+slot.'s Dark and Light themes get redrawn cartridge slots in moulded plastic: Game Boy games get a Game Boy slot, GBA games a GBA SP slot. Each theme gets a new plain wallpaper, and either wallpaper goes with either theme, next to your own from the `Wallpapers` folder.
 
 <img src=".github/resources/gravy/themes.png" width="100%" alt="The Game Boy Color shelf in the dark and the light theme">
 
@@ -60,7 +54,7 @@ A **Dark** and a **Light** housing, each with its own clean wallpaper. Mix and m
 
 ### Favorites that stand out
 
-Press **Y** on any cart to make it a favorite. Favorites stand a little taller on their shelf under a soft, warm spotlight, and get a shelf of their own where the light stays put in the middle as you scroll through it. Prefer something quieter? Pick **Star** instead.
+slot. already stars a cart onto its Favorites shelf with **Y**. In GRAVY, favorites stand a little taller under a soft, warm spotlight, and on the Favorites shelf the light stays put in the middle as you scroll. Prefer slot.'s quieter star? Pick **Star** instead.
 
 <img src=".github/resources/gravy/favorites.png" width="100%" alt="The Favorites shelf in dark and light">
 
@@ -70,20 +64,20 @@ No scan for a game? It still gets a proper cartridge: bare plastic with the titl
 
 <img src=".github/resources/gravy/marker.png" width="100%" alt="Carts with no label art, titled in marker">
 
-### Menus anyone can use
+### A different look for the menus
 
-Every settings page lists its options on the left with the value on the right, flat pill switches for anything that's on or off, and a plain-English line at the bottom saying what the selected option does. The light theme gets light menus.
+slot.'s settings pages get a new layout: options on the left with the value on the right, flat pill switches for anything that's on or off, and a plain-English line at the bottom saying what the selected option does. The light theme gets light menus.
 
 <img src=".github/resources/gravy/menus.png" width="100%" alt="The main menu and the General page">
 <img src=".github/resources/gravy/menus2.png" width="100%" alt="The Screen and Gameplay pages">
 
-### Every button, explained — and a proper power menu
+### Every button, explained, and Sleep in the power menu
 
-A **Buttons** page in the menu lists every shortcut, everywhere. Hold **POWER** for **Sleep**, **Restart** or **Power Off**.
+A **Buttons** page in the menu lists every shortcut slot. answers to. Holding **POWER** now offers **Sleep** next to slot.'s Restart and Power Off.
 
 <img src=".github/resources/gravy/buttons_power.png" width="100%" alt="The Buttons page and the power menu">
 
-### Play
+### Playing
 
 <img src=".github/resources/gravy/gameplay.png" width="100%" alt="Goodboy Galaxy on mGBA and Hauntsfield in the original Game Boy green">
 <img src=".github/resources/gravy/ingame.png" width="100%" alt="Hauntsfield in its own colours and on the DMG Green palette">
@@ -93,7 +87,8 @@ A **Buttons** page in the menu lists every shortcut, everywhere. Hold **POWER** 
 - Carts sit a little smaller on the carousel, with soft drop shadows that lift them off the wallpaper
 - Game titles under the shelf at the same size as the shelf names
 - A lighter GBA LCD grid
-- Games start on your Favorites shelf when you have favorites, otherwise on Game Boy
+- Gambatte as the Game Boy core
+- An About page in the style of a Game Boy's back
 - Sleep after 1 minute by default, power off after 5 minutes asleep
 
 ---
@@ -111,7 +106,7 @@ ROMs must be unzipped; `.zip` and `.7z` are not read.
 
 ## Controls
 
-The full list is on the **Buttons** page in the menu. The essentials:
+These are slot.'s own controls, unchanged; the full list is on the **Buttons** page in the menu. The essentials:
 
 | On the shelf | |
 |---|---|
@@ -139,7 +134,7 @@ slot. x GRAVY builds the same way slot. does; see [the slot. README](SLOT_README
 
 ## Credits
 
-- **[slot.](https://github.com/BrandonKowalski/slot)** by Brandon Kowalski, the frontend slot. x GRAVY is built on, with artwork by Markus and contributions from its community
+- **[slot.](https://github.com/BrandonKowalski/slot)** by Brandon Kowalski, with artwork by Markus and contributions from its community: everything slot. x GRAVY is built on, and most of what it does
 - **mGBA**, **gpSP** and **Gambatte**, the emulator cores (their licenses and sources ship in `System/licenses`)
 - **Permanent Marker** by Font Diner (Apache 2.0) for the handwritten titles
 - **Liberation Sans** by Red Hat (SIL OFL 1.1), subset as "slot Serial", for the serial sticker on the About page
