@@ -1063,10 +1063,18 @@ impl App {
         self.state.wallpaper.clone()
     }
 
+    /// What Wallpaper shows: Dark, Light, one of your own, or Off. A card still on Default
+    /// (or the old blur) shows the theme's own wallpaper, and so does your own file while it
+    /// cannot be loaded.
     pub fn resolved_wallpaper(&self) -> WallpaperPick {
+        let theme = if self.light() { WallpaperPick::Light } else { WallpaperPick::Dark };
         match &self.state.wallpaper {
             WallpaperPick::None => WallpaperPick::None,
-            _ => WallpaperPick::Default,
+            WallpaperPick::Dark => WallpaperPick::Dark,
+            WallpaperPick::Light => WallpaperPick::Light,
+            WallpaperPick::File(name) => WallpaperPick::File(name.clone()),
+            WallpaperPick::Random => WallpaperPick::Random,
+            _ => theme,
         }
     }
 
@@ -1091,7 +1099,9 @@ impl App {
     }
 
     fn cycle_wallpaper(&mut self, right: bool) {
-        let choices = vec![WallpaperPick::Default, WallpaperPick::None];
+        let mut choices = vec![WallpaperPick::Dark, WallpaperPick::Light];
+        choices.extend(self.wallpaper_files().into_iter().map(WallpaperPick::File));
+        choices.push(WallpaperPick::None);
         let key = self.resolved_wallpaper().key();
         let at = choices.iter().position(|c| c.key() == key).unwrap_or(0);
         let n = choices.len();
@@ -1107,10 +1117,26 @@ impl App {
     /// The wallpaper behind the shelf and menus: the theme's own default, or none (black) when
     /// Wallpaper is Off.
     fn ground_face(&self) -> Option<TexId> {
-        match &self.state.wallpaper {
+        match self.resolved_wallpaper() {
             WallpaperPick::None => None,
-            _ if self.light() => self.ground_light.or(self.ground),
+            WallpaperPick::Light => self.ground_light.or(self.ground),
+            WallpaperPick::File(_) | WallpaperPick::Random if self.wallpaper.is_some() => {
+                self.wallpaper
+            }
+            WallpaperPick::File(_) | WallpaperPick::Random if self.light() => {
+                self.ground_light.or(self.ground)
+            }
             _ => self.ground,
+        }
+    }
+
+    /// Whether the wallpaper behind the shelf and menus is a light one, so text and shadows on
+    /// it go dark. Your own wallpaper is taken to suit the theme you picked.
+    fn light_ground(&self) -> bool {
+        match self.resolved_wallpaper() {
+            WallpaperPick::None | WallpaperPick::Dark => false,
+            WallpaperPick::Light => true,
+            _ => self.light(),
         }
     }
 
@@ -1118,10 +1144,9 @@ impl App {
         self.ground_face()
     }
 
-    /// Dark ink on the light themes' grey wallpaper; with Wallpaper Off the ground is black, so
-    /// the ink stays light.
+    /// Dark ink on a light wallpaper, light ink on a dark one or on black (Wallpaper Off).
     pub fn menu_ink(&self) -> slot_ui::theme::Ink {
-        slot_ui::theme::ink(self.light() && self.ground_face().is_some())
+        slot_ui::theme::ink(self.light_ground())
     }
 
     fn draw_background(&self, out: &mut Vec<Draw>) {
@@ -1196,9 +1221,8 @@ impl App {
     }
 
     fn mark_stars(&mut self) {
-        slot_ui::set_light_ground(
-            self.state.appearance.light() && self.state.wallpaper != WallpaperPick::None,
-        );
+        let light_ground = self.light_ground();
+        slot_ui::set_light_ground(light_ground);
         let state = &self.state;
         for (rack, shelf) in &mut self.shelves {
             shelf.set_mark(state.favorite_mark);
@@ -1206,7 +1230,7 @@ impl App {
             let on_favorites = *rack == Rack::Favorites;
             shelf.mark_starred(|c| !on_favorites && state.is_favorite(c.platform, &c.stem));
             shelf.set_spotlight(on_favorites);
-            shelf.set_light_ground(state.appearance.light() && state.wallpaper != WallpaperPick::None);
+            shelf.set_light_ground(light_ground);
         }
     }
 

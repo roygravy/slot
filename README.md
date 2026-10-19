@@ -52,7 +52,7 @@ In a game, **SELECT + B / A** turns the LCD grid on or off and **SELECT + Y** th
 
 ### Two themes, two slots
 
-A **Dark** and a **Light** housing, each with its own clean wallpaper. Game Boy and Game Boy Color carts slide into a Game Boy cartridge slot; GBA carts get their own slot with the finger scoop. Both are drawn as moulded plastic, and every cart sits flush with the top of its slot.
+A **Dark** and a **Light** housing, each with its own clean wallpaper. Mix and match as you like: either wallpaper goes with either theme, or drop your own PNGs in the `Wallpapers` folder and pick one by name. Game Boy and Game Boy Color carts slide into a Game Boy cartridge slot; GBA carts get their own slot with the finger scoop. Both are drawn as moulded plastic, and every cart sits flush with the top of its slot.
 
 <img src=".github/resources/gravy/themes.png" width="100%" alt="The Game Boy shelf in the dark and the light theme">
 

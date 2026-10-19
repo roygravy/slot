@@ -152,8 +152,13 @@ impl WallpaperTint {
 pub enum WallpaperPick {
     None,
     Random,
+    /// The theme's own wallpaper (what older cards and a fresh card hold).
     #[default]
     Default,
+    /// The dark theme's wallpaper, whatever the theme.
+    Dark,
+    /// The light theme's wallpaper, whatever the theme.
+    Light,
     Blur,
     File(String),
 }
@@ -164,6 +169,8 @@ impl WallpaperPick {
             WallpaperPick::None => "none".to_string(),
             WallpaperPick::Random => "random".to_string(),
             WallpaperPick::Default => "default".to_string(),
+            WallpaperPick::Dark => "dark".to_string(),
+            WallpaperPick::Light => "light".to_string(),
             WallpaperPick::Blur => "default_blur".to_string(),
             WallpaperPick::File(name) => name.clone(),
         }
@@ -171,9 +178,11 @@ impl WallpaperPick {
 
     pub fn label(&self) -> String {
         match self {
-            WallpaperPick::None => "None".to_string(),
+            WallpaperPick::None => "Off".to_string(),
             WallpaperPick::Random => "Random".to_string(),
             WallpaperPick::Default => "Default".to_string(),
+            WallpaperPick::Dark => "Dark".to_string(),
+            WallpaperPick::Light => "Light".to_string(),
             WallpaperPick::Blur => "DEFAULT BLUR".to_string(),
             WallpaperPick::File(name) => name
                 .rsplit_once('.')
@@ -188,6 +197,8 @@ impl WallpaperPick {
             "none" => WallpaperPick::None,
             "random" => WallpaperPick::Random,
             "" | "default" => WallpaperPick::Default,
+            "dark" => WallpaperPick::Dark,
+            "light" => WallpaperPick::Light,
             "default_blur" => WallpaperPick::Blur,
             other => WallpaperPick::File(other.to_string()),
         }

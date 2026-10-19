@@ -379,7 +379,7 @@ impl QuickRow {
             QuickRow::Rumble => "Let games that support it shake the device.",
             QuickRow::InGameMenu => "Tap MENU in a game to pause and open a menu.",
             QuickRow::EjectSave => "Save your place when you eject a cart.",
-            QuickRow::Wallpaper => "Default follows the theme. Off is plain black.",
+            QuickRow::Wallpaper => "Dark, Light, or your own from the Wallpapers folder.",
             QuickRow::Theme => "Dark or light housing, shelves and menus.",
             QuickRow::Recents => "A shelf with the last 10 games you played.",
             QuickRow::FavoriteMark => "How favorites stand out. Press Y on a cart to mark it.",
