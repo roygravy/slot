@@ -24,23 +24,37 @@ pub struct Ink {
     pub wash: [f32; 4],
 }
 
-/// Dark theme: bone white on charcoal, as slot has always looked.
+const fn grey(v: u8, a: f32) -> [f32; 4] {
+    [v as f32 / 255.0, v as f32 / 255.0, v as f32 / 255.0, a]
+}
+
+/// Dark theme, monochrome: white text, grey for the rows not chosen, and the chosen row a
+/// solid white bar with black text.
 pub const DARK: Ink = Ink {
-    text: [0xf6 as f32 / 255.0, 0xf4 as f32 / 255.0, 0xef as f32 / 255.0, 1.0],
-    dim: [0x9a as f32 / 255.0, 0x9a as f32 / 255.0, 0xa4 as f32 / 255.0, 1.0],
-    bar: [0x4d as f32 / 255.0, 0x4d as f32 / 255.0, 0x57 as f32 / 255.0, 1.0],
-    on_bar: [0xf6 as f32 / 255.0, 0xf4 as f32 / 255.0, 0xef as f32 / 255.0, 1.0],
+    text: grey(0xf4, 1.0),
+    dim: grey(0x9c, 1.0),
+    bar: grey(0xf4, 1.0),
+    on_bar: grey(0x16, 1.0),
     wash: [0.0, 0.0, 0.0, 0.65],
 };
 
-/// Light theme: the Game Boy's charcoal print on its warm grey plastic, with the
-/// bar in the darker grey of its screen surround.
+/// Over a paused game: the dark theme's ink, the game dimmed behind it.
+pub const OVER_GAME: Ink = Ink {
+    text: grey(0xf4, 1.0),
+    dim: grey(0xa6, 1.0),
+    bar: grey(0xf4, 1.0),
+    on_bar: grey(0x16, 1.0),
+    wash: [0.0, 0.0, 0.0, 0.55],
+};
+
+/// Light theme, monochrome: near-black text on the light ground, grey for the rows not
+/// chosen, and the chosen row a solid black bar with white text.
 pub fn light() -> Ink {
     Ink {
-        text: rgb([0x2b, 0x2a, 0x2e], 1.0),
-        dim: rgb([0x6c, 0x6a, 0x66], 1.0),
-        bar: rgb([0x58, 0x5a, 0x63], 1.0),
-        on_bar: rgb([0xee, 0xec, 0xe6], 1.0),
+        text: grey(0x1c, 1.0),
+        dim: grey(0x66, 1.0),
+        bar: grey(0x1c, 1.0),
+        on_bar: grey(0xf4, 1.0),
         wash: rgb([0xd6, 0xd4, 0xce], 0.35),
     }
 }

@@ -73,7 +73,7 @@ const ROW_MAX: f32 = 40.0;
 const KEY_PX: f32 = 17.0;
 const DO_PX: f32 = 17.0;
 const KEY_W: f32 = 270.0;
-const LEGEND_Y: f32 = 427.0;
+pub const LEGEND_Y: f32 = 427.0;
 /// How strongly the description column reads against the key column.
 const DO_ALPHA: f32 = 0.72;
 

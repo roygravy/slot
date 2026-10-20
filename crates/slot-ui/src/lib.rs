@@ -1,7 +1,9 @@
+mod about;
 mod art;
 pub use art::cover;
 mod bitmaps;
 mod buttons_help;
+mod cheat_page;
 pub use bitmaps::{
     link_port, link_port_light, slot_back, slot_back_gb, slot_back_light, slot_front, slot_front_gb, slot_front_light, Mould,
     SLOT_H, SLOT_W,
@@ -54,7 +56,7 @@ pub use cart::{
 };
 pub use clock::{clock_label, date_time_text, hhmm, set_clock_hint_face, ClockPicker, Field};
 pub use draw::{Canvas, Draw, Layout, TexId, OUT_H, OUT_W};
-pub use footer::{draw_corners, draw_footer, Printed, FOOTER_Y};
+pub use footer::{corner_gauge_end, draw_corners, draw_footer, Printed, FOOTER_Y};
 pub use hud::{
     badge_at, ff_badge, footer_ink, FfState, Hud, HudKind, LinkBadge, Millis, ALARM_BAND_H,
     HUD_ICON_PX, HUD_INK, HUD_MS, LINK_HOST_INK, LINK_JOIN_INK, PLATE_H,
@@ -76,14 +78,20 @@ pub use plate::{
 };
 pub use polaroids::{photo_face, PhotoFace, Polaroids, DOT, LEGEND, PHOTO_H, PHOTO_W};
 pub use power_menu::{menu_face, PowerChoice, MENU_PAD};
+pub use about::{about_face, draw_about};
+pub use cheat_page::{
+    cheat_badge_face, draw_cheat_badge_in_game, draw_cheat_badge_in_menu, first_shown, CheatFaces,
+    CheatPage, BADGE_GAME_H, BADGE_MENU_H, CHEAT_ROWS, NAME_MAX_W,
+};
 pub use buttons_help::{
     buttons_body_face, buttons_tab_face, ButtonsFaces, ButtonsHelp, BUTTON_PAGES,
+    LEGEND_Y as MENU_LEGEND_Y,
 };
 pub use quick_menu::{
     draw_menu_ground, quick_caret_face, quick_help_face, quick_label_face, quick_legend_faces,
     quick_pointer_face, quick_switch_face,
     quick_row_top, quick_value_face, QuickMenu, QuickMenuFaces, QuickRow, QuickValue, QUICK_EDGE,
-    quick_pitch, QUICK_LABEL_X, QUICK_PITCH,
+    quick_first, quick_pitch, window_first, QUICK_LABEL_X, QUICK_PITCH, SUB_ROWS,
 };
 pub use rebuild::{rebuild_count_face, rebuild_title_face, RebuildScreen};
 pub use refusal::Refusal;

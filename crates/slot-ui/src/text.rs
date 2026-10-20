@@ -5,6 +5,7 @@ use fontdue::{Font, FontSettings};
 const LABEL_TTF: &[u8] = include_bytes!("../assets/label.ttf");
 /// Permanent Marker by Font Diner, Apache 2.0: a title written on a blank label by hand.
 const MARKER_TTF: &[u8] = include_bytes!("../assets/marker.ttf");
+const SERIAL_TTF: &[u8] = include_bytes!("../assets/serial.ttf");
 
 pub struct Layout {
     pub lines: Vec<String>,
@@ -15,6 +16,13 @@ pub struct Layout {
 pub fn label_font() -> Option<&'static Font> {
     static FONT: OnceLock<Option<Font>> = OnceLock::new();
     FONT.get_or_init(|| Font::from_bytes(LABEL_TTF, FontSettings::default()).ok())
+        .as_ref()
+}
+
+/// The plain grotesque printed on the Game Boy's serial sticker (digits and capitals only).
+pub fn serial_font() -> Option<&'static Font> {
+    static FONT: OnceLock<Option<Font>> = OnceLock::new();
+    FONT.get_or_init(|| Font::from_bytes(SERIAL_TTF, FontSettings::default()).ok())
         .as_ref()
 }
 
@@ -127,8 +135,30 @@ pub fn draw_centred(dst: &mut [u8], dst_w: u32, dst_h: u32, layout: &Layout, col
 }
 
 pub fn coverage(dst_w: u32, dst_h: u32, layout: &Layout) -> Vec<u8> {
+    match label_font() {
+        Some(font) => coverage_in(font, dst_w, dst_h, layout),
+        None => vec![0u8; (dst_w * dst_h) as usize],
+    }
+}
+
+/// `draw_centred`, set in `font` rather than the label face.
+pub fn draw_centred_in(
+    font: &Font,
+    dst: &mut [u8],
+    dst_w: u32,
+    dst_h: u32,
+    layout: &Layout,
+    colour: [u8; 3],
+) {
+    for (i, a) in coverage_in(font, dst_w, dst_h, layout).into_iter().enumerate() {
+        if a > 0 {
+            blend(&mut dst[i * 4..i * 4 + 4], a as u32, colour);
+        }
+    }
+}
+
+fn coverage_in(font: &Font, dst_w: u32, dst_h: u32, layout: &Layout) -> Vec<u8> {
     let mut out = vec![0u8; (dst_w * dst_h) as usize];
-    let Some(font) = label_font() else { return out };
     let Some(vm) = font.horizontal_line_metrics(layout.px) else {
         return out;
     };

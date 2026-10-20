@@ -285,6 +285,11 @@ impl Session {
                 None => eprintln!("slot: link: a transport arrived with no core to run it"),
             }
         }
+        if let Some(codes) = self.app.take_cheats() {
+            if let Some(emu) = &self.emu {
+                emu.set_cheats(codes);
+            }
+        }
         let mut recoloured = false;
         if let Some(p) = self.app.take_gb_palette() {
             if let Some(emu) = &self.emu {
@@ -494,6 +499,10 @@ impl Session {
                     (self.app.palette_live(), self.app.gb_palette(), &self.emu)
                 {
                     emu.set_option("mgba_gb_colors", p.core_name());
+                }
+                let cheats = self.app.start_cheats();
+                if let (false, Some(emu)) = (cheats.is_empty(), &self.emu) {
+                    emu.set_cheats(cheats);
                 }
                 self.app.on_core_ready()
             }

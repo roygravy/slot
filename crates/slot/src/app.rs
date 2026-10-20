@@ -15,7 +15,7 @@ use slot_store::{
 };
 use slot_ui::{
     board_from, board_x, board_zoom, cart_box, draw_empty_slot, draw_footer, draw_ground,
-    draw_slot_name, draw_sticker, ease, foot_y, footer_ink, grown, lid_at, lid_from, lift_of,
+    draw_slot_name, ease, foot_y, footer_ink, grown, lid_at, lid_from, lift_of,
     on_board, repeat_gap, shelf_cart_at, ClockPicker, Draw, FfState, GbShell, Hud, HudKind, Icon,
     LinkBadge, Millis, Placed, Polaroids, PowerChoice, QuickMenu, QuickMenuFaces, QuickRow,
     QuickValue, Refusal, Shelf, SlotChrome, TexId, Toast, BOARD_W, CART_W, CHIP_H, CHIP_U, CHIP_V,
@@ -42,6 +42,8 @@ pub const EJECT_S: f32 = SEATED_AT;
 const EJECT_HOLD_S: f32 = 0.35;
 
 pub const IN_GAME_MENU: Layout = Layout::Native;
+/// Room between the battery's percentage and the cheats robber in the menu corner.
+const MENU_BADGE_GAP: f32 = 8.0;
 
 const POWER_ON_S: f32 = 0.22;
 
@@ -374,6 +376,20 @@ pub struct App {
     states_from_menu: bool,
     menu_tap: Option<(Millis, Option<QuickRow>)>,
     sticker_face: Option<TexId>,
+    /// The playing game's cheats, which game they belong to, and the Cheats page's cursor
+    /// (selected row, first row shown) while it is open.
+    cheats: Vec<crate::cheats::Cheat>,
+    cheats_for: Option<(Platform, String)>,
+    cheat_page: Option<(usize, usize)>,
+    cheats_pending: Option<Vec<String>>,
+    /// Bumped whenever the list of names changes, so the frontend rebuilds their faces.
+    cheats_rev: u64,
+    cheat_faces: Option<slot_ui::CheatFaces>,
+    /// The robber: in the menu corner, and in play.
+    cheat_badges: Option<[(TexId, u32, u32); 2]>,
+    /// Which page scrolled last, and the first row it showed, so a list stays still while
+    /// the selection moves within it.
+    menu_scroll: std::cell::Cell<(usize, usize)>,
     ground: Option<TexId>,
     ground_light: Option<TexId>,
     wallpaper: Option<TexId>,
@@ -526,6 +542,14 @@ impl App {
             states_from_menu: false,
             menu_tap: None,
             sticker_face: None,
+            cheats: Vec::new(),
+            cheats_for: None,
+            cheat_page: None,
+            cheats_pending: None,
+            cheats_rev: 0,
+            cheat_faces: None,
+            cheat_badges: None,
+            menu_scroll: std::cell::Cell::new((usize::MAX, 0)),
             ground: None,
             ground_light: None,
             wallpaper: None,
@@ -901,6 +925,7 @@ impl App {
                 None => QuickValue::Custom,
             }),
             QuickRow::Rumble => Some(QuickValue::flag(self.state.rumble)),
+            QuickRow::CheatIcon => Some(QuickValue::flag(self.state.cheat_icon)),
             QuickRow::EjectSave => Some(QuickValue::flag(self.state.eject_save)),
             QuickRow::Turbo => Some(QuickValue::flag(self.state.turbo)),
             QuickRow::Rewind => Some(QuickValue::flag(self.state.rewind)),
@@ -938,6 +963,7 @@ impl App {
             | QuickRow::Wallpaper
             | QuickRow::Resume
             | QuickRow::States
+            | QuickRow::Cheats
             | QuickRow::Settings
             | QuickRow::ExitGame
             | QuickRow::PlayScreen
@@ -1063,10 +1089,18 @@ impl App {
         self.state.wallpaper.clone()
     }
 
+    /// What Wallpaper shows: Dark, Light, one of your own, or Off. A card still on Default
+    /// (or the old blur) shows the theme's own wallpaper, and so does your own file while it
+    /// cannot be loaded.
     pub fn resolved_wallpaper(&self) -> WallpaperPick {
+        let theme = if self.light() { WallpaperPick::Light } else { WallpaperPick::Dark };
         match &self.state.wallpaper {
             WallpaperPick::None => WallpaperPick::None,
-            _ => WallpaperPick::Default,
+            WallpaperPick::Dark => WallpaperPick::Dark,
+            WallpaperPick::Light => WallpaperPick::Light,
+            WallpaperPick::File(name) => WallpaperPick::File(name.clone()),
+            WallpaperPick::Random => WallpaperPick::Random,
+            _ => theme,
         }
     }
 
@@ -1091,7 +1125,9 @@ impl App {
     }
 
     fn cycle_wallpaper(&mut self, right: bool) {
-        let choices = vec![WallpaperPick::Default, WallpaperPick::None];
+        let mut choices = vec![WallpaperPick::Dark, WallpaperPick::Light];
+        choices.extend(self.wallpaper_files().into_iter().map(WallpaperPick::File));
+        choices.push(WallpaperPick::None);
         let key = self.resolved_wallpaper().key();
         let at = choices.iter().position(|c| c.key() == key).unwrap_or(0);
         let n = choices.len();
@@ -1107,10 +1143,26 @@ impl App {
     /// The wallpaper behind the shelf and menus: the theme's own default, or none (black) when
     /// Wallpaper is Off.
     fn ground_face(&self) -> Option<TexId> {
-        match &self.state.wallpaper {
+        match self.resolved_wallpaper() {
             WallpaperPick::None => None,
-            _ if self.light() => self.ground_light.or(self.ground),
+            WallpaperPick::Light => self.ground_light.or(self.ground),
+            WallpaperPick::File(_) | WallpaperPick::Random if self.wallpaper.is_some() => {
+                self.wallpaper
+            }
+            WallpaperPick::File(_) | WallpaperPick::Random if self.light() => {
+                self.ground_light.or(self.ground)
+            }
             _ => self.ground,
+        }
+    }
+
+    /// Whether the wallpaper behind the shelf and menus is a light one, so text and shadows on
+    /// it go dark. Your own wallpaper is taken to suit the theme you picked.
+    fn light_ground(&self) -> bool {
+        match self.resolved_wallpaper() {
+            WallpaperPick::None | WallpaperPick::Dark => false,
+            WallpaperPick::Light => true,
+            _ => self.light(),
         }
     }
 
@@ -1118,10 +1170,9 @@ impl App {
         self.ground_face()
     }
 
-    /// Dark ink on the light themes' grey wallpaper; with Wallpaper Off the ground is black, so
-    /// the ink stays light.
+    /// Dark ink on a light wallpaper, light ink on a dark one or on black (Wallpaper Off).
     pub fn menu_ink(&self) -> slot_ui::theme::Ink {
-        slot_ui::theme::ink(self.light() && self.ground_face().is_some())
+        slot_ui::theme::ink(self.light_ground())
     }
 
     fn draw_background(&self, out: &mut Vec<Draw>) {
@@ -1196,9 +1247,8 @@ impl App {
     }
 
     fn mark_stars(&mut self) {
-        slot_ui::set_light_ground(
-            self.state.appearance.light() && self.state.wallpaper != WallpaperPick::None,
-        );
+        let light_ground = self.light_ground();
+        slot_ui::set_light_ground(light_ground);
         let state = &self.state;
         for (rack, shelf) in &mut self.shelves {
             shelf.set_mark(state.favorite_mark);
@@ -1206,7 +1256,7 @@ impl App {
             let on_favorites = *rack == Rack::Favorites;
             shelf.mark_starred(|c| !on_favorites && state.is_favorite(c.platform, &c.stem));
             shelf.set_spotlight(on_favorites);
-            shelf.set_light_ground(state.appearance.light() && state.wallpaper != WallpaperPick::None);
+            shelf.set_light_ground(light_ground);
         }
     }
 
@@ -1953,6 +2003,16 @@ impl App {
         if self.game_menu.is_some() {
             return self.game_menu_input(action);
         }
+        if self.in_game_menu.is_none() {
+            self.cheat_page = None;
+        }
+        if let (Some(_), Some(_), Phase::Playing { .. }) =
+            (self.in_game_menu, self.cheat_page, &self.phase)
+        {
+            if action != Action::Eject {
+                return self.cheat_page_input(action);
+            }
+        }
         if let (Some(row), Phase::Playing { .. }) = (self.in_game_menu, &self.phase) {
             if action != Action::Eject {
                 return self.in_game_menu_input(row, action);
@@ -2090,12 +2150,139 @@ impl App {
         match row {
             QuickRow::Resume => self.in_game_menu = None,
             QuickRow::States => self.open_states(),
+            QuickRow::Cheats => self.open_cheats(),
             QuickRow::ExitGame => self.eject(),
             _ => {
                 if let Some(child) = row.child() {
                     self.in_game_menu = Some(child);
                 }
             }
+        }
+    }
+
+    /// The seated or playing cart, and its platform.
+    fn cart_in_slot(&self) -> Option<(Platform, String)> {
+        let stem = match &self.phase {
+            Phase::Playing { cart } | Phase::Inserting { cart, .. } => cart.clone(),
+            Phase::Polaroids { cart } => cart.clone(),
+            _ => return None,
+        };
+        Some((self.playing_platform(), stem))
+    }
+
+    /// Read the cheats of the game in the slot, unless they are read already.
+    fn load_cheats(&mut self) {
+        let Some(key) = self.cart_in_slot() else {
+            return;
+        };
+        if self.cheats_for.as_ref() == Some(&key) {
+            return;
+        }
+        self.cheats = match self.root() {
+            Some(root) => crate::cheats::load(root, key.0, &key.1),
+            None => Vec::new(),
+        };
+        self.cheats_for = Some(key);
+        self.cheats_rev += 1;
+    }
+
+    /// The codes to hand a freshly loaded core: the cheats this game left on.
+    pub fn start_cheats(&mut self) -> Vec<String> {
+        self.load_cheats();
+        crate::cheats::codes(&self.cheats)
+    }
+
+    pub fn take_cheats(&mut self) -> Option<Vec<String>> {
+        self.cheats_pending.take()
+    }
+
+    /// Whether the robber shows: a cheat is on and the Cheat Icon setting allows it.
+    fn cheat_icon_shown(&self) -> bool {
+        self.state.cheat_icon && self.cheats_on()
+    }
+
+    pub fn cheats_on(&self) -> bool {
+        self.cheats_for.is_some()
+            && self.cart_in_slot() == self.cheats_for
+            && self.cheats.iter().any(|c| c.on)
+    }
+
+    pub fn cheats_rev(&self) -> u64 {
+        self.cheats_rev
+    }
+
+    pub fn cheat_names(&self) -> Vec<String> {
+        self.cheats.iter().map(|c| c.name.clone()).collect()
+    }
+
+    pub fn cheat_counts(&self) -> (usize, usize) {
+        (self.cheats.iter().filter(|c| c.on).count(), self.cheats.len())
+    }
+
+    pub fn cheat_platform(&self) -> Platform {
+        self.cheats_for.as_ref().map_or(self.playing_platform(), |k| k.0)
+    }
+
+    pub fn set_cheat_faces(&mut self, faces: slot_ui::CheatFaces) {
+        self.cheat_faces = Some(faces);
+    }
+
+    pub fn cheat_faces_mut(&mut self) -> Option<&mut slot_ui::CheatFaces> {
+        self.cheat_faces.as_mut()
+    }
+
+    pub fn set_cheat_badges(&mut self, badges: [(TexId, u32, u32); 2]) {
+        self.cheat_badges = Some(badges);
+    }
+
+    pub fn cheat_page_open(&self) -> bool {
+        self.cheat_page.is_some()
+    }
+
+    fn open_cheats(&mut self) {
+        self.load_cheats();
+        self.cheat_page = Some((0, 0));
+    }
+
+    fn cheats_changed(&mut self) {
+        if let Some((platform, stem)) = self.cheats_for.clone() {
+            if let Some(root) = self.root() {
+                crate::cheats::save(root, platform, &stem, &self.cheats);
+            }
+        }
+        self.cheats_pending = Some(crate::cheats::codes(&self.cheats));
+    }
+
+    fn cheat_page_input(&mut self, action: Action) {
+        let Some((sel, first)) = self.cheat_page else {
+            return;
+        };
+        let n = self.cheats.len();
+        match action {
+            Action::GbaDown(Btn::Up) if n > 0 => {
+                let sel = if sel == 0 { n - 1 } else { sel - 1 };
+                self.cheat_page = Some((sel, slot_ui::first_shown(sel, n, first)));
+            }
+            Action::GbaDown(Btn::Down) if n > 0 => {
+                let sel = if sel + 1 >= n { 0 } else { sel + 1 };
+                self.cheat_page = Some((sel, slot_ui::first_shown(sel, n, first)));
+            }
+            Action::GbaDown(Btn::A) if sel < n => {
+                self.cheats[sel].on = !self.cheats[sel].on;
+                self.cheats_changed();
+            }
+            Action::GbaDown(Btn::Y) if self.cheats.iter().any(|c| c.on) => {
+                for c in &mut self.cheats {
+                    c.on = false;
+                }
+                self.cheats_changed();
+            }
+            Action::GbaDown(Btn::B) => self.cheat_page = None,
+            Action::QuickMenu => {
+                self.cheat_page = None;
+                self.tap_in_game_menu(None);
+            }
+            _ => {}
         }
     }
 
@@ -2164,6 +2351,7 @@ impl App {
             | QuickRow::GbPalettes
             | QuickRow::RunAhead
             | QuickRow::Rumble
+            | QuickRow::CheatIcon
             | QuickRow::Theme
             | QuickRow::Recents
             | QuickRow::FavoriteMark
@@ -2172,6 +2360,7 @@ impl App {
             | QuickRow::WallpaperTint
             | QuickRow::Resume
             | QuickRow::States
+            | QuickRow::Cheats
             | QuickRow::Settings
             | QuickRow::ExitGame
             | QuickRow::PlayScreen
@@ -2340,6 +2529,7 @@ impl App {
                 s.shader_gbc = to;
             }
             QuickRow::Rumble => s.rumble = !s.rumble,
+            QuickRow::CheatIcon => s.cheat_icon = !s.cheat_icon,
             QuickRow::EjectSave => s.eject_save = !s.eject_save,
             QuickRow::Turbo => s.turbo = !s.turbo,
             QuickRow::Rewind => s.rewind = !s.rewind,
@@ -2362,6 +2552,7 @@ impl App {
             | QuickRow::General
             | QuickRow::Resume
             | QuickRow::States
+            | QuickRow::Cheats
             | QuickRow::Settings
             | QuickRow::ExitGame
             | QuickRow::PlayScreen
@@ -3164,6 +3355,7 @@ impl App {
                 over_game: false,
                 canvas: self.canvas(),
                 ink: self.menu_ink(),
+                first: self.menu_first(*row, self.hidden_rows()),
             }
             .draw(out),
             Phase::Shelf => {
@@ -3223,8 +3415,22 @@ impl App {
                 return;
             }
             Phase::About => {
-                slot_ui::draw_menu_ground(self.canvas(), self.menu_ground(), self.menu_ink(), out);
-                draw_sticker(self.canvas(), self.sticker_face, out);
+                slot_ui::draw_about(self.canvas(), self.sticker_face, out);
+                if let Some(back) = self.buttons_faces.as_ref().map(|f| [f.legend[1]]) {
+                    let ink = self.menu_ink();
+                    for (tex, w, x) in
+                        slot_ui::centred_hints(self.canvas(), &back, slot_ui::LEGEND_GAP)
+                    {
+                        out.push(Draw::Tint {
+                            x,
+                            y: slot_ui::MENU_LEGEND_Y,
+                            w: w as f32,
+                            h: slot_ui::HINT_H as f32,
+                            tex,
+                            colour: ink.text,
+                        });
+                    }
+                }
                 return;
             }
             Phase::Inserting { cart, resumed, .. } => {
@@ -3278,7 +3484,20 @@ impl App {
                 return;
             }
         }
-        if let (Some(row), Phase::Playing { .. }, true) =
+        let page = self.cheat_page.filter(|_| self.in_game_menu_shown().is_some());
+        if let (Some((sel, first)), Phase::Playing { .. }, true) =
+            (page, &self.phase, self.screen >= 1.0)
+        {
+            let on: Vec<bool> = self.cheats.iter().map(|c| c.on).collect();
+            slot_ui::CheatPage {
+                sel,
+                first,
+                on: &on,
+                faces: self.cheat_faces.as_ref(),
+                canvas: self.canvas(),
+            }
+            .draw(out);
+        } else if let (Some(row), Phase::Playing { .. }, true) =
             (self.in_game_menu_shown(), &self.phase, self.screen >= 1.0)
         {
             QuickMenu {
@@ -3297,9 +3516,12 @@ impl App {
                 over_game: true,
                 canvas: self.canvas(),
                 ink: slot_ui::theme::DARK,
+                first: self.menu_first(row, self.in_game_hidden()),
             }
             .draw(out);
-            if row.page() != QuickRow::PLAY_SCREEN {
+            // The settings pages fill the screen; only the centred menu leaves room for the
+            // battery and clock.
+            if row.centred() {
                 slot_ui::draw_corners(
                     self.canvas(),
                     self.battery,
@@ -3308,6 +3530,20 @@ impl App {
                     self.shelf_clock,
                     out,
                 );
+                if let (true, Some([menu, _])) = (self.cheat_icon_shown(), self.cheat_badges) {
+                    let x = slot_ui::corner_gauge_end(self.battery, self.battery_percent) + MENU_BADGE_GAP;
+                    slot_ui::draw_cheat_badge_in_menu(x, menu, out);
+                }
+            }
+        }
+        if let (Phase::Playing { .. }, None, true, Some([_, game])) = (
+            &self.phase,
+            self.in_game_menu_shown(),
+            self.cheat_icon_shown(),
+            self.cheat_badges,
+        ) {
+            if self.screen >= 1.0 && self.game_menu.is_none() {
+                slot_ui::draw_cheat_badge_in_game(self.canvas(), game, out);
             }
         }
         if let Some(picker) = self.core_picker_shown() {
@@ -3485,8 +3721,19 @@ impl App {
             over_game: false,
             canvas: self.canvas(),
             ink: self.menu_ink(),
+            first: 0,
         }
         .draw(out);
+    }
+
+    /// The first row to show for `row`'s page, remembering it for the next frame.
+    fn menu_first(&self, row: QuickRow, hidden: &[QuickRow]) -> usize {
+        let page = row.page()[0].index();
+        let (last_page, prev) = self.menu_scroll.get();
+        let prev = if last_page == page { prev } else { 0 };
+        let first = slot_ui::quick_first(row, hidden, prev);
+        self.menu_scroll.set((page, first));
+        first
     }
 
     fn core_picker_shown(&self) -> Option<CorePicker> {
@@ -4027,7 +4274,12 @@ impl App {
             return;
         };
         self.phase = match cart.take() {
-            Some(cart) => Phase::Playing { cart },
+            Some(cart) => {
+                // Waking straight back into the game: no power-on animation, the screen is
+                // simply on again.
+                self.screen = 1.0;
+                Phase::Playing { cart }
+            }
             None => Phase::Shelf,
         };
         if let Some(power) = &mut self.power {
