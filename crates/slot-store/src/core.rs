@@ -10,15 +10,17 @@ pub enum Core {
     #[default]
     Mgba,
     Gpsp,
+    Gambatte,
 }
 
 impl Core {
-    pub const ALL: [Core; 2] = [Core::Mgba, Core::Gpsp];
+    pub const ALL: [Core; 3] = [Core::Mgba, Core::Gpsp, Core::Gambatte];
 
     pub fn as_str(&self) -> &'static str {
         match self {
             Core::Mgba => "mgba",
             Core::Gpsp => "gpsp",
+            Core::Gambatte => "gambatte",
         }
     }
 
@@ -30,6 +32,7 @@ impl Core {
         match self {
             Core::Mgba => "mGBA",
             Core::Gpsp => "gpSP",
+            Core::Gambatte => "Gambatte",
         }
     }
 
@@ -37,6 +40,7 @@ impl Core {
         match s.trim().to_ascii_lowercase().as_str() {
             "mgba" => Some(Core::Mgba),
             "gpsp" => Some(Core::Gpsp),
+            "gambatte" => Some(Core::Gambatte),
             _ => None,
         }
     }
@@ -45,12 +49,14 @@ impl Core {
         match self {
             Core::Mgba => true,
             Core::Gpsp => platform == Platform::Gba,
+            Core::Gambatte => matches!(platform, Platform::Gb | Platform::Gbc),
         }
     }
 
     pub fn default_for(platform: Platform) -> Core {
         match platform {
-            Platform::Gba | Platform::Gb | Platform::Gbc => Core::Mgba,
+            Platform::Gba => Core::Mgba,
+            Platform::Gb | Platform::Gbc => Core::Gambatte,
         }
     }
 }
@@ -70,6 +76,9 @@ pub fn core_for(root: &Path, stem: &str) -> Core {
 }
 
 pub fn core_for_platform(root: &Path, stem: &str, platform: Platform) -> Core {
+    if matches!(platform, Platform::Gb | Platform::Gbc) {
+        return Core::Gambatte;
+    }
     crate::ini::value(root, SELECTED_CORE_FILE, stem)
         .as_deref()
         .and_then(Core::parse)

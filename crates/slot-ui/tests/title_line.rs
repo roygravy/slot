@@ -34,8 +34,14 @@ fn a_long_title_stays_inside_the_screen() {
 fn the_title_sits_on_the_rack_names_baseline_and_grows_upward() {
     let canvas = Canvas { w: 640.0, h: 480.0 };
     let mut out = Vec::new();
-    draw_slot_title(canvas, Printed::new(TexId::from_raw(7), 300), 1.0, &mut out);
-    let Some(Draw::Tex { x, y, w, h, .. }) = out.first() else {
+    draw_slot_title(
+        canvas,
+        Printed::new(TexId::from_raw(7), 300),
+        1.0,
+        [1.0; 4],
+        &mut out,
+    );
+    let Some(Draw::Tint { x, y, w, h, .. }) = out.first() else {
         panic!("no title drawn");
     };
     assert_eq!(*h, TITLE_LINE_H as f32);

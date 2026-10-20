@@ -1,5 +1,5 @@
 use slot_gfx::{Canvas, Draw, TexId, OUT_H};
-use slot_store::{Cart, Platform};
+use slot_store::{Cart, FavoriteMark, Platform};
 use std::sync::OnceLock;
 
 use crate::board::{board_in, Placed};
@@ -11,6 +11,8 @@ use crate::silhouette::GbShell;
 use crate::slot_chrome::{draw_empty_slot, MOUTH_H};
 
 const SIDE_SCALE: f32 = 0.78;
+/// How large the carts stand on the carousel, the middle one included.
+const CAROUSEL: f32 = 0.88;
 const SIDE_ALPHA: f32 = 1.0;
 
 pub fn rest_y(h: f32) -> f32 {
@@ -34,8 +36,16 @@ const SLOTS: i32 = 3;
 
 pub const REPEAT_DELAY_MS: Millis = 400;
 
-pub const STAR_SCALE: u32 = 2;
-pub const STAR_INK: [u8; 3] = [0xf6, 0xc3, 0x2c];
+pub const GLOW_MARGIN: u32 = 130;
+/// A favourite stands this much higher than the carts beside it.
+const LIFT: f32 = 10.0;
+/// How far a cart's drop shadow spreads, and how far below the cart it falls.
+pub const DROP_MARGIN: u32 = 22;
+const DROP_FALL: f32 = 10.0;
+const DROP_ALPHA: f32 = 0.22;
+pub const GLOW_GOLD: [u8; 3] = [0xff, 0xdc, 0x9a];
+pub const GLOW_WHITE: [u8; 3] = [0xff, 0xff, 0xff];
+pub const STAR_PX: u32 = 22;
 const STAR_INSET: f32 = 5.0;
 const REPEAT_MS: [Millis; 4] = [110, 85, 65, 50];
 
@@ -58,7 +68,14 @@ pub struct Shelf {
     shells: Vec<OnceLock<Option<GbShell>>>,
     clears: Vec<OnceLock<bool>>,
     starred: Vec<bool>,
+    glows: [[Option<TexId>; 3]; 2],
     star: Option<(TexId, f32, f32)>,
+    mark: FavoriteMark,
+    /// One still backlight behind the middle of the shelf, for the Favorites shelf.
+    spotlight: bool,
+    drops: [Option<TexId>; 3],
+    /// Light grounds take the glow as a tint; dark ones take it as added light.
+    light_ground: bool,
     ride: f32,
     vel: f32,
     held: Option<(i32, Millis, usize)>,
@@ -72,7 +89,12 @@ impl Shelf {
             faces: vec![None; carts.len()],
             interiors: vec![None; carts.len()],
             starred: vec![false; carts.len()],
+            glows: [[None; 3]; 2],
             star: None,
+            mark: FavoriteMark::default(),
+            spotlight: false,
+            drops: [None; 3],
+            light_ground: false,
             carts,
             index: 0,
             scroll: 0.0,
@@ -127,8 +149,49 @@ impl Shelf {
         self.vel = 0.0;
     }
 
+    pub fn set_glow(&mut self, style: FavoriteMark, shell: Option<GbShell>, face: TexId) {
+        let row = (style == FavoriteMark::WhiteGlow) as usize;
+        let col = match shell {
+            None => 0,
+            Some(GbShell::Notched) => 1,
+            Some(GbShell::Rounded) => 2,
+        };
+        self.glows[row][col] = Some(face);
+    }
+
     pub fn set_star(&mut self, face: TexId, w: u32, h: u32) {
         self.star = Some((face, w as f32, h as f32));
+    }
+
+    pub fn set_drop(&mut self, shell: Option<GbShell>, face: TexId) {
+        let col = match shell {
+            None => 0,
+            Some(GbShell::Notched) => 1,
+            Some(GbShell::Rounded) => 2,
+        };
+        self.drops[col] = Some(face);
+    }
+
+    pub fn set_light_ground(&mut self, light: bool) {
+        self.light_ground = light;
+    }
+
+    pub fn set_spotlight(&mut self, on: bool) {
+        self.spotlight = on;
+    }
+
+    fn glow_for(&self, i: usize) -> Option<TexId> {
+        let row = (self.mark == FavoriteMark::WhiteGlow) as usize;
+        let col = match self.shell(i) {
+            None => 0,
+            Some(GbShell::Notched) => 1,
+            Some(GbShell::Rounded) => 2,
+        };
+        self.glows[row][col]
+    }
+
+    pub fn set_mark(&mut self, mark: FavoriteMark) {
+        self.mark = mark;
     }
 
     pub fn mark_starred(&mut self, starred: impl Fn(&Cart) -> bool) {
@@ -386,7 +449,7 @@ impl Shelf {
         let ((wa, gba_a), (wb, gba_b)) = (self.slot_width(a), self.slot_width(a + 1));
         let (sa, sb) = (shrink(a as f32 - u), shrink((a + 1) as f32 - u));
         let gap_of = if gba_a || gba_b { CART_W as f32 } else { wa };
-        wa * sa / 2.0 + gap_of * (1.0 - (sa + sb) / 2.0) + wb * sb / 2.0
+        wa * sa / 2.0 + gap_of * (CAROUSEL - (sa + sb) / 2.0) + wb * sb / 2.0
     }
 
     fn centre(&self, canvas: Canvas, slot: i32) -> f32 {
@@ -454,7 +517,16 @@ impl Shelf {
                 continue;
             }
             let x = x + shake;
-            let y = foot_y(ch as f32) - h;
+            // A favourite stands raised; on the Favorites shelf, the cart under the light does.
+            let lift = if self.starred.get(i) == Some(&true) {
+                LIFT
+            } else if self.spotlight {
+                LIFT * (1.0 - t)
+            } else {
+                0.0
+            } * scale;
+            let ground = foot_y(ch as f32) - h;
+            let y = ground - lift;
             if alpha < 1.0 {
                 let backing = match self.shell(i) {
                     None => self.shadow,
@@ -471,6 +543,26 @@ impl Shelf {
                         alpha: recede_alpha(alpha),
                     });
                 }
+            }
+            let col = match self.shell(i) {
+                None => 0,
+                Some(GbShell::Notched) => 1,
+                Some(GbShell::Rounded) => 2,
+            };
+            if let Some(tex) = self.drops[col] {
+                let m = DROP_MARGIN as f32 * scale;
+                out.push(Draw::Tex {
+                    x: x - m,
+                    y: ground - m + DROP_FALL * scale + lift * 0.5,
+                    w: w + 2.0 * m,
+                    h: h + 2.0 * m,
+                    tex,
+                    alpha: DROP_ALPHA
+                        * alpha
+                        * dim
+                        * (1.0 + lift / LIFT * 0.3)
+                        * if self.light_ground { 0.55 } else { 1.0 },
+                });
             }
             if self.clear(i) && self.face(i).is_some() {
                 let board = match self.shell(i) {
@@ -538,7 +630,23 @@ impl Shelf {
                     }
                 }
             });
-            if let (Some(true), Some((tex, sw, sh))) = (self.starred.get(i), self.star) {
+            // The spotlight falls on the cart: added over it, after its face.
+            if self.starred.get(i) == Some(&true) && self.mark != FavoriteMark::Star {
+                if let Some(tex) = self.glow_for(i) {
+                    let m = GLOW_MARGIN as f32 * scale;
+                    out.push(Draw::Light {
+                        x: x - m,
+                        y: y - m,
+                        w: w + 2.0 * m,
+                        h: h + 2.0 * m,
+                        tex,
+                        alpha: alpha * dim,
+                    });
+                }
+            }
+            if let (FavoriteMark::Star, Some(true), Some((tex, sw, sh))) =
+                (self.mark, self.starred.get(i).copied(), self.star)
+            {
                 let (lx, ly, lw, _) = label_rect(self.shell(i));
                 out.push(Draw::Tex {
                     x: (x + (lx + lw) * w - sw - STAR_INSET).round(),
@@ -550,11 +658,30 @@ impl Shelf {
                 });
             }
         }
+        if self.spotlight && self.mark != FavoriteMark::Star && !self.carts.is_empty() {
+            // Still, over the middle: the carts slide through the light rather than carry it.
+            let i = self.index.min(self.carts.len() - 1);
+            if let Some(tex) = self.glow_for(i) {
+                let (cw, ch) = cart_box(self.carts[i].platform);
+                let (w, h) = (cw as f32 * CAROUSEL, ch as f32 * CAROUSEL);
+                let m = GLOW_MARGIN as f32 * CAROUSEL;
+                let x = canvas.w / 2.0 - w / 2.0;
+                let y = foot_y(ch as f32) - h - LIFT * CAROUSEL;
+                out.push(Draw::Light {
+                    x: x - m,
+                    y: y - m,
+                    w: w + 2.0 * m,
+                    h: h + 2.0 * m,
+                    tex,
+                    alpha: (1.0 - recede) * dim,
+                });
+            }
+        }
     }
 }
 
 fn shrink(offset: f32) -> f32 {
-    1.0 + (SIDE_SCALE - 1.0) * offset.abs().min(1.0)
+    CAROUSEL * (1.0 + (SIDE_SCALE - 1.0) * offset.abs().min(1.0))
 }
 
 fn recede_alpha(face_alpha: f32) -> f32 {

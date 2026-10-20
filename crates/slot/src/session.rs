@@ -9,6 +9,45 @@ use slot_ui::FfState;
 pub const RUMBLE_MIN_MS: Millis = 100;
 pub const RUMBLE_MAX_MS: Millis = 150;
 
+fn gambatte_boot_rom_status(root: &std::path::Path, platform: Platform) -> Option<String> {
+    let (name, expected_size, expected_crc) = match platform {
+        Platform::Gb => ("gb_bios.bin", 0x100usize, 0x59C8_598E),
+        Platform::Gbc => ("gbc_bios.bin", 0x900usize, 0x4188_4E46),
+        Platform::Gba => return None,
+    };
+    let path = root.join("BIOS").join(name);
+    let bytes = match std::fs::read(&path) {
+        Ok(bytes) => bytes,
+        Err(_) => return Some(format!("missing at {}", path.display())),
+    };
+    if bytes.len() != expected_size {
+        return Some(format!(
+            "wrong size ({} bytes; expected {expected_size}) at {}",
+            bytes.len(),
+            path.display()
+        ));
+    }
+    let checksum = crc32(&bytes);
+    if checksum != expected_crc {
+        return Some(format!(
+            "checksum mismatch (CRC32 {checksum:08X}; expected {expected_crc:08X}) at {}",
+            path.display()
+        ));
+    }
+    Some(format!("verified official boot ROM at {}", path.display()))
+}
+
+fn crc32(bytes: &[u8]) -> u32 {
+    let mut crc = !0u32;
+    for &byte in bytes {
+        crc ^= u32::from(byte);
+        for _ in 0..8 {
+            crc = (crc >> 1) ^ (0xEDB8_8320 & 0u32.wrapping_sub(crc & 1));
+        }
+    }
+    !crc
+}
+
 use crate::app::{App, Phase};
 use crate::audio::{opened_sink, AudioSink, Ring, Sfx};
 use crate::core::open_core;
@@ -249,8 +288,10 @@ impl Session {
         let mut recoloured = false;
         if let Some(p) = self.app.take_gb_palette() {
             if let Some(emu) = &self.emu {
-                emu.set_option("mgba_gb_colors", p.core_name());
-                recoloured = true;
+                for (key, value) in crate::core::gb_palette_options(self.app.core(), p) {
+                    emu.set_option(key, &value);
+                    recoloured = true;
+                }
             }
         }
         if let Some(on) = self.app.take_colour_correction() {
@@ -261,6 +302,13 @@ impl Session {
                     emu.set_option(key, value);
                     recoloured = true;
                 }
+            }
+        }
+        if let Some(on) = self.app.take_lcd_ghosting() {
+            let (key, value) = crate::core::lcd_ghosting_option(self.app.core(), on);
+            if let Some(emu) = &self.emu {
+                emu.set_option(key, value);
+                recoloured = true;
             }
         }
         if recoloured && self.held() && !self.app.link_active() {
@@ -475,11 +523,19 @@ impl Session {
         let resume = (!self.app.starting_clean())
             .then(|| persist::read_resume(&self.root, platform, core, stem))
             .flatten();
+        if core == slot_store::Core::Gambatte {
+            if let Some(status) = gambatte_boot_rom_status(&self.root, platform) {
+                eprintln!("slot: Gambatte boot ROM: {status}");
+                if resume.is_some() {
+                    eprintln!("slot: Gambatte is resuming a saved state; boot logo is skipped");
+                }
+            }
+        }
         launch("resume state read");
         let player = self.app.link_player();
         let palette = crate::core::palette_for(self.app.gb_palette(), platform, &rom, player);
         self.app.set_palette_live(palette.is_some());
-        let opened = open_core(
+        let mut opened = open_core(
             &self.root,
             core,
             platform,
@@ -488,6 +544,9 @@ impl Session {
             palette,
             player,
         );
+        let (ghosting_key, ghosting_value) =
+            crate::core::lcd_ghosting_option(core, self.app.lcd_ghosting());
+        opened.core.set_option(ghosting_key, ghosting_value);
         self.app.set_named_core(opened.named);
         launch("core opened");
         let sav = persist::read_sav(&self.root, platform, stem);

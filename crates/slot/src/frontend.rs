@@ -3,6 +3,7 @@ use std::time::{Duration, Instant};
 use slot_gfx::{Compositor, Draw, ScreenEffect, TexId, OUT_H, OUT_W};
 
 const PAPER: &[u8] = include_bytes!("../assets/paper.png");
+const GBA_LCD_OVERLAY: &[u8] = include_bytes!("../assets/gba_lcd_overlay.png");
 use slot_input::{InputSource, Millis};
 use slot_power::{Platform, Power};
 use slot_store::{format_stamp, BezelPick, Platform as Console};
@@ -28,7 +29,7 @@ use crate::link_screen::{LinkSprites, Sprite};
 use crate::link_start::{LinkFail, LinkStep};
 use crate::session::Session;
 
-const DOZE_TIMEOUT: Duration = Duration::from_secs(180);
+const DOZE_TIMEOUT: Duration = Duration::from_secs(300);
 
 const ALERT_INK: [u8; 3] = [0xf0, 0xb4, 0x3c];
 
@@ -126,7 +127,7 @@ struct Clocks {
 }
 
 struct ShelfLook {
-    slot: [[TexId; 2]; 2],
+    slot: [(TexId, TexId); 4],
     bolt: [TexId; 2],
     port: [Option<TexId>; 2],
     legend: [Vec<(TexId, u32)>; 2],
@@ -203,6 +204,22 @@ impl Frontend {
         compositor.set_paper(info.width, &buf[..info.buffer_size()]);
     }
 
+    fn upload_gba_lcd_overlay(compositor: &mut Compositor) {
+        let mut dec = png::Decoder::new(std::io::Cursor::new(GBA_LCD_OVERLAY));
+        dec.set_transformations(png::Transformations::normalize_to_color8());
+        let Ok(mut reader) = dec.read_info() else {
+            return;
+        };
+        let mut buf = vec![0u8; reader.output_buffer_size()];
+        let Ok(info) = reader.next_frame(&mut buf) else {
+            return;
+        };
+        if info.color_type != png::ColorType::Rgba || (info.width, info.height) != (OUT_W, OUT_H) {
+            return;
+        }
+        compositor.set_lcd_overlay(info.width, info.height, &buf[..info.buffer_size()]);
+    }
+
     pub fn upload_faces(&mut self, compositor: &mut Compositor) {
         self.upload_boot_faces(compositor);
         if let Some(faces) = self.ui_faces.take().and_then(|rx| rx.recv().ok()) {
@@ -212,6 +229,7 @@ impl Frontend {
 
     pub fn upload_boot_faces(&mut self, compositor: &mut Compositor) {
         Self::upload_paper(compositor);
+        Self::upload_gba_lcd_overlay(compositor);
         crate::boot_time::mark("paper");
         if self.rebuild.is_none() {
             self.cart_faces.sync(self.session.app_mut(), compositor);
@@ -242,9 +260,26 @@ impl Frontend {
         self.session.app_mut().set_legend_faces(legend);
         let hint = set_clock_hint_face();
         self.clocks.hint = Some(compositor.create_texture(hint.w, hint.h, &hint.rgba));
-        let star = slot_ui::star_face(slot_ui::STAR_SCALE, slot_ui::STAR_INK);
-        let id = compositor.create_texture_nearest(star.w, star.h, &star.rgba);
-        self.session.app_mut().set_star_face(id, star.w, star.h);
+        let drops = [Console::Gba, Console::Gb, Console::Gbc].map(|p| {
+            let (cw, ch) = slot_ui::cart_box(p);
+            let f = slot_ui::drop_shadow_face(cw, ch, slot_ui::DROP_MARGIN);
+            compositor.create_texture(f.w, f.h, &f.rgba)
+        });
+        self.session.app_mut().set_drop_shadows(drops);
+        let mut halos = |colour: [u8; 3], peak: f32| {
+            [Console::Gba, Console::Gb, Console::Gbc].map(|p| {
+                let (cw, ch) = slot_ui::cart_box(p);
+                let halo = slot_ui::glow_face(cw, ch, slot_ui::GLOW_MARGIN, colour, peak);
+                compositor.create_texture(halo.w, halo.h, &halo.rgba)
+            })
+        };
+        let gold = halos(slot_ui::GLOW_GOLD, 0.38);
+        let white = halos(slot_ui::GLOW_GOLD, 0.38);
+        let star = slot_ui::star_mark_face(slot_ui::STAR_PX);
+        let star_id = compositor.create_texture(star.w, star.h, &star.rgba);
+        self.session
+            .app_mut()
+            .set_mark_faces(gold, white, (star_id, star.w, star.h));
         let shadow = cart_shadow();
         let id = compositor.create_texture(shadow.w, shadow.h, &shadow.rgba);
         self.session.app_mut().set_cart_shadow(id);
@@ -267,8 +302,16 @@ impl Frontend {
             let mut upload =
                 |bytes: &[u8]| compositor.create_texture(slot_ui::SLOT_W, slot_ui::SLOT_H, bytes);
             [
-                [upload(slot_back()), upload(slot_front())],
-                [upload(slot_back_light()), upload(slot_front_light())],
+                (upload(slot_back()), upload(slot_front())),
+                (upload(slot_back_light()), upload(slot_front_light())),
+                (
+                    upload(slot_ui::slot_back_gb(false)),
+                    upload(slot_ui::slot_front_gb(false)),
+                ),
+                (
+                    upload(slot_ui::slot_back_gb(true)),
+                    upload(slot_ui::slot_front_gb(true)),
+                ),
             ]
         };
         let dark_bolt = icon_face(Icon::Charging, BOLT_PX, footer_ink(false));
@@ -295,9 +338,9 @@ impl Frontend {
         };
         let id = compositor.create_texture(OUT_W, OUT_H, rgba);
         self.session.app_mut().set_ground(id);
-        if let Some(rgba) = slot_ui::blur_background() {
+        if let Some(rgba) = slot_ui::light_background() {
             let id = compositor.create_texture(OUT_W, OUT_H, rgba);
-            self.session.app_mut().set_blur(id);
+            self.session.app_mut().set_ground_light(id);
         }
     }
 
@@ -309,7 +352,7 @@ impl Frontend {
             let port_ready = look.port[i].is_some();
             (
                 look.applied == Some((light, legend_ready, port_ready)),
-                look.slot[i],
+                look.slot,
                 look.bolt[i],
                 look.bolt[0],
                 look.port[i],
@@ -325,7 +368,7 @@ impl Frontend {
         if done {
             return;
         }
-        self.session.app_mut().set_slot_faces(slot[0], slot[1]);
+        self.session.app_mut().set_slot_sets(slot);
         self.session.app_mut().set_bolt_face(bolt);
         self.session.app_mut().set_hud_bolt_face(hud_bolt);
         if let Some(tex) = port {
@@ -377,6 +420,18 @@ impl Frontend {
             .map(|v| v.map(&mut up))
             .collect();
         let carets = faces.quick_carets.map(&mut up);
+        let switches = faces.quick_switches.map(&mut up);
+        let button_tabs = faces.button_tabs.into_iter().map(&mut up).collect();
+        let button_bodies = faces.button_bodies.into_iter().map(&mut up).collect();
+        let button_legend = faces.button_legend.map(|f| {
+            let (tex, w, _) = up(f);
+            (tex, w)
+        });
+        let help = faces
+            .quick_help
+            .into_iter()
+            .map(|f| f.map(&mut up))
+            .collect();
         let legend = faces.quick_legend.map(|f| {
             let (tex, w, _) = up(f);
             (tex, w)
@@ -418,6 +473,13 @@ impl Frontend {
             values,
             carets,
             legend,
+            switches,
+            help,
+        });
+        app.set_buttons_faces(slot_ui::ButtonsFaces {
+            tabs: button_tabs,
+            bodies: button_bodies,
+            legend: button_legend,
         });
         app.set_core_part_faces(sockets, chips, blank, shadow);
         app.set_core_legend_faces(core_legend);
@@ -494,12 +556,25 @@ impl Frontend {
     pub fn compose(&mut self, compositor: &mut Compositor) {
         compositor.set_blue_light(self.session.app().blue_light());
         compositor.set_picture(self.session.app().picture_rect());
+        let platform = self.session.app().playing_platform();
+        let gb = platform == slot_store::Platform::Gb;
+        let gbc = platform == slot_store::Platform::Gbc;
+        compositor.set_picture_appearance(gb, if gb { 0.03 } else { 0.0 });
+        compositor.set_grid_opacity(if gb {
+            0.50
+        } else if gbc {
+            0.20
+        } else {
+            0.30
+        });
+        compositor.set_pixel_transparency(self.session.app().pixel_transparency());
         compositor.set_screen_effect(match self.session.app().screen_shader() {
             slot_store::Shader::Off => ScreenEffect::None,
             slot_store::Shader::Lcd3x => ScreenEffect::Lcd3x,
             slot_store::Shader::Grid => ScreenEffect::Grid,
             slot_store::Shader::Dot => ScreenEffect::Dot,
             slot_store::Shader::Simpletex => ScreenEffect::Simpletex,
+            slot_store::Shader::GbaLcd => ScreenEffect::GbaLcd,
         });
         compositor.set_shake(self.session.app().screen_shake());
         compositor.set_screen_power(self.session.app().screen_power());
@@ -746,7 +821,12 @@ struct UiFaces {
     quick_pointer: UndoFace,
     quick_values: Vec<[UndoFace; 2]>,
     quick_carets: [UndoFace; 2],
-    quick_legend: [UndoFace; 4],
+    quick_legend: [UndoFace; 5],
+    quick_switches: [UndoFace; 2],
+    quick_help: Vec<Option<UndoFace>>,
+    button_tabs: Vec<UndoFace>,
+    button_bodies: Vec<UndoFace>,
+    button_legend: [UndoFace; 2],
     sockets: Vec<CartFace>,
     chips: Vec<CartFace>,
     blank_chip: CartFace,
@@ -798,6 +878,21 @@ impl UiFaces {
                 .collect(),
             quick_carets: [false, true].map(quick_caret_face),
             quick_legend: quick_legend_faces(),
+            quick_switches: [false, true].map(slot_ui::quick_switch_face),
+            quick_help: QuickRow::ALL
+                .iter()
+                .map(|r| slot_ui::quick_help_face(*r))
+                .collect(),
+            button_tabs: (0..slot_ui::BUTTON_PAGES.len())
+                .map(slot_ui::buttons_tab_face)
+                .collect(),
+            button_bodies: (0..slot_ui::BUTTON_PAGES.len())
+                .map(slot_ui::buttons_body_face)
+                .collect(),
+            button_legend: [
+                slot_ui::tint_mask(arrows_hint_face("Page")),
+                slot_ui::tint_mask(hint_face("B", "Back")),
+            ],
             sockets: slot_store::Core::ALL
                 .iter()
                 .map(|c| socket_face(*c))

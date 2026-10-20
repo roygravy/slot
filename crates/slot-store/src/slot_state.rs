@@ -18,6 +18,9 @@ pub const FF_SPEED_DEFAULT: u8 = 6;
 pub const RUN_AHEAD_MAX: u8 = 1;
 
 pub const RECENTS_MAX: usize = 10;
+pub const AUTO_SLEEP_OPTIONS_SECS: [u16; 4] = [0, 30, 60, 300];
+pub const AUTO_SLEEP_DEFAULT_SECS: u16 = 60;
+const AUTHENTIC_LCD_PROFILE: &str = "lcd_profile=authentic-v4";
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Recent {
@@ -47,7 +50,8 @@ impl Appearance {
     pub fn parse(name: &str) -> Option<Appearance> {
         match name {
             "dark" => Some(Appearance::Dark),
-            "light" => Some(Appearance::Light),
+            // A card set to the DMG theme of a test build reads as light.
+            "light" | "dmg" => Some(Appearance::Light),
             _ => None,
         }
     }
@@ -56,6 +60,46 @@ impl Appearance {
         match self {
             Appearance::Dark => Appearance::Light,
             Appearance::Light => Appearance::Dark,
+        }
+    }
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Default)]
+pub enum FavoriteMark {
+    #[default]
+    GoldGlow,
+    WhiteGlow,
+    Star,
+}
+
+impl FavoriteMark {
+    pub const ALL: [FavoriteMark; 3] = [
+        FavoriteMark::GoldGlow,
+        FavoriteMark::WhiteGlow,
+        FavoriteMark::Star,
+    ];
+
+    pub fn key(self) -> &'static str {
+        match self {
+            FavoriteMark::GoldGlow => "gold_glow",
+            FavoriteMark::WhiteGlow => "white_glow",
+            FavoriteMark::Star => "star",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<FavoriteMark> {
+        // The white glow is gone; a card set to it gets the spotlight.
+        if value == "white_glow" {
+            return Some(FavoriteMark::GoldGlow);
+        }
+        FavoriteMark::ALL.into_iter().find(|m| m.key() == value)
+    }
+
+    /// Spotlight and Star: the white glow is no longer offered.
+    pub fn step(self, _right: bool) -> FavoriteMark {
+        match self {
+            FavoriteMark::Star => FavoriteMark::GoldGlow,
+            _ => FavoriteMark::Star,
         }
     }
 }
@@ -222,6 +266,7 @@ pub struct SlotState {
     pub appearance: Appearance,
     pub wallpaper: WallpaperPick,
     pub wallpaper_tint: WallpaperTint,
+    pub favorite_mark: FavoriteMark,
     pub show_recents: bool,
     pub show_titles: bool,
     pub bezel_gba: BezelPick,
@@ -231,6 +276,11 @@ pub struct SlotState {
     pub favorites: Vec<Recent>,
     pub shelf: Option<String>,
     pub shelf_cart: Option<Recent>,
+    pub auto_sleep_secs: u16,
+    pub pixel_transparency: bool,
+    pub lcd_ghosting: bool,
+    pub in_game_menu: bool,
+    pub remember_position: bool,
 }
 
 impl SlotState {
@@ -272,19 +322,21 @@ pub enum Shader {
     Off,
     Lcd3x,
     Grid,
+    GbaLcd,
     Dot,
     Simpletex,
 }
 
 impl Shader {
-    pub const GBA: [Shader; 4] = [Shader::Off, Shader::Lcd3x, Shader::Grid, Shader::Dot];
-    pub const GB: [Shader; 4] = [Shader::Off, Shader::Lcd3x, Shader::Grid, Shader::Simpletex];
+    pub const GBA: [Shader; 2] = [Shader::Off, Shader::GbaLcd];
+    pub const GB: [Shader; 2] = [Shader::Off, Shader::Grid];
 
     pub fn name(self) -> &'static str {
         match self {
             Shader::Off => "off",
             Shader::Lcd3x => "lcd3x",
             Shader::Grid => "grid",
+            Shader::GbaLcd => "gba_lcd",
             Shader::Dot => "dot",
             Shader::Simpletex => "simpletex",
         }
@@ -295,6 +347,7 @@ impl Shader {
             Shader::Off,
             Shader::Lcd3x,
             Shader::Grid,
+            Shader::GbaLcd,
             Shader::Dot,
             Shader::Simpletex,
         ]
@@ -329,21 +382,22 @@ impl Default for SlotState {
             rumble: true,
             ff_speed: FF_SPEED_DEFAULT,
             ff_sound: false,
-            colour_correction_gba: false,
-            colour_correction_gb: false,
-            colour_correction_gbc: false,
-            shader_gba: Shader::Grid,
-            shader_gb: Shader::Simpletex,
-            shader_gbc: Shader::Simpletex,
+            colour_correction_gba: true,
+            colour_correction_gb: true,
+            colour_correction_gbc: true,
+            shader_gba: Shader::GbaLcd,
+            shader_gb: Shader::Grid,
+            shader_gbc: Shader::Grid,
             eject_save: true,
             turbo: true,
             rewind: true,
             runahead: 0,
-            gb_palettes: false,
+            gb_palettes: true,
             gb_palette: GbPalette::DEFAULT,
             appearance: Appearance::Dark,
             wallpaper: WallpaperPick::Default,
             wallpaper_tint: WallpaperTint::Off,
+            favorite_mark: FavoriteMark::GoldGlow,
             show_recents: false,
             show_titles: false,
             bezel_gba: BezelPick::Ags102,
@@ -353,6 +407,11 @@ impl Default for SlotState {
             favorites: Vec::new(),
             shelf: None,
             shelf_cart: None,
+            auto_sleep_secs: AUTO_SLEEP_DEFAULT_SECS,
+            pixel_transparency: true,
+            lcd_ghosting: true,
+            in_game_menu: false,
+            remember_position: false,
         }
     }
 }
@@ -374,6 +433,28 @@ pub fn read_slot_state(root: &Path) -> SlotState {
         .and_then(|b| String::from_utf8(b).ok())
         .and_then(|s| parse(&s))
         .unwrap_or_default();
+    let text = std::fs::read_to_string(state_path(root)).unwrap_or_default();
+    if !text
+        .lines()
+        .any(|line| line.trim() == AUTHENTIC_LCD_PROFILE)
+    {
+        let had_display_profile = text
+            .lines()
+            .any(|line| line.trim().starts_with("lcd_profile="));
+        if !had_display_profile {
+            s.colour_correction_gba = true;
+            s.colour_correction_gb = true;
+            s.colour_correction_gbc = true;
+            s.shader_gba = Shader::GbaLcd;
+            s.shader_gb = Shader::Grid;
+            s.shader_gbc = Shader::Grid;
+            s.gb_palettes = true;
+            if s.auto_sleep_secs == 0 {
+                s.auto_sleep_secs = AUTO_SLEEP_DEFAULT_SECS;
+            }
+        }
+        let _ = write_slot_state(root, &s);
+    }
     s.recents = read_list(root, RECENTS_FILE);
     s.recents.truncate(RECENTS_MAX);
     s.favorites = read_list(root, FAVORITES_FILE);
@@ -438,6 +519,18 @@ pub fn write_slot_state(root: &Path, s: &SlotState) -> std::io::Result<()> {
     ));
     text.push_str(&format!("shader_gbc={}\n", s.shader_gbc.name()));
     text.push_str(&format!("wallpaper_tint={}\n", s.wallpaper_tint.key()));
+    text.push_str(&format!("favorite_mark={}\n", s.favorite_mark.key()));
+    text.push_str(&format!("auto_sleep_secs={}\n", s.auto_sleep_secs));
+    text.push_str(&format!(
+        "pixel_transparency={}\n",
+        s.pixel_transparency as u8
+    ));
+    text.push_str(&format!("lcd_ghosting={}\n", s.lcd_ghosting as u8));
+    text.push_str(&format!("in_game_menu={}\n", s.in_game_menu as u8));
+    text.push_str(&format!(
+        "remember_position={}\n",
+        s.remember_position as u8
+    ));
     text.push_str(&format!("show_recents={}\n", s.show_recents as u8));
     text.push_str(&format!("show_titles={}\n", s.show_titles as u8));
     text.push_str(&format!("bezel_gba={}\n", s.bezel_gba.key()));
@@ -452,6 +545,8 @@ pub fn write_slot_state(root: &Path, s: &SlotState) -> std::io::Result<()> {
             r.stem
         ))
     ));
+    text.push_str(AUTHENTIC_LCD_PROFILE);
+    text.push('\n');
     atomic_write(&state_path(root), text.as_bytes())?;
     write_list(root, RECENTS_FILE, &s.recents)?;
     write_list(root, FAVORITES_FILE, &s.favorites)
@@ -487,6 +582,7 @@ fn parse(text: &str) -> Option<SlotState> {
     let mut appearance = None;
     let mut wallpaper = None;
     let mut wallpaper_tint = None;
+    let mut favorite_mark = None;
     let mut show_recents = None;
     let mut show_titles = None;
     let mut bezel_gba = None;
@@ -494,6 +590,11 @@ fn parse(text: &str) -> Option<SlotState> {
     let mut bezel_gbc = None;
     let mut shelf = None;
     let mut shelf_cart = None;
+    let mut auto_sleep_secs = None;
+    let mut pixel_transparency = None;
+    let mut lcd_ghosting = None;
+    let mut in_game_menu = None;
+    let mut remember_position = None;
     for line in text.lines().filter(|l| !l.is_empty()) {
         let Some((key, value)) = line.split_once('=') else {
             continue;
@@ -526,6 +627,7 @@ fn parse(text: &str) -> Option<SlotState> {
             "appearance" => appearance = Appearance::parse(value),
             "wallpaper" => wallpaper = Some(WallpaperPick::parse(value)),
             "wallpaper_tint" => wallpaper_tint = WallpaperTint::parse(value),
+            "favorite_mark" => favorite_mark = FavoriteMark::parse(value),
             "show_recents" => show_recents = flag(value),
             "show_titles" => show_titles = flag(value),
             "bezel_gba" => bezel_gba = Some(BezelPick::parse(value)),
@@ -533,6 +635,11 @@ fn parse(text: &str) -> Option<SlotState> {
             "bezel_gbc" => bezel_gbc = Some(BezelPick::parse(value)),
             "shelf" => shelf = Some(value.to_string()).filter(|v| !v.is_empty()),
             "shelf_cart" => shelf_cart = recent_value(value),
+            "auto_sleep_secs" => auto_sleep_secs = auto_sleep_value(value),
+            "pixel_transparency" => pixel_transparency = flag(value),
+            "lcd_ghosting" => lcd_ghosting = flag(value),
+            "in_game_menu" => in_game_menu = flag(value),
+            "remember_position" => remember_position = flag(value),
             "shader_gb" => shader_gb = Shader::parse(value).filter(|s| Shader::GB.contains(s)),
             "shader_gbc" => shader_gbc = Shader::parse(value).filter(|s| Shader::GB.contains(s)),
             _ => {}
@@ -576,6 +683,7 @@ fn parse(text: &str) -> Option<SlotState> {
         appearance: appearance.unwrap_or(fallback.appearance),
         wallpaper: wallpaper.unwrap_or(fallback.wallpaper),
         wallpaper_tint: wallpaper_tint.unwrap_or(fallback.wallpaper_tint),
+        favorite_mark: favorite_mark.unwrap_or(fallback.favorite_mark),
         show_recents: show_recents.unwrap_or(fallback.show_recents),
         show_titles: show_titles.unwrap_or(fallback.show_titles),
         bezel_gba: bezel_gba.unwrap_or(fallback.bezel_gba),
@@ -585,6 +693,11 @@ fn parse(text: &str) -> Option<SlotState> {
         favorites: Vec::new(),
         shelf,
         shelf_cart,
+        auto_sleep_secs: auto_sleep_secs.unwrap_or(fallback.auto_sleep_secs),
+        pixel_transparency: pixel_transparency.unwrap_or(fallback.pixel_transparency),
+        lcd_ghosting: lcd_ghosting.unwrap_or(fallback.lcd_ghosting),
+        in_game_menu: in_game_menu.unwrap_or(fallback.in_game_menu),
+        remember_position: remember_position.unwrap_or(fallback.remember_position),
     })
 }
 
@@ -616,6 +729,13 @@ fn offset(value: &str) -> Option<i16> {
 
 fn ff_speed_value(value: &str) -> Option<u8> {
     value.parse().ok().filter(|n| FF_SPEEDS.contains(n))
+}
+
+fn auto_sleep_value(value: &str) -> Option<u16> {
+    value
+        .parse()
+        .ok()
+        .filter(|secs| AUTO_SLEEP_OPTIONS_SECS.contains(secs))
 }
 
 fn level(value: &str, max: u8) -> Option<u8> {

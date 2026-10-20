@@ -6,6 +6,9 @@ mod gl;
 mod grade;
 #[cfg(target_os = "macos")]
 mod headless;
+#[cfg(all(target_os = "linux", not(feature = "device")))]
+#[path = "headless_linux.rs"]
+mod headless;
 #[cfg(feature = "host")]
 mod host;
 mod layout;
@@ -21,12 +24,12 @@ pub use draw::{Draw, TexId};
 pub use fbdev::{egl_error, panel_mode, panel_size, FbdevSurface};
 pub use fbo::{canvas_size, Compositor, BACKDROP};
 pub use grade::{blue_light_gain, BLUE_LIGHT_MAX};
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", all(target_os = "linux", not(feature = "device"))))]
 pub use headless::HeadlessSurface;
 #[cfg(feature = "host")]
 pub use host::HostSurface;
 pub use layout::{Canvas, Layout};
 pub use lcd3x::{lcd3x_factors, lcd3x_mask, ScreenEffect};
-pub use pipeline::{SCALE, SRC_H, SRC_W, WHOLE_TEXTURE};
-pub use power::{screen_brightness, screen_scale, screen_width};
+pub use pipeline::{SRC_H, SRC_W, WHOLE_TEXTURE};
+pub use power::{screen_brightness, screen_scale, screen_width, GAME_H};
 pub use surface::{blit_rect, blit_rect_fit, fit_rect, fit_scale, GfxError, Surface, OUT_H, OUT_W};

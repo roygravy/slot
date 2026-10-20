@@ -587,7 +587,8 @@ fn a_cart_in_flight_is_not_also_left_standing_on_the_shelf() {
             Draw::Rect { w, h, .. }
             | Draw::Tex { w, h, .. }
             | Draw::Part { w, h, .. }
-            | Draw::Turned { w, h, .. } => {
+            | Draw::Turned { w, h, .. }
+            | Draw::Tint { w, h, .. } => {
                 w > 200.0
                     && w <= CART_W as f32 + 0.01
                     && (w / h - CART_W as f32 / CART_H as f32).abs() < 0.05

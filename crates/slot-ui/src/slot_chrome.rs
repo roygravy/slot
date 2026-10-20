@@ -94,7 +94,13 @@ pub struct SlotChrome<'a> {
     pub behind: [Option<TexId>; 2],
     pub slot: Option<(TexId, TexId)>,
     pub canvas: Canvas,
+    /// How much higher the cart stands once seated.
+    pub lift: f32,
 }
+
+/// The Game Boy slot seats a pak this much higher, so its top lines up with the housing's top
+/// edge.
+pub const GB_SEAT_LIFT: f32 = SEATED_Y - BAND_Y;
 
 impl SlotChrome<'_> {
     pub fn draw(&self, out: &mut Vec<Draw>) {
@@ -129,7 +135,7 @@ impl SlotChrome<'_> {
         let (w0, h0) = (cw * scale, ch * scale);
         let (sw, sh) = seated_box(self.cart.platform);
         let (sw, sh) = (sw as f32, sh as f32);
-        let (foot0, seated_foot) = (foot_y(ch), SEATED_Y + sh);
+        let (foot0, seated_foot) = (foot_y(ch), SEATED_Y + sh - self.lift);
         let catch = catch_at(foot0, seated_foot);
         let travel = travel(seat, catch);
         let k = (travel / catch).min(1.0);
@@ -233,8 +239,41 @@ fn strip(canvas: Canvas, tex: TexId, alpha: f32) -> Draw {
     }
 }
 
+/// The console's shadow on the ground just above its top edge, for depth.
+const CONSOLE_SHADOW: f32 = 16.0;
+const CONSOLE_SHADOW_ALPHA: f32 = 0.18;
+
+static LIGHT_GROUND: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// On a light wallpaper the console's shadow is lighter.
+pub fn set_light_ground(light: bool) {
+    LIGHT_GROUND.store(light, std::sync::atomic::Ordering::Relaxed);
+}
+
+fn draw_console_shadow(canvas: Canvas, alpha: f32, out: &mut Vec<Draw>) {
+    let alpha = match LIGHT_GROUND.load(std::sync::atomic::Ordering::Relaxed) {
+        true => alpha * 0.55,
+        false => alpha,
+    };
+    const STEPS: usize = 8;
+    let step = CONSOLE_SHADOW / STEPS as f32;
+    for k in 0..STEPS {
+        // Darkest against the housing, easing out to nothing.
+        let t = (k as f32 + 1.0) / STEPS as f32;
+        let a = CONSOLE_SHADOW_ALPHA * t * t / STEPS as f32 * 2.2;
+        out.push(Draw::Rect {
+            x: 0.0,
+            y: BAND_Y - CONSOLE_SHADOW + k as f32 * step,
+            w: canvas.w,
+            h: CONSOLE_SHADOW - k as f32 * step,
+            colour: [0.0, 0.0, 0.0, a * alpha],
+        });
+    }
+}
+
 fn draw_slot_back(canvas: Canvas, slot: Option<(TexId, TexId)>, alpha: f32, out: &mut Vec<Draw>) {
     if let Some((back, _)) = slot {
+        draw_console_shadow(canvas, alpha, out);
         out.push(strip(canvas, back, alpha));
         return;
     }
@@ -300,33 +339,45 @@ pub fn slot_name_y() -> f32 {
     OUT_H as f32 - MOUTH_H - HINT_H as f32 - SLOT_NAME_GAP
 }
 
-pub fn draw_slot_name(canvas: Canvas, name: Printed, alpha: f32, out: &mut Vec<Draw>) {
+pub fn draw_slot_name(
+    canvas: Canvas,
+    name: Printed,
+    alpha: f32,
+    ink: [f32; 4],
+    out: &mut Vec<Draw>,
+) {
     let (Some(tex), true) = (name.face, alpha > 0.0) else {
         return;
     };
     let (w, h) = (name.w as f32, HINT_H as f32);
-    out.push(Draw::Tex {
+    out.push(Draw::Tint {
         x: canvas.centred(w),
         y: slot_name_y(),
         w,
         h,
         tex,
-        alpha,
+        colour: [ink[0], ink[1], ink[2], ink[3] * alpha],
     });
 }
 
-pub fn draw_slot_title(canvas: Canvas, title: Printed, alpha: f32, out: &mut Vec<Draw>) {
+pub fn draw_slot_title(
+    canvas: Canvas,
+    title: Printed,
+    alpha: f32,
+    ink: [f32; 4],
+    out: &mut Vec<Draw>,
+) {
     let (Some(tex), true) = (title.face, alpha > 0.0) else {
         return;
     };
     let (w, h) = (title.w as f32, crate::plate::TITLE_LINE_H as f32);
-    out.push(Draw::Tex {
+    out.push(Draw::Tint {
         x: canvas.centred(w),
         y: slot_name_y() + HINT_H as f32 - h,
         w,
         h,
         tex,
-        alpha,
+        colour: [ink[0], ink[1], ink[2], ink[3] * alpha],
     });
 }
 

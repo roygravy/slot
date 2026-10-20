@@ -1,75 +1,135 @@
 <div align="center">
 
-<img src=".github/resources/banner.png" width="100%" alt="slot. A bespoke, Game Boy-centric frontend for the Anbernic RG SP.">
+# GRAVY
 
-<a href="LICENSE"><img src="https://img.shields.io/github/license/BrandonKowalski/slot?style=for-the-badge&labelColor=242429&color=4d4d57" height="36" alt="License"></a>
-<a href="https://github.com/BrandonKowalski/slot/stargazers"><img src="https://img.shields.io/github/stars/BrandonKowalski/slot?style=for-the-badge&labelColor=242429&color=4d4d57" height="36" alt="Stars"></a>
-<a href="https://github.com/BrandonKowalski/slot/releases"><img src="https://img.shields.io/github/downloads/BrandonKowalski/slot/total?style=for-the-badge&labelColor=242429&color=4d4d57" height="36" alt="Downloads"></a>
-<a href="https://slot-cfw.fyi"><img src="https://img.shields.io/badge/Guide-slot--cfw.fyi-4d4d57?style=for-the-badge&labelColor=242429" height="36" alt="Guide"></a>
-<a href="CHANGELOG.md"><img src="https://img.shields.io/badge/Changelog-4d4d57?style=for-the-badge&labelColor=242429" height="36" alt="Changelog"></a>
+**A Game Boy–centric frontend for the Anbernic RG35XX Plus, built on [slot](https://github.com/BrandonKowalski/slot).**
+
+Real cartridges on a shelf. A real cartridge slot. Just pick a game and push it in.
+
+<img src=".github/resources/gravy/carousel.gif" width="640" alt="Scrolling the Game Boy shelf and pushing Mud Warriors into the slot">
+
+[**Download GRAVY 1.0**](https://github.com/roygravy/slot/releases) · [Install](#install) · [What's new](#whats-new) · [Controls](#controls)
 
 </div>
 
 ---
 
-# What is slot?
+## What is GRAVY?
 
-A bespoke, Game Boy-centric frontend for the Anbernic RG SP.
+GRAVY is a custom build of [slot](https://github.com/BrandonKowalski/slot), Brandon Kowalski's bespoke Game Boy, Game Boy Color and Game Boy Advance frontend, tuned for the **Anbernic RG35XX Plus** and its 640×480 screen.
 
-Has support for GBA, GBC, and GB titles only.
+Where slot is modelled on the GBA SP, GRAVY leans into the handheld it runs on: the RG35XX Plus is a love letter to the original Game Boy, so Game Boy carts go into a Game Boy slot, the plastic looks like plastic, and every menu is written for people who just want to play.
 
-> [!IMPORTANT]
-> ROMs must be unzipped. slot does not read `.zip` or `.7z` files.
-
-A full user guide can be found at [slot-cfw.fyi](https://slot-cfw.fyi).
-
-Release notes can be found in the [changelog](CHANGELOG.md).
+It plays GB, GBC and GBA games only (unzipped ROMs), on mGBA, gpSP and Gambatte.
 
 ---
 
-# What does it look like?
+## What's new
 
-<p align="center">
-<img src=".github/resources/screenshots/carousel.gif" width="48%" alt="Scrolling the cart carousel across the Game Boy Advance, Game Boy and Game Boy Color shelves">
-<img src=".github/resources/screenshots/core-picker.gif" width="48%" alt="Flipping a cart to its circuit board to choose mGBA or gpSP">
-</p>
+### Two themes, two slots
 
-<p align="center">
-<img src=".github/resources/screenshots/link.gif" width="96.5%" alt="Two SPs racing in Mario Kart over the emulated link">
-</p>
+A **Dark** and a **Light** housing, each with its own clean wallpaper. Game Boy and Game Boy Color carts slide into a Game Boy cartridge slot; GBA carts get their own slot with the finger scoop. Both are drawn as moulded plastic, and every cart sits flush with the top of its slot.
+
+<img src=".github/resources/gravy/themes.png" width="100%" alt="The Game Boy shelf in the dark and the light theme">
+
+<img src=".github/resources/gravy/slots.png" width="100%" alt="A GBA cart and a Game Boy Color cart seated in their slots, dark and light">
+
+### Favorites that stand out
+
+Press **Y** on any cart to make it a favorite. Favorites stand a little taller on their shelf under a soft, warm spotlight, and get a shelf of their own where the light stays put in the middle as you scroll through it. Prefer something quieter? Pick **Star** instead.
+
+<img src=".github/resources/gravy/favorites.png" width="100%" alt="The Favorites shelf in dark and the GBA shelf in light">
+
+### Carts without label art
+
+No scan for a game? It still gets a proper cartridge: bare plastic with the title written on by hand in marker, dark on Game Boy carts, white on the GBA's dark shell.
+
+<img src=".github/resources/gravy/marker.png" width="100%" alt="Carts with no label art, titled in marker">
+
+### Menus anyone can use
+
+Every settings page lists its options on the left with the value on the right, flat pill switches for anything that's on or off, and a plain-English line at the bottom saying what the selected option does. The light theme gets light menus.
+
+<img src=".github/resources/gravy/menus.png" width="100%" alt="The main menu and the General page">
+<img src=".github/resources/gravy/menus2.png" width="100%" alt="The Screen and Gameplay pages">
+
+**Screen Look** sets the whole picture in one go: *Authentic* turns on everything that makes the screen look like the real hardware, *Clean* turns it all off. Or fine-tune it per console:
+
+| Setting | What it does |
+|---|---|
+| LCD Grid | Thin lines between the pixels, like the real screen |
+| Original Colors | Softer colors, the way the original screen showed them |
+| Color Palettes | Tint Game Boy games; SELECT + L2 / R2 picks a palette |
+| See-Through Pixels | Pale pixels let the screen behind them show through |
+| Motion Blur | Moving pixels fade out slowly, like an old LCD |
+
+### Every button, explained — and a proper power menu
+
+A **Buttons** page in the menu lists every shortcut, everywhere. Hold **POWER** for **Sleep**, **Restart** or **Power Off**.
+
+<img src=".github/resources/gravy/buttons_power.png" width="100%" alt="The Buttons page and the power menu">
+
+### Play
+
+<img src=".github/resources/gravy/gameplay.png" width="100%" alt="Goodboy Galaxy on mGBA and Mud Warriors on Gambatte">
+<img src=".github/resources/gravy/ingame.png" width="100%" alt="The in-game menu, and the Game Boy Color shelf in light">
+
+### And more
+
+- Carts sit a little smaller on the carousel, with soft drop shadows that lift them off the wallpaper
+- Game titles under the shelf at the same size as the shelf names
+- A lighter GBA LCD grid
+- Games start on your Favorites shelf when you have favorites, otherwise on Game Boy
+- Sleep after 1 minute by default, power off after 5 minutes asleep
 
 ---
 
-# Supported Devices
+## Install
 
-| Device             | Supported                  | Since Version |
-|--------------------|----------------------------|---------------|
-| Anbernic RG SP     | Yes                        | Always        |
-| Anbernic RG34XX    | Yes                        | 1.4.0         |
-| Anbernic RG34XXSP  | Yes (No Stick Support Yet) | 1.4.0         |
-| Anbernic RG35XXSP  | Yes                        | 1.5.0         |
-| Anbernic 35XX Plus | Yes                        | 1.5.0         |
-| Anbernic RG28XX    | Yes                        | 1.6.0         |
+1. Download **gravy-v1.0.zip** from the [releases](https://github.com/roygravy/slot/releases).
+2. Unzip it and copy the **contents** of the `gravy-v1.0` folder onto the second SD card of your RG35XX Plus.
+3. Put your games in `Games/GB`, `Games/GBC` and `Games/GBA`, and optional label art (PNG, named like the ROM) in the matching `Labels` folders.
+4. Put the BIOS files (`gb_bios.bin`, `gbc_bios.bin`, `gba_bios.bin`) in `BIOS/` if you have them.
 
-If you have one of the untested devices, or have tried slot on a device not listed,
-please [open an issue on GitHub](https://github.com/BrandonKowalski/slot/issues) and let me know how it went.
+ROMs must be unzipped; `.zip` and `.7z` are not read.
 
 ---
 
-# AI Disclosure
+## Controls
 
-The Rust frontend, and the SVGs on [slot-cfw.fyi](https://slot-cfw.fyi), were put together by Claude.
-I reviewed everything that was produced. All documentation is 100% free-range, meatbag prose.
+The full list is on the **Buttons** page in the menu. The essentials:
 
-My goal with this project was to recreate the feeling of playing my GBA SP in the back seat as a kid,
-but with a few modern creature comforts.
+| On the shelf | |
+|---|---|
+| Left / Right | Move along the shelf |
+| L1 / R1 | Switch shelf |
+| Tap A / Hold A | Play from your last save / start fresh |
+| Y | Favorite |
+| MENU | Settings |
 
-Nothing about this project is exciting or groundbreaking from a technological perspective, and as a
-result, I delegated the glue code. mGBA and gpSP have been around forever and are the true stars of
-this show. The incredible skeuomorphic art is the work of [Markus](https://github.com/MarkusMaribu), an
-artist who saw the bare-bones version and offered to dress it up.
+| In a game | |
+|---|---|
+| Hold MENU | Save, eject and back to the shelf |
+| Double tap MENU | Save state switcher |
+| Hold L2 / Hold R2 | Rewind / fast-forward |
+| SELECT + Up / Down | Brightness |
+| SELECT + MENU | Link cable to another slot device |
 
-I understand if my use of AI is a dealbreaker for you. Just know it's the least interesting part of
-what's here.
+---
 
-Figured I should share the end result of all the wasted water. ✌🏻
+## Building
+
+GRAVY builds the same way slot does; see [the slot README](SLOT_README.md) and `taskfile.yml`. The cartridge slots are drawn by `tools/slot_art.py`. Screenshots in this page were rendered headless with `cargo run --release -p slot --no-default-features --example shoot`.
+
+---
+
+## Credits
+
+- **[slot](https://github.com/BrandonKowalski/slot)** by Brandon Kowalski, the frontend GRAVY is built on, with artwork by Markus and contributions from its community
+- **mGBA**, **gpSP** and **Gambatte**, the emulator cores (their licenses and sources ship in `System/licenses`)
+- **Permanent Marker** by Font Diner (Apache 2.0) for the handwritten titles
+- **Goodboy Galaxy** (demo) and **Mud Warriors**, the free games in the screenshots
+
+Like slot, GRAVY was put together with help from Claude.
+
+Licensed under the same terms as slot; see [LICENSE](LICENSE).

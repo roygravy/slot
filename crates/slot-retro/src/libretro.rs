@@ -405,10 +405,19 @@ impl LibretroCore {
     }
 
     pub fn open_with(dylib: &Path, system_dir: &Path, save_dir: &Path) -> Result<Self, CoreError> {
+        Self::open_with_options(dylib, system_dir, save_dir, &[])
+    }
+
+    pub fn open_with_options(
+        dylib: &Path,
+        system_dir: &Path,
+        save_dir: &Path,
+        initial_options: &[(&str, &str)],
+    ) -> Result<Self, CoreError> {
         if LIVE.swap(true, Ordering::SeqCst) {
             return Err(CoreError::Unsupported("a core is already open".into()));
         }
-        Self::open_inner(dylib, system_dir, save_dir)
+        Self::open_inner(dylib, system_dir, save_dir, initial_options)
             .inspect_err(|_| LIVE.store(false, Ordering::SeqCst))
     }
 
@@ -461,12 +470,23 @@ impl LibretroCore {
             .map(|s| s.to_string())
     }
 
-    fn open_inner(dylib: &Path, system_dir: &Path, save_dir: &Path) -> Result<Self, CoreError> {
+    fn open_inner(
+        dylib: &Path,
+        system_dir: &Path,
+        save_dir: &Path,
+        initial_options: &[(&str, &str)],
+    ) -> Result<Self, CoreError> {
         let lib = unsafe { Library::new(dylib) }.map_err(|e| CoreError::Load(e.to_string()))?;
         let api = unsafe { Api::load(&lib) }?;
         let version = unsafe { (api.api_version)() };
         if version != API_VERSION {
             return Err(CoreError::Unsupported(format!("libretro api {version}")));
+        }
+        let mut options = std::collections::HashMap::new();
+        for (key, value) in initial_options {
+            let value = CString::new(*value)
+                .map_err(|_| CoreError::Load(format!("core option {key:?} contains a nul")))?;
+            options.insert((*key).to_string(), value);
         }
         let mut host = Box::new(Host {
             video: vec![0; VIDEO_BYTES],
@@ -481,7 +501,7 @@ impl LibretroCore {
             net: Link::default(),
             net_peer: None,
             audio_status: None,
-            options: std::collections::HashMap::new(),
+            options,
             options_dirty: false,
             declared: std::collections::HashMap::new(),
         });

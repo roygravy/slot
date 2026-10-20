@@ -5,10 +5,8 @@ use slot_gfx::{Canvas, Draw, TexId, OUT_H, OUT_W};
 
 use crate::art;
 
-const DEFAULT_PNG: &[u8] = include_bytes!("../../../assets/background_default.png");
 const BEZEL_GB_PNG: &[u8] = include_bytes!("../../../assets/bezel_gb.png");
 const BEZEL_GBC_PNG: &[u8] = include_bytes!("../../../assets/bezel_gbc.png");
-const BLUR_PNG: &[u8] = include_bytes!("../../../assets/background_default_blur.png");
 
 const SCRIM: f32 = 0.62;
 
@@ -29,17 +27,20 @@ pub fn default_game_bezel_face(colour: bool) -> Option<Vec<u8>> {
     art::cover_bytes(png, OUT_W, OUT_H)
 }
 
-/// The carousel ground, scaled to cover the whole screen, including behind the footer.
+const DEFAULT_PNG: &[u8] = include_bytes!("../../../assets/background_default.png");
+const LIGHT_PNG: &[u8] = include_bytes!("../../../assets/background_light.png");
+
+/// The charcoal wallpaper the dark theme ships with, decoded to OUT_W x OUT_H RGBA.
 pub fn default_background() -> Option<&'static [u8]> {
     static P: OnceLock<Option<Vec<u8>>> = OnceLock::new();
     P.get_or_init(|| art::cover_bytes(DEFAULT_PNG, OUT_W, OUT_H))
         .as_deref()
 }
 
-/// The blurred carousel ground, scaled to cover the whole screen the same way as the default.
-pub fn blur_background() -> Option<&'static [u8]> {
+/// The warm Game Boy grey wallpaper the light theme ships with, decoded the same way.
+pub fn light_background() -> Option<&'static [u8]> {
     static P: OnceLock<Option<Vec<u8>>> = OnceLock::new();
-    P.get_or_init(|| art::cover_bytes(BLUR_PNG, OUT_W, OUT_H))
+    P.get_or_init(|| art::cover_bytes(LIGHT_PNG, OUT_W, OUT_H))
         .as_deref()
 }
 

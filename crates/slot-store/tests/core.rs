@@ -190,15 +190,15 @@ fn a_line_naming_a_core_the_platform_cannot_run_is_dropped() {
     write_selected_core(d.path(), "Tetris", Core::Gpsp).unwrap();
     assert_eq!(
         core_for_platform(d.path(), "Tetris", Platform::Gb),
-        Core::Mgba
+        Core::Gambatte
     );
     assert_eq!(
         core_for_platform(d.path(), "Tetris", Platform::Gbc),
-        Core::Mgba
+        Core::Gambatte
     );
 }
 
 #[test]
-fn the_picker_board_has_exactly_two_sockets() {
-    assert_eq!(Core::ALL.len(), 2);
+fn all_supported_cores_have_identity_values() {
+    assert_eq!(Core::ALL.len(), 3);
 }

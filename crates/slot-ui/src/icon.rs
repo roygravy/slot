@@ -120,6 +120,34 @@ pub fn icon_face(icon: Icon, px: f32, colour: [u8; 3]) -> CartFace {
     haloed(&r.cov, r.w, r.h, colour)
 }
 
+pub fn icon_glyph_face(icon: Icon, px: f32, colour: [u8; 3]) -> CartFace {
+    let Some(font) = symbols_font() else {
+        return CartFace {
+            rgba: Vec::new(),
+            w: 0,
+            h: 0,
+        };
+    };
+    let (metrics, coverage) = font.rasterize(icon.glyph(), px);
+    haloed(
+        &coverage,
+        metrics.width as u32,
+        metrics.height as u32,
+        colour,
+    )
+}
+
+pub fn icon_glyph_box(icon: Icon, px: f32) -> (u32, u32) {
+    let Some(font) = symbols_font() else {
+        return (0, 0);
+    };
+    let metrics = font.metrics(icon.glyph(), px);
+    (
+        metrics.width as u32 + 2 * HALO_PX,
+        metrics.height as u32 + 2 * HALO_PX,
+    )
+}
+
 pub fn icon_box(px: f32) -> (u32, u32) {
     match raster(Icon::Volume, px) {
         Some(r) => (r.w + 2 * HALO_PX, r.h + 2 * HALO_PX),
@@ -142,40 +170,108 @@ impl Badge {
     }
 }
 
-const STAR: [&str; 9] = [
-    "....#....",
-    "...###...",
-    "...###...",
-    "#########",
-    ".#######.",
-    "..#####..",
-    "..#####..",
-    ".###.###.",
-    ".##...##.",
-];
 
-pub fn star_face(scale: u32, colour: [u8; 3]) -> CartFace {
-    let (gw, gh) = (STAR[0].len() as i32, STAR.len() as i32);
-    let ink = |x: i32, y: i32| {
-        (0..gw).contains(&x)
-            && (0..gh).contains(&y)
-            && STAR[y as usize].as_bytes()[x as usize] == b'#'
-    };
-    let (w, h) = ((gw + 2) as u32 * scale, (gh + 2) as u32 * scale);
+/// A spotlight for a favourite cart, added over the cart as light: a soft warm pool centred
+/// on the cart's upper half that lights the cart itself and fades out over the ground around it,
+/// with no edge and no beam. `cw` x `ch` is the cart; the face is `margin` px larger all round,
+/// built at half resolution.
+pub fn glow_face(cw: u32, ch: u32, margin: u32, colour: [u8; 3], peak: f32) -> CartFace {
+    let (fw, fh) = (cw + 2 * margin, ch + 2 * margin);
+    let (w, h) = (fw.div_ceil(2), fh.div_ceil(2));
+    let (cx, cy) = (fw as f32 / 2.0, fh as f32 / 2.0 - ch as f32 * 0.12);
+    let (sx, sy) = (cw as f32 * 0.46, ch as f32 * 0.46);
     let mut rgba = vec![0u8; (w * h * 4) as usize];
     for py in 0..h {
         for px in 0..w {
-            let (x, y) = ((px / scale) as i32 - 1, (py / scale) as i32 - 1);
-            let rim = [(0, -1), (0, 1), (-1, 0), (1, 0)]
-                .iter()
-                .any(|(dx, dy)| ink(x + dx, y + dy));
-            let c = match (ink(x, y), rim) {
-                (true, _) => [colour[0], colour[1], colour[2], 255],
-                (false, true) => [HALO[0], HALO[1], HALO[2], 255],
-                _ => continue,
-            };
+            let (x, y) = ((px as f32 + 0.5) * 2.0 - cx, (py as f32 + 0.5) * 2.0 - cy);
+            let r2 = (x / sx).powi(2) + (y / sy).powi(2);
+            // A soft bell that reaches exactly nothing well inside the face, so no edge of
+            // the face ever shows, however the cart is scaled.
+            const REACH2: f32 = 1.6 * 1.6;
+            let a = (1.0 - r2 / REACH2).max(0.0).powi(3) * peak;
             let o = ((py * w + px) * 4) as usize;
-            rgba[o..o + 4].copy_from_slice(&c);
+            rgba[o..o + 4].copy_from_slice(&[
+                colour[0],
+                colour[1],
+                colour[2],
+                (a * 255.0).round().min(255.0) as u8,
+            ]);
+        }
+    }
+    CartFace { rgba, w, h }
+}
+
+/// A soft drop shadow for a cart: a black rounded box `cw` x `ch` blurred over `margin` px,
+/// built at half resolution and smoothed when stretched.
+pub fn drop_shadow_face(cw: u32, ch: u32, margin: u32) -> CartFace {
+    let (fw, fh) = (cw + 2 * margin, ch + 2 * margin);
+    let (w, h) = (fw.div_ceil(2), fh.div_ceil(2));
+    let (m, radius) = (margin as f32, 14.0_f32);
+    let (cx, cy) = (fw as f32 / 2.0, fh as f32 / 2.0);
+    let (hw, hh) = (cw as f32 / 2.0 - radius - 4.0, ch as f32 / 2.0 - radius - 4.0);
+    let mut rgba = vec![0u8; (w * h * 4) as usize];
+    for py in 0..h {
+        for px in 0..w {
+            let (x, y) = ((px as f32 + 0.5) * 2.0, (py as f32 + 0.5) * 2.0);
+            let (qx, qy) = ((x - cx).abs() - hw, (y - cy).abs() - hh);
+            let outside = (qx.max(0.0).powi(2) + qy.max(0.0).powi(2)).sqrt();
+            let d = outside + qx.max(qy).min(0.0) - radius;
+            // A smooth fall from full at the box's edge to nothing `margin` px out.
+            let t = ((d + m * 0.35) / (m * 1.2)).clamp(0.0, 1.0);
+            let a = 1.0 - t * t * (3.0 - 2.0 * t);
+            let o = ((py * w + px) * 4) as usize;
+            rgba[o..o + 4].copy_from_slice(&[0, 0, 0, (a * 255.0).round() as u8]);
+        }
+    }
+    CartFace { rgba, w, h }
+}
+
+/// A smooth white five-point star with a soft dark rim, `px` wide, anti-aliased.
+pub fn star_mark_face(px: u32) -> CartFace {
+    let pad = 3.0_f32;
+    let size = px as f32 + 2.0 * pad;
+    let (w, h) = (size.ceil() as u32, size.ceil() as u32);
+    let (cx, cy) = (w as f32 / 2.0, h as f32 / 2.0 + px as f32 * 0.04);
+    let (outer, inner) = (px as f32 / 2.0, px as f32 / 2.0 * 0.46);
+    let pts: Vec<(f32, f32)> = (0..10)
+        .map(|k| {
+            let a = -std::f32::consts::FRAC_PI_2 + k as f32 * std::f32::consts::PI / 5.0;
+            let r = if k % 2 == 0 { outer } else { inner };
+            (cx + r * a.cos(), cy + r * a.sin())
+        })
+        .collect();
+    let dist = |x: f32, y: f32| -> f32 {
+        let mut best = f32::MAX;
+        let mut inside = false;
+        for k in 0..10 {
+            let (a, b) = (pts[k], pts[(k + 1) % 10]);
+            let (ex, ey) = (b.0 - a.0, b.1 - a.1);
+            let t = (((x - a.0) * ex + (y - a.1) * ey) / (ex * ex + ey * ey)).clamp(0.0, 1.0);
+            let (qx, qy) = (a.0 + t * ex - x, a.1 + t * ey - y);
+            best = best.min((qx * qx + qy * qy).sqrt());
+            if (a.1 > y) != (b.1 > y) && x < a.0 + (y - a.1) / (b.1 - a.1) * ex {
+                inside = !inside;
+            }
+        }
+        if inside {
+            -best
+        } else {
+            best
+        }
+    };
+    let mut rgba = vec![0u8; (w * h * 4) as usize];
+    for py in 0..h {
+        for pxl in 0..w {
+            let d = dist(pxl as f32 + 0.5, py as f32 + 0.5);
+            let fill = (0.5 - d).clamp(0.0, 1.0);
+            let rim = ((2.4 - d) / 1.8).clamp(0.0, 1.0) * 0.5;
+            let a = fill + rim * (1.0 - fill);
+            if a <= 0.0 {
+                continue;
+            }
+            let c = 255.0 * fill / a;
+            let o = ((py * w + pxl) * 4) as usize;
+            rgba[o..o + 4].copy_from_slice(&[c as u8, c as u8, c as u8, (a * 255.0).round() as u8]);
         }
     }
     CartFace { rgba, w, h }

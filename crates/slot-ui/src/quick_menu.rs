@@ -1,7 +1,9 @@
 use crate::draw::{Canvas, Draw, TexId, OUT_H, OUT_W};
-use crate::plate::{arrows_hint_face, centred_hints, hint_face, UndoFace, HINT_H, LEGEND_GAP};
-use crate::power_menu::{MENU_H, MENU_INK, MENU_PAD, MENU_PX};
-use crate::slot_chrome::opening;
+use crate::plate::{
+    arrows_hint_face, centred_hints, hint_face, tint_mask, UndoFace, HINT_H, LEGEND_GAP,
+};
+use crate::theme::{self, Ink};
+use crate::power_menu::{MENU_H, MENU_INK, MENU_PAD};
 use crate::text;
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -46,10 +48,21 @@ pub enum QuickRow {
     GbaBezel,
     ScreenGbc,
     ScreenGb,
+    AutoSleep,
+    PixelTransparency,
+    LcdGhosting,
+    InGameMenu,
+    RememberPosition,
+    FavoriteMark,
+    ScreenLook,
+    Buttons,
+    Sleep,
+    Restart,
+    PowerOff,
 }
 
 impl QuickRow {
-    pub const ALL: [QuickRow; 40] = [
+    pub const ALL: [QuickRow; 51] = [
         QuickRow::FastForward,
         QuickRow::FastForwardSound,
         QuickRow::Screen,
@@ -90,53 +103,67 @@ impl QuickRow {
         QuickRow::GbaBezel,
         QuickRow::ScreenGbc,
         QuickRow::ScreenGb,
+        QuickRow::AutoSleep,
+        QuickRow::PixelTransparency,
+        QuickRow::LcdGhosting,
+        QuickRow::InGameMenu,
+        QuickRow::RememberPosition,
+        QuickRow::FavoriteMark,
+        QuickRow::ScreenLook,
+        QuickRow::Buttons,
+        QuickRow::Sleep,
+        QuickRow::Restart,
+        QuickRow::PowerOff,
     ];
+
+    /// The power menu, held POWER.
+    pub const POWER: [QuickRow; 3] = [QuickRow::Sleep, QuickRow::Restart, QuickRow::PowerOff];
 
     pub const MAIN: [QuickRow; 4] = [
         QuickRow::General,
         QuickRow::Screen,
         QuickRow::Game,
-        QuickRow::About,
+        QuickRow::Buttons,
     ];
 
-    pub const GENERAL: [QuickRow; 6] = [
+    pub const GENERAL: [QuickRow; 8] = [
         QuickRow::Wallpaper,
-        QuickRow::WallpaperTint,
         QuickRow::Theme,
         QuickRow::Recents,
+        QuickRow::FavoriteMark,
         QuickRow::ShowTitles,
         QuickRow::DateTime,
+        QuickRow::AutoSleep,
+        QuickRow::RememberPosition,
     ];
 
-    pub const SCREEN: [QuickRow; 3] =
-        [QuickRow::ScreenGba, QuickRow::ScreenGbc, QuickRow::ScreenGb];
-
-    pub const SCREEN_GBA: [QuickRow; 3] = [
-        QuickRow::GbaShader,
-        QuickRow::GbaColourCorrection,
-        QuickRow::GbaBezel,
+    pub const SCREEN: [QuickRow; 6] = [
+        QuickRow::ScreenLook,
+        QuickRow::ScreenGb,
+        QuickRow::ScreenGbc,
+        QuickRow::ScreenGba,
+        QuickRow::PixelTransparency,
+        QuickRow::LcdGhosting,
     ];
 
-    pub const SCREEN_GBC: [QuickRow; 3] = [
-        QuickRow::GbcShader,
-        QuickRow::GbcColourCorrection,
-        QuickRow::GbcBezel,
-    ];
+    pub const SCREEN_GBA: [QuickRow; 2] = [QuickRow::GbaShader, QuickRow::GbaColourCorrection];
 
-    pub const SCREEN_GB: [QuickRow; 4] = [
+    pub const SCREEN_GBC: [QuickRow; 2] = [QuickRow::GbcShader, QuickRow::GbcColourCorrection];
+
+    pub const SCREEN_GB: [QuickRow; 3] = [
         QuickRow::GbShader,
         QuickRow::GbColourCorrection,
         QuickRow::GbPalettes,
-        QuickRow::GbBezel,
     ];
 
-    pub const GAME: [QuickRow; 7] = [
+    pub const GAME: [QuickRow; 8] = [
         QuickRow::FastForward,
         QuickRow::FastForwardSound,
         QuickRow::Rewind,
         QuickRow::RunAhead,
         QuickRow::Turbo,
         QuickRow::Rumble,
+        QuickRow::InGameMenu,
         QuickRow::EjectSave,
     ];
 
@@ -149,11 +176,10 @@ impl QuickRow {
 
     pub const SETTINGS: [QuickRow; 2] = [QuickRow::PlayScreen, QuickRow::PlayGameplay];
 
-    pub const PLAY_SCREEN: [QuickRow; 4] = [
+    pub const PLAY_SCREEN: [QuickRow; 3] = [
         QuickRow::Shader,
         QuickRow::ColourCorrection,
         QuickRow::Palette,
-        QuickRow::Bezel,
     ];
 
     pub fn index(self) -> usize {
@@ -162,7 +188,10 @@ impl QuickRow {
 
     pub fn page(self) -> &'static [QuickRow] {
         match self {
-            QuickRow::ScreenGba | QuickRow::ScreenGbc | QuickRow::ScreenGb => &QuickRow::SCREEN,
+            QuickRow::ScreenLook
+            | QuickRow::ScreenGba
+            | QuickRow::ScreenGbc
+            | QuickRow::ScreenGb => &QuickRow::SCREEN,
             QuickRow::GbaShader | QuickRow::GbaColourCorrection | QuickRow::GbaBezel => {
                 &QuickRow::SCREEN_GBA
             }
@@ -173,23 +202,29 @@ impl QuickRow {
             | QuickRow::GbColourCorrection
             | QuickRow::GbPalettes
             | QuickRow::GbBezel => &QuickRow::SCREEN_GB,
+            QuickRow::PixelTransparency | QuickRow::LcdGhosting => &QuickRow::SCREEN,
             QuickRow::FastForward
             | QuickRow::FastForwardSound
             | QuickRow::Rewind
             | QuickRow::RunAhead
             | QuickRow::Turbo
             | QuickRow::Rumble
+            | QuickRow::InGameMenu
             | QuickRow::EjectSave => &QuickRow::GAME,
             QuickRow::Wallpaper
             | QuickRow::WallpaperTint
             | QuickRow::DateTime
             | QuickRow::Theme
             | QuickRow::Recents
-            | QuickRow::ShowTitles => &QuickRow::GENERAL,
+            | QuickRow::FavoriteMark
+            | QuickRow::ShowTitles
+            | QuickRow::AutoSleep
+            | QuickRow::RememberPosition => &QuickRow::GENERAL,
             QuickRow::Resume | QuickRow::States | QuickRow::Settings | QuickRow::ExitGame => {
                 &QuickRow::PLAY
             }
             QuickRow::PlayScreen | QuickRow::PlayGameplay => &QuickRow::SETTINGS,
+            QuickRow::Sleep | QuickRow::Restart | QuickRow::PowerOff => &QuickRow::POWER,
             QuickRow::Shader | QuickRow::ColourCorrection | QuickRow::Palette | QuickRow::Bezel => {
                 &QuickRow::PLAY_SCREEN
             }
@@ -199,12 +234,14 @@ impl QuickRow {
 
     pub fn parent(self) -> Option<QuickRow> {
         match self.page()[0] {
-            QuickRow::ScreenGba => Some(QuickRow::Screen),
+            QuickRow::ScreenLook => Some(QuickRow::Screen),
             QuickRow::GbaShader => Some(QuickRow::ScreenGba),
             QuickRow::GbcShader => Some(QuickRow::ScreenGbc),
             QuickRow::GbShader => Some(QuickRow::ScreenGb),
             QuickRow::FastForward => Some(QuickRow::Game),
             QuickRow::Wallpaper => Some(QuickRow::General),
+            QuickRow::AutoSleep => Some(QuickRow::General),
+            QuickRow::RememberPosition => Some(QuickRow::General),
             QuickRow::PlayScreen => Some(QuickRow::Settings),
             QuickRow::Shader => Some(QuickRow::PlayScreen),
             _ => None,
@@ -223,7 +260,7 @@ impl QuickRow {
             &QuickRow::MAIN[..],
             &QuickRow::PLAY,
             &QuickRow::SETTINGS,
-            &QuickRow::SCREEN,
+            &QuickRow::POWER,
         ]
         .contains(&self.page())
     }
@@ -266,41 +303,95 @@ impl QuickRow {
             QuickRow::Rumble => "Rumble",
             QuickRow::DateTime => "Date & Time",
             QuickRow::About => "About",
-            QuickRow::GbaShader => "Shader",
-            QuickRow::GbShader => "Shader",
-            QuickRow::GbcShader => "Shader",
-            QuickRow::GbaColourCorrection => "Color Correction",
-            QuickRow::GbColourCorrection => "Color Correction",
-            QuickRow::GbcColourCorrection => "Color Correction",
+            QuickRow::GbaShader | QuickRow::GbShader | QuickRow::GbcShader | QuickRow::Shader => {
+                "LCD Grid"
+            }
+            QuickRow::GbaColourCorrection
+            | QuickRow::GbColourCorrection
+            | QuickRow::GbcColourCorrection
+            | QuickRow::ColourCorrection => "Original Colors",
             QuickRow::Game => "Gameplay",
             QuickRow::EjectSave => "Auto Save on Eject",
             QuickRow::Turbo => "Turbo Buttons",
             QuickRow::Rewind => "Rewind",
-            QuickRow::GbPalettes => "Palettes",
+            QuickRow::GbPalettes => "Color Palettes",
             QuickRow::RunAhead => "Run-Ahead",
             QuickRow::Theme => "Theme",
             QuickRow::Wallpaper => "Wallpaper",
             QuickRow::General => "General",
             QuickRow::Recents => "Recents",
+            QuickRow::FavoriteMark => "Favorites",
             QuickRow::ShowTitles => "Game Titles",
             QuickRow::WallpaperTint => "Wallpaper Tint",
+            QuickRow::AutoSleep => "Auto Sleep",
+            QuickRow::PixelTransparency => "See-Through Pixels",
+            QuickRow::LcdGhosting => "Motion Blur",
+            QuickRow::InGameMenu => "In-Game Menu",
+            QuickRow::RememberPosition => "Remember Shelf Position",
             QuickRow::Resume => "Resume",
             QuickRow::States => "States",
             QuickRow::Settings => "Settings",
             QuickRow::ExitGame => "Exit Game",
             QuickRow::PlayScreen => "Screen",
             QuickRow::PlayGameplay => "Gameplay",
-            QuickRow::Shader => "Shader",
-            QuickRow::ColourCorrection => "Color Correction",
             QuickRow::Palette => "Palette",
             QuickRow::ScreenGba => "Game Boy Advance",
             QuickRow::ScreenGbc => "Game Boy Color",
             QuickRow::ScreenGb => "Game Boy",
-            QuickRow::GbBezel => "Bezel",
-            QuickRow::GbcBezel => "Bezel",
-            QuickRow::GbaBezel => "Bezel",
-            QuickRow::Bezel => "Bezel",
+            QuickRow::GbBezel | QuickRow::GbcBezel | QuickRow::GbaBezel | QuickRow::Bezel => "Bezel",
+            QuickRow::ScreenLook => "Screen Look",
+            QuickRow::Buttons => "Buttons",
+            QuickRow::Sleep => "Sleep",
+            QuickRow::Restart => "Restart",
+            QuickRow::PowerOff => "Power Off",
         }
+    }
+
+    /// One plain line under the menu saying what the selected row does.
+    pub fn help(self) -> Option<&'static str> {
+        Some(match self {
+            QuickRow::General => "Wallpaper, theme, shelves and sleep.",
+            QuickRow::Screen => "How the game picture looks.",
+            QuickRow::Game => "Speed, rewind, turbo and saving.",
+            QuickRow::Buttons => "Every button and shortcut, explained.",
+            QuickRow::ScreenLook => "Authentic: like the real screen. Clean: sharp and bright.",
+            QuickRow::ScreenGb | QuickRow::ScreenGbc | QuickRow::ScreenGba => {
+                "Settings for this console only."
+            }
+            QuickRow::GbaShader | QuickRow::GbShader | QuickRow::GbcShader | QuickRow::Shader => {
+                "Thin lines between the pixels, like the real screen."
+            }
+            QuickRow::GbaColourCorrection
+            | QuickRow::GbColourCorrection
+            | QuickRow::GbcColourCorrection
+            | QuickRow::ColourCorrection => "Softer colors, the way the original screen showed them.",
+            QuickRow::GbPalettes => "Tint Game Boy games. SELECT + L2 / R2 picks a palette.",
+            QuickRow::Palette => "The colors this Game Boy game is shown in.",
+            QuickRow::PixelTransparency => "Pale pixels let the screen behind them show through.",
+            QuickRow::LcdGhosting => "Moving pixels fade out slowly, like an old LCD.",
+            QuickRow::FastForward => "How fast the game runs while you hold R2.",
+            QuickRow::FastForwardSound => "Hear the game while it fast-forwards.",
+            QuickRow::Rewind => "Hold L2 in a game to go back in time.",
+            QuickRow::RunAhead => "Buttons respond one frame sooner. Uses more battery.",
+            QuickRow::Turbo => "Hold X for rapid A, hold Y for rapid B.",
+            QuickRow::Rumble => "Let games that support it shake the device.",
+            QuickRow::InGameMenu => "Tap MENU in a game to pause and open a menu.",
+            QuickRow::EjectSave => "Save your place when you eject a cart.",
+            QuickRow::Wallpaper => "Default follows the theme. Off is plain black.",
+            QuickRow::Theme => "Dark or light housing, shelves and menus.",
+            QuickRow::Recents => "A shelf with the last 10 games you played.",
+            QuickRow::FavoriteMark => "How favorites stand out. Press Y on a cart to mark it.",
+            QuickRow::ShowTitles => "Show the selected game's name under the shelf.",
+            QuickRow::DateTime => "Set the clock.",
+            QuickRow::AutoSleep => "Sleep after this long without a button press.",
+            QuickRow::RememberPosition => "Start where you left off on the shelf.",
+            QuickRow::PlayScreen => "How the game picture looks.",
+            QuickRow::PlayGameplay => "Speed, rewind, turbo and saving.",
+            QuickRow::Sleep => "Screen off, game paused. Press POWER to wake.",
+            QuickRow::Restart => "Save your place and start again.",
+            QuickRow::PowerOff => "Save your place and switch off.",
+            _ => return None,
+        })
     }
 
     pub fn opens(self) -> bool {
@@ -320,6 +411,10 @@ impl QuickRow {
                 | QuickRow::ScreenGba
                 | QuickRow::ScreenGbc
                 | QuickRow::ScreenGb
+                | QuickRow::Buttons
+                | QuickRow::Sleep
+                | QuickRow::Restart
+                | QuickRow::PowerOff
         )
     }
 
@@ -343,6 +438,7 @@ pub enum QuickValue {
     On,
     Off,
     Lcd3x,
+    GbaLcd,
     Grid,
     Dot,
     Simpletex,
@@ -354,10 +450,19 @@ pub enum QuickValue {
     Low,
     Medium,
     High,
+    Sleep30s,
+    Sleep1m,
+    Sleep5m,
+    GoldGlow,
+    WhiteGlow,
+    StarMark,
+    Authentic,
+    Clean,
+    Custom,
 }
 
 impl QuickValue {
-    pub const ALL: [QuickValue; 18] = [
+    pub const ALL: [QuickValue; 28] = [
         QuickValue::Speed2,
         QuickValue::Speed3,
         QuickValue::Speed4,
@@ -365,6 +470,7 @@ impl QuickValue {
         QuickValue::On,
         QuickValue::Off,
         QuickValue::Lcd3x,
+        QuickValue::GbaLcd,
         QuickValue::Grid,
         QuickValue::Dot,
         QuickValue::Simpletex,
@@ -376,6 +482,15 @@ impl QuickValue {
         QuickValue::Low,
         QuickValue::Medium,
         QuickValue::High,
+        QuickValue::Sleep30s,
+        QuickValue::Sleep1m,
+        QuickValue::Sleep5m,
+        QuickValue::GoldGlow,
+        QuickValue::WhiteGlow,
+        QuickValue::StarMark,
+        QuickValue::Authentic,
+        QuickValue::Clean,
+        QuickValue::Custom,
     ];
 
     pub fn index(self) -> usize {
@@ -391,17 +506,27 @@ impl QuickValue {
             QuickValue::On => "On",
             QuickValue::Off => "Off",
             QuickValue::Lcd3x => "LCD3x",
+            QuickValue::GbaLcd => "GBA LCD",
             QuickValue::Grid => "Grid",
             QuickValue::Dot => "Dot",
             QuickValue::Simpletex => "Simpletex",
             QuickValue::Frames1 => "1 Frame",
             QuickValue::Dark => "Dark",
             QuickValue::Light => "Light",
-            QuickValue::Show => "Show",
-            QuickValue::Hide => "Hide",
+            QuickValue::Show => "On",
+            QuickValue::Hide => "Off",
             QuickValue::Low => "25%",
             QuickValue::Medium => "45%",
             QuickValue::High => "65%",
+            QuickValue::Sleep30s => "30 sec",
+            QuickValue::Sleep1m => "1 min",
+            QuickValue::Sleep5m => "5 min",
+            QuickValue::GoldGlow => "Spotlight",
+            QuickValue::WhiteGlow => "White Glow",
+            QuickValue::StarMark => "Star",
+            QuickValue::Authentic => "Authentic",
+            QuickValue::Clean => "Clean",
+            QuickValue::Custom => "Custom",
         }
     }
 
@@ -423,6 +548,15 @@ impl QuickValue {
         }
     }
 
+    /// Values that read as a switch rather than a word.
+    pub fn switch(self) -> Option<bool> {
+        match self {
+            QuickValue::On | QuickValue::Show => Some(true),
+            QuickValue::Off | QuickValue::Hide => Some(false),
+            _ => None,
+        }
+    }
+
     pub fn flag(on: bool) -> QuickValue {
         if on {
             QuickValue::On
@@ -434,33 +568,57 @@ impl QuickValue {
 
 pub const QUICK_PITCH: f32 = 52.0;
 pub const QUICK_EDGE: f32 = 32.0;
-pub const QUICK_LABEL_X: f32 = 64.0;
-const POINTER_GAP: f32 = 14.0;
+pub const QUICK_LABEL_X: f32 = QUICK_EDGE;
+
+/// The 1.6 menu look: a smaller face than the power menu, so a label and its value never run into each other.
+const QUICK_PX: f32 = 26.0;
 const POINTER_SCALE: usize = 4;
 const POINTER: [&str; 11] = [
     "X.......", "XX......", "XoX.....", "XooX....", "XoooX...", "XooooX..", "XoooX...", "XooX....",
     "XoX.....", "XX......", "X.......",
 ];
 const POINTER_BLEED: u32 = 4;
-const GROUND_SCRIM: f32 = 0.65;
 const TYPE_DROP: f32 = 4.0;
+const BAR_INSET: f32 = 4.0;
 const CARET_GAP: f32 = 14.0;
 const CARET_PX: f32 = 24.0;
 const LEGEND_Y: f32 = 427.0;
-const DIM_INK: [u8; 3] = [0x9a, 0x9a, 0xa4];
+/// The help line sits between the rows and the legend.
+const HELP_Y: f32 = 392.0;
+const HELP_H: u32 = 24;
+const HELP_PX: f32 = 17.0;
+const HELP_MIN_PX: f32 = 12.0;
+const HELP_MAX_W: f32 = 600.0;
+/// Rows fill the space above the help line.
+const ROWS_BOTTOM: f32 = HELP_Y - 8.0;
+const QUICK_ROOM: f32 = ROWS_BOTTOM - 12.0;
 const PANEL_GAP: f32 = 12.0;
+/// Faces are rendered white and tinted with the theme's ink when drawn.
+const FACE_INK: [u8; 3] = [0xff, 0xff, 0xff];
 
-pub fn quick_label_face(row: QuickRow, lit: bool) -> UndoFace {
-    quick_text_face(row.label(), if lit { MENU_INK } else { DIM_INK })
+/// The on/off switch: a flat pill in one colour, as on a phone.
+pub const SWITCH_W: u32 = 52;
+pub const SWITCH_H: u32 = 30;
+const SWITCH_STROKE: f32 = 2.5;
+
+pub fn quick_label_face(row: QuickRow, _lit: bool) -> UndoFace {
+    quick_text_face(row.label(), FACE_INK)
 }
 
 fn cap_centre(label: &fontdue::Font, h: u32) -> f32 {
-    match label.horizontal_line_metrics(MENU_PX) {
+    match label.horizontal_line_metrics(QUICK_PX) {
         Some(v) => {
             (h as f32 - v.new_line_size) / 2.0 + v.ascent
-                - label.metrics('H', MENU_PX).height as f32 / 2.0
+                - label.metrics('H', QUICK_PX).height as f32 / 2.0
         }
         None => h as f32 / 2.0,
+    }
+}
+
+fn row_cap_centre() -> f32 {
+    match text::label_font() {
+        Some(label) => cap_centre(label, MENU_H),
+        None => MENU_H as f32 / 2.0,
     }
 }
 
@@ -468,10 +626,7 @@ pub fn quick_pointer_face() -> UndoFace {
     let s = POINTER_SCALE;
     let w = POINTER[0].len() * s;
     let h = (MENU_H + 2 * POINTER_BLEED) as usize;
-    let centre = match text::label_font() {
-        Some(label) => cap_centre(label, MENU_H),
-        None => MENU_H as f32 / 2.0,
-    } + POINTER_BLEED as f32;
+    let centre = row_cap_centre() + POINTER_BLEED as f32;
     let tip = POINTER.len() / 2 * s + s / 2;
     let top = (centre - tip as f32).round() as usize;
     let mut rgba = vec![0u8; w * h * 4];
@@ -497,8 +652,8 @@ pub fn quick_pointer_face() -> UndoFace {
     }
 }
 
-pub fn quick_value_face(text: &str, lit: bool) -> UndoFace {
-    quick_text_face(text, if lit { MENU_INK } else { DIM_INK })
+pub fn quick_value_face(text: &str, _lit: bool) -> UndoFace {
+    quick_text_face(text, FACE_INK)
 }
 
 fn quick_text_face(label: &str, colour: [u8; 3]) -> UndoFace {
@@ -509,7 +664,7 @@ fn quick_text_face(label: &str, colour: [u8; 3]) -> UndoFace {
             h: 0,
         };
     };
-    let layout = text::fit(font, label, OUT_W as f32, 1, MENU_PX, MENU_PX);
+    let layout = text::fit(font, label, OUT_W as f32, 1, QUICK_PX, QUICK_PX);
     let set = layout
         .lines
         .iter()
@@ -519,6 +674,67 @@ fn quick_text_face(label: &str, colour: [u8; 3]) -> UndoFace {
     let mut rgba = vec![0u8; (w * MENU_H * 4) as usize];
     text::draw_centred(&mut rgba, w, MENU_H, &layout, colour);
     UndoFace { rgba, w, h: MENU_H }
+}
+
+/// The help line for a row, in white for tinting. Rows with nothing to say have none.
+pub fn quick_help_face(row: QuickRow) -> Option<UndoFace> {
+    let line = row.help()?;
+    let font = text::label_font()?;
+    let layout = text::fit(font, line, HELP_MAX_W, 1, HELP_PX, HELP_MIN_PX);
+    let set = layout
+        .lines
+        .iter()
+        .map(|l| text::line_width(font, l, layout.px, layout.tracking))
+        .fold(0.0, f32::max);
+    let w = (set.ceil() as u32 + 4).min(HELP_MAX_W as u32);
+    let mut rgba = vec![0u8; (w * HELP_H * 4) as usize];
+    text::draw_centred(&mut rgba, w, HELP_H, &layout, FACE_INK);
+    Some(UndoFace { rgba, w, h: HELP_H })
+}
+
+/// The switch in white: off is an outlined pill with the knob on the left, on is a filled pill
+/// with the knob cut out on the right.
+pub fn quick_switch_face(on: bool) -> UndoFace {
+    const SS: usize = 4;
+    let (w, h) = (SWITCH_W as usize, SWITCH_H as usize);
+    let r = h as f32 / 2.0;
+    let pill = |x: f32, y: f32| -> f32 {
+        // Signed distance to the pill's outline, negative inside.
+        let cx = x.clamp(r, w as f32 - r);
+        ((x - cx).powi(2) + (y - r).powi(2)).sqrt() - r
+    };
+    let knob_r = if on { r - 4.0 } else { r - 5.5 };
+    let knob_x = if on { w as f32 - r } else { r };
+    let mut rgba = vec![0u8; w * h * 4];
+    for py in 0..h {
+        for px in 0..w {
+            let mut cover = 0.0f32;
+            for sy in 0..SS {
+                for sx in 0..SS {
+                    let x = px as f32 + (sx as f32 + 0.5) / SS as f32;
+                    let y = py as f32 + (sy as f32 + 0.5) / SS as f32;
+                    let d = pill(x, y);
+                    let knob = ((x - knob_x).powi(2) + (y - r).powi(2)).sqrt() - knob_r;
+                    let ink = if on {
+                        d <= 0.0 && knob > 0.0
+                    } else {
+                        (d <= 0.0 && d > -SWITCH_STROKE) || knob <= 0.0
+                    };
+                    if ink {
+                        cover += 1.0;
+                    }
+                }
+            }
+            let a = (cover / (SS * SS) as f32 * 255.0).round() as u8;
+            let at = (py * w + px) * 4;
+            rgba[at..at + 4].copy_from_slice(&[0xff, 0xff, 0xff, a]);
+        }
+    }
+    UndoFace {
+        rgba,
+        w: SWITCH_W,
+        h: SWITCH_H,
+    }
 }
 
 pub fn quick_caret_face(right: bool) -> UndoFace {
@@ -543,18 +759,19 @@ pub fn quick_caret_face(right: bool) -> UndoFace {
         for gx in 0..m.width {
             let at = ((y as u32 * w + gx as u32) * 4) as usize;
             let a = cov[gy * m.width + gx];
-            rgba[at..at + 4].copy_from_slice(&[MENU_INK[0], MENU_INK[1], MENU_INK[2], a]);
+            rgba[at..at + 4].copy_from_slice(&[FACE_INK[0], FACE_INK[1], FACE_INK[2], a]);
         }
     }
     UndoFace { rgba, w, h }
 }
 
-pub fn quick_legend_faces() -> [UndoFace; 4] {
+pub fn quick_legend_faces() -> [UndoFace; 5] {
     [
-        hint_face("B", "Back"),
-        arrows_hint_face("Change"),
-        hint_face("A", "Open"),
-        hint_face("B", "Resume"),
+        tint_mask(hint_face("B", "Back")),
+        tint_mask(arrows_hint_face("Change")),
+        tint_mask(hint_face("A", "Open")),
+        tint_mask(hint_face("B", "Resume")),
+        tint_mask(hint_face("A", "Select")),
     ]
 }
 
@@ -563,7 +780,10 @@ pub struct QuickMenuFaces {
     pub pointer: (TexId, u32, u32),
     pub values: Vec<[(TexId, u32, u32); 2]>,
     pub carets: [(TexId, u32, u32); 2],
-    pub legend: [(TexId, u32); 4],
+    pub legend: [(TexId, u32); 5],
+    /// Off, on.
+    pub switches: [(TexId, u32, u32); 2],
+    pub help: Vec<Option<(TexId, u32, u32)>>,
 }
 
 pub struct QuickMenu<'a> {
@@ -581,12 +801,14 @@ pub struct QuickMenu<'a> {
     pub bezel: Option<[(TexId, u32, u32); 2]>,
     pub over_game: bool,
     pub canvas: Canvas,
+    pub ink: Ink,
 }
 
 impl QuickMenu<'_> {
     pub fn draw(&self, out: &mut Vec<Draw>) {
+        let ink = if self.over_game { theme::DARK } else { self.ink };
         match (self.over_game, self.row.page() == QuickRow::PLAY_SCREEN) {
-            (false, _) => draw_menu_ground(self.canvas, self.ground, out),
+            (false, _) => draw_menu_ground(self.canvas, self.ground, ink, out),
             (true, panel) => {
                 let y = match panel {
                     true => quick_row_top(self.row.page()[0], self.hidden) - PANEL_GAP,
@@ -597,36 +819,44 @@ impl QuickMenu<'_> {
                     y,
                     w: self.canvas.w,
                     h: OUT_H as f32 - y,
-                    colour: [0.0, 0.0, 0.0, GROUND_SCRIM],
+                    colour: theme::DARK.wash,
                 });
             }
         }
+        let rows = self.row.shown(self.hidden).len();
+        let pitch = quick_pitch(rows);
+        out.push(Draw::Rect {
+            x: 0.0,
+            y: quick_row_top(self.row, self.hidden) + BAR_INSET,
+            w: self.canvas.w,
+            h: pitch - 2.0 * BAR_INSET,
+            colour: ink.bar,
+        });
         let Some(faces) = self.faces else {
             return;
         };
         let (right, pad) = (self.canvas.w - QUICK_EDGE, MENU_PAD as f32);
-        let main_w = self
-            .row
-            .page()
-            .iter()
-            .filter_map(|r| faces.labels.get(r.index()))
-            .map(|l| l[1].1)
-            .max()
-            .unwrap_or(0);
+        let centre = row_cap_centre();
         for row in self.row.shown(self.hidden) {
-            let y = quick_row_top(row, self.hidden) + TYPE_DROP;
+            let y = quick_row_top(row, self.hidden) + TYPE_DROP + (pitch - QUICK_PITCH) / 2.0;
             let lit = row == self.row;
+            let colour = if lit { ink.on_bar } else { ink.dim };
             if let Some(&(tex, w, h)) = faces.labels.get(row.index()).map(|l| &l[lit as usize]) {
                 let x = match row.centred() {
-                    true => self.canvas.centred(main_w as f32),
+                    true => self.canvas.centred(w as f32),
                     false => QUICK_LABEL_X - pad,
                 };
-                push(out, tex, x, y, w, h);
-                if lit {
-                    let (tex, pw, ph) = faces.pointer;
-                    let px = x + pad - POINTER_GAP - pw as f32;
-                    push(out, tex, px, y - POINTER_BLEED as f32, pw, ph);
-                }
+                tint(out, tex, x, y, w, h, colour);
+            }
+            if row.centred() {
+                continue;
+            }
+            let picked = self.values[row.index()];
+            if let Some(on) = picked.and_then(QuickValue::switch) {
+                let (tex, w, h) = faces.switches[on as usize];
+                let sy = y + centre - h as f32 / 2.0;
+                tint(out, tex, right - w as f32, sy, w, h, colour);
+                continue;
             }
             let value = match row {
                 QuickRow::DateTime => self.clock.map(|c| c[lit as usize]),
@@ -636,37 +866,58 @@ impl QuickMenu<'_> {
                 QuickRow::GbBezel => self.gb_bezel.map(|c| c[lit as usize]),
                 QuickRow::GbcBezel => self.gbc_bezel.map(|c| c[lit as usize]),
                 QuickRow::Bezel => self.bezel.map(|c| c[lit as usize]),
-                _ => self.values[row.index()]
+                _ => picked
                     .and_then(|v| faces.values.get(v.index()))
                     .map(|v| v[lit as usize]),
             };
+            let [(left_tex, lw, lh), (right_tex, rw, rh)] = faces.carets;
             let Some((tex, w, h)) = value else {
+                // A row that opens a page of its own: a caret says there is more inside.
+                if row.opens() {
+                    tint(out, right_tex, right - rw as f32, y, rw, rh, colour);
+                }
                 continue;
             };
             if !lit || row.opens() {
-                push(out, tex, right + pad - w as f32, y, w, h);
+                tint(out, tex, right + pad - w as f32, y, w, h, colour);
                 continue;
             }
-            let [(left_tex, lw, lh), (right_tex, rw, rh)] = faces.carets;
             let rx = right - rw as f32;
-            push(out, right_tex, rx, y, rw, rh);
+            tint(out, right_tex, rx, y, rw, rh, colour);
             let vx = rx - CARET_GAP + pad - w as f32;
-            push(out, tex, vx, y, w, h);
-            push(out, left_tex, vx + pad - CARET_GAP - lw as f32, y, lw, lh);
+            tint(out, tex, vx, y, w, h, colour);
+            tint(out, left_tex, vx + pad - CARET_GAP - lw as f32, y, lw, lh, colour);
         }
-        let [back, change, open, resume] = faces.legend;
+        if let Some(&Some((tex, w, h))) = faces.help.get(self.row.index()) {
+            tint(
+                out,
+                tex,
+                self.canvas.centred(w as f32),
+                HELP_Y,
+                w,
+                h,
+                ink.dim,
+            );
+        }
+        let [back, change, open, resume, select] = faces.legend;
         let back = match self.row.page() == QuickRow::PLAY {
             true => resume,
             false => back,
         };
-        let other = if self.row.opens() { open } else { change };
+        let other = match (self.row.page() == QuickRow::POWER, self.row.opens()) {
+            (true, _) => select,
+            (false, true) => open,
+            (false, false) => change,
+        };
         for (tex, w, x) in centred_hints(self.canvas, &[back, other], LEGEND_GAP) {
-            push(out, tex, x, LEGEND_Y, w, HINT_H);
+            tint(out, tex, x, LEGEND_Y, w, HINT_H, ink.text);
         }
     }
 }
 
-pub fn draw_menu_ground(canvas: Canvas, ground: Option<TexId>, out: &mut Vec<Draw>) {
+/// The menu's ground: the theme's wallpaper under a light wash, or plain black when Wallpaper
+/// is Off.
+pub fn draw_menu_ground(canvas: Canvas, ground: Option<TexId>, ink: Ink, out: &mut Vec<Draw>) {
     let (w, h) = (canvas.w, OUT_H as f32);
     match ground {
         Some(tex) => {
@@ -684,7 +935,7 @@ pub fn draw_menu_ground(canvas: Canvas, ground: Option<TexId>, out: &mut Vec<Dra
                 y: 0.0,
                 w,
                 h,
-                colour: [0.0, 0.0, 0.0, GROUND_SCRIM],
+                colour: ink.wash,
             });
         }
         None => out.push(Draw::Rect {
@@ -692,27 +943,36 @@ pub fn draw_menu_ground(canvas: Canvas, ground: Option<TexId>, out: &mut Vec<Dra
             y: 0.0,
             w,
             h,
-            colour: opening(),
+            colour: [0.0, 0.0, 0.0, 1.0],
         }),
     }
 }
 
-pub fn quick_row_top(row: QuickRow, hidden: &[QuickRow]) -> f32 {
-    let rows = QUICK_PITCH * row.shown(hidden).len() as f32;
-    let top = match row.page() == QuickRow::PLAY_SCREEN {
-        true => LEGEND_Y - PANEL_GAP - rows,
-        false => (LEGEND_Y - rows) / 2.0,
-    };
-    top + QUICK_PITCH * row.position(hidden) as f32
+/// The row height: the full pitch while the page fits, squeezed so a longer page still does.
+pub fn quick_pitch(rows: usize) -> f32 {
+    if rows == 0 {
+        return QUICK_PITCH;
+    }
+    (QUICK_ROOM / rows as f32).floor().clamp(MENU_H as f32, QUICK_PITCH)
 }
 
-fn push(out: &mut Vec<Draw>, tex: TexId, x: f32, y: f32, w: u32, h: u32) {
-    out.push(Draw::Tex {
+pub fn quick_row_top(row: QuickRow, hidden: &[QuickRow]) -> f32 {
+    let pitch = quick_pitch(row.shown(hidden).len());
+    let rows = pitch * row.shown(hidden).len() as f32;
+    let top = match row.page() == QuickRow::PLAY_SCREEN {
+        true => HELP_Y - PANEL_GAP - rows,
+        false => (ROWS_BOTTOM - rows) / 2.0,
+    };
+    top + pitch * row.position(hidden) as f32
+}
+
+fn tint(out: &mut Vec<Draw>, tex: TexId, x: f32, y: f32, w: u32, h: u32, colour: [f32; 4]) {
+    out.push(Draw::Tint {
         x: x.round(),
         y: y.round(),
         w: w as f32,
         h: h as f32,
         tex,
-        alpha: 1.0,
+        colour,
     });
 }
