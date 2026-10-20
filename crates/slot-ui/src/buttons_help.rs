@@ -60,7 +60,7 @@ pub const BUTTON_PAGES: [(&str, &[(&str, &str)]); 7] = [
             ("SELECT + L1", "Load the newest state"),
             ("SELECT + B", "Screen effects on / off"),
             ("SELECT + L2 / R2", "Game Boy palette"),
-            ("L1 / R1", "Stretch or not (GB)"),
+            ("L1 / R1", "Full screen (GB / GBC)"),
         ],
     ),
     (

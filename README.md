@@ -86,7 +86,7 @@ The About page is the back of the handheld, credits moulded into the plastic and
 - **START + SELECT** resets the game
 - **Resume Game** powers straight back into your game, its picture as the boot screen
 - Carts without label art get their title written on by hand
-- Native 640×480, with Game Boy games filling the screen
+- Native 640×480, with Game Boy and Game Boy Color games filling the screen; **L1 / R1** flips between full screen and original size
 - Starts on your Favorites; GB, GBC, GBA in that order
 
 <img src=".github/resources/gravy/marker.png" width="100%" alt="Carts with no label art, titled in marker">
@@ -124,6 +124,7 @@ The full list is on the **Buttons** pages in the menu. The essentials:
 | SELECT + R1 / L1 | Save / load a state |
 | Hold L2 / Hold R2 | Rewind / fast-forward |
 | SELECT + B | Screen effects on / off |
+| L1 / R1 | Full screen / original size (GB, GBC) |
 | START + SELECT | Reset the game |
 
 | Everywhere | |
