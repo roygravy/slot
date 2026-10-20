@@ -866,7 +866,7 @@ fn a_paused_refresh_shows_a_colour_change_on_the_first_toggle() {
             "gpsp_color_correction",
             if on { "enabled" } else { "disabled" },
         );
-        emu.refresh();
+        emu.refresh(true);
         while emu.published_count() == before {
             assert!(Instant::now() < deadline, "the refresh never published");
             std::thread::sleep(Duration::from_millis(2));

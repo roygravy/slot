@@ -63,6 +63,10 @@ pub enum CoreState {
     Failed,
 }
 
+/// How many times a refresh redraws the paused frame: enough for the cores' Ghosting
+/// blend to settle on a still picture.
+const REFRESH_FRAMES: usize = 12;
+
 pub struct EmuHandle {
     frames: Arc<Frames>,
     shared: Arc<Shared>,
@@ -83,7 +87,9 @@ enum Cmd {
     EndLink,
     BeginCable(u8, Box<dyn LinkChannel>),
     SetOption(String, String),
-    Refresh,
+    /// Settle a core after a colour or Ghosting change; `show` also puts the paused picture
+    /// back on screen, for when the game is held behind a menu.
+    Refresh { show: bool },
 }
 
 struct Shared {
@@ -404,8 +410,8 @@ impl EmuHandle {
         rx
     }
 
-    pub fn refresh(&self) {
-        request(&self.cmds, &self.shared, Cmd::Refresh);
+    pub fn refresh(&self, show: bool) {
+        request(&self.cmds, &self.shared, Cmd::Refresh { show });
     }
 
     pub fn request_load(&self, state: Vec<u8>) {
@@ -937,13 +943,20 @@ impl Worker {
                     eprintln!("slot: {e}");
                 }
             }
-            Cmd::Refresh => match core.serialize() {
+            Cmd::Refresh { show } => match core.serialize() {
                 Ok(state) => {
-                    core.set_frame_skip(true);
-                    core.run_frame(ButtonMask(0));
-                    core.set_frame_skip(false);
-                    core.run_frame(ButtonMask(0));
-                    self.publish(core.video_xrgb8888());
+                    // Run a few frames rather than one, then go back to the paused state: a
+                    // core's frame blending (Ghosting) starts over when it is switched on or its
+                    // colours change, and a single frame of it shows the game half dark or half
+                    // in the old colours. A few frames on, it has settled. Going back to the state
+                    // between them would start the blending over again, so they run straight on;
+                    // the picture is a fifth of a second ahead, and the game picks up from the state.
+                    for _ in 0..REFRESH_FRAMES {
+                        core.run_frame(ButtonMask(0));
+                    }
+                    if show {
+                        self.publish(core.video_xrgb8888());
+                    }
                     let _ = core.take_audio();
                     if let Err(e) = core.unserialize(&state) {
                         eprintln!("slot: refresh: {e}");

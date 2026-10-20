@@ -1109,7 +1109,7 @@ fn a_refresh_redraws_a_paused_core_without_moving_it() {
     std::thread::sleep(Duration::from_millis(100));
     let held = frame_count(&emu);
     let shown = emu.published_count();
-    emu.refresh();
+    emu.refresh(true);
     assert!(
         wait_for(|| emu.published_count() > shown),
         "the refresh never published a frame"

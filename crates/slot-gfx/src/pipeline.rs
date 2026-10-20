@@ -62,7 +62,6 @@ pub struct GamePass {
     fills: bool,
     src: [f32; 4],
     background: [f32; 3],
-    bg_sample_countdown: u8,
 }
 
 impl GamePass {
@@ -196,7 +195,6 @@ impl GamePass {
             fills: false,
             src: WHOLE_TEXTURE,
             background: [0.0, 0.0, 0.0],
-            bg_sample_countdown: 0,
         })
     }
 
@@ -257,7 +255,6 @@ impl GamePass {
     pub fn set_picture_appearance(&mut self, sample_background: bool, dim: f32) {
         if self.sample_background != sample_background {
             self.background = [0.0, 0.0, 0.0];
-            self.bg_sample_countdown = 0;
         }
         self.sample_background = sample_background;
         self.picture_dim = dim.clamp(0.0, 1.0);
@@ -328,12 +325,9 @@ impl GamePass {
             return;
         }
         if self.sample_background && self.pic != WHOLE_TEXTURE {
-            if self.bg_sample_countdown == 0 {
-                self.background = palette_lightest_color(xrgb8888, self.pic);
-                self.bg_sample_countdown = 7;
-            } else {
-                self.bg_sample_countdown -= 1;
-            }
+            // Every frame: a Game Boy picture is small, and the screen behind it must change
+            // colour with the palette on the same frame, not some frames later.
+            self.background = palette_lightest_color(xrgb8888, self.pic);
         }
         unsafe {
             gl::BindTexture(gl::TEXTURE_2D, self.game);

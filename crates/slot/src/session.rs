@@ -315,9 +315,11 @@ impl Session {
                 recoloured = true;
             }
         }
+        // Behind a menu the game is still: redraw its picture in the new colours. In play the
+        // next frames show the change, Ghosting fading the old colours out like a real LCD.
         if recoloured && self.held() && !self.app.link_active() {
             if let Some(emu) = &self.emu {
-                emu.refresh();
+                emu.refresh(true);
             }
         }
         if let Some((stem, serial)) = self.app.take_link_reload() {
