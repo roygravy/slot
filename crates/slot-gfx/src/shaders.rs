@@ -68,6 +68,13 @@ uniform vec2 u_fbo;
 uniform vec4 u_pic;
 uniform vec3 u_bg;
 uniform float u_picture_dim;
+uniform vec3 u_shadow;
+uniform vec3 u_tint;
+uniform float u_saturation;
+uniform float u_pale_opacity;
+uniform float u_panel_fixed;
+uniform float u_black_edge;
+uniform vec3 u_lcd_mix;
 uniform float u_grid_opacity;
 uniform float u_pixel_transparency;
 varying vec2 v_uv;
@@ -90,13 +97,27 @@ void main() {
     vec4 lcd = vec4(0.0);
     bool inside = all(greaterThanEqual(uv, u_pic.xy)) && all(lessThan(uv, u_pic.zw));
     if (!inside) {
-        c = u_bg;
+        c = u_black_edge > 0.5 ? vec3(0.0) : u_bg;
     } else if (u_mode > 4.5) {
         vec2 screen_px = floor(gl_FragCoord.xy / u_fbo);
         vec2 overlay_px = floor(screen_px * u_lcd_overlay_size / u_output_size);
+
         vec2 overlay_uv = (overlay_px + 0.5) / u_lcd_overlay_size;
         lcd = texture2D(u_lcd_overlay, overlay_uv);
-        c = mix(c, lcd.rgb, lcd.a * 0.45);
+        if (u_panel_fixed > 0.5) {
+            // The GBC's LCD, drawn on its own pixels (three screen pixels each way): a solid
+            // red, green and blue line down each pixel, and a faint dark line under every row.
+            // On the GBA, which is not scaled a whole number of times, the cells follow the
+            // screen's own pixels instead, three to a cell.
+            vec2 cell = u_lcd_mix.z > 0.5 ? mod(screen_px, 3.0) : floor(f * 3.0);
+            vec3 stripe = cell.x < 0.5 ? vec3(1.0, 0.0, 0.0) : (cell.x < 1.5 ? vec3(0.0, 1.0, 0.0) : vec3(0.0, 0.0, 1.0));
+            c = mix(c, stripe, u_lcd_mix.y);
+            if (cell.y > 1.5) {
+                c = mix(c, vec3(0.0), u_lcd_mix.x);
+            }
+        } else {
+            c = mix(c, lcd.rgb, lcd.a * 0.45);
+        }
     } else if (u_mode > 3.5) {
         c = pow(c, vec3(1.05));
         vec2 d = abs(f - 0.5);
@@ -133,27 +154,59 @@ void main() {
     }
     if (inside) {
         c *= 1.0 - u_picture_dim;
+        // How vivid the screen shows colour: a little less than the raw colours on a GBA.
+        c = mix(vec3(dot(c, luma_coeff)), c, u_saturation);
+        // A reflective panel: the brighter each channel, the more it takes the panel's tone.
+        c *= mix(vec3(1.0), u_tint, clamp(c, 0.0, 1.0));
     }
     if (inside && u_pixel_transparency > 0.5) {
-        vec3 panel = u_mode > 4.5 ? lcd.rgb : u_bg;
+        vec3 panel = (u_mode > 4.5 && u_panel_fixed < 0.5) ? lcd.rgb : u_bg;
         float luma = clamp(dot(c, luma_coeff), 0.0, 1.0);
         float ink = 1.0 - smoothstep(0.05, 0.88, luma);
-        float opacity = mix(0.62, 0.97, ink);
+        float opacity = mix(u_pale_opacity, 0.97, ink);
         c = mix(panel, c, opacity);
 
         vec2 texel = vec2(1.0 / u_src.x, 1.0 / u_src.y);
         vec2 edge_distance = min((uv - u_pic.xy) / texel, (u_pic.zw - uv) / texel);
         bool away_from_edge = all(greaterThan(edge_distance, vec2(1.0)));
         vec2 shadow_uv = sharp - texel;
-        float shadow_luma = dot(texture2D(u_game, shadow_uv).rgb, luma_coeff) * 0.60;
-        shadow_luma += dot(texture2D(u_game, shadow_uv - vec2(texel.x * 0.55, 0.0)).rgb, luma_coeff) * 0.10;
-        shadow_luma += dot(texture2D(u_game, shadow_uv + vec2(texel.x * 0.55, 0.0)).rgb, luma_coeff) * 0.10;
-        shadow_luma += dot(texture2D(u_game, shadow_uv - vec2(0.0, texel.y * 0.55)).rgb, luma_coeff) * 0.10;
-        shadow_luma += dot(texture2D(u_game, shadow_uv + vec2(0.0, texel.y * 0.55)).rgb, luma_coeff) * 0.10;
+        float spread = u_shadow.y;
+        float shadow_luma;
+        vec3 shadow_rgb = vec3(0.0);
+        if (u_shadow.z > 0.5) {
+            // Soft: a small blur over the pixel up and to the left, edges fading out.
+            vec2 soft_uv = uv - texel * 0.85;
+            shadow_rgb = vec3(0.0);
+            for (int j = -1; j <= 1; j++) {
+                for (int i = -1; i <= 1; i++) {
+                    float w = (i == 0 ? 2.0 : 1.0) * (j == 0 ? 2.0 : 1.0) / 16.0;
+                    vec2 o = vec2(float(i), float(j)) * texel * spread;
+                    // Only the game's own pixels cast shadows: never sample past its picture.
+                    vec2 at = clamp(soft_uv + o, u_pic.xy + texel * 0.5, u_pic.zw - texel * 0.5);
+                    shadow_rgb += texture2D(u_game, at).rgb * w;
+                }
+            }
+            shadow_luma = dot(shadow_rgb, luma_coeff);
+        } else {
+            shadow_luma = dot(texture2D(u_game, shadow_uv).rgb, luma_coeff) * 0.60;
+            shadow_luma += dot(texture2D(u_game, shadow_uv - vec2(texel.x * spread, 0.0)).rgb, luma_coeff) * 0.10;
+            shadow_luma += dot(texture2D(u_game, shadow_uv + vec2(texel.x * spread, 0.0)).rgb, luma_coeff) * 0.10;
+            shadow_luma += dot(texture2D(u_game, shadow_uv - vec2(0.0, texel.y * spread)).rgb, luma_coeff) * 0.10;
+            shadow_luma += dot(texture2D(u_game, shadow_uv + vec2(0.0, texel.y * spread)).rgb, luma_coeff) * 0.10;
+        }
         float shadow_ink = 1.0 - smoothstep(0.05, 0.45, shadow_luma);
         float exposed_panel = smoothstep(0.08, 0.70, luma);
-        float shadow = away_from_edge ? shadow_ink * exposed_panel * 0.16 : 0.0;
-        c = mix(c, vec3(0.0), shadow);
+        if (u_shadow.z > 0.5) {
+            // The whole LCD lets light through: every pixel darker than the spot its shadow
+            // falls on casts one, a coloured pixel as well as a black one, the darker the more.
+            float here = dot(texture2D(u_game, sharp).rgb, luma_coeff);
+            shadow_ink = smoothstep(0.0, 0.6, here - shadow_luma);
+            exposed_panel = 1.0;
+        }
+        float shadow = away_from_edge ? shadow_ink * exposed_panel * u_shadow.x : 0.0;
+        // Light through a coloured pixel is coloured: its shadow is a darker shade of it.
+        vec3 shade = u_shadow.z > 0.5 ? shadow_rgb * 0.5 : vec3(0.0);
+        c = mix(c, c * shade, shadow);
     }
     FRAG_COLOR = vec4(c * u_bright, 1.0);
 }

@@ -74,6 +74,7 @@ pub struct EmuHandle {
 
 enum Cmd {
     SetCheats(Vec<String>),
+    Reset,
     Load(Vec<u8>),
     Save(Sender<Vec<u8>>),
     Sav(Sender<Option<Vec<u8>>>),
@@ -259,6 +260,11 @@ impl EmuHandle {
     /// Replace the running game's cheats with these codes, all on; empty clears them.
     pub fn set_cheats(&self, codes: Vec<String>) {
         request(&self.cmds, &self.shared, Cmd::SetCheats(codes));
+    }
+
+    /// Reset the running game, as switching the console off and on.
+    pub fn reset(&self) {
+        request(&self.cmds, &self.shared, Cmd::Reset);
     }
 
     pub fn set_driven(&self, driven: bool) {
@@ -987,6 +993,7 @@ impl Worker {
             Cmd::SetCheats(codes) => {
                 core.set_cheats(&codes);
             }
+            Cmd::Reset => core.reset(),
             Cmd::EndLink => {
                 self.shared.link_lost.store(false, Ordering::Relaxed);
                 self.shared.peer_ended.store(false, Ordering::Relaxed);

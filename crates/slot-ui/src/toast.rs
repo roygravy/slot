@@ -15,20 +15,23 @@ pub enum Toast {
     LinkEnded,
     PeerEnded,
     BiosMismatch,
-    ColourOn,
-    ColourOff,
     ShaderOff,
     ShaderLcd3x,
     ShaderGrid,
     ShaderGbaLcd,
+    ShaderGbcLcd,
+    EffectsOn,
+    EffectsOff,
     ShaderDot,
     ShaderSimpletex,
     CardUnwritable,
+    ScreenshotSaved,
+    GameReset,
     Palette(GbPalette),
 }
 
 impl Toast {
-    const FIXED: [Toast; 16] = [
+    const FIXED: [Toast; 19] = [
         Toast::StateSaved,
         Toast::StateLoaded,
         Toast::NeedsGpsp,
@@ -36,8 +39,6 @@ impl Toast {
         Toast::LinkEnded,
         Toast::PeerEnded,
         Toast::BiosMismatch,
-        Toast::ColourOn,
-        Toast::ColourOff,
         Toast::ShaderOff,
         Toast::ShaderLcd3x,
         Toast::ShaderGrid,
@@ -45,6 +46,11 @@ impl Toast {
         Toast::ShaderDot,
         Toast::ShaderSimpletex,
         Toast::CardUnwritable,
+        Toast::ScreenshotSaved,
+        Toast::GameReset,
+        Toast::ShaderGbcLcd,
+        Toast::EffectsOn,
+        Toast::EffectsOff,
     ];
 
     pub fn all() -> Vec<Toast> {
@@ -81,15 +87,18 @@ impl Toast {
             Toast::LinkEnded => "Link ended",
             Toast::PeerEnded => "Link was ended",
             Toast::BiosMismatch => "BIOS does not match",
-            Toast::ColourOn => "Correction On",
-            Toast::ColourOff => "Correction Off",
             Toast::ShaderOff => "Shader: Off",
             Toast::ShaderLcd3x => "Shader: LCD3x",
             Toast::ShaderGrid => "Shader: Grid",
             Toast::ShaderGbaLcd => "Shader: GBA LCD",
+            Toast::ShaderGbcLcd => "Shader: GBC LCD",
+            Toast::EffectsOn => "Screen Effects On",
+            Toast::EffectsOff => "Screen Effects Off",
             Toast::ShaderDot => "Shader: Dot",
             Toast::ShaderSimpletex => "Shader: Simpletex",
             Toast::CardUnwritable => "Can't write to SD card",
+            Toast::ScreenshotSaved => "Screenshot Saved",
+            Toast::GameReset => "Game Reset",
             Toast::Palette(p) => p.label(),
         }
     }

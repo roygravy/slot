@@ -14,7 +14,7 @@ use slot_ui::{
     quick_caret_face, quick_label_face, quick_legend_faces, quick_pointer_face, quick_value_face,
     rebuild_count_face, rebuild_title_face, set_clock_hint_face, slot_back, slot_back_light,
     slot_front, slot_front_light, socket_face, title_face, toast_face,
-    wallpaper_face, word_ink, CartFace, GbShell, Icon, LinkBadge, PowerChoice, QuickMenuFaces,
+    wallpaper_face, word_ink, CartFace, GbShell, Icon, LinkBadge, QuickMenuFaces,
     QuickRow, QuickValue, RebuildScreen, Toast, UndoFace, ALERT_PX, BOLT_PX,
     HUD_ICON_PX, HUD_INK, LEGEND,
 };
@@ -51,11 +51,14 @@ pub struct Frontend {
     core_asked: Option<String>,
     core_tex: CoreTextures,
     core_built: Option<String>,
-    undo_tex: Option<TexId>,
     switcher: Switcher,
     clocks: Clocks,
     about: AboutFace,
     cheats: CheatTextures,
+    shot_tex: ShotTextures,
+    /// A game-only frame was drawn last frame and waits to be read back.
+    capture_pending: bool,
+    shot_pending: bool,
     quick_clock: QuickClock,
     quick_palette: QuickPalette,
     wallpaper: WallpaperSync,
@@ -118,6 +121,20 @@ struct CheatTextures {
     switches: [Option<TexId>; 2],
     more: [Option<TexId>; 2],
     badges: [Option<TexId>; 2],
+}
+
+/// The Screenshots page's faces and a few pictures, reused texture by texture.
+#[derive(Default)]
+struct ShotTextures {
+    built: bool,
+    key: Option<(u64, usize)>,
+    title: Option<TexId>,
+    date: Option<TexId>,
+    fixed: [Option<TexId>; 3],
+    hints: [Option<TexId>; 7],
+    state_line: Option<TexId>,
+    /// Up to five pictures: (path, texture), least recently used first.
+    pics: Vec<(std::path::PathBuf, TexId)>,
 }
 
 #[derive(Default)]
@@ -189,11 +206,13 @@ impl Frontend {
             core_asked: None,
             core_tex: CoreTextures::default(),
             core_built: None,
-            undo_tex: None,
             switcher: Switcher::default(),
             clocks: Clocks::default(),
             about: AboutFace::default(),
             cheats: CheatTextures::default(),
+            shot_tex: ShotTextures::default(),
+            capture_pending: false,
+            shot_pending: false,
             quick_clock: QuickClock::default(),
             quick_palette: QuickPalette::default(),
             wallpaper: WallpaperSync::default(),
@@ -423,8 +442,6 @@ impl Frontend {
         let blank = cart(faces.blank_chip);
         let shadow = cart(faces.chip_shadow);
         let mut up = |f: UndoFace| (compositor.create_texture(f.w, f.h, &f.rgba), f.w, f.h);
-        let lines = faces.shutdown.into_iter().map(&mut up).collect();
-        let menu = faces.power_menu.into_iter().map(&mut up).collect();
         let labels = faces
             .quick_labels
             .into_iter()
@@ -441,6 +458,8 @@ impl Frontend {
         let switches = faces.quick_switches.map(&mut up);
         let button_tabs = faces.button_tabs.into_iter().map(&mut up).collect();
         let button_bodies = faces.button_bodies.into_iter().map(&mut up).collect();
+        let [left, right] = faces.button_arrows;
+        let button_arrows = [up(left), up(right)];
         let button_legend = faces.button_legend.map(|f| {
             let (tex, w, _) = up(f);
             (tex, w)
@@ -483,8 +502,6 @@ impl Frontend {
         }
         let app = self.session.app_mut();
         app.set_link_badge_faces(link_badges);
-        app.set_shutdown_faces(lines);
-        app.set_power_menu_faces(menu);
         app.set_quick_menu_faces(QuickMenuFaces {
             labels,
             pointer,
@@ -499,6 +516,7 @@ impl Frontend {
             tabs: button_tabs,
             bodies: button_bodies,
             legend: button_legend,
+            arrows: button_arrows,
         });
         app.set_core_part_faces(sockets, chips, blank, shadow);
         app.set_core_legend_faces(core_legend);
@@ -572,13 +590,92 @@ impl Frontend {
         self.link_shot_shown = true;
     }
 
+    /// Read back the game-only frame drawn for the boot screen, the frame after it was drawn.
+    fn grab_boot_picture(&mut self, compositor: &mut Compositor) {
+        if std::mem::take(&mut self.capture_pending) {
+            let (w, h) = compositor.frame_size();
+            let rgba = compositor.read_frame();
+            if w > 0 && h > 0 && rgba.len() >= (w * h * 4) as usize {
+                self.session.app_mut().set_boot_picture(rgba, w, h);
+            }
+        }
+        if self.session.app().capturing() {
+            self.capture_pending = true;
+        }
+    }
+
+    /// Read back the frame drawn for a screenshot, the frame after it was asked for.
+    fn grab_screenshot(&mut self, compositor: &mut Compositor) {
+        if std::mem::take(&mut self.shot_pending) {
+            let (w, h) = compositor.frame_size();
+            let rgba = compositor.read_frame();
+            if w > 0 && h > 0 && rgba.len() >= (w * h * 4) as usize {
+                self.session.app_mut().save_screenshot(rgba, w, h);
+            }
+        }
+        if self.session.app().shot_pending() {
+            self.shot_pending = true;
+        }
+    }
+
+    /// Booting back into a game: the picture it left as the boot screen, until it runs again.
+    fn load_resume_picture(&mut self, compositor: &mut Compositor) {
+        let app = self.session.app_mut();
+        if app.resume_picture_done() {
+            if let Some(tex) = app.clear_resume_picture() {
+                // Shrink the picture's texture away; it shows once a boot.
+                compositor.update_texture(tex, 1, 1, &[0, 0, 0, 0]);
+            }
+            return;
+        }
+        if !app.picture_wanted() {
+            return;
+        }
+        let tex = app
+            .root()
+            .map(|r| r.to_path_buf())
+            .and_then(|root| crate::bootlogo::take_picture(&root))
+            .map(|bmp| {
+                let rgba: Vec<u8> =
+                    bmp.rgb.iter().flat_map(|p| [p[0], p[1], p[2], 255]).collect();
+                compositor.create_texture(bmp.width as u32, bmp.height as u32, &rgba)
+            });
+        app.set_resume_picture(tex);
+    }
+
     pub fn compose(&mut self, compositor: &mut Compositor) {
         compositor.set_blue_light(self.session.app().blue_light());
         compositor.set_picture(self.session.app().picture_rect());
         let platform = self.session.app().playing_platform();
-        let gb = platform == slot_store::Platform::Gb;
-        let gbc = platform == slot_store::Platform::Gbc;
+        // A Game Boy game in its own Game Boy Color colors (Color Palettes off) is drawn as
+        // the GBC draws it: the GBC's panel, LCD lines and saturation.
+        let colour = !self.session.app().gb_palette_live();
+        let gb = platform == slot_store::Platform::Gb && !colour;
+        let gbc = platform == slot_store::Platform::Gbc
+            || (platform == slot_store::Platform::Gb && colour);
         compositor.set_picture_appearance(gb, if gb { 0.03 } else { 0.0 });
+        let gba = platform == slot_store::Platform::Gba;
+        // The colour screens, GBC and GBA, cast lighter shadows than the Game Boy's.
+        compositor.set_pixel_shadow(match (gba || gbc, gb) {
+            (true, _) => COLOUR_PIXEL_SHADOW,
+            (_, true) => GB_PIXEL_SHADOW,
+            _ => slot_gfx::PIXEL_SHADOW,
+        });
+        compositor.set_pale_opacity(match gba || gbc {
+            true => COLOUR_PALE_OPACITY,
+            false => GB_PALE_OPACITY,
+        });
+        compositor.set_lcd_mix(GBC_LCD[0], GBC_LCD[1], gba);
+        compositor.set_black_edge(self.session.app().black_border());
+        compositor.set_saturation(match (gba, gbc) {
+            (true, _) => GBA_SATURATION,
+            (_, true) => GBC_SATURATION,
+            _ => 1.0,
+        });
+        match gbc || gba {
+            true => compositor.set_panel(Some(GBC_PANEL), GBC_PANEL),
+            false => compositor.set_panel(None, [1.0; 3]),
+        }
         compositor.set_grid_opacity(if gb {
             0.50
         } else if gbc {
@@ -589,17 +686,22 @@ impl Frontend {
         compositor.set_pixel_transparency(self.session.app().pixel_transparency());
         compositor.set_screen_effect(match self.session.app().screen_shader() {
             slot_store::Shader::Off => ScreenEffect::None,
+            slot_store::Shader::Grid if gbc => ScreenEffect::GbaLcd,
             slot_store::Shader::Lcd3x => ScreenEffect::Lcd3x,
             slot_store::Shader::Grid => ScreenEffect::Grid,
             slot_store::Shader::Dot => ScreenEffect::Dot,
             slot_store::Shader::Simpletex => ScreenEffect::Simpletex,
-            slot_store::Shader::GbaLcd => ScreenEffect::GbaLcd,
+            // The GBC's LCD is the GBA's mode, drawn on the GBC's own pixels over its panel.
+            slot_store::Shader::GbaLcd | slot_store::Shader::GbcLcd => ScreenEffect::GbaLcd,
         });
         compositor.set_shake(self.session.app().screen_shake());
         compositor.set_screen_power(self.session.app().screen_power());
         compositor.set_overlay_slide(self.session.app().overlay_slide());
         compositor.set_game_source_rect(self.session.app().source_rect());
         self.grab_link_shot(compositor);
+        self.grab_boot_picture(compositor);
+        self.grab_screenshot(compositor);
+        self.load_resume_picture(compositor);
         compositor.begin_frame(self.session.app().layout());
         if self.draw_rebuild(compositor) {
             return;
@@ -612,6 +714,7 @@ impl Frontend {
         sync_clock(self.session.app_mut(), compositor, &mut self.clocks);
         sync_about(self.session.app_mut(), compositor, &mut self.about);
         sync_cheats(self.session.app_mut(), compositor, &mut self.cheats);
+        sync_shots(self.session.app_mut(), compositor, &mut self.shot_tex);
         sync_quick_clock(self.session.app_mut(), compositor, &mut self.quick_clock);
         sync_quick_palette(self.session.app_mut(), compositor, &mut self.quick_palette);
         sync_wallpaper(self.session.app_mut(), compositor, &mut self.wallpaper);
@@ -669,7 +772,6 @@ impl Frontend {
             Faces {
                 pool: &mut self.polaroid_texes,
                 title: &mut self.title_tex,
-                undo: &mut self.undo_tex,
             },
             &mut self.switcher,
         );
@@ -803,11 +905,29 @@ impl Frontend {
     }
 
     pub fn restart(&mut self) {
+        self.leave_boot_picture();
         self.session.app_mut().restart();
     }
 
     pub fn poweroff(&mut self) {
+        self.leave_boot_picture();
         self.session.app_mut().poweroff();
+    }
+
+    /// Shutting down in a game: its picture becomes the boot screen.
+    fn leave_boot_picture(&mut self) {
+        let app = self.session.app_mut();
+        let Some((rgba, w, h)) = app.take_boot_picture() else {
+            return;
+        };
+        if let Some(root) = app.root().map(|r| r.to_path_buf()) {
+            crate::bootlogo::install_picture(&root, &rgba, (w as usize, h as usize));
+        }
+    }
+
+    /// For previews: the picture a shutdown would leave as the boot screen.
+    pub fn boot_picture(&mut self) -> Option<(Vec<u8>, u32, u32)> {
+        self.session.app_mut().take_boot_picture()
     }
 }
 
@@ -835,8 +955,6 @@ fn legend_faces(compositor: &mut Compositor, legend: &[(&str, &str)]) -> Vec<Tex
 
 struct UiFaces {
     link_badges: Vec<CartFace>,
-    shutdown: Vec<UndoFace>,
-    power_menu: Vec<UndoFace>,
     quick_labels: Vec<[UndoFace; 2]>,
     quick_pointer: UndoFace,
     quick_values: Vec<[UndoFace; 2]>,
@@ -847,6 +965,7 @@ struct UiFaces {
     quick_help: Vec<Option<UndoFace>>,
     button_tabs: Vec<UndoFace>,
     button_bodies: Vec<UndoFace>,
+    button_arrows: [UndoFace; 2],
     button_legend: [UndoFace; 2],
     sockets: Vec<CartFace>,
     chips: Vec<CartFace>,
@@ -875,19 +994,6 @@ impl UiFaces {
                     badge_face(badge, HUD_ICON_PX, ink)
                 })
                 .collect(),
-            shutdown: PowerChoice::ALL
-                .iter()
-                .map(|c| {
-                    menu_face(match c {
-                        PowerChoice::Restart => "Restarting",
-                        PowerChoice::PowerOff => "Powering Down",
-                    })
-                })
-                .collect(),
-            power_menu: PowerChoice::ALL
-                .iter()
-                .map(|c| menu_face(c.text()))
-                .collect(),
             quick_labels: QuickRow::ALL
                 .iter()
                 .map(|r| [false, true].map(|lit| quick_label_face(*r, lit)))
@@ -911,6 +1017,8 @@ impl UiFaces {
             button_tabs: (0..slot_ui::BUTTON_PAGES.len())
                 .map(slot_ui::buttons_tab_face)
                 .collect(),
+            // The menus' own carets, so the pages turn with the same arrows.
+            button_arrows: [false, true].map(quick_caret_face),
             button_bodies: (0..slot_ui::BUTTON_PAGES.len())
                 .map(slot_ui::buttons_body_face)
                 .collect(),
@@ -950,7 +1058,6 @@ impl UiFaces {
 struct Faces<'a> {
     pool: &'a mut Vec<TexId>,
     title: &'a mut Option<TexId>,
-    undo: &'a mut Option<TexId>,
 }
 
 fn sync_switcher(app: &mut App, compositor: &mut Compositor, texes: Faces, state: &mut Switcher) {
@@ -978,11 +1085,6 @@ fn sync_switcher(app: &mut App, compositor: &mut Compositor, texes: Faces, state
             })
             .collect();
         app.set_polaroid_faces(ids);
-
-        let label = app
-            .undo_label()
-            .map(|l| upload(compositor, texes.undo, hint_face("X", l)));
-        app.set_undo_face(label);
     }
     if state.titled.as_deref() != app.polaroid_stamp() {
         state.titled = app.polaroid_stamp().map(str::to_string);
@@ -1175,9 +1277,6 @@ fn sync_quick_clock(app: &mut App, compositor: &mut Compositor, state: &mut Quic
 }
 
 fn sync_quick_palette(app: &mut App, compositor: &mut Compositor, state: &mut QuickPalette) {
-    if app.in_game_menu().is_none() {
-        return;
-    }
     let text = app.gb_palette_label();
     if text == state.shown {
         return;
@@ -1330,11 +1429,191 @@ fn sync_cheats(app: &mut App, compositor: &mut Compositor, state: &mut CheatText
     }
 }
 
+/// A line of white text at `px`, fitted into `max_w`.
+fn text_face(line: &str, px: f32, max_w: f32) -> slot_ui::UndoFace {
+    use slot_ui::text;
+    let Some(font) = text::label_font() else {
+        return slot_ui::UndoFace { rgba: Vec::new(), w: 0, h: 0 };
+    };
+    let layout = text::fit(font, line, max_w, 1, px, 12.0);
+    let set = layout
+        .lines
+        .iter()
+        .map(|l| text::line_width(font, l, layout.px, layout.tracking))
+        .fold(0.0, f32::max);
+    let (w, h) = ((set.ceil() as u32 + 4).min(max_w as u32 + 4), (px * 1.5).ceil() as u32);
+    let mut rgba = vec![0u8; (w * h * 4) as usize];
+    text::draw_centred(&mut rgba, w, h, &layout, [0xff, 0xff, 0xff]);
+    slot_ui::UndoFace { rgba, w, h }
+}
+
+fn read_png(path: &std::path::Path) -> Option<(Vec<u8>, u32, u32)> {
+    let file = std::fs::File::open(path).ok()?;
+    let mut dec = png::Decoder::new(std::io::BufReader::new(file));
+    dec.set_transformations(png::Transformations::normalize_to_color8());
+    let mut reader = dec.read_info().ok()?;
+    let mut buf = vec![0u8; reader.output_buffer_size()];
+    let info = reader.next_frame(&mut buf).ok()?;
+    let (w, h) = (info.width, info.height);
+    let px = (w * h) as usize;
+    let rgba = match info.color_type {
+        png::ColorType::Rgba => buf[..px * 4].to_vec(),
+        png::ColorType::Rgb => buf[..px * 3].chunks_exact(3).flat_map(|p| [p[0], p[1], p[2], 255]).collect(),
+        png::ColorType::Grayscale => buf[..px].iter().flat_map(|&g| [g, g, g, 255]).collect(),
+        png::ColorType::GrayscaleAlpha => buf[..px * 2].chunks_exact(2).flat_map(|p| [p[0], p[0], p[0], p[1]]).collect(),
+        _ => return None,
+    };
+    Some((rgba, w, h))
+}
+
+fn build_shot_faces(app: &mut App, compositor: &mut Compositor, st: &mut ShotTextures) {
+    st.built = true;
+    {
+        let mut up = |slot: &mut Option<TexId>, f: slot_ui::UndoFace| {
+            let (w, h) = (f.w, f.h);
+            (upload(compositor, slot, f), w, h)
+        };
+        let [f0, f1, f2] = &mut st.fixed;
+        let confirm = up(f0, help_line_face("Delete this screenshot?"));
+        let empty = up(f1, quick_value_face("No screenshots yet", false));
+        let empty_help = up(f2, help_line_face("Press VOL+ and POWER together to take one."));
+        let mut hint = |slot: &mut Option<TexId>, f: slot_ui::UndoFace| {
+            let f = slot_ui::tint_mask(f);
+            let w = f.w;
+            (upload(compositor, slot, f), w)
+        };
+        let [h0, h1, h2, h3, h4, h5, h6] = &mut st.hints;
+        let back = hint(h0, hint_face("B", "Back"));
+        let view_ = hint(h1, hint_face("A", "View"));
+        let delete = hint(h2, hint_face("Y", "Delete"));
+        let cancel = hint(h3, hint_face("B", "Cancel"));
+        let sure = hint(h4, hint_face("A", "Delete"));
+        let close = hint(h5, hint_face("B", "Close"));
+        let flick = hint(h6, slot_ui::arrows_hint_face("Flick"));
+        let f = slot_ui::tint_mask(help_line_face("Delete this save state?"));
+        let (lw, lh) = (f.w, f.h);
+        let line = upload(compositor, &mut st.state_line, f);
+        app.set_state_confirm_faces(slot_ui::ConfirmFaces {
+            cancel,
+            delete: sure,
+            line: (line, lw, lh),
+        });
+        app.set_shot_faces(slot_ui::ShotFaces {
+            title: None,
+            date: None,
+            confirm,
+            empty,
+            empty_help,
+            legend: vec![back, view_, delete],
+            legend_empty: vec![back],
+            legend_confirm: vec![cancel, sure],
+            full_left: vec![close, delete],
+            full_right: vec![flick],
+        });
+    }
+}
+
+/// The Game Boy's pixels cast a stronger shadow on its pale panel than the GBA's or GBC's.
+/// The Game Boy Color's unlit, reflective panel: what white becomes, and the tone light colours
+/// take on. A warm grey, like the glass of a GBC held in daylight.
+const GBC_PANEL: [f32; 3] = [0.79, 0.80, 0.74];
+/// Grid lines a little darker than the panel, as the gaps between a GBC's pixels look.
+/// The GBC's LCD on its own pixels: a dark line under each row at 10%, and a red, green or blue
+/// line down each third of a pixel at 20%.
+const GBC_LCD: [f32; 2] = [0.10, 0.20];
+
+/// A GBA's colours shown a quarter less vivid than the raw ones: between the raw colours and
+/// the old colour correction, as the screen showed them.
+const GBA_SATURATION: f32 = 0.75;
+/// A GBC's colours, a touch softer than the raw ones.
+const GBC_SATURATION: f32 = 0.85;
+
+/// How dark, how wide, and soft-edged.
+/// The GBC's and GBA's pixels let less light through than the Game Boy's and cast lighter
+/// shadows, so white lettering on dark ground stays white.
+const COLOUR_PIXEL_SHADOW: [f32; 3] = [0.28, 1.1, 1.0];
+const COLOUR_PALE_OPACITY: f32 = 0.80;
+const GB_PALE_OPACITY: f32 = slot_gfx::PALE_OPACITY;
+
+const GB_PIXEL_SHADOW: [f32; 3] = [0.56, 1.1, 1.0];
+
+fn sync_shots(app: &mut App, compositor: &mut Compositor, st: &mut ShotTextures) {
+    if !st.built {
+        build_shot_faces(app, compositor, st);
+    }
+    let Some(view) = app.shot_view() else {
+        st.key = None;
+        return;
+    };
+    let key = (view.rev, view.sel);
+    let title = view.title();
+    let date = view.selected().map(|s| crate::shots::when(s.secs));
+    // The pictures to have: the chosen one first, then its neighbours either side.
+    let mut wanted: Vec<usize> = match view.shots.is_empty() {
+        true => Vec::new(),
+        false => vec![view.sel],
+    };
+    for i in [view.sel.wrapping_sub(1), view.sel + 1, view.pos.floor() as usize, view.pos.ceil() as usize] {
+        if i < view.shots.len() && !wanted.contains(&i) {
+            wanted.push(i);
+        }
+    }
+    let paths: Vec<(usize, std::path::PathBuf)> =
+        wanted.iter().map(|&i| (i, view.shots[i].path.clone())).collect();
+    if st.key != Some(key) {
+        st.key = Some(key);
+        let t = (!title.is_empty()).then(|| {
+            let f = text_face(&title, 20.0, 380.0);
+            let (w, h) = (f.w, f.h);
+            (upload(compositor, &mut st.title, f), w, h)
+        });
+        let d = date.map(|line| {
+            let f = help_line_face(&line);
+            let (w, h) = (f.w, f.h);
+            (upload(compositor, &mut st.date, f), w, h)
+        });
+        if let Some(faces) = app.shot_faces_mut() {
+            faces.title = t;
+            faces.date = d;
+        }
+    }
+    // Load at most one new picture a frame, so flicking never stalls.
+    let mut loaded = false;
+    let mut pics = Vec::new();
+    for (i, path) in &paths {
+        if let Some(at) = st.pics.iter().position(|(p, _)| p == path) {
+            let entry = st.pics.remove(at);
+            pics.push((*i, entry.1));
+            st.pics.push(entry);
+            continue;
+        }
+        if loaded {
+            continue;
+        }
+        loaded = true;
+        let Some((rgba, w, h)) = read_png(path) else {
+            continue;
+        };
+        let keep: Vec<&std::path::PathBuf> = paths.iter().map(|(_, p)| p).collect();
+        let tex = if st.pics.len() >= 5 {
+            let at = st.pics.iter().position(|(p, _)| !keep.contains(&p)).unwrap_or(0);
+            let (_, tex) = st.pics.remove(at);
+            compositor.update_texture(tex, w, h, &rgba);
+            tex
+        } else {
+            compositor.create_texture(w, h, &rgba)
+        };
+        st.pics.push((path.clone(), tex));
+        pics.push((*i, tex));
+    }
+    app.set_shot_pics(pics);
+}
+
 fn sync_about(app: &mut App, compositor: &mut Compositor, state: &mut AboutFace) {
     if !matches!(app.phase(), Phase::About) {
         return;
     }
-    let light = app.light();
+    let light = app.about_light();
     if state.tex.is_some() && state.light == Some(light) {
         return;
     }

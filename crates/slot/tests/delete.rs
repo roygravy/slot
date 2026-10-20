@@ -1,6 +1,6 @@
 mod common;
 
-use common::{app_in_switcher, app_playing_in, tmp_root_with_carts};
+use common::{app_in_switcher, tmp_root_with_carts};
 use slot::app::Phase;
 use slot_input::{Action, Btn};
 use slot_store::{Core, Platform, StateRing};
@@ -24,19 +24,6 @@ fn y_deletes_the_selected_state_and_nothing_else() {
     );
 }
 
-#[test]
-fn deleting_the_pending_undos_target_clears_the_offer() {
-    let d = tmp_root_with_carts(&["Emerald"]);
-    let mut a = app_playing_in(d.path(), "Emerald");
-    a.apply_at(Action::SaveState, 1_000);
-    a.apply_at(Action::Polaroids, 1_100);
-    assert!(a.undo_available(1_200));
-    a.apply(Action::GbaDown(Btn::Y));
-    assert!(
-        !a.undo_available(1_300),
-        "the offer still points at a deleted state"
-    );
-}
 
 #[test]
 fn deleting_the_last_state_closes_the_switcher() {
@@ -73,18 +60,3 @@ fn the_deleted_state_leaves_the_switcher_with_it() {
     );
 }
 
-#[test]
-fn deleting_someone_elses_state_leaves_the_offer_alone() {
-    let d = tmp_root_with_carts(&["Emerald"]);
-    let r = StateRing::new(d.path(), Platform::Gba, Core::Mgba, "Emerald");
-    r.push(&[0u8; 64], b"png", "2026-08-09_00-00-00").unwrap();
-    let mut a = app_playing_in(d.path(), "Emerald");
-    a.apply_at(Action::SaveState, 1_000);
-    a.apply_at(Action::Polaroids, 1_100);
-    a.apply(Action::ShelfRight);
-    a.apply(Action::GbaDown(Btn::Y));
-    assert!(
-        a.undo_available(1_300),
-        "an unrelated delete took the offer"
-    );
-}

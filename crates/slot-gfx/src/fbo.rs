@@ -221,6 +221,30 @@ impl Compositor {
         self.game.set_picture_appearance(sample_background, dim);
     }
 
+    pub fn set_lcd_mix(&mut self, scanlines: f32, tint: f32, on_screen_pixels: bool) {
+        self.game.set_lcd_mix(scanlines, tint, on_screen_pixels);
+    }
+
+    pub fn set_black_edge(&mut self, black: bool) {
+        self.game.set_black_edge(black);
+    }
+
+    pub fn set_pale_opacity(&mut self, opacity: f32) {
+        self.game.set_pale_opacity(opacity);
+    }
+
+    pub fn set_saturation(&mut self, saturation: f32) {
+        self.game.set_saturation(saturation);
+    }
+
+    pub fn set_panel(&mut self, panel: Option<[f32; 3]>, tint: [f32; 3]) {
+        self.game.set_panel(panel, tint);
+    }
+
+    pub fn set_pixel_shadow(&mut self, shadow: [f32; 3]) {
+        self.game.set_pixel_shadow(shadow);
+    }
+
     pub fn set_grid_opacity(&mut self, opacity: f32) {
         self.game.set_grid_opacity(opacity);
     }

@@ -262,9 +262,6 @@ pub struct SlotState {
     pub rumble: bool,
     pub ff_speed: u8,
     pub ff_sound: bool,
-    pub colour_correction_gba: bool,
-    pub colour_correction_gb: bool,
-    pub colour_correction_gbc: bool,
     pub shader_gba: Shader,
     pub shader_gb: Shader,
     pub shader_gbc: Shader,
@@ -288,12 +285,25 @@ pub struct SlotState {
     pub shelf: Option<String>,
     pub shelf_cart: Option<Recent>,
     pub auto_sleep_secs: u16,
-    pub pixel_transparency: bool,
+    /// Pale pixels let the panel through, for each system on its own: GB, GBC, GBA.
+    pub pixel_transparency_gb: bool,
+    pub pixel_transparency_gbc: bool,
+    pub pixel_transparency_gba: bool,
     /// Show the masked robber while cheats are on.
     pub cheat_icon: bool,
-    pub lcd_ghosting: bool,
+    /// GB and GBC pictures framed in black rather than the LCD's own glass.
+    pub gbc_black_border: bool,
+    pub gb_black_border: bool,
+    /// Moving pixels fade out slowly, for each system on its own: GB, GBC, GBA.
+    pub lcd_ghosting_gb: bool,
+    pub lcd_ghosting_gbc: bool,
+    pub lcd_ghosting_gba: bool,
     pub in_game_menu: bool,
     pub remember_position: bool,
+    /// Power on straight back into the game that was in the slot.
+    pub resume_game: bool,
+    /// Powering off in a game leaves its picture as the boot screen.
+    pub boot_picture: bool,
 }
 
 impl SlotState {
@@ -336,6 +346,7 @@ pub enum Shader {
     Lcd3x,
     Grid,
     GbaLcd,
+    GbcLcd,
     Dot,
     Simpletex,
 }
@@ -343,6 +354,16 @@ pub enum Shader {
 impl Shader {
     pub const GBA: [Shader; 2] = [Shader::Off, Shader::GbaLcd];
     pub const GB: [Shader; 2] = [Shader::Off, Shader::Grid];
+    pub const GBC: [Shader; 2] = [Shader::Off, Shader::GbcLcd];
+
+    /// A GBC setting saved before the GBC had an LCD of its own: off stays off, any shader
+    /// becomes the GBC LCD.
+    pub fn for_gbc(self) -> Shader {
+        match self {
+            Shader::Off => Shader::Off,
+            _ => Shader::GbcLcd,
+        }
+    }
 
     pub fn name(self) -> &'static str {
         match self {
@@ -350,6 +371,7 @@ impl Shader {
             Shader::Lcd3x => "lcd3x",
             Shader::Grid => "grid",
             Shader::GbaLcd => "gba_lcd",
+            Shader::GbcLcd => "gbc_lcd",
             Shader::Dot => "dot",
             Shader::Simpletex => "simpletex",
         }
@@ -361,6 +383,7 @@ impl Shader {
             Shader::Lcd3x,
             Shader::Grid,
             Shader::GbaLcd,
+            Shader::GbcLcd,
             Shader::Dot,
             Shader::Simpletex,
         ]
@@ -395,12 +418,9 @@ impl Default for SlotState {
             rumble: true,
             ff_speed: FF_SPEED_DEFAULT,
             ff_sound: false,
-            colour_correction_gba: true,
-            colour_correction_gb: true,
-            colour_correction_gbc: true,
             shader_gba: Shader::GbaLcd,
             shader_gb: Shader::Grid,
-            shader_gbc: Shader::Grid,
+            shader_gbc: Shader::GbcLcd,
             eject_save: true,
             turbo: true,
             rewind: true,
@@ -421,11 +441,19 @@ impl Default for SlotState {
             shelf: None,
             shelf_cart: None,
             auto_sleep_secs: AUTO_SLEEP_DEFAULT_SECS,
-            pixel_transparency: true,
+            pixel_transparency_gb: true,
+            pixel_transparency_gbc: true,
+            pixel_transparency_gba: true,
             cheat_icon: true,
-            lcd_ghosting: true,
-            in_game_menu: false,
+            gbc_black_border: false,
+            gb_black_border: false,
+            lcd_ghosting_gb: true,
+            lcd_ghosting_gbc: true,
+            lcd_ghosting_gba: true,
+            in_game_menu: true,
             remember_position: false,
+            resume_game: true,
+            boot_picture: true,
         }
     }
 }
@@ -456,12 +484,9 @@ pub fn read_slot_state(root: &Path) -> SlotState {
             .lines()
             .any(|line| line.trim().starts_with("lcd_profile="));
         if !had_display_profile {
-            s.colour_correction_gba = true;
-            s.colour_correction_gb = true;
-            s.colour_correction_gbc = true;
             s.shader_gba = Shader::GbaLcd;
             s.shader_gb = Shader::Grid;
-            s.shader_gbc = Shader::Grid;
+            s.shader_gbc = Shader::GbcLcd;
             s.gb_palettes = true;
             if s.auto_sleep_secs == 0 {
                 s.auto_sleep_secs = AUTO_SLEEP_DEFAULT_SECS;
@@ -500,7 +525,7 @@ fn write_list(root: &Path, name: &str, list: &[Recent]) -> std::io::Result<()> {
 
 pub fn write_slot_state(root: &Path, s: &SlotState) -> std::io::Result<()> {
     let mut text = format!(
-        "cart={}\ncart_platform={}\nbrightness={}\nblue_light={}\nvolume={}\nvolume_hp={}\nmuted={}\nmuted_hp={}\nclock_set={}\nutc_offset_min={}\nrumble={}\nff_speed={}\nff_sound={}\ncolour_correction_gba={}\ncolour_correction_gb={}\nshader_gba={}\nshader_gb={}\neject_save={}\nturbo={}\nrewind={}\nrunahead={}\ngb_palettes={}\ngb_palette={}\nappearance={}\nwallpaper={}\n",
+        "cart={}\ncart_platform={}\nbrightness={}\nblue_light={}\nvolume={}\nvolume_hp={}\nmuted={}\nmuted_hp={}\nclock_set={}\nutc_offset_min={}\nrumble={}\nff_speed={}\nff_sound={}\nshader_gba={}\nshader_gb={}\neject_save={}\nturbo={}\nrewind={}\nrunahead={}\ngb_palettes={}\ngb_palette={}\nappearance={}\nwallpaper={}\n",
         s.cart.as_deref().unwrap_or(""),
         s.cart_platform.map_or(String::new(), platform_key),
         s.brightness,
@@ -514,8 +539,6 @@ pub fn write_slot_state(root: &Path, s: &SlotState) -> std::io::Result<()> {
         s.rumble as u8,
         s.ff_speed,
         s.ff_sound as u8,
-        s.colour_correction_gba as u8,
-        s.colour_correction_gb as u8,
         s.shader_gba.name(),
         s.shader_gb.name(),
         s.eject_save as u8,
@@ -527,20 +550,25 @@ pub fn write_slot_state(root: &Path, s: &SlotState) -> std::io::Result<()> {
         s.appearance.name(),
         s.wallpaper.key()
     );
-    text.push_str(&format!(
-        "colour_correction_gbc={}\n",
-        s.colour_correction_gbc as u8
-    ));
     text.push_str(&format!("shader_gbc={}\n", s.shader_gbc.name()));
     text.push_str(&format!("wallpaper_tint={}\n", s.wallpaper_tint.key()));
     text.push_str(&format!("favorite_mark={}\n", s.favorite_mark.key()));
     text.push_str(&format!("auto_sleep_secs={}\n", s.auto_sleep_secs));
-    text.push_str(&format!(
-        "pixel_transparency={}\n",
-        s.pixel_transparency as u8
-    ));
-    text.push_str(&format!("lcd_ghosting={}\n", s.lcd_ghosting as u8));
+    for (key, on) in [
+        ("pixel_transparency_gb", s.pixel_transparency_gb),
+        ("pixel_transparency_gbc", s.pixel_transparency_gbc),
+        ("pixel_transparency_gba", s.pixel_transparency_gba),
+        ("lcd_ghosting_gb", s.lcd_ghosting_gb),
+        ("lcd_ghosting_gbc", s.lcd_ghosting_gbc),
+        ("lcd_ghosting_gba", s.lcd_ghosting_gba),
+    ] {
+        text.push_str(&format!("{key}={}\n", on as u8));
+    }
     text.push_str(&format!("cheat_icon={}\n", s.cheat_icon as u8));
+    text.push_str(&format!("gbc_black_border={}\n", s.gbc_black_border as u8));
+    text.push_str(&format!("gb_black_border={}\n", s.gb_black_border as u8));
+    text.push_str(&format!("resume_game={}\n", s.resume_game as u8));
+    text.push_str(&format!("boot_picture={}\n", s.boot_picture as u8));
     text.push_str(&format!("in_game_menu={}\n", s.in_game_menu as u8));
     text.push_str(&format!(
         "remember_position={}\n",
@@ -581,10 +609,6 @@ fn parse(text: &str) -> Option<SlotState> {
     let mut rumble = None;
     let mut ff_speed = None;
     let mut ff_sound = None;
-    let mut colour_correction = None;
-    let mut colour_correction_gba = None;
-    let mut colour_correction_gb = None;
-    let mut colour_correction_gbc = None;
     let mut shader_gba = None;
     let mut shader_gb = None;
     let mut shader_gbc = None;
@@ -607,8 +631,18 @@ fn parse(text: &str) -> Option<SlotState> {
     let mut shelf_cart = None;
     let mut auto_sleep_secs = None;
     let mut pixel_transparency = None;
+    let mut pixel_transparency_gb = None;
+    let mut pixel_transparency_gbc = None;
+    let mut pixel_transparency_gba = None;
     let mut cheat_icon = None;
+    let mut gbc_black_border = None;
+    let mut gb_black_border = None;
+    let mut resume_game = None;
+    let mut boot_picture = None;
     let mut lcd_ghosting = None;
+    let mut lcd_ghosting_gb = None;
+    let mut lcd_ghosting_gbc = None;
+    let mut lcd_ghosting_gba = None;
     let mut in_game_menu = None;
     let mut remember_position = None;
     for line in text.lines().filter(|l| !l.is_empty()) {
@@ -629,10 +663,6 @@ fn parse(text: &str) -> Option<SlotState> {
             "rumble" => rumble = flag(value),
             "ff_speed" => ff_speed = ff_speed_value(value),
             "ff_sound" => ff_sound = flag(value),
-            "colour_correction" => colour_correction = flag(value),
-            "colour_correction_gba" => colour_correction_gba = flag(value),
-            "colour_correction_gb" => colour_correction_gb = flag(value),
-            "colour_correction_gbc" => colour_correction_gbc = flag(value),
             "shader_gba" => shader_gba = Shader::parse(value).filter(|s| Shader::GBA.contains(s)),
             "eject_save" => eject_save = flag(value),
             "turbo" => turbo = flag(value),
@@ -653,12 +683,22 @@ fn parse(text: &str) -> Option<SlotState> {
             "shelf_cart" => shelf_cart = recent_value(value),
             "auto_sleep_secs" => auto_sleep_secs = auto_sleep_value(value),
             "pixel_transparency" => pixel_transparency = flag(value),
+            "pixel_transparency_gb" => pixel_transparency_gb = flag(value),
+            "pixel_transparency_gbc" => pixel_transparency_gbc = flag(value),
+            "pixel_transparency_gba" => pixel_transparency_gba = flag(value),
             "cheat_icon" => cheat_icon = flag(value),
+            "gbc_black_border" => gbc_black_border = flag(value),
+            "gb_black_border" => gb_black_border = flag(value),
+            "resume_game" => resume_game = flag(value),
+            "boot_picture" => boot_picture = flag(value),
             "lcd_ghosting" => lcd_ghosting = flag(value),
+            "lcd_ghosting_gb" => lcd_ghosting_gb = flag(value),
+            "lcd_ghosting_gbc" => lcd_ghosting_gbc = flag(value),
+            "lcd_ghosting_gba" => lcd_ghosting_gba = flag(value),
             "in_game_menu" => in_game_menu = flag(value),
             "remember_position" => remember_position = flag(value),
             "shader_gb" => shader_gb = Shader::parse(value).filter(|s| Shader::GB.contains(s)),
-            "shader_gbc" => shader_gbc = Shader::parse(value).filter(|s| Shader::GB.contains(s)),
+            "shader_gbc" => shader_gbc = Shader::parse(value).map(Shader::for_gbc),
             _ => {}
         }
     }
@@ -678,19 +718,11 @@ fn parse(text: &str) -> Option<SlotState> {
         rumble: rumble.unwrap_or(fallback.rumble),
         ff_speed: ff_speed.unwrap_or(fallback.ff_speed),
         ff_sound: ff_sound.unwrap_or(fallback.ff_sound),
-        colour_correction_gba: colour_correction_gba
-            .or(colour_correction)
-            .unwrap_or(fallback.colour_correction_gba),
-        colour_correction_gb: colour_correction_gb
-            .or(colour_correction)
-            .unwrap_or(fallback.colour_correction_gb),
-        colour_correction_gbc: colour_correction_gbc
-            .or(colour_correction_gb)
-            .or(colour_correction)
-            .unwrap_or(fallback.colour_correction_gbc),
         shader_gba: shader_gba.unwrap_or(fallback.shader_gba),
         shader_gb: shader_gb.unwrap_or(fallback.shader_gb),
-        shader_gbc: shader_gbc.or(shader_gb).unwrap_or(fallback.shader_gbc),
+        shader_gbc: shader_gbc
+            .or(shader_gb.map(Shader::for_gbc))
+            .unwrap_or(fallback.shader_gbc),
         eject_save: eject_save.unwrap_or(fallback.eject_save),
         turbo: turbo.unwrap_or(fallback.turbo),
         rewind: rewind.unwrap_or(fallback.rewind),
@@ -711,9 +743,24 @@ fn parse(text: &str) -> Option<SlotState> {
         shelf,
         shelf_cart,
         auto_sleep_secs: auto_sleep_secs.unwrap_or(fallback.auto_sleep_secs),
-        pixel_transparency: pixel_transparency.unwrap_or(fallback.pixel_transparency),
+        // A card from before the screen settings went per system: the one switch, for all.
+        pixel_transparency_gb: pixel_transparency_gb
+            .or(pixel_transparency)
+            .unwrap_or(fallback.pixel_transparency_gb),
+        pixel_transparency_gbc: pixel_transparency_gbc
+            .or(pixel_transparency)
+            .unwrap_or(fallback.pixel_transparency_gbc),
+        pixel_transparency_gba: pixel_transparency_gba
+            .or(pixel_transparency)
+            .unwrap_or(fallback.pixel_transparency_gba),
         cheat_icon: cheat_icon.unwrap_or(fallback.cheat_icon),
-        lcd_ghosting: lcd_ghosting.unwrap_or(fallback.lcd_ghosting),
+        gbc_black_border: gbc_black_border.unwrap_or(fallback.gbc_black_border),
+        gb_black_border: gb_black_border.unwrap_or(fallback.gb_black_border),
+        resume_game: resume_game.unwrap_or(fallback.resume_game),
+        boot_picture: boot_picture.unwrap_or(fallback.boot_picture),
+        lcd_ghosting_gb: lcd_ghosting_gb.or(lcd_ghosting).unwrap_or(fallback.lcd_ghosting_gb),
+        lcd_ghosting_gbc: lcd_ghosting_gbc.or(lcd_ghosting).unwrap_or(fallback.lcd_ghosting_gbc),
+        lcd_ghosting_gba: lcd_ghosting_gba.or(lcd_ghosting).unwrap_or(fallback.lcd_ghosting_gba),
         in_game_menu: in_game_menu.unwrap_or(fallback.in_game_menu),
         remember_position: remember_position.unwrap_or(fallback.remember_position),
     })

@@ -3,8 +3,14 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+const OUT_W: usize = slot_gfx::OUT_W as usize;
+const OUT_H: usize = slot_gfx::OUT_H as usize;
+
 pub const CARD_LOGO: &str = "System/bootlogo.bmp";
 pub const USER_LOGO: &str = "Config/bootlogo.bmp";
+/// The game picture left as the boot screen, kept on the card so slot can show the same
+/// picture while the game loads again.
+pub const BOOT_PICTURE: &str = "Config/boot_picture.bmp";
 const LOGO: &str = "bootlogo.bmp";
 const ORIGINAL: &str = "bootlogo.baseos.bmp";
 const PARTITION: &str = "boot-resource";
@@ -123,6 +129,50 @@ pub fn compose(wordmark: &Bmp, (width, height): (usize, usize)) -> Option<Bmp> {
     Some(Bmp { width, height, rgb })
 }
 
+/// The wordmark laid over a ground picture (`ground` is `gw` x `gh` RGBA), stretched to the
+/// panel: the wordmark's own background colour is taken as clear and its lighter pixels as
+/// white ink, so the boot screen shows the same wallpaper the shelf opens on.
+pub fn compose_over(
+    wordmark: &Bmp,
+    (width, height): (usize, usize),
+    ground: &[u8],
+    (gw, gh): (usize, usize),
+) -> Option<Bmp> {
+    if height > width || wordmark.width > width || wordmark.height > height {
+        return compose(wordmark, (width, height));
+    }
+    if ground.len() < gw * gh * 4 || gw == 0 || gh == 0 {
+        return compose(wordmark, (width, height));
+    }
+    let mut rgb = Vec::with_capacity(width * height);
+    for y in 0..height {
+        let sy = (y * gh / height).min(gh - 1);
+        for x in 0..width {
+            let sx = (x * gw / width).min(gw - 1);
+            let o = (sy * gw + sx) * 4;
+            rgb.push([ground[o], ground[o + 1], ground[o + 2]]);
+        }
+    }
+    let bg = *wordmark.rgb.first()?;
+    let bg_lum = (bg[0] as f32 + bg[1] as f32 + bg[2] as f32) / 3.0;
+    let (x0, y0) = ((width - wordmark.width) / 2, (height - wordmark.height) / 2);
+    for y in 0..wordmark.height {
+        for x in 0..wordmark.width {
+            let p = wordmark.rgb[y * wordmark.width + x];
+            let lum = (p[0] as f32 + p[1] as f32 + p[2] as f32) / 3.0;
+            let a = ((lum - bg_lum) / (255.0 - bg_lum)).clamp(0.0, 1.0);
+            if a <= 0.0 {
+                continue;
+            }
+            let d = &mut rgb[(y0 + y) * width + x0 + x];
+            for c in 0..3 {
+                d[c] = (d[c] as f32 * (1.0 - a) + 255.0 * a).round() as u8;
+            }
+        }
+    }
+    Some(Bmp { width, height, rgb })
+}
+
 pub fn install(wordmark: &[u8], dir: &Path) -> io::Result<Outcome> {
     let Some(mark) = decode(wordmark) else {
         return Ok(Outcome::Invalid);
@@ -132,7 +182,11 @@ pub fn install(wordmark: &[u8], dir: &Path) -> io::Result<Outcome> {
     let Some(panel) = original.as_deref().or(current.as_deref()).and_then(size) else {
         return Ok(Outcome::Invalid);
     };
-    let Some(logo) = compose(&mark, panel).map(|b| encode(&b)) else {
+    // The boot screen is the dark menus' flat ground, so boot, menus and shelf share a tone.
+    let flat = slot_ui::theme::MENU_FLAT_DARK;
+    let ground: Vec<u8> = (0..OUT_W * OUT_H).flat_map(|_| [flat[0], flat[1], flat[2], 255]).collect();
+    let composed = compose_over(&mark, panel, &ground, (OUT_W, OUT_H));
+    let Some(logo) = composed.map(|b| encode(&b)) else {
         return Ok(Outcome::Invalid);
     };
     if current.as_deref() == Some(&logo[..]) {
@@ -180,10 +234,8 @@ pub fn chosen(card: &Path) -> Option<Vec<u8>> {
     None
 }
 
-pub fn refresh(card: &Path) {
-    let Some(logo) = chosen(card) else {
-        return;
-    };
+/// Run `f` on the mounted boot-resource partition.
+fn on_partition(f: impl FnOnce(&Path)) {
     let Some(device) = partition(PARTITION) else {
         eprintln!("slot: bootlogo: no {PARTITION} partition");
         return;
@@ -194,15 +246,84 @@ pub fn refresh(card: &Path) {
         eprintln!("slot: bootlogo: could not mount {device}");
         return;
     }
-    match install(&logo, Path::new(MOUNT)) {
+    f(Path::new(MOUNT));
+    if !run("umount", &[MOUNT]) {
+        eprintln!("slot: bootlogo: could not unmount {MOUNT}");
+    }
+}
+
+pub fn refresh(card: &Path) {
+    let Some(logo) = chosen(card) else {
+        return;
+    };
+    on_partition(|dir| match install(&logo, dir) {
         Ok(Outcome::Installed) => eprintln!("slot: bootlogo: installed"),
         Ok(Outcome::Invalid) => eprintln!("slot: bootlogo: no logo fits this panel, left alone"),
         Ok(_) => {}
         Err(e) => eprintln!("slot: bootlogo: {e}"),
+    });
+}
+
+/// A screen picture (`w` x `h` RGBA, top row first) stretched to a panel.
+pub fn picture_bmp(rgba: &[u8], (w, h): (usize, usize), (pw, ph): (usize, usize)) -> Option<Bmp> {
+    if w == 0 || h == 0 || rgba.len() < w * h * 4 || pw == 0 || ph == 0 {
+        return None;
     }
-    if !run("umount", &[MOUNT]) {
-        eprintln!("slot: bootlogo: could not unmount {MOUNT}");
+    let mut rgb = Vec::with_capacity(pw * ph);
+    for y in 0..ph {
+        let sy = (y * h / ph).min(h - 1);
+        for x in 0..pw {
+            let sx = (x * w / pw).min(w - 1);
+            let o = (sy * w + sx) * 4;
+            rgb.push([rgba[o], rgba[o + 1], rgba[o + 2]]);
+        }
     }
+    Some(Bmp { width: pw, height: ph, rgb })
+}
+
+/// Write `bmp` as the boot logo in `dir`, sized like the panel's own.
+fn install_bmp(rgba: &[u8], size: (usize, usize), dir: &Path) -> io::Result<Outcome> {
+    let current = fs::read(dir.join(LOGO)).ok();
+    let original = fs::read(dir.join(ORIGINAL)).ok();
+    let Some(panel) = original.as_deref().or(current.as_deref()).and_then(self::size) else {
+        return Ok(Outcome::Invalid);
+    };
+    if panel.1 > panel.0 {
+        return Ok(Outcome::Invalid);
+    }
+    let Some(logo) = picture_bmp(rgba, size, panel).map(|b| encode(&b)) else {
+        return Ok(Outcome::Invalid);
+    };
+    if let Some(current) = &current {
+        if original.is_none() {
+            replace(dir, ORIGINAL, current)?;
+        }
+    }
+    replace(dir, LOGO, &logo)?;
+    Ok(Outcome::Installed)
+}
+
+/// Leave the game's picture as the boot screen, and keep a copy on the card.
+pub fn install_picture(card: &Path, rgba: &[u8], size: (usize, usize)) {
+    if let Some(bmp) = picture_bmp(rgba, size, size) {
+        let path = card.join(BOOT_PICTURE);
+        if let Err(e) = slot_store::atomic_write(&path, &encode(&bmp)) {
+            eprintln!("slot: bootlogo: {}: {e}", path.display());
+        }
+    }
+    on_partition(|dir| match install_bmp(rgba, size, dir) {
+        Ok(Outcome::Installed) => eprintln!("slot: bootlogo: the game's picture is the boot screen"),
+        Ok(_) => eprintln!("slot: bootlogo: the game's picture does not fit this panel"),
+        Err(e) => eprintln!("slot: bootlogo: {e}"),
+    });
+}
+
+/// The game picture kept from the last power off, taken off the card so it shows only once.
+pub fn take_picture(card: &Path) -> Option<Bmp> {
+    let path = card.join(BOOT_PICTURE);
+    let bytes = fs::read(&path).ok()?;
+    let _ = fs::remove_file(&path);
+    decode(&bytes)
 }
 
 fn partition(name: &str) -> Option<String> {

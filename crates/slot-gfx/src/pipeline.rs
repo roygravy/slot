@@ -11,6 +11,11 @@ pub const SRC_H: u32 = 160;
 
 pub const WHOLE_TEXTURE: [f32; 4] = [0.0, 0.0, 1.0, 1.0];
 
+/// The drop shadow pixels cast with Pixel Transparency on, as it has always been: how dark,
+/// and how soft.
+pub const PALE_OPACITY: f32 = 0.62;
+pub const PIXEL_SHADOW: [f32; 3] = [0.16, 0.55, 0.0];
+
 pub struct GamePass {
     prog: gl::types::GLuint,
     game: gl::types::GLuint,
@@ -22,6 +27,13 @@ pub struct GamePass {
     u_fbo: gl::types::GLint,
     u_bg: gl::types::GLint,
     u_picture_dim: gl::types::GLint,
+    u_shadow: gl::types::GLint,
+    u_tint: gl::types::GLint,
+    u_saturation: gl::types::GLint,
+    u_pale_opacity: gl::types::GLint,
+    u_panel_fixed: gl::types::GLint,
+    u_black_edge: gl::types::GLint,
+    u_lcd_mix: gl::types::GLint,
     u_grid_opacity: gl::types::GLint,
     u_pixel_transparency: gl::types::GLint,
     u_lcd_overlay_size: gl::types::GLint,
@@ -32,6 +44,13 @@ pub struct GamePass {
     pic: [f32; 4],
     sample_background: bool,
     picture_dim: f32,
+    shadow: [f32; 3],
+    panel: Option<[f32; 3]>,
+    tint: [f32; 3],
+    saturation: f32,
+    pale_opacity: f32,
+    black_edge: bool,
+    lcd_mix: [f32; 3],
     grid_opacity: f32,
     pixel_transparency: bool,
     paper: gl::types::GLuint,
@@ -76,6 +95,13 @@ impl GamePass {
             u_fbo,
             u_bg,
             u_picture_dim,
+            u_shadow,
+            u_tint,
+            u_saturation,
+            u_pale_opacity,
+            u_panel_fixed,
+            u_black_edge,
+            u_lcd_mix,
             u_grid_opacity,
             u_pixel_transparency,
             u_lcd_overlay,
@@ -111,6 +137,13 @@ impl GamePass {
             u_origin = crate::gl::uniform_location(prog, "u_origin");
             u_bg = crate::gl::uniform_location(prog, "u_bg");
             u_picture_dim = crate::gl::uniform_location(prog, "u_picture_dim");
+            u_shadow = crate::gl::uniform_location(prog, "u_shadow");
+            u_tint = crate::gl::uniform_location(prog, "u_tint");
+            u_saturation = crate::gl::uniform_location(prog, "u_saturation");
+            u_pale_opacity = crate::gl::uniform_location(prog, "u_pale_opacity");
+            u_panel_fixed = crate::gl::uniform_location(prog, "u_panel_fixed");
+            u_black_edge = crate::gl::uniform_location(prog, "u_black_edge");
+            u_lcd_mix = crate::gl::uniform_location(prog, "u_lcd_mix");
             u_grid_opacity = crate::gl::uniform_location(prog, "u_grid_opacity");
             u_pixel_transparency = crate::gl::uniform_location(prog, "u_pixel_transparency");
             u_lcd_overlay = crate::gl::uniform_location(prog, "u_lcd_overlay");
@@ -128,6 +161,13 @@ impl GamePass {
             u_fbo,
             u_bg,
             u_picture_dim,
+            u_shadow,
+            u_tint,
+            u_saturation,
+            u_pale_opacity,
+            u_panel_fixed,
+            u_black_edge,
+            u_lcd_mix,
             u_grid_opacity,
             u_pixel_transparency,
             u_lcd_overlay_size,
@@ -138,6 +178,13 @@ impl GamePass {
             pic: WHOLE_TEXTURE,
             sample_background: false,
             picture_dim: 0.0,
+            shadow: PIXEL_SHADOW,
+            panel: None,
+            tint: [1.0, 1.0, 1.0],
+            saturation: 1.0,
+            pale_opacity: PALE_OPACITY,
+            black_edge: false,
+            lcd_mix: [1.0, 1.0, 0.0],
             grid_opacity: 0.3,
             pixel_transparency: false,
             paper,
@@ -170,6 +217,41 @@ impl GamePass {
 
     pub fn set_picture(&mut self, rect: [f32; 4]) {
         self.pic = rect;
+    }
+
+    /// How dark the drop shadow each pixel casts on the panel behind it, and how far (in
+    /// source pixels) it softens; a third value over 0.5 blurs its edges smooth.
+    pub fn set_pixel_shadow(&mut self, [strength, spread, soft]: [f32; 3]) {
+        self.shadow = [strength.clamp(0.0, 1.0), spread.clamp(0.0, 2.0), soft];
+    }
+
+    /// A fixed panel behind the picture (instead of black, or the GB's sampled lightest
+    /// colour), and the tone light colours take from it.
+    /// For the GBC's LCD: how dark the line under each row, and how strong each column's
+    /// red, green or blue.
+    pub fn set_lcd_mix(&mut self, scanlines: f32, tint: f32, on_screen_pixels: bool) {
+        self.lcd_mix = [scanlines.max(0.0), tint.max(0.0), f32::from(u8::from(on_screen_pixels))];
+    }
+
+    /// How vivid colours show, 1.0 being the game's own.
+    /// Black around the picture rather than the panel's own colour.
+    pub fn set_black_edge(&mut self, black: bool) {
+        self.black_edge = black;
+    }
+
+    /// How opaque the palest pixels stay with Pixel Transparency on: the lower, the more of
+    /// the screen behind them shows.
+    pub fn set_pale_opacity(&mut self, opacity: f32) {
+        self.pale_opacity = opacity.clamp(0.0, 1.0);
+    }
+
+    pub fn set_saturation(&mut self, saturation: f32) {
+        self.saturation = saturation.clamp(0.0, 2.0);
+    }
+
+    pub fn set_panel(&mut self, panel: Option<[f32; 3]>, tint: [f32; 3]) {
+        self.panel = panel;
+        self.tint = tint;
     }
 
     pub fn set_picture_appearance(&mut self, sample_background: bool, dim: f32) {
@@ -311,13 +393,21 @@ impl GamePass {
             gl::Uniform1f(self.u_paper_size, self.paper_size);
             gl::Uniform2f(self.u_fbo, self.fbo_scale[0], self.fbo_scale[1]);
             gl::Uniform2f(self.u_origin, self.origin[0], self.origin[1]);
+            let bg = self.panel.unwrap_or(self.background);
             gl::Uniform3f(
                 self.u_bg,
-                self.background[0],
-                self.background[1],
-                self.background[2],
+                bg[0],
+                bg[1],
+                bg[2],
             );
             gl::Uniform1f(self.u_picture_dim, self.picture_dim);
+            gl::Uniform3f(self.u_shadow, self.shadow[0], self.shadow[1], self.shadow[2]);
+            gl::Uniform3f(self.u_tint, self.tint[0], self.tint[1], self.tint[2]);
+            gl::Uniform1f(self.u_saturation, self.saturation);
+            gl::Uniform1f(self.u_pale_opacity, self.pale_opacity);
+            gl::Uniform1f(self.u_panel_fixed, if self.panel.is_some() { 1.0 } else { 0.0 });
+            gl::Uniform1f(self.u_black_edge, if self.black_edge { 1.0 } else { 0.0 });
+            gl::Uniform3f(self.u_lcd_mix, self.lcd_mix[0], self.lcd_mix[1], self.lcd_mix[2]);
             gl::Uniform1f(self.u_grid_opacity, self.grid_opacity);
             gl::Uniform1f(
                 self.u_pixel_transparency,

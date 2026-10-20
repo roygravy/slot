@@ -26,6 +26,7 @@ mod quick_menu;
 mod rebuild;
 mod refusal;
 mod shelf;
+mod shot_page;
 mod shell;
 mod silhouette;
 mod slot_chrome;
@@ -76,7 +77,7 @@ pub use plate::{
     tint_mask, word_face, word_ink, word_width, Hint, UndoFace, ARROW_GAP, CAP, CAP_GAP, HINT_EDGE, HINT_GAP,
     HINT_H, LEGEND_GAP, TITLE_H, TITLE_LINE_H, TITLE_W,
 };
-pub use polaroids::{photo_face, PhotoFace, Polaroids, DOT, LEGEND, PHOTO_H, PHOTO_W};
+pub use polaroids::{photo_face, ConfirmFaces, PhotoFace, Polaroids, DOT, LEGEND, PHOTO_H, PHOTO_W};
 pub use power_menu::{menu_face, PowerChoice, MENU_PAD};
 pub use about::{about_face, draw_about};
 pub use cheat_page::{
@@ -95,6 +96,7 @@ pub use quick_menu::{
 };
 pub use rebuild::{rebuild_count_face, rebuild_title_face, RebuildScreen};
 pub use refusal::Refusal;
+pub use shot_page::{ShotFaces, ShotPage, SHOT_H, SHOT_W};
 pub use shelf::{foot_y, repeat_gap, rest_y, Shelf, DROP_MARGIN, GLOW_GOLD, GLOW_MARGIN, GLOW_WHITE, REPEAT_DELAY_MS, STAR_PX};
 pub use shell::{
     gb_plastics, gb_table_shells, gba_plastics, gba_shell_for,

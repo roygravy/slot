@@ -110,16 +110,6 @@ fn shader_edits_the_running_platforms_shader() {
 }
 
 #[test]
-fn colour_correction_toggles_the_running_platform_and_asks_the_core() {
-    let (_d, mut a) = playing();
-    let before = a.colour_correction();
-    go_to(&mut a, QuickRow::ColourCorrection);
-    press(&mut a, Btn::Right);
-    assert_eq!(a.colour_correction(), !before);
-    assert_eq!(a.take_colour_correction(), Some(!before));
-}
-
-#[test]
 fn palette_steps_the_palette_and_asks_the_core() {
     let (_d, mut a) = playing();
     a.set_palette_live(true);
@@ -281,13 +271,10 @@ fn holding_menu_with_the_menu_open_ejects_and_drops_it() {
 fn play_chords_do_nothing_while_the_menu_is_open() {
     let (d, mut a) = playing();
     let shader = a.screen_shader();
-    let colour = a.colour_correction();
     a.apply(Action::QuickMenu);
     a.apply(Action::SaveState);
     a.apply(Action::ShaderNext);
-    a.apply(Action::ColourCorrectionToggle);
     assert_eq!(a.screen_shader(), shader);
-    assert_eq!(a.colour_correction(), colour);
     let ring = StateRing::new(d.path(), Platform::Gba, a.core(), "Emerald");
     assert!(ring.list().unwrap_or_default().is_empty());
     assert_eq!(a.in_game_menu(), Some(QuickRow::Resume));

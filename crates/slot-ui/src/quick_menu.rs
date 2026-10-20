@@ -13,12 +13,19 @@ pub enum QuickRow {
     Screen,
     Rumble,
     CheatIcon,
+    GbcBlackBorder,
+    GbBlackBorder,
+    BlackBorder,
+    GbTransparency,
+    GbcTransparency,
+    GbaTransparency,
+    GbGhosting,
+    GbcGhosting,
+    GbaGhosting,
     DateTime,
     About,
     GbaShader,
     GbShader,
-    GbaColourCorrection,
-    GbColourCorrection,
     Game,
     EjectSave,
     Turbo,
@@ -32,16 +39,16 @@ pub enum QuickRow {
     ShowTitles,
     WallpaperTint,
     GbcShader,
-    GbcColourCorrection,
     Resume,
     States,
     Cheats,
     Settings,
     ExitGame,
+    Screenshots,
+    GameScreenshots,
     PlayScreen,
     PlayGameplay,
     Shader,
-    ColourCorrection,
     Palette,
     ScreenGba,
     GbBezel,
@@ -55,8 +62,9 @@ pub enum QuickRow {
     LcdGhosting,
     InGameMenu,
     RememberPosition,
+    ResumeGame,
+    BootPicture,
     FavoriteMark,
-    ScreenLook,
     Buttons,
     Sleep,
     Restart,
@@ -64,18 +72,25 @@ pub enum QuickRow {
 }
 
 impl QuickRow {
-    pub const ALL: [QuickRow; 53] = [
+    pub const ALL: [QuickRow; 61] = [
         QuickRow::FastForward,
         QuickRow::FastForwardSound,
         QuickRow::Screen,
         QuickRow::Rumble,
         QuickRow::CheatIcon,
+        QuickRow::GbcBlackBorder,
+        QuickRow::GbBlackBorder,
+        QuickRow::BlackBorder,
+        QuickRow::GbTransparency,
+        QuickRow::GbcTransparency,
+        QuickRow::GbaTransparency,
+        QuickRow::GbGhosting,
+        QuickRow::GbcGhosting,
+        QuickRow::GbaGhosting,
         QuickRow::DateTime,
         QuickRow::About,
         QuickRow::GbaShader,
         QuickRow::GbShader,
-        QuickRow::GbaColourCorrection,
-        QuickRow::GbColourCorrection,
         QuickRow::Game,
         QuickRow::EjectSave,
         QuickRow::Turbo,
@@ -89,16 +104,16 @@ impl QuickRow {
         QuickRow::ShowTitles,
         QuickRow::WallpaperTint,
         QuickRow::GbcShader,
-        QuickRow::GbcColourCorrection,
         QuickRow::Resume,
         QuickRow::States,
         QuickRow::Cheats,
         QuickRow::Settings,
         QuickRow::ExitGame,
+        QuickRow::Screenshots,
+        QuickRow::GameScreenshots,
         QuickRow::PlayScreen,
         QuickRow::PlayGameplay,
         QuickRow::Shader,
-        QuickRow::ColourCorrection,
         QuickRow::Palette,
         QuickRow::ScreenGba,
         QuickRow::GbBezel,
@@ -112,8 +127,9 @@ impl QuickRow {
         QuickRow::LcdGhosting,
         QuickRow::InGameMenu,
         QuickRow::RememberPosition,
+        QuickRow::ResumeGame,
+        QuickRow::BootPicture,
         QuickRow::FavoriteMark,
-        QuickRow::ScreenLook,
         QuickRow::Buttons,
         QuickRow::Sleep,
         QuickRow::Restart,
@@ -123,15 +139,16 @@ impl QuickRow {
     /// The power menu, held POWER.
     pub const POWER: [QuickRow; 3] = [QuickRow::Sleep, QuickRow::Restart, QuickRow::PowerOff];
 
-    pub const MAIN: [QuickRow; 5] = [
+    pub const MAIN: [QuickRow; 6] = [
         QuickRow::General,
         QuickRow::Screen,
         QuickRow::Game,
         QuickRow::Buttons,
+        QuickRow::Screenshots,
         QuickRow::About,
     ];
 
-    pub const GENERAL: [QuickRow; 8] = [
+    pub const GENERAL: [QuickRow; 9] = [
         QuickRow::Wallpaper,
         QuickRow::Theme,
         QuickRow::Recents,
@@ -140,25 +157,31 @@ impl QuickRow {
         QuickRow::DateTime,
         QuickRow::AutoSleep,
         QuickRow::RememberPosition,
+        QuickRow::ResumeGame,
     ];
 
-    pub const SCREEN: [QuickRow; 6] = [
-        QuickRow::ScreenLook,
-        QuickRow::ScreenGb,
-        QuickRow::ScreenGbc,
-        QuickRow::ScreenGba,
-        QuickRow::PixelTransparency,
-        QuickRow::LcdGhosting,
+    /// Every screen setting belongs to one system: nothing here reaches across all three.
+    pub const SCREEN: [QuickRow; 3] = [QuickRow::ScreenGb, QuickRow::ScreenGbc, QuickRow::ScreenGba];
+
+    pub const SCREEN_GBA: [QuickRow; 3] = [
+        QuickRow::GbaShader,
+        QuickRow::GbaTransparency,
+        QuickRow::GbaGhosting,
     ];
 
-    pub const SCREEN_GBA: [QuickRow; 2] = [QuickRow::GbaShader, QuickRow::GbaColourCorrection];
+    pub const SCREEN_GBC: [QuickRow; 4] = [
+        QuickRow::GbcShader,
+        QuickRow::GbcTransparency,
+        QuickRow::GbcGhosting,
+        QuickRow::GbcBlackBorder,
+    ];
 
-    pub const SCREEN_GBC: [QuickRow; 2] = [QuickRow::GbcShader, QuickRow::GbcColourCorrection];
-
-    pub const SCREEN_GB: [QuickRow; 3] = [
+    pub const SCREEN_GB: [QuickRow; 5] = [
         QuickRow::GbShader,
-        QuickRow::GbColourCorrection,
         QuickRow::GbPalettes,
+        QuickRow::GbTransparency,
+        QuickRow::GbGhosting,
+        QuickRow::GbBlackBorder,
     ];
 
     pub const GAME: [QuickRow; 9] = [
@@ -173,9 +196,10 @@ impl QuickRow {
         QuickRow::CheatIcon,
     ];
 
-    pub const PLAY: [QuickRow; 5] = [
+    pub const PLAY: [QuickRow; 6] = [
         QuickRow::Resume,
         QuickRow::States,
+        QuickRow::GameScreenshots,
         QuickRow::Cheats,
         QuickRow::Settings,
         QuickRow::ExitGame,
@@ -183,10 +207,14 @@ impl QuickRow {
 
     pub const SETTINGS: [QuickRow; 2] = [QuickRow::PlayScreen, QuickRow::PlayGameplay];
 
-    pub const PLAY_SCREEN: [QuickRow; 3] = [
+    /// The in-game Screen page: the playing system's own settings, through rows that stand
+    /// for whichever system is in the slot.
+    pub const PLAY_SCREEN: [QuickRow; 5] = [
         QuickRow::Shader,
-        QuickRow::ColourCorrection,
         QuickRow::Palette,
+        QuickRow::PixelTransparency,
+        QuickRow::LcdGhosting,
+        QuickRow::BlackBorder,
     ];
 
     pub fn index(self) -> usize {
@@ -195,21 +223,28 @@ impl QuickRow {
 
     pub fn page(self) -> &'static [QuickRow] {
         match self {
-            QuickRow::ScreenLook
-            | QuickRow::ScreenGba
+            QuickRow::ScreenGba
             | QuickRow::ScreenGbc
             | QuickRow::ScreenGb => &QuickRow::SCREEN,
-            QuickRow::GbaShader | QuickRow::GbaColourCorrection | QuickRow::GbaBezel => {
+            QuickRow::GbaShader
+            | QuickRow::GbaTransparency
+            | QuickRow::GbaGhosting
+            | QuickRow::GbaBezel => {
                 &QuickRow::SCREEN_GBA
             }
-            QuickRow::GbcShader | QuickRow::GbcColourCorrection | QuickRow::GbcBezel => {
+            QuickRow::GbcShader
+            | QuickRow::GbcTransparency
+            | QuickRow::GbcGhosting
+            | QuickRow::GbcBlackBorder
+            | QuickRow::GbcBezel => {
                 &QuickRow::SCREEN_GBC
             }
             QuickRow::GbShader
-            | QuickRow::GbColourCorrection
+            | QuickRow::GbTransparency
+            | QuickRow::GbGhosting
             | QuickRow::GbPalettes
+            | QuickRow::GbBlackBorder
             | QuickRow::GbBezel => &QuickRow::SCREEN_GB,
-            QuickRow::PixelTransparency | QuickRow::LcdGhosting => &QuickRow::SCREEN,
             QuickRow::FastForward
             | QuickRow::FastForwardSound
             | QuickRow::Rewind
@@ -227,15 +262,23 @@ impl QuickRow {
             | QuickRow::FavoriteMark
             | QuickRow::ShowTitles
             | QuickRow::AutoSleep
-            | QuickRow::RememberPosition => &QuickRow::GENERAL,
+            | QuickRow::RememberPosition
+            | QuickRow::ResumeGame
+            | QuickRow::BootPicture => &QuickRow::GENERAL,
             QuickRow::Resume
             | QuickRow::States
             | QuickRow::Cheats
+            | QuickRow::GameScreenshots
             | QuickRow::Settings
             | QuickRow::ExitGame => &QuickRow::PLAY,
             QuickRow::PlayScreen | QuickRow::PlayGameplay => &QuickRow::SETTINGS,
             QuickRow::Sleep | QuickRow::Restart | QuickRow::PowerOff => &QuickRow::POWER,
-            QuickRow::Shader | QuickRow::ColourCorrection | QuickRow::Palette | QuickRow::Bezel => {
+            QuickRow::Shader
+            | QuickRow::PixelTransparency
+            | QuickRow::LcdGhosting
+            | QuickRow::Palette
+            | QuickRow::BlackBorder
+            | QuickRow::Bezel => {
                 &QuickRow::PLAY_SCREEN
             }
             _ => &QuickRow::MAIN,
@@ -244,7 +287,7 @@ impl QuickRow {
 
     pub fn parent(self) -> Option<QuickRow> {
         match self.page()[0] {
-            QuickRow::ScreenLook => Some(QuickRow::Screen),
+            QuickRow::ScreenGb => Some(QuickRow::Screen),
             QuickRow::GbaShader => Some(QuickRow::ScreenGba),
             QuickRow::GbcShader => Some(QuickRow::ScreenGbc),
             QuickRow::GbShader => Some(QuickRow::ScreenGb),
@@ -312,20 +355,20 @@ impl QuickRow {
             QuickRow::Screen => "Screen",
             QuickRow::Rumble => "Rumble",
             QuickRow::CheatIcon => "Cheat Icon",
+            QuickRow::GbcBlackBorder | QuickRow::GbBlackBorder | QuickRow::BlackBorder => {
+                "Black Border"
+            }
             QuickRow::DateTime => "Date & Time",
             QuickRow::About => "About",
-            QuickRow::GbaShader | QuickRow::GbShader | QuickRow::GbcShader | QuickRow::Shader => {
-                "LCD Grid"
-            }
-            QuickRow::GbaColourCorrection
-            | QuickRow::GbColourCorrection
-            | QuickRow::GbcColourCorrection
-            | QuickRow::ColourCorrection => "Original Colors",
+            QuickRow::Screenshots | QuickRow::GameScreenshots => "Screenshots",
+            QuickRow::GbaShader | QuickRow::GbcShader | QuickRow::Shader => "LCD Filter",
+            // The Game Boy's own screen; with its game's GBC colors it takes the GBC's filter.
+            QuickRow::GbShader => "Dot Matrix",
             QuickRow::Game => "Gameplay",
             QuickRow::EjectSave => "Auto Save on Eject",
             QuickRow::Turbo => "Turbo Buttons",
             QuickRow::Rewind => "Rewind",
-            QuickRow::GbPalettes => "Color Palettes",
+            QuickRow::GbPalettes => "Palette",
             QuickRow::RunAhead => "Run-Ahead",
             QuickRow::Theme => "Theme",
             QuickRow::Wallpaper => "Wallpaper",
@@ -335,10 +378,18 @@ impl QuickRow {
             QuickRow::ShowTitles => "Game Titles",
             QuickRow::WallpaperTint => "Wallpaper Tint",
             QuickRow::AutoSleep => "Auto Sleep",
-            QuickRow::PixelTransparency => "See-Through Pixels",
-            QuickRow::LcdGhosting => "Motion Blur",
+            QuickRow::PixelTransparency
+            | QuickRow::GbTransparency
+            | QuickRow::GbcTransparency
+            | QuickRow::GbaTransparency => "Pixel Transparency",
+            QuickRow::LcdGhosting
+            | QuickRow::GbGhosting
+            | QuickRow::GbcGhosting
+            | QuickRow::GbaGhosting => "Ghosting",
             QuickRow::InGameMenu => "In-Game Menu",
             QuickRow::RememberPosition => "Remember Shelf Position",
+            QuickRow::ResumeGame => "Resume Game",
+            QuickRow::BootPicture => "Game as Boot Screen",
             QuickRow::Resume => "Resume",
             QuickRow::States => "States",
             QuickRow::Cheats => "Cheats",
@@ -351,7 +402,6 @@ impl QuickRow {
             QuickRow::ScreenGbc => "Game Boy Color",
             QuickRow::ScreenGb => "Game Boy",
             QuickRow::GbBezel | QuickRow::GbcBezel | QuickRow::GbaBezel | QuickRow::Bezel => "Bezel",
-            QuickRow::ScreenLook => "Screen Look",
             QuickRow::Buttons => "Buttons",
             QuickRow::Sleep => "Sleep",
             QuickRow::Restart => "Restart",
@@ -367,21 +417,26 @@ impl QuickRow {
             QuickRow::Game => "Speed, rewind, turbo and saving.",
             QuickRow::Buttons => "Every button and shortcut, explained.",
             QuickRow::About => "Who made this, and what it runs on.",
-            QuickRow::ScreenLook => "Authentic: like the real screen. Clean: sharp and bright.",
+            QuickRow::Screenshots => "Every screenshot, newest first. VOL+ and POWER takes one.",
+            QuickRow::GameScreenshots => "This game's screenshots. VOL+ and POWER takes one.",
             QuickRow::ScreenGb | QuickRow::ScreenGbc | QuickRow::ScreenGba => {
                 "Settings for this console only."
             }
-            QuickRow::GbaShader | QuickRow::GbShader | QuickRow::GbcShader | QuickRow::Shader => {
-                "Thin lines between the pixels, like the real screen."
+            QuickRow::GbShader => "The Game Boy's dot grid. SELECT + B turns every effect off.",
+            QuickRow::GbaShader | QuickRow::GbcShader | QuickRow::Shader => {
+                "The real screen's lines. SELECT + B turns every effect off."
             }
-            QuickRow::GbaColourCorrection
-            | QuickRow::GbColourCorrection
-            | QuickRow::GbcColourCorrection
-            | QuickRow::ColourCorrection => "Softer colors, the way the original screen showed them.",
-            QuickRow::GbPalettes => "Tint Game Boy games. SELECT + L2 / R2 picks a palette.",
-            QuickRow::Palette => "The colors this Game Boy game is shown in.",
-            QuickRow::PixelTransparency => "Pale pixels let the screen behind them show through.",
-            QuickRow::LcdGhosting => "Moving pixels fade out slowly, like an old LCD.",
+            QuickRow::GbPalettes | QuickRow::Palette => {
+                "Off: the game's own Game Boy Color colors. SELECT + L2 / R2 picks one."
+            }
+            QuickRow::PixelTransparency
+            | QuickRow::GbTransparency
+            | QuickRow::GbcTransparency
+            | QuickRow::GbaTransparency => "Pale pixels let the light through and cast soft shadows.",
+            QuickRow::LcdGhosting
+            | QuickRow::GbGhosting
+            | QuickRow::GbcGhosting
+            | QuickRow::GbaGhosting => "Moving pixels fade out slowly, like an old LCD.",
             QuickRow::FastForward => "How fast the game runs while you hold R2.",
             QuickRow::FastForwardSound => "Hear the game while it fast-forwards.",
             QuickRow::Rewind => "Hold L2 in a game to go back in time.",
@@ -389,6 +444,9 @@ impl QuickRow {
             QuickRow::Turbo => "Hold X for rapid A, hold Y for rapid B.",
             QuickRow::Rumble => "Let games that support it shake the device.",
             QuickRow::CheatIcon => "Show a masked robber while any cheat is on.",
+            QuickRow::GbcBlackBorder | QuickRow::GbBlackBorder | QuickRow::BlackBorder => {
+                "Black around the picture, instead of the screen's own glass."
+            }
             QuickRow::InGameMenu => "Tap MENU in a game to pause and open a menu.",
             QuickRow::EjectSave => "Save your place when you eject a cart.",
             QuickRow::Wallpaper => "Dark, Light, or your own from the Wallpapers folder.",
@@ -399,6 +457,8 @@ impl QuickRow {
             QuickRow::DateTime => "Set the clock.",
             QuickRow::AutoSleep => "Sleep after this long without a button press.",
             QuickRow::RememberPosition => "Start where you left off on the shelf.",
+            QuickRow::ResumeGame => "Power on straight back into the game, its picture as boot screen.",
+            QuickRow::BootPicture => "Power off in a game and it shows while the device starts.",
             QuickRow::Resume => "Back to the game, right where you paused.",
             QuickRow::States => "Save, load and flick through save states.",
             QuickRow::Cheats => "Turn this game's cheats on and off.",
@@ -418,12 +478,14 @@ impl QuickRow {
             self,
             QuickRow::DateTime
                 | QuickRow::About
+                | QuickRow::Screenshots
                 | QuickRow::Screen
                 | QuickRow::Game
                 | QuickRow::General
                 | QuickRow::Resume
                 | QuickRow::States
                 | QuickRow::Cheats
+                | QuickRow::GameScreenshots
                 | QuickRow::Settings
                 | QuickRow::ExitGame
                 | QuickRow::PlayScreen
@@ -864,6 +926,8 @@ pub struct QuickMenu<'a> {
     pub ink: Ink,
     /// The first row shown on a page that scrolls (see `quick_first`).
     pub first: usize,
+    /// Rows shown under another row's name: in game, LCD Filter reads Dot Matrix on a GBA.
+    pub named_as: &'a [(QuickRow, QuickRow)],
 }
 
 impl QuickMenu<'_> {
@@ -919,7 +983,12 @@ impl QuickMenu<'_> {
             let y = top + pitch * (i - first) as f32 + TYPE_DROP;
             let lit = row == self.row;
             let colour = if lit { ink.on_bar } else { ink.dim };
-            if let Some(&(tex, w, h)) = faces.labels.get(row.index()).map(|l| &l[lit as usize]) {
+            let named = self
+                .named_as
+                .iter()
+                .find(|(r, _)| *r == row)
+                .map_or(row, |&(_, as_row)| as_row);
+            if let Some(&(tex, w, h)) = faces.labels.get(named.index()).map(|l| &l[lit as usize]) {
                 let x = match row.centred() {
                     true => self.canvas.centred(w as f32),
                     false => QUICK_LABEL_X - pad,
@@ -939,7 +1008,7 @@ impl QuickMenu<'_> {
             let value = match row {
                 QuickRow::DateTime => self.clock.map(|c| c[lit as usize]),
                 QuickRow::Wallpaper => self.wallpaper.map(|c| c[lit as usize]),
-                QuickRow::Palette => self.palette.map(|c| c[lit as usize]),
+                QuickRow::Palette | QuickRow::GbPalettes => self.palette.map(|c| c[lit as usize]),
                 QuickRow::GbaBezel => self.gba_bezel.map(|c| c[lit as usize]),
                 QuickRow::GbBezel => self.gb_bezel.map(|c| c[lit as usize]),
                 QuickRow::GbcBezel => self.gbc_bezel.map(|c| c[lit as usize]),
@@ -966,7 +1035,12 @@ impl QuickMenu<'_> {
             tint(out, tex, vx, y, w, h, colour);
             tint(out, left_tex, vx + pad - CARET_GAP - lw as f32, y, lw, lh, colour);
         }
-        if let Some(&Some((tex, w, h))) = faces.help.get(self.row.index()) {
+        let help_row = self
+            .named_as
+            .iter()
+            .find(|(r, _)| *r == self.row)
+            .map_or(self.row, |&(_, as_row)| as_row);
+        if let Some(&Some((tex, w, h))) = faces.help.get(help_row.index()) {
             tint(
                 out,
                 tex,

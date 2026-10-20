@@ -244,35 +244,6 @@ fn a_live_session_refuses_a_switcher_pick_even_when_one_exists() {
     );
 }
 
-#[test]
-fn a_live_session_refuses_to_undo_a_load() {
-    let d = tmp_root_with_carts(&["Emerald"]);
-    let r = StateRing::new(d.path(), Platform::Gba, Core::Mgba, "Emerald");
-    r.push(&[7u8; 64], b"png", "2026-08-09_00-00-00").unwrap();
-    let (snapshot, loaded) = StubSnapshot::pair();
-    let mut a = app_playing_with(d.path(), "Emerald", snapshot);
-
-    a.apply(Action::Polaroids);
-    a.apply(Action::GbaDown(Btn::A));
-    assert!(a.undo_available(a.now()), "the load did not offer an undo");
-    *loaded.lock().unwrap() = None;
-
-    a.begin_link(0);
-    a.undo(a.now());
-
-    assert!(
-        a.refusal_active(a.now()),
-        "undoing a load must be refused during a session, the same hazard load_file guards"
-    );
-    assert!(
-        loaded.lock().unwrap().is_none(),
-        "the core must not have been moved to the prior state"
-    );
-    assert!(
-        a.undo_available(a.now()),
-        "a refused undo must not consume the offer"
-    );
-}
 
 #[test]
 fn a_live_session_refuses_to_open_the_switcher() {
@@ -293,22 +264,6 @@ fn a_live_session_refuses_to_open_the_switcher() {
     );
 }
 
-#[test]
-fn a_live_session_refuses_to_open_the_power_menu() {
-    let d = tmp_root_with_carts(&["Emerald"]);
-    let mut a = app_playing_in(d.path(), "Emerald");
-    a.begin_link(0);
-
-    a.apply(Action::PowerHold);
-    assert!(
-        a.power_menu().is_none(),
-        "the power menu pauses the core, which a session forbids"
-    );
-    assert!(
-        a.refusal_active(a.now()),
-        "a refused power-menu open must shake"
-    );
-}
 
 #[test]
 fn ejecting_during_a_session_ends_it() {

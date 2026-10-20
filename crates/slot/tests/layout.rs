@@ -73,11 +73,7 @@ fn the_in_game_menu_takes_its_own_layout_once_it_shows() {
 }
 
 #[test]
-fn the_photos_and_the_power_menu_over_a_game_stay_framed() {
-    let mut a = playing(PANEL_4_3);
-    a.apply(Action::PowerHold);
-    assert!(a.power_menu().is_some(), "the power menu did not open");
-    assert_eq!(a.layout(), Layout::Framed, "the power menu over a game");
+fn the_photos_over_a_game_stay_framed() {
     let mut a = playing(PANEL_4_3);
     a.apply(Action::Polaroids);
     if matches!(a.phase(), Phase::Polaroids { .. }) {
@@ -86,14 +82,10 @@ fn the_photos_and_the_power_menu_over_a_game_stay_framed() {
 }
 
 #[test]
-fn the_shelf_menu_and_the_power_menu_over_the_shelf_stay_native() {
+fn the_shelf_menu_over_the_shelf_stays_native() {
     let mut a = app_with_carts(&["Emerald", "Zzz"], PANEL_4_3);
     a.apply(Action::QuickMenu);
     assert!(matches!(a.phase(), Phase::QuickMenu { .. }));
-    assert_eq!(a.layout(), Layout::Native);
-    let mut a = app_with_carts(&["Emerald", "Zzz"], PANEL_4_3);
-    a.apply(Action::PowerHold);
-    assert!(a.power_menu().is_some());
     assert_eq!(a.layout(), Layout::Native);
 }
 

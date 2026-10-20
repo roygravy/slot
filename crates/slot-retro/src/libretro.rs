@@ -584,6 +584,11 @@ impl RetroCore for LibretroCore {
         }
     }
 
+    fn reset(&mut self) {
+        let _a = Active::bind(&mut self.host);
+        unsafe { (self.api.reset)() };
+    }
+
     fn load(&mut self, rom: &Path) -> Result<(), CoreError> {
         self.unload();
         self.rom = std::fs::read(rom)?;

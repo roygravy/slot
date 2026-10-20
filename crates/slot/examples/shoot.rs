@@ -29,6 +29,8 @@ fn btn(name: &str) -> Btn {
         "select" => Btn::Select,
         "menu" => Btn::Menu,
         "power" => Btn::Power,
+        "volup" => Btn::VolUp,
+        "voldown" => Btn::VolDown,
         other => panic!("unknown button {other}"),
     }
 }
@@ -73,6 +75,7 @@ fn main() {
 
     let mut input = Scripted::default();
     let mut frame = 0u64;
+    let mut shut = false;
     let present = Duration::from_secs_f64(1.0 / FPS);
     let mut run = |input: &mut Scripted, frame: &mut u64| -> Vec<u8> {
         let loading = std::time::Instant::now();
@@ -82,6 +85,12 @@ fn main() {
         *frame += 1;
         let now = (*frame as f64 * 1000.0 / FPS) as Millis;
         frontend.advance_at(input, now, (1.0 / FPS) as f32);
+        if (frontend.powering_off() || frontend.restarting()) && !shut {
+            // Run slot's own shutdown step, as the device would, then keep drawing.
+            shut = true;
+            frontend.poweroff();
+            eprintln!("poweroff");
+        }
         frontend.step_emulator(present, Duration::from_secs(1));
         frontend.compose(&mut compositor);
         compositor.read_frame()

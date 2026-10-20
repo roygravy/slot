@@ -36,6 +36,8 @@ pub mod persist;
 pub mod prefetch;
 pub mod resample;
 pub mod rewind;
+pub mod screenshot;
+pub mod shots;
 pub mod root;
 pub mod session;
 pub mod state_writer;

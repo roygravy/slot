@@ -1,6 +1,6 @@
 use slot_input::RawEvent::{Down, Up};
 use slot_input::{
-    Action::*, Btn, Btn::*, Gestures, RawEvent, MENU_HOLD_MS, POWER_HOLD_MS, SELECT_CHORD_MS,
+    Action::*, Btn, Btn::*, Gestures, RawEvent, MENU_HOLD_MS, POWER_HOLD_MS, POWER_TAP_MS, SELECT_CHORD_MS,
     SELECT_TAP_MS, VOLUME_REPEAT_DELAY_MS, VOLUME_REPEAT_MS,
 };
 
@@ -18,9 +18,10 @@ fn a_select_that_becomes_a_chord_never_reaches_the_game() {
 fn a_chord_keeps_both_keys_from_the_game() {
     let mut g = Gestures::new();
     assert!(g.feed(Down(Select), 0).is_empty());
-    assert_eq!(g.feed(Down(R1), 50), vec![SaveState]);
-    assert!(
-        g.feed(Up(R1), 60).is_empty(),
+    assert!(g.feed(Down(R1), 50).is_empty());
+    assert_eq!(
+        g.feed(Up(R1), 60),
+        vec![SaveState],
         "the chord key reached the game"
     );
     assert!(
@@ -43,11 +44,8 @@ fn a_select_held_past_the_window_reaches_the_game_then() {
 fn a_game_button_under_select_hands_select_over_first() {
     let mut g = Gestures::new();
     assert!(g.feed(Down(Select), 0).is_empty());
-    assert_eq!(
-        g.feed(Down(Start), 100),
-        vec![GbaDown(Select), GbaDown(Start)]
-    );
-    assert_eq!(g.feed(Up(Start), 200), vec![GbaUp(Start)]);
+    assert_eq!(g.feed(Down(A), 100), vec![GbaDown(Select), GbaDown(A)]);
+    assert_eq!(g.feed(Up(A), 200), vec![GbaUp(A)]);
     assert!(
         g.tick(SELECT_CHORD_MS).is_empty(),
         "SELECT was pressed twice"
@@ -208,7 +206,7 @@ fn power_flushes_on_the_press_and_locks_on_the_release() {
 }
 
 #[test]
-fn power_held_past_the_threshold_raises_the_menu_and_the_release_does_nothing() {
+fn power_held_past_the_threshold_powers_off_and_the_release_does_nothing() {
     let mut g = Gestures::new();
     g.feed(Down(Btn::Power), 0);
     assert!(g.tick(POWER_HOLD_MS - 1).is_empty());
@@ -218,11 +216,18 @@ fn power_held_past_the_threshold_raises_the_menu_and_the_release_does_nothing() 
 }
 
 #[test]
-fn a_press_just_short_of_the_threshold_is_a_lock() {
+fn a_press_just_short_of_the_tap_time_sleeps() {
+    let mut g = Gestures::new();
+    g.feed(Down(Btn::Power), 0);
+    assert_eq!(g.feed(Up(Btn::Power), POWER_TAP_MS - 1), vec![PowerTap]);
+}
+
+#[test]
+fn letting_go_during_the_countdown_cancels_it() {
     let mut g = Gestures::new();
     g.feed(Down(Btn::Power), 0);
     assert!(g.tick(POWER_HOLD_MS - 1).is_empty());
-    assert_eq!(g.feed(Up(Btn::Power), POWER_HOLD_MS - 1), vec![PowerTap]);
+    assert_eq!(g.feed(Up(Btn::Power), POWER_HOLD_MS - 1), vec![PowerCancel]);
 }
 
 #[test]
@@ -274,7 +279,8 @@ fn a_chord_landing_late_is_still_a_chord() {
     let mut g = Gestures::new();
     g.feed(Down(Select), 0);
     g.tick(400);
-    assert_eq!(g.feed(Down(R1), 400), vec![SaveState]);
+    assert!(g.feed(Down(R1), 400).is_empty());
+    assert_eq!(g.feed(Up(R1), 450), vec![SaveState]);
     assert!(
         g.tick(5_000).is_empty(),
         "the tick handed something over behind a late chord"
@@ -473,15 +479,6 @@ fn the_menu_button_still_works_after_a_chord() {
 }
 
 #[test]
-fn select_and_y_toggles_colour_correction_and_costs_the_game_nothing() {
-    let mut g = Gestures::new();
-    assert!(g.feed(Down(Select), 0).is_empty());
-    assert_eq!(g.feed(Down(Y), 10), vec![ColourCorrectionToggle]);
-    assert!(g.feed(Up(Y), 40).is_empty());
-    assert!(g.feed(Up(Select), 200).is_empty());
-}
-
-#[test]
 fn y_on_its_own_is_untouched_by_the_colour_chord() {
     let mut g = Gestures::new();
     assert_eq!(g.feed(Down(Y), 0), vec![GbaDown(Y)]);
@@ -509,14 +506,21 @@ fn l2_and_r2_on_their_own_still_rewind_and_fast_forward() {
 }
 
 #[test]
-fn select_and_a_or_b_steps_the_shader_and_costs_the_game_nothing() {
+fn select_and_b_toggles_the_screen_effects_and_costs_the_game_nothing() {
     let mut g = Gestures::new();
     assert!(g.feed(Down(Select), 0).is_empty());
-    assert_eq!(g.feed(Down(A), 10), vec![ShaderNext]);
-    assert!(g.feed(Up(A), 40).is_empty());
     assert_eq!(g.feed(Down(B), 60), vec![ShaderPrev]);
     assert!(g.feed(Up(B), 90).is_empty());
     assert!(g.feed(Up(Select), 200).is_empty());
+}
+
+#[test]
+fn select_and_a_is_left_to_the_game() {
+    let mut g = Gestures::new();
+    assert!(g.feed(Down(Select), 0).is_empty());
+    assert_eq!(g.feed(Down(A), 10), vec![GbaDown(Select), GbaDown(A)]);
+    assert_eq!(g.feed(Up(A), 40), vec![GbaUp(A)]);
+    assert_eq!(g.feed(Up(Select), 200), vec![GbaUp(Select)]);
 }
 
 #[test]
@@ -622,4 +626,46 @@ fn menu_dpad_display_chord_resets_when_menu_is_released() {
     g.feed(Up(Menu), 200);
     g.feed(Down(Menu), 300);
     assert_eq!(g.tick(300 + MENU_HOLD_MS), vec![Eject]);
+}
+
+#[test]
+fn power_then_volume_up_takes_a_screenshot_and_nothing_else() {
+    let mut g = Gestures::new();
+    assert_eq!(g.feed(Down(Power), 0), vec![PowerPress]);
+    assert_eq!(g.feed(Down(VolUp), 80), vec![Screenshot]);
+    assert!(g.tick(POWER_HOLD_MS + 500).is_empty(), "power hold or volume ramp fired");
+    assert!(g.feed(Up(Power), 2_000).is_empty(), "the power tap went to sleep");
+    assert!(g.feed(Up(VolUp), 2_100).is_empty());
+    assert_eq!(g.feed(Down(Power), 3_000), vec![PowerPress]);
+    assert_eq!(g.feed(Up(Power), 3_050), vec![PowerTap]);
+}
+
+#[test]
+fn volume_up_then_power_takes_a_screenshot() {
+    let mut g = Gestures::new();
+    assert_eq!(g.feed(Down(VolUp), 0), vec![VolumeUp]);
+    assert_eq!(g.feed(Down(Power), 60), vec![Screenshot]);
+    assert!(g.tick(VOLUME_REPEAT_DELAY_MS + 300).is_empty());
+    assert!(g.feed(Up(VolUp), 900).is_empty());
+    assert!(g.feed(Up(Power), 950).is_empty());
+}
+
+#[test]
+fn start_and_select_reset_at_once_and_the_game_sees_neither() {
+    let mut g = Gestures::new();
+    assert!(g.feed(Down(Select), 0).is_empty());
+    assert_eq!(g.feed(Down(Start), 30), vec![ResetGame]);
+    assert!(g.tick(2_000).is_empty(), "reset fired twice");
+}
+
+#[test]
+fn select_then_start_or_start_then_select_both_reset_once_per_press() {
+    let mut g = Gestures::new();
+    g.feed(Down(Start), 0);
+    assert!(g.feed(Down(Select), 20).contains(&ResetGame));
+    g.feed(Up(Select), 100);
+    g.feed(Up(Start), 110);
+    g.feed(Down(Select), 300);
+    assert!(g.feed(Down(Start), 320).contains(&ResetGame));
+    assert!(!g.tick(2_000).contains(&ResetGame), "reset fired twice");
 }

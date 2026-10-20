@@ -27,7 +27,7 @@ fn a_cart_gpsp_cannot_link_says_there_is_no_link() {
 fn the_banner_says_what_happened_and_never_what_is_on_screen() {
     let all = Toast::all();
     assert_eq!(
-        all[..15],
+        all[..19],
         [
             Toast::StateSaved,
             Toast::StateLoaded,
@@ -36,19 +36,23 @@ fn the_banner_says_what_happened_and_never_what_is_on_screen() {
             Toast::LinkEnded,
             Toast::PeerEnded,
             Toast::BiosMismatch,
-            Toast::ColourOn,
-            Toast::ColourOff,
             Toast::ShaderOff,
             Toast::ShaderLcd3x,
             Toast::ShaderGrid,
+            Toast::ShaderGbaLcd,
             Toast::ShaderDot,
             Toast::ShaderSimpletex,
             Toast::CardUnwritable,
+            Toast::ScreenshotSaved,
+            Toast::GameReset,
+            Toast::ShaderGbcLcd,
+            Toast::EffectsOn,
+            Toast::EffectsOff,
         ],
         "a banner was added or dropped: every face is uploaded by its place in this list"
     );
     assert_eq!(
-        all[15..],
+        all[19..],
         GbPalette::all().map(Toast::Palette).collect::<Vec<_>>()[..],
         "the palette banners do not follow the fixed ones in palette order"
     );
@@ -166,9 +170,9 @@ fn a_toast_takes_the_band_from_the_bar() {
 }
 
 #[test]
-fn a_palette_banner_names_the_palette_without_its_boot_combo() {
-    let p = GbPalette::parse("GBC Dark Green →A").unwrap();
-    assert_eq!(Toast::Palette(p).text(), "GBC Dark Green");
+fn a_palette_banner_names_the_palette_as_the_menu_does() {
+    let p = GbPalette::parse("DMG Green").unwrap();
+    assert_eq!(Toast::Palette(p).text(), "GB DMG");
 }
 
 fn band(h: &Hud, now: u64) -> Option<(f32, f32, [f32; 4])> {

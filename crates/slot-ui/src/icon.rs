@@ -23,10 +23,11 @@ pub enum Icon {
     HeadphonesMuted,
     /// A robber's masked face: cheats are on.
     Cheats,
+    Power,
 }
 
 impl Icon {
-    pub const ALL: [Icon; 13] = [
+    pub const ALL: [Icon; 14] = [
         Icon::Volume,
         Icon::VolumeZero,
         Icon::VolumeMuted,
@@ -40,6 +41,7 @@ impl Icon {
         Icon::Headphones,
         Icon::HeadphonesMuted,
         Icon::Cheats,
+        Icon::Power,
     ];
 
     pub fn index(self) -> usize {
@@ -61,6 +63,7 @@ impl Icon {
             Icon::Headphones => '\u{f025}',
             Icon::HeadphonesMuted => '\u{f07ce}',
             Icon::Cheats => '\u{f1058}',
+            Icon::Power => '\u{f011}',
         }
     }
 }
@@ -330,6 +333,9 @@ fn raster(icon: Icon, px: f32) -> Option<Arc<Raster>> {
 fn rasterise(icon: Icon, px: f32) -> Option<Raster> {
     let font = symbols_font()?;
     let f = frame(font, px);
+    if icon == Icon::Power {
+        return Some(power_symbol(&f, px));
+    }
     let (m, cov) = font.rasterize(icon.glyph(), px);
     let x0 = m.xmin - f.left;
     let y0 = f.top - (m.ymin + m.height as i32);
@@ -348,6 +354,41 @@ fn rasterise(icon: Icon, px: f32) -> Option<Raster> {
     })
 }
 
+/// The power symbol, drawn rather than taken from the font, which does not carry it: a ring
+/// open at the top with a bar down through the gap, centred in the icons' frame.
+fn power_symbol(f: &Frame, px: f32) -> Raster {
+    let (cx, cy) = (f.w as f32 / 2.0, f.h as f32 / 2.0 + px * 0.04);
+    let radius = px * 0.36;
+    let stroke = (px * 0.11).max(1.5);
+    let gap = 0.62; // half the opening at the top, in radians
+    let mut cov = vec![0u8; (f.w * f.h) as usize];
+    for y in 0..f.h {
+        for x in 0..f.w {
+            let (dx, dy) = (x as f32 + 0.5 - cx, y as f32 + 0.5 - cy);
+            // The ring, cut open around straight up.
+            let angle = dx.atan2(-dy).abs();
+            let ring = if angle > gap {
+                (dx.hypot(dy) - radius).abs() - stroke / 2.0
+            } else {
+                // Distance to the nearer cut end, so the ends are rounded.
+                let end = |s: f32| {
+                    let (ex, ey) = (s * radius * gap.sin(), -radius * gap.cos());
+                    (dx - ex).hypot(dy - ey) - stroke / 2.0
+                };
+                end(1.0).min(end(-1.0))
+            };
+            // The bar, from above the ring's top down to near its middle, rounded too.
+            let (top, bottom) = (-radius - stroke * 0.3, -radius * 0.05);
+            let by = dy.clamp(top, bottom);
+            let bar = dx.hypot(dy - by) - stroke / 2.0;
+            let d = ring.min(bar);
+            let a = (0.5 - d).clamp(0.0, 1.0);
+            cov[(y * f.w + x) as usize] = (a * 255.0) as u8;
+        }
+    }
+    Raster { cov, w: f.w, h: f.h }
+}
+
 struct Frame {
     w: u32,
     h: u32,
@@ -357,7 +398,7 @@ struct Frame {
 
 fn frame(font: &Font, px: f32) -> Frame {
     let (mut left, mut right, mut top, mut bottom) = (i32::MAX, i32::MIN, i32::MIN, i32::MAX);
-    for icon in Icon::ALL {
+    for icon in Icon::ALL.into_iter().filter(|i| *i != Icon::Power) {
         let m = font.metrics(icon.glyph(), px);
         left = left.min(m.xmin);
         right = right.max((m.xmin + m.width as i32).max(m.advance_width.ceil() as i32));

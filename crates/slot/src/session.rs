@@ -253,7 +253,7 @@ impl Session {
         self.bridge_link(|app| app.apply(action));
         if matches!(
             action,
-            Action::VolumeUp | Action::VolumeDown | Action::MuteToggle
+            Action::VolumeUp | Action::VolumeDown | Action::MuteToggle | Action::Screenshot
         ) {
             if let Some(emu) = &self.emu {
                 emu.set_volume(self.app.output_volume());
@@ -285,6 +285,11 @@ impl Session {
                 None => eprintln!("slot: link: a transport arrived with no core to run it"),
             }
         }
+        if self.app.take_reset() {
+            if let Some(emu) = &self.emu {
+                emu.reset();
+            }
+        }
         if let Some(codes) = self.app.take_cheats() {
             if let Some(emu) = &self.emu {
                 emu.set_cheats(codes);
@@ -293,18 +298,12 @@ impl Session {
         let mut recoloured = false;
         if let Some(p) = self.app.take_gb_palette() {
             if let Some(emu) = &self.emu {
-                for (key, value) in crate::core::gb_palette_options(self.app.core(), p) {
+                let options = match p {
+                    Some(p) => crate::core::gb_palette_options(self.app.core(), p),
+                    None => crate::core::gb_palette_off_options(self.app.core()),
+                };
+                for (key, value) in options {
                     emu.set_option(key, &value);
-                    recoloured = true;
-                }
-            }
-        }
-        if let Some(on) = self.app.take_colour_correction() {
-            if let Some((key, value)) =
-                crate::core::colour_option(self.app.core(), self.app.playing_platform(), on)
-            {
-                if let Some(emu) = &self.emu {
-                    emu.set_option(key, value);
                     recoloured = true;
                 }
             }
@@ -433,8 +432,7 @@ impl Session {
     }
 
     fn held(&self) -> bool {
-        self.app.power_menu().is_some()
-            || self.app.game_menu_open()
+        self.app.game_menu_open()
             || self.app.in_game_menu().is_some()
             || self.app.shutting_down()
     }
@@ -544,17 +542,21 @@ impl Session {
         let player = self.app.link_player();
         let palette = crate::core::palette_for(self.app.gb_palette(), platform, &rom, player);
         self.app.set_palette_live(palette.is_some());
+        self.app.set_palette_capable(
+            crate::core::palette_for(Some(slot_store::GbPalette::DEFAULT), platform, &rom, player).is_some(),
+        );
         let mut opened = open_core(
             &self.root,
             core,
             platform,
             serial,
-            self.app.colour_correction_for(platform),
+            // slot.'s own screen looks take the place of the cores' colour correction.
+            false,
             palette,
             player,
         );
         let (ghosting_key, ghosting_value) =
-            crate::core::lcd_ghosting_option(core, self.app.lcd_ghosting());
+            crate::core::lcd_ghosting_option(core, self.app.lcd_ghosting_for(platform));
         opened.core.set_option(ghosting_key, ghosting_value);
         self.app.set_named_core(opened.named);
         launch("core opened");

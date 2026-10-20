@@ -6,16 +6,23 @@ use crate::plate::{centred_hints, UndoFace, HINT_H, LEGEND_GAP};
 use crate::text;
 use crate::theme::Ink;
 
-pub const BUTTON_PAGES: [(&str, &[(&str, &str)]); 4] = [
+/// Every page keeps to a few rows; a tab with more runs over pages of its own, ‹ and ›.
+pub const BUTTON_PAGES: [(&str, &[(&str, &str)]); 7] = [
     (
         "Everywhere",
         &[
             ("SELECT + Up / Down", "Brightness"),
             ("SELECT + Left / Right", "Blue light filter"),
             ("VOL+ / VOL-", "Volume"),
-            ("VOL+ and VOL- together", "Mute"),
-            ("SELECT + VOL+ or VOL-", "Mute"),
-            ("Hold POWER", "Restart or power off"),
+            ("VOL+ and VOL-", "Mute"),
+        ],
+    ),
+    (
+        "Everywhere",
+        &[
+            ("POWER", "Sleep / wake up"),
+            ("Hold POWER", "Power off"),
+            ("VOL+ and POWER", "Screenshot"),
         ],
     ),
     (
@@ -24,55 +31,63 @@ pub const BUTTON_PAGES: [(&str, &[(&str, &str)]); 4] = [
             ("Left / Right", "Move along the shelf"),
             ("Up / Down", "Jump to the next letter"),
             ("L1 / R1", "Switch shelf"),
-            ("Tap A", "Play from your last save state"),
+            ("MENU", "Settings"),
+        ],
+    ),
+    (
+        "Shelf",
+        &[
+            ("Tap A", "Play from the last state"),
             ("Hold A", "Start the game fresh"),
             ("Y", "Favorite or unfavorite"),
-            ("MENU", "Settings"),
-            ("START", "Choose the emulator (GBA)"),
+            ("START", "Emulator choice (GBA)"),
         ],
     ),
     (
         "In Game",
         &[
-            ("Hold MENU", "Save, eject, back to the shelf"),
-            ("Tap MENU", "In-game menu, when it is on"),
+            ("Tap MENU", "In-game menu"),
+            ("Hold MENU", "Save and eject"),
             ("Double tap MENU", "Save state switcher"),
-            ("SELECT + MENU", "Link cable to another slot"),
+            ("SELECT + MENU", "Link cable"),
+            ("START + SELECT", "Reset the game"),
+        ],
+    ),
+    (
+        "In Game",
+        &[
             ("SELECT + R1", "Save state"),
-            ("SELECT + L1", "Load the newest save state"),
-            ("SELECT + B / A", "LCD grid on / off"),
-            ("SELECT + Y", "Original colors on / off"),
+            ("SELECT + L1", "Load the newest state"),
+            ("SELECT + B", "Screen effects on / off"),
             ("SELECT + L2 / R2", "Game Boy palette"),
+            ("L1 / R1", "Stretch or not (GB)"),
+        ],
+    ),
+    (
+        "In Game",
+        &[
             ("Hold L2", "Rewind"),
             ("Hold R2", "Fast-forward"),
             ("Double tap R2", "Keep fast-forwarding"),
             ("Hold X / Y", "Turbo A / turbo B"),
-            ("L1 / R1", "Stretch / original size (GB)"),
-        ],
-    ),
-    (
-        "Save States",
-        &[
-            ("Left / Right", "Flick through the states"),
-            ("A", "Load the one on screen"),
-            ("Y", "Delete the one on screen"),
-            ("X", "Undo the last save or load"),
-            ("B", "Back to the game"),
         ],
     ),
 ];
 
-pub const BODY_W: u32 = 592;
+/// The rows sit between the ‹ and ›, clear of them.
+pub const BODY_W: u32 = 528;
 const TAB_H: u32 = 30;
-const TAB_PX: f32 = 18.0;
+const TAB_PX: f32 = 17.0;
 const TAB_Y: f32 = 22.0;
 const TAB_GAP: f32 = 22.0;
+/// Room kept free at each side of the tab row.
+const TAB_EDGE: f32 = 8.0;
 const BODY_Y: f32 = 72.0;
 const BODY_ROOM: f32 = 344.0;
 const ROW_MAX: f32 = 40.0;
 const KEY_PX: f32 = 17.0;
 const DO_PX: f32 = 17.0;
-const KEY_W: f32 = 270.0;
+const KEY_W: f32 = 244.0;
 pub const LEGEND_Y: f32 = 427.0;
 /// How strongly the description column reads against the key column.
 const DO_ALPHA: f32 = 0.72;
@@ -83,6 +98,8 @@ pub struct ButtonsFaces {
     /// Each page's body: keys in white, what they do in a fainter white.
     pub bodies: Vec<(TexId, u32, u32)>,
     pub legend: [(TexId, u32); 2],
+    /// ‹ and ›: a tab's earlier and later page, in white.
+    pub arrows: [(TexId, u32, u32); 2],
 }
 
 fn word(font: &fontdue::Font, s: &str, px: f32, max_w: f32, h: u32) -> UndoFace {
@@ -107,6 +124,11 @@ pub fn buttons_tab_face(page: usize) -> UndoFace {
         };
     };
     word(font, BUTTON_PAGES[page].0, TAB_PX, 200.0, TAB_H)
+}
+
+/// Whether two pages share a tab: In Game runs over two.
+fn same_tab(a: usize, b: usize) -> bool {
+    BUTTON_PAGES.get(a).zip(BUTTON_PAGES.get(b)).is_some_and(|(a, b)| a.0 == b.0)
 }
 
 fn pitch(rows: usize) -> f32 {
@@ -168,12 +190,20 @@ impl ButtonsHelp<'_> {
         let Some(faces) = self.faces else {
             return;
         };
-        let total: f32 = faces.tabs.iter().map(|t| t.1 as f32).sum::<f32>()
-            + TAB_GAP * 2.0 * faces.tabs.len() as f32;
+        // The tabs share the width: as many as there are, the gaps between them narrow.
+        // A tab's later pages share its place in the row.
+        let first = |i: usize| i == 0 || !same_tab(i - 1, i);
+        let shown = || faces.tabs.iter().enumerate().filter(|(i, _)| first(*i));
+        let words: f32 = shown().map(|(_, t)| t.1 as f32).sum();
+        let n = shown().count().max(1) as f32;
+        let gap = ((self.canvas.w - 2.0 * TAB_EDGE - words) / (2.0 * n)).clamp(4.0, TAB_GAP).floor();
+        let total = words + gap * 2.0 * n;
         let mut x = self.canvas.centred(total).round();
-        for (i, &(tex, w, h)) in faces.tabs.iter().enumerate() {
-            let lit = i == self.page;
-            let cell = w as f32 + 2.0 * TAB_GAP;
+        for (i, &(tex, w, h)) in shown() {
+            let lit = (i..faces.tabs.len())
+                .take_while(|&j| j == i || same_tab(j - 1, j))
+                .any(|j| j == self.page);
+            let cell = w as f32 + 2.0 * gap;
             if lit {
                 out.push(Draw::Rect {
                     x,
@@ -184,7 +214,7 @@ impl ButtonsHelp<'_> {
                 });
             }
             out.push(Draw::Tint {
-                x: (x + TAB_GAP).round(),
+                x: (x + gap).round(),
                 y: TAB_Y,
                 w: w as f32,
                 h: h as f32,
@@ -192,6 +222,29 @@ impl ButtonsHelp<'_> {
                 colour: if lit { self.ink.on_bar } else { self.ink.dim },
             });
             x += cell;
+        }
+        // ‹ and ›: this tab has a page before or after this one.
+        let more = [
+            self.page > 0 && same_tab(self.page - 1, self.page),
+            same_tab(self.page, self.page + 1),
+        ];
+        for (right, &(tex, w, h)) in faces.arrows.iter().enumerate() {
+            if !more[right] {
+                continue;
+            }
+            // Where the menus' own carets sit, and as dim as their scroll arrows.
+            let x = match right {
+                1 => self.canvas.w - crate::quick_menu::QUICK_EDGE - w as f32,
+                _ => crate::quick_menu::QUICK_EDGE,
+            };
+            out.push(Draw::Tint {
+                x: x.round(),
+                y: (BODY_Y + (BODY_ROOM - h as f32) / 2.0).round(),
+                w: w as f32,
+                h: h as f32,
+                tex,
+                colour: self.ink.dim,
+            });
         }
         if let Some(&(tex, w, h)) = faces.bodies.get(self.page) {
             out.push(Draw::Tint {

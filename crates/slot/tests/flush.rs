@@ -7,7 +7,7 @@ use common::{app_playing_in, app_playing_with, tmp_root_with_carts};
 use slot::app::Phase;
 use slot::persist;
 use slot::persist::Snapshot;
-use slot_input::{Action, Btn};
+use slot_input::Action;
 use slot_power::{Battery, Charge, LedState};
 use slot_store::{read_slot_state, Core, Platform, StateRing};
 
@@ -76,26 +76,21 @@ fn a_power_tap_dozes_and_a_second_one_wakes() {
 }
 
 #[test]
-fn opening_the_menu_flushes_and_the_choice_powers_off() {
+fn power_down_flushes_and_the_hold_powers_off() {
     let d = tmp_root_with_carts(&["Emerald"]);
     let mut a = app_playing_in(d.path(), "Emerald");
 
-    a.apply(Action::PowerHold);
-    assert!(
-        !a.powering_off(),
-        "the hold asks the question, it does not answer it"
-    );
+    a.apply(Action::PowerPress);
     assert!(
         StateRing::new(d.path(), Platform::Gba, Core::Mgba, "Emerald")
             .read_resume()
             .unwrap()
             .is_some(),
-        "durable before the user has read a single row"
+        "durable the moment POWER goes down"
     );
 
-    a.apply(Action::GbaDown(Btn::Down));
-    a.apply(Action::GbaDown(Btn::A));
-    assert!(a.powering_off(), "Power Off is the second row");
+    a.apply(Action::PowerHold);
+    assert!(a.powering_off(), "the hold powers off");
     assert_eq!(
         read_slot_state(d.path()).cart,
         Some("Emerald".into()),
@@ -103,15 +98,6 @@ fn opening_the_menu_flushes_and_the_choice_powers_off() {
     );
 }
 
-#[test]
-fn a_release_after_the_hold_does_nothing_on_its_own() {
-    let d = tmp_root_with_carts(&["Emerald"]);
-    let mut a = app_playing_in(d.path(), "Emerald");
-    a.apply(Action::PowerHold);
-    a.apply(Action::PowerOff);
-    assert!(!a.powering_off());
-    assert_eq!(a.power_menu(), Some(0), "and leaves the menu up");
-}
 
 #[test]
 fn an_idle_doze_times_out_into_a_power_off() {

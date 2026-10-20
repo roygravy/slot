@@ -20,7 +20,6 @@ const MARGIN: f32 = 16.0;
 
 pub const LEGEND: [(&str, &str); 3] = [("B", "Back"), ("Y", "Delete"), ("A", "Load")];
 const WAYS_OUT: usize = 2;
-const UNDO_KEY: &str = "X";
 
 pub struct PhotoFace {
     pub rgba: Vec<u8>,
@@ -44,13 +43,22 @@ pub fn photo_face(entry: &StateEntry) -> PhotoFace {
     }
 }
 
+/// Asking before a state is deleted: B cancels on the left, A deletes on the right, and the
+/// question between them.
+#[derive(Clone, Copy)]
+pub struct ConfirmFaces {
+    pub cancel: (TexId, u32),
+    pub delete: (TexId, u32),
+    pub line: (TexId, u32, u32),
+}
+
 pub struct Polaroids {
     pub entries: Vec<StateEntry>,
     pub index: usize,
     faces: Vec<TexId>,
     title: Option<TexId>,
     hint_faces: Vec<TexId>,
-    undo: Option<String>,
+    pub confirm: Option<ConfirmFaces>,
 }
 
 impl Polaroids {
@@ -61,7 +69,7 @@ impl Polaroids {
             faces: Vec::new(),
             title: None,
             hint_faces: Vec::new(),
-            undo: None,
+            confirm: None,
         }
     }
 
@@ -77,19 +85,8 @@ impl Polaroids {
         self.hint_faces = faces;
     }
 
-    pub fn set_undo(&mut self, label: Option<&str>) {
-        self.undo = label.map(str::to_string);
-    }
-
     pub fn hints(&self) -> Vec<Hint> {
-        let mut out = hint_row(&LEGEND);
-        if let Some(label) = &self.undo {
-            out.push(Hint {
-                key: UNDO_KEY,
-                label: label.clone(),
-            });
-        }
-        out
+        hint_row(&LEGEND)
     }
 
     pub fn is_empty(&self) -> bool {
@@ -196,6 +193,23 @@ impl Polaroids {
         let top = OUT_H as f32 - PLATE_H;
         out.push(plate(top));
         let y = top + (PLATE_H - HINT_H as f32) / 2.0;
+        if let Some(c) = self.confirm {
+            let white = [1.0, 1.0, 1.0, 1.0];
+            let tint = |tex, x: f32, y: f32, w: u32, h: u32| Draw::Tint {
+                x: x.round(),
+                y: y.round(),
+                w: w as f32,
+                h: h as f32,
+                tex,
+                colour: white,
+            };
+            out.push(tint(c.cancel.0, MARGIN, y, c.cancel.1, HINT_H));
+            let dx = OUT_W as f32 - MARGIN - c.delete.1 as f32;
+            out.push(tint(c.delete.0, dx, y, c.delete.1, HINT_H));
+            let lx = (OUT_W as f32 - c.line.1 as f32) / 2.0;
+            out.push(tint(c.line.0, lx, top + (PLATE_H - c.line.2 as f32) / 2.0, c.line.1, c.line.2));
+            return;
+        }
         let hints = self.hints();
         let widths: Vec<f32> = hints
             .iter()

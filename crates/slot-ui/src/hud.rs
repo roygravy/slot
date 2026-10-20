@@ -56,6 +56,8 @@ pub enum HudKind {
     BlueLight,
     Volume,
     Rewind,
+    /// POWER held: the bar fills towards powering off.
+    Power,
 }
 
 impl HudKind {
@@ -69,6 +71,7 @@ impl HudKind {
             HudKind::Volume if value == 0 => Icon::VolumeZero,
             HudKind::Volume => Icon::Volume,
             HudKind::Rewind => Icon::Rewind,
+            HudKind::Power => Icon::Power,
         }
     }
 
@@ -77,7 +80,7 @@ impl HudKind {
             HudKind::Brightness => BRIGHTNESS_MAX,
             HudKind::BlueLight => BLUE_LIGHT_MAX,
             HudKind::Volume => VOLUME_MAX,
-            HudKind::Rewind => 100,
+            HudKind::Rewind | HudKind::Power => 100,
         }
     }
 }
@@ -201,7 +204,14 @@ impl Hud {
         self.value = value;
         self.muted = muted;
         self.shown_at = Some(now);
-        self.held = kind == HudKind::Rewind;
+        self.held = matches!(kind, HudKind::Rewind | HudKind::Power);
+    }
+
+    pub fn release_power(&mut self) {
+        if self.kind == HudKind::Power {
+            self.shown_at = None;
+            self.held = false;
+        }
     }
 
     pub fn release_rewind(&mut self) {
@@ -247,9 +257,14 @@ impl Hud {
         let alpha = self.alpha(now);
         let toast = self.toast_alpha(now);
         if alpha > 0.0 || toast > 0.0 {
+            // The power-off countdown runs along the bottom, clear of the banners on top.
+            let top = match toast > 0.0 || self.kind != HudKind::Power {
+                true => 0.0,
+                false => canvas.h - PLATE_H,
+            };
             out.push(Draw::Rect {
                 x: 0.0,
-                y: 0.0,
+                y: top,
                 w: canvas.w,
                 h: PLATE_H,
                 colour: faded(PLATE, alpha.max(toast)),
@@ -257,7 +272,7 @@ impl Hud {
             if toast > 0.0 {
                 self.draw_toast(canvas, now, out);
             } else {
-                self.draw_bar(canvas, alpha, out);
+                self.draw_bar(canvas, top, alpha, out);
             }
         }
         let link = self
@@ -273,13 +288,13 @@ impl Hud {
         }
     }
 
-    fn draw_bar(&self, canvas: Canvas, alpha: f32, out: &mut Vec<Draw>) {
+    fn draw_bar(&self, canvas: Canvas, top: f32, alpha: f32, out: &mut Vec<Draw>) {
         let x = canvas.centred(BAR_W);
         if let Some(tex) = self.icon() {
             let (w, h) = icon_box(HUD_ICON_PX);
             out.push(Draw::Tex {
                 x: x - ICON_GAP - w as f32,
-                y: (PLATE_H - h as f32) / 2.0,
+                y: top + (PLATE_H - h as f32) / 2.0,
                 w: w as f32,
                 h: h as f32,
                 tex,
@@ -288,14 +303,14 @@ impl Hud {
         }
         out.push(Draw::Rect {
             x,
-            y: BAR_Y,
+            y: top + BAR_Y,
             w: BAR_W,
             h: BAR_H,
             colour: faded(TRACK, alpha),
         });
         out.push(Draw::Rect {
             x,
-            y: BAR_Y,
+            y: top + BAR_Y,
             w: BAR_W * self.fraction(),
             h: BAR_H,
             colour: faded(FILL, alpha),

@@ -8,7 +8,11 @@ pub const MENU_DOUBLE_TAP_MS: Millis = 350;
 pub const MENU_HOLD_MS: Millis = 1000;
 pub const FF_DOUBLE_TAP_MS: Millis = 250;
 pub const MUTE_CHORD_MS: Millis = 200;
-pub const POWER_HOLD_MS: Millis = 1000;
+/// Let go of POWER before this and it is a tap: sleep.
+pub const POWER_TAP_MS: Millis = 400;
+/// Held this long, POWER powers off; the bar counts down from the tap to here.
+pub const POWER_HOLD_MS: Millis = 1900;
+/// START, SELECT, L1 and R1 held together this long reset the cartridge.
 
 pub const VOLUME_REPEAT_DELAY_MS: Millis = 400;
 pub const VOLUME_REPEAT_MS: Millis = 120;
@@ -37,7 +41,6 @@ pub enum Action {
     QuickMenu,
     GameMenu,
     MuteToggle,
-    ColourCorrectionToggle,
     PaletteNext,
     PalettePrev,
     ShaderNext,
@@ -45,9 +48,25 @@ pub enum Action {
     PowerPress,
     PowerTap,
     PowerHold,
+    /// POWER let go after a tap's time but before powering off: nothing happens.
+    PowerCancel,
     PowerOff,
     LidClose,
     LidOpen,
+    /// VOL+ and POWER together, the iPhone way.
+    Screenshot,
+    /// START, SELECT, L1 and R1 held: back to power on.
+    ResetGame,
+}
+
+const RESET_KEYS: u8 = 0b11;
+
+fn reset_bit(b: Btn) -> u8 {
+    match b {
+        Btn::Start => 1,
+        Btn::Select => 2,
+        _ => 0,
+    }
 }
 
 #[derive(Copy, Clone, Default)]
@@ -84,6 +103,15 @@ pub struct Gestures {
     r2_refused: bool,
     r2_last_release: Option<Millis>,
     rewinding: bool,
+    /// VOL+ and POWER made a screenshot: neither does its own job until both are let go.
+    shot_fired: bool,
+    /// Which of START, SELECT, L1 and R1 are down, and since when all four.
+    reset_held: u8,
+    reset_fired: bool,
+    /// Both reset keys were down at once since the last of them came up.
+    reset_formed: bool,
+    /// SELECT + L1 or R1 waits for its release, so a reset can still cancel it.
+    state_pending: Option<(u16, Action)>,
 }
 
 fn ramp_due(down: Option<Millis>, last: Option<Millis>, now: Millis) -> bool {
@@ -118,8 +146,32 @@ impl Gestures {
 
     pub fn feed(&mut self, ev: RawEvent, now: Millis) -> Vec<Action> {
         match ev {
-            RawEvent::Down(b) => self.down(b, now),
-            RawEvent::Up(b) => self.up(b, now),
+            RawEvent::Down(b) => {
+                self.reset_held |= reset_bit(b);
+                let mut out = self.down(b, now);
+                if self.reset_held == RESET_KEYS && !self.reset_fired {
+                    // START + SELECT resets the moment both are down; the game never sees them.
+                    self.reset_fired = true;
+                    self.reset_formed = true;
+                    self.state_pending = None;
+                    out.retain(|a| {
+                        !matches!(a, Action::GbaDown(Btn::Start) | Action::GbaDown(Btn::Select))
+                    });
+                    out.push(Action::ResetGame);
+                }
+                out
+            }
+            RawEvent::Up(b) => {
+                let bit = reset_bit(b);
+                if bit != 0 {
+                    self.reset_held &= !bit;
+                    self.reset_fired = false;
+                    if self.reset_held == 0 {
+                        self.reset_formed = false;
+                    }
+                }
+                self.up(b, now)
+            }
         }
     }
 
@@ -148,12 +200,12 @@ impl Gestures {
             }
         }
         if let Some(d) = self.power_down_at {
-            if !self.power_hold_fired && now.saturating_sub(d) >= POWER_HOLD_MS {
+            if !self.shot_fired && !self.power_hold_fired && now.saturating_sub(d) >= POWER_HOLD_MS {
                 self.power_hold_fired = true;
                 out.push(Action::PowerHold);
             }
         }
-        if !self.mute_fired {
+        if !self.mute_fired && !self.shot_fired {
             if ramp_due(self.vol_up_at, self.vol_up_ramp, now) {
                 self.vol_up_ramp = Some(now);
                 out.push(Action::VolumeUp);
@@ -178,6 +230,12 @@ impl Gestures {
         if let (true, Some((bit, action))) = (self.chording(now), chord(b)) {
             self.mark_chorded();
             self.chord_held |= bit;
+            if matches!(action, Action::SaveState | Action::LoadState) {
+                if !self.reset_formed {
+                    self.state_pending = Some((bit, action));
+                }
+                return Vec::new();
+            }
             return vec![action];
         }
         match b {
@@ -186,7 +244,17 @@ impl Gestures {
             Btn::Power => {
                 self.power_down_at = Some(now);
                 self.power_hold_fired = false;
+                if self.vol_up_at.is_some() {
+                    self.shot_fired = true;
+                    return vec![Action::Screenshot];
+                }
                 vec![Action::PowerPress]
+            }
+            Btn::VolUp if self.power_down_at.is_some() && !self.power_hold_fired => {
+                self.vol_up_at = Some(now);
+                self.vol_up_ramp = None;
+                self.shot_fired = true;
+                vec![Action::Screenshot]
             }
             Btn::Lid => vec![Action::LidClose],
             Btn::VolUp | Btn::VolDown => self.volume_press(b, now),
@@ -204,13 +272,19 @@ impl Gestures {
         if let Some((bit, _)) = chord(b) {
             if self.chord_held & bit != 0 {
                 self.chord_held &= !bit;
-                return Vec::new();
+                return match self.state_pending {
+                    Some((pending, action)) if pending == bit => {
+                        self.state_pending = None;
+                        vec![action]
+                    }
+                    _ => Vec::new(),
+                };
             }
         }
         match b {
             Btn::Select => self.select_up(now),
             Btn::Menu => self.menu_up(now),
-            Btn::Power => self.power_up(),
+            Btn::Power => self.power_up(now),
             Btn::Lid => vec![Action::LidOpen],
             Btn::VolUp | Btn::VolDown => self.volume_release(b),
             Btn::L2 => self.rewind_stop(),
@@ -323,14 +397,23 @@ impl Gestures {
         }
     }
 
-    fn power_up(&mut self) -> Vec<Action> {
+    fn power_up(&mut self, now: Millis) -> Vec<Action> {
         let held = self.power_hold_fired;
+        let tap = self
+            .power_down_at
+            .is_some_and(|d| now.saturating_sub(d) < POWER_TAP_MS);
         self.power_down_at = None;
         self.power_hold_fired = false;
+        if self.shot_fired {
+            self.shot_fired = self.vol_up_at.is_some();
+            return Vec::new();
+        }
         vec![if held {
             Action::PowerOff
-        } else {
+        } else if tap {
             Action::PowerTap
+        } else {
+            Action::PowerCancel
         }]
     }
 
@@ -360,6 +443,9 @@ impl Gestures {
         }
         if self.vol_up_at.is_none() && self.vol_down_at.is_none() {
             self.mute_fired = false;
+        }
+        if self.vol_up_at.is_none() && self.power_down_at.is_none() {
+            self.shot_fired = false;
         }
         Vec::new()
     }
@@ -452,10 +538,8 @@ fn chord(b: Btn) -> Option<(u16, Action)> {
         Btn::Up | Btn::Down | Btn::Left | Btn::Right => display_chord(b)?,
         Btn::L1 => (16, Action::LoadState),
         Btn::R1 => (32, Action::SaveState),
-        Btn::Y => (64, Action::ColourCorrectionToggle),
         Btn::L2 => (128, Action::PalettePrev),
         Btn::R2 => (256, Action::PaletteNext),
-        Btn::A => (512, Action::ShaderNext),
         Btn::B => (1024, Action::ShaderPrev),
         Btn::VolUp => (2048, Action::MuteToggle),
         Btn::VolDown => (4096, Action::MuteToggle),

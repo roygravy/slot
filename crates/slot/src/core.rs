@@ -101,6 +101,9 @@ fn open_named(
         if !path.exists() {
             continue;
         }
+        if core == Core::Gambatte {
+            ensure_dmg_palette(&bios);
+        }
         // Gambatte reads this option during retro_init, so it has to exist
         // before the core is initialized (setting it afterward is too late).
         let opened = if core == Core::Gambatte {
@@ -236,15 +239,66 @@ fn gambatte_palette_name(palette: GbPalette) -> String {
     }
 }
 
+/// slot.'s own DMG Green, lightest to darkest: a yellow-green glass with dark, slightly blue
+/// pixels, nearer a real DMG-01 than Gambatte's built-in "GB - DMG".
+pub const DMG_GREEN: [u32; 4] = [0x8E9526, 0x5F7C48, 0x36554F, 0x213A3B];
+
+/// Marks the palette file as slot.'s own, so one a player wrote themselves is left alone.
+const DMG_MARK: &str = "[slot. DMG Green]";
+
+/// The custom palette Gambatte reads from `BIOS/palettes/default.pal` when DMG Green is on.
+pub fn dmg_palette_text() -> String {
+    let mut text = format!("{DMG_MARK}\n");
+    for (i, c) in DMG_GREEN.iter().enumerate() {
+        text.push_str(&format!("Background{i}={c}\nSprite%201{i}={c}\nSprite%202{i}={c}\n"));
+    }
+    text
+}
+
+/// Put slot.'s DMG Green where Gambatte looks for a custom palette, unless the player has
+/// a default.pal of their own there.
+pub fn ensure_dmg_palette(bios: &Path) {
+    let path = bios.join("palettes").join("default.pal");
+    let want = dmg_palette_text();
+    match std::fs::read_to_string(&path) {
+        Ok(have) if have == want => return,
+        Ok(have) if !have.starts_with(DMG_MARK) => return,
+        _ => {}
+    }
+    if let Err(e) = std::fs::create_dir_all(bios.join("palettes"))
+        .and_then(|()| slot_store::atomic_write(&path, want.as_bytes()))
+    {
+        eprintln!("slot: core: could not write {}: {e}", path.display());
+    }
+}
+
 pub fn gb_palette_options(which: Core, palette: GbPalette) -> Vec<(&'static str, String)> {
     match which {
         Core::Mgba => vec![("mgba_gb_colors", palette.core_name().to_string())],
+        Core::Gambatte if palette.core_name() == "DMG Green" => {
+            vec![("gambatte_gb_colorization", "custom".to_string())]
+        }
         Core::Gambatte => vec![
             ("gambatte_gb_colorization", "internal".to_string()),
             (
                 "gambatte_gb_internal_palette",
                 gambatte_palette_name(palette),
             ),
+        ],
+        Core::Gpsp => Vec::new(),
+    }
+}
+
+/// Palettes off: the game's own Game Boy Color colors, as when it starts that way.
+pub fn gb_palette_off_options(which: Core) -> Vec<(&'static str, String)> {
+    match which {
+        Core::Mgba => vec![
+            ("mgba_gb_colors_preset", "1".to_string()),
+            ("mgba_gb_colors", "GBC Dark Green →A".to_string()),
+        ],
+        Core::Gambatte => vec![
+            ("gambatte_gb_colorization", "auto".to_string()),
+            ("gambatte_gb_internal_palette", "GBC - Dark Green".to_string()),
         ],
         Core::Gpsp => Vec::new(),
     }
@@ -315,6 +369,9 @@ pub fn apply_core_options(
             }
         } else {
             core.set_option("gambatte_gb_colorization", "auto");
+            // A game with no colours of its own falls back on this, as mGBA's does, rather
+            // than on Gambatte's own GB - DMG, which slot. no longer uses.
+            core.set_option("gambatte_gb_internal_palette", "GBC - Dark Green");
         }
         if let Some((key, value)) = colour_option(which, platform, colour) {
             core.set_option(key, value);
