@@ -105,8 +105,8 @@ fn printed(x: f32, p: Printed, out: &mut Vec<Draw>) {
 pub const WIFI_H: u32 = 17;
 /// Each band's share of the fan, and the clear gap between bands.
 const WIFI_GAP_FRAC: f32 = 0.12;
-/// The same gap the gauge keeps before its percentage.
-const WIFI_GAP: f32 = 7.0;
+/// Clear room between the Wi-Fi mark and the battery.
+const WIFI_GAP: f32 = 11.0;
 
 pub fn wifi_w() -> u32 {
     (WIFI_H as f32 * std::f32::consts::SQRT_2).round() as u32
