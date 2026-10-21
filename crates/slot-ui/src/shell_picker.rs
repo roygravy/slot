@@ -1,6 +1,6 @@
-//! The shell picker: a shelf cart lifted onto the menu's ground, a row of colours under it,
-//! the finishes under those, and a line to fetch its label when it has none, or when there is
-//! none to fetch, the markers its title can be written in.
+//! The shell picker: a shelf cart lifted onto the menu's ground, a row of colours under it and
+//! the finishes under those; for a blank cart with no label to fetch, a second tab holds the
+//! markers its title can be written in.
 use crate::board::{board_in, Placed};
 use crate::draw::{Canvas, Draw, TexId, OUT_H, OUT_W};
 use crate::plate::{centred_hints, tint_mask, word_face, UndoFace, HINT_EDGE, HINT_H, LEGEND_GAP};
@@ -19,11 +19,11 @@ const NAME_Y: f32 = 262.0;
 const SWATCH_Y: f32 = 304.0;
 const FINISH_Y: f32 = 338.0;
 const FINISH_GAP: f32 = 34.0;
-const DOWNLOAD_Y: f32 = 376.0;
-const MARKER_DISC: f32 = 16.0;
-const MARKER_RING: f32 = 26.0;
-const MARKER_PITCH: f32 = 28.0;
-const MARKER_GAP: f32 = 20.0;
+/// With two tabs their names stand under the cart and the rows move down to make room.
+const TAB_Y: f32 = 262.0;
+const TAB_GAP: f32 = 34.0;
+const TABBED_DROP: f32 = 34.0;
+const MARKER_PITCH: f32 = 40.0;
 const LEGEND_Y: f32 = 430.0;
 const BOX_PAD_X: f32 = 10.0;
 const BOX_PAD_Y: f32 = 2.0;
@@ -37,10 +37,13 @@ pub struct ShellPickerFaces {
     /// Original, Custom, then the palette's names.
     pub names: Vec<(TexId, u32)>,
     pub finishes: Vec<(TexId, u32)>,
-    /// The fetch line idle, then at work.
-    pub download: [(TexId, u32); 2],
-    pub marker: (TexId, u32),
+    /// The tabs' names: the colour's, then the marker's.
+    pub tabs: [(TexId, u32); 2],
+    /// The markers' names, in the order of their inks.
+    pub inks: Vec<(TexId, u32)>,
     pub legend: Vec<(TexId, u32)>,
+    /// Y fetching the label, shown while the cart has none.
+    pub fetch: (TexId, u32),
 }
 
 pub struct ShellPickerView<'a> {
@@ -61,13 +64,21 @@ pub struct ShellPickerView<'a> {
     pub swatch: usize,
     pub finish: usize,
     pub finish_on: bool,
-    /// 0 colours, 1 finish, 2 the fetch line or the markers.
-    pub row: usize,
-    /// None when the cart has a label; Some(at work) otherwise.
-    pub download: Option<bool>,
-    /// In the fetch line's place for a cart with no label to fetch: the marker chosen and
-    /// the inks offered.
-    pub markers: Option<(usize, [[u8; 3]; 3])>,
+    pub row: PickerRow,
+    /// The open tab, when there are two.
+    pub tabs: Option<usize>,
+    pub marker: usize,
+    pub inks: [[u8; 3]; 3],
+    /// Some(at work) while Y can fetch the cart's label.
+    pub fetch: Option<bool>,
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum PickerRow {
+    Tabs,
+    Colour,
+    Finish,
+    Marker,
 }
 
 /// A white disc, a white ring for the chosen swatch and the cart's-own swatch (a ring with a
@@ -192,181 +203,192 @@ pub fn draw_shell_picker(canvas: Canvas, v: &ShellPickerView, out: &mut Vec<Draw
     }
 
     let ink = |c: [f32; 4]| faded(c, open);
-    let focus = |row: usize| if v.row == row { v.ink.text } else { v.ink.dim };
+    let focus = |row: PickerRow| if v.row == row { v.ink.text } else { v.ink.dim };
     let word = |(tex, w): (TexId, u32), x: f32, y: f32, colour: [f32; 4]| {
         tint(tex, x.round(), y, w as f32, HINT_H as f32, colour)
     };
+    // A row of words, the chosen one boxed: the bar's own colours while the row is current.
+    let boxed_row = |faces: &[(TexId, u32)],
+                     chosen: Option<usize>,
+                     current: bool,
+                     y: f32,
+                     gap: f32,
+                     out: &mut Vec<Draw>| {
+        let widths: Vec<f32> = faces.iter().map(|&(_, w)| seen(w)).collect();
+        let total = widths.iter().sum::<f32>() + gap * (widths.len().saturating_sub(1)) as f32;
+        let mut x = canvas.centred(total);
+        for (i, &face) in faces.iter().enumerate() {
+            let w = widths[i];
+            let colour = match (chosen == Some(i), current) {
+                (true, on) => {
+                    out.push(Draw::Rect {
+                        x: (x - BOX_PAD_X).round(),
+                        y: y - BOX_PAD_Y,
+                        w: (w + 2.0 * BOX_PAD_X).round(),
+                        h: HINT_H as f32 + 2.0 * BOX_PAD_Y,
+                        colour: ink(if on { v.ink.bar } else { RESTING_BOX }),
+                    });
+                    if on {
+                        v.ink.on_bar
+                    } else {
+                        v.ink.text
+                    }
+                }
+                _ => v.ink.dim,
+            };
+            // Off for the cart's own shell: the finish waits, faint, for a colour.
+            let alpha = if chosen.is_none() { 0.35 } else { 1.0 };
+            out.push(word(face, x, y, ink(faded(colour, alpha))));
+            x += w + gap;
+        }
+    };
 
-    // The name of the colour at the cursor, over the row.
-    if let Some(&(_, name)) = v.swatches.get(v.swatch) {
-        if let Some(&face) = v.faces.names.get(name) {
+    let drop = if v.tabs.is_some() { TABBED_DROP } else { 0.0 };
+    if let Some(tab) = v.tabs {
+        boxed_row(
+            &v.faces.tabs,
+            Some(tab),
+            v.row == PickerRow::Tabs,
+            TAB_Y,
+            TAB_GAP,
+            out,
+        );
+    }
+
+    if v.tabs == Some(1) {
+        // The marker's tab: the ink's name over a row of inks.
+        if let Some(&face) = v.faces.inks.get(v.marker) {
             out.push(word(
                 face,
                 canvas.centred(seen(face.1)),
-                NAME_Y,
-                ink(focus(0)),
+                NAME_Y + drop,
+                ink(focus(PickerRow::Marker)),
             ));
         }
-    }
-
-    let n = v.swatches.len() as f32;
-    let first = canvas.w / 2.0 - SWATCH_PITCH * (n - 1.0) / 2.0;
-    for (i, &(colour, _)) in v.swatches.iter().enumerate() {
-        let cx = first + SWATCH_PITCH * i as f32;
-        let d = DISC as f32;
-        // A faint rim, so the darkest swatch still stands off the ground.
-        let rim = d + 2.0;
-        out.push(tint(
-            v.faces.disc,
-            cx - rim / 2.0,
-            SWATCH_Y - rim / 2.0,
-            rim,
-            rim,
-            ink(faded(v.ink.dim, 0.45)),
-        ));
-        match colour {
-            Some(c) => out.push(tint(
-                v.faces.disc,
-                cx - d / 2.0,
-                SWATCH_Y - d / 2.0,
-                d,
-                d,
-                ink([
-                    c[0] as f32 / 255.0,
-                    c[1] as f32 / 255.0,
-                    c[2] as f32 / 255.0,
-                    1.0,
-                ]),
-            )),
-            None => out.push(tint(
-                v.faces.original,
-                cx - d / 2.0,
-                SWATCH_Y - d / 2.0,
-                d,
-                d,
-                ink(v.ink.text),
-            )),
+        let n = v.inks.len() as f32;
+        let first = canvas.w / 2.0 - MARKER_PITCH * (n - 1.0) / 2.0;
+        for (i, &c) in v.inks.iter().enumerate() {
+            swatch(
+                v,
+                first + MARKER_PITCH * i as f32,
+                SWATCH_Y + drop,
+                Some(c),
+                i == v.marker,
+                focus(PickerRow::Marker),
+                &ink,
+                out,
+            );
         }
-        if i == v.swatch {
-            let r = RING as f32;
-            out.push(tint(
-                v.faces.ring,
-                cx - r / 2.0,
-                SWATCH_Y - r / 2.0,
-                r,
-                r,
-                ink(focus(0)),
-            ));
-        }
-    }
-
-    // The finishes, the chosen one boxed: the bar's own colours while the row is current.
-    let widths: Vec<f32> = v.faces.finishes.iter().map(|&(_, w)| seen(w)).collect();
-    let total = widths.iter().sum::<f32>() + FINISH_GAP * (widths.len().saturating_sub(1)) as f32;
-    let mut x = canvas.centred(total);
-    for (i, &face) in v.faces.finishes.iter().enumerate() {
-        let w = widths[i];
-        let chosen = i == v.finish && v.finish_on;
-        let colour = match (chosen, v.row == 1) {
-            (true, true) => {
-                out.push(Draw::Rect {
-                    x: (x - BOX_PAD_X).round(),
-                    y: FINISH_Y - BOX_PAD_Y,
-                    w: (w + 2.0 * BOX_PAD_X).round(),
-                    h: HINT_H as f32 + 2.0 * BOX_PAD_Y,
-                    colour: ink(v.ink.bar),
-                });
-                v.ink.on_bar
-            }
-            (true, false) => {
-                out.push(Draw::Rect {
-                    x: (x - BOX_PAD_X).round(),
-                    y: FINISH_Y - BOX_PAD_Y,
-                    w: (w + 2.0 * BOX_PAD_X).round(),
-                    h: HINT_H as f32 + 2.0 * BOX_PAD_Y,
-                    colour: ink(RESTING_BOX),
-                });
-                v.ink.text
-            }
-            _ => v.ink.dim,
-        };
-        // Off for the cart's own shell: the finish waits, faint, for a colour.
-        let alpha = if v.finish_on { 1.0 } else { 0.35 };
-        out.push(word(face, x, FINISH_Y, ink(faded(colour, alpha))));
-        x += w + FINISH_GAP;
-    }
-
-    if let Some((chosen, inks)) = v.markers {
-        let face = v.faces.marker;
-        let w = seen(face.1);
-        let n = inks.len() as f32;
-        let total = w + MARKER_GAP + MARKER_PITCH * (n - 1.0) + MARKER_DISC;
-        let x = canvas.centred(total);
-        out.push(word(face, x, DOWNLOAD_Y, ink(focus(2))));
-        let cy = DOWNLOAD_Y + HINT_H as f32 / 2.0;
-        let first = x + w + MARKER_GAP + MARKER_DISC / 2.0;
-        for (i, c) in inks.iter().enumerate() {
-            let cx = first + MARKER_PITCH * i as f32;
-            let rim = MARKER_DISC + 2.0;
-            out.push(tint(
-                v.faces.disc,
-                cx - rim / 2.0,
-                cy - rim / 2.0,
-                rim,
-                rim,
-                ink(faded(v.ink.dim, 0.45)),
-            ));
-            out.push(tint(
-                v.faces.disc,
-                cx - MARKER_DISC / 2.0,
-                cy - MARKER_DISC / 2.0,
-                MARKER_DISC,
-                MARKER_DISC,
-                ink([
-                    c[0] as f32 / 255.0,
-                    c[1] as f32 / 255.0,
-                    c[2] as f32 / 255.0,
-                    1.0,
-                ]),
-            ));
-            if i == chosen {
-                out.push(tint(
-                    v.faces.ring,
-                    cx - MARKER_RING / 2.0,
-                    cy - MARKER_RING / 2.0,
-                    MARKER_RING,
-                    MARKER_RING,
-                    ink(focus(2)),
+    } else {
+        // The name of the colour at the cursor, over the row.
+        if let Some(&(_, name)) = v.swatches.get(v.swatch) {
+            if let Some(&face) = v.faces.names.get(name) {
+                out.push(word(
+                    face,
+                    canvas.centred(seen(face.1)),
+                    NAME_Y + drop,
+                    ink(focus(PickerRow::Colour)),
                 ));
             }
         }
-    } else if let Some(working) = v.download {
-        let face = v.faces.download[usize::from(working)];
-        let w = seen(face.1);
-        let x = canvas.centred(w);
-        let colour = if v.row == 2 {
-            out.push(Draw::Rect {
-                x: (x - BOX_PAD_X).round(),
-                y: DOWNLOAD_Y - BOX_PAD_Y,
-                w: (w + 2.0 * BOX_PAD_X).round(),
-                h: HINT_H as f32 + 2.0 * BOX_PAD_Y,
-                colour: ink(v.ink.bar),
-            });
-            v.ink.on_bar
-        } else {
-            v.ink.dim
-        };
-        out.push(word(face, x, DOWNLOAD_Y, ink(colour)));
+        let n = v.swatches.len() as f32;
+        let first = canvas.w / 2.0 - SWATCH_PITCH * (n - 1.0) / 2.0;
+        for (i, &(colour, _)) in v.swatches.iter().enumerate() {
+            swatch(
+                v,
+                first + SWATCH_PITCH * i as f32,
+                SWATCH_Y + drop,
+                colour,
+                i == v.swatch,
+                focus(PickerRow::Colour),
+                &ink,
+                out,
+            );
+        }
+        boxed_row(
+            &v.faces.finishes,
+            v.finish_on.then_some(v.finish),
+            v.row == PickerRow::Finish,
+            FINISH_Y + drop,
+            FINISH_GAP,
+            out,
+        );
     }
 
-    for (tex, w, x) in centred_hints(canvas, &v.faces.legend, LEGEND_GAP) {
+    let mut legend = v.faces.legend.clone();
+    if v.fetch.is_some() {
+        // Before Save, as A stays last on every legend.
+        let at = legend.len().saturating_sub(1);
+        legend.insert(at, v.faces.fetch);
+    }
+    for (tex, w, x) in centred_hints(canvas, &legend, LEGEND_GAP) {
+        let busy = tex == v.faces.fetch.0 && v.fetch == Some(true);
         out.push(tint(
             tex,
             x,
             LEGEND_Y,
             w as f32,
             HINT_H as f32,
+            ink(faded(v.ink.text, if busy { 0.35 } else { 1.0 })),
+        ));
+    }
+}
+
+/// One disc on a row, with a faint rim so the darkest still stands off the ground, and the
+/// ring around the chosen one.
+#[allow(clippy::too_many_arguments)]
+fn swatch(
+    v: &ShellPickerView,
+    cx: f32,
+    cy: f32,
+    colour: Option<[u8; 3]>,
+    chosen: bool,
+    ring: [f32; 4],
+    ink: &dyn Fn([f32; 4]) -> [f32; 4],
+    out: &mut Vec<Draw>,
+) {
+    let d = DISC as f32;
+    let rim = d + 2.0;
+    out.push(tint(
+        v.faces.disc,
+        cx - rim / 2.0,
+        cy - rim / 2.0,
+        rim,
+        rim,
+        ink(faded(v.ink.dim, 0.45)),
+    ));
+    match colour {
+        Some(c) => out.push(tint(
+            v.faces.disc,
+            cx - d / 2.0,
+            cy - d / 2.0,
+            d,
+            d,
+            ink([
+                c[0] as f32 / 255.0,
+                c[1] as f32 / 255.0,
+                c[2] as f32 / 255.0,
+                1.0,
+            ]),
+        )),
+        None => out.push(tint(
+            v.faces.original,
+            cx - d / 2.0,
+            cy - d / 2.0,
+            d,
+            d,
             ink(v.ink.text),
+        )),
+    }
+    if chosen {
+        let r = RING as f32;
+        out.push(tint(
+            v.faces.ring,
+            cx - r / 2.0,
+            cy - r / 2.0,
+            r,
+            r,
+            ink(ring),
         ));
     }
 }

@@ -1,5 +1,6 @@
-//! SELECT on a shelf cart: its shell's colour and finish, its label fetched when it has none,
-//! and when there is none to fetch, the marker its title is written in.
+//! SELECT on a shelf cart: its shell's colour and finish on one tab, and when it has no label
+//! and there is none to fetch, the marker its title is written in on a second. Y fetches the
+//! label of a cart that has none.
 use std::path::PathBuf;
 
 use slot_input::Millis;
@@ -71,15 +72,22 @@ pub fn swatch_names() -> Vec<&'static str> {
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum Row {
+    /// The tab names themselves, to step between the tabs.
+    Tabs,
     Colour,
     Finish,
-    Download,
+    Marker,
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum Tab {
+    Colour,
     Marker,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum Fetch {
-    /// The cart has a label: the row is not offered.
+    /// The cart has a label: no fetch is offered.
     Labelled,
     Idle,
     Working,
@@ -103,6 +111,7 @@ pub enum Press {
     Up,
     Down,
     Keep,
+    Fetch,
     Back,
 }
 
@@ -114,6 +123,7 @@ pub struct ShellPicker {
     swatches: Vec<Swatch>,
     swatch: usize,
     finish: usize,
+    tab: Tab,
     row: Row,
     fetch: Fetch,
     /// A label was looked for and none exists: the marker is offered instead of a fetch.
@@ -127,6 +137,7 @@ pub struct ShellPicker {
 }
 
 impl ShellPicker {
+    #[allow(clippy::too_many_arguments)]
     pub fn open(
         rom: PathBuf,
         stem: String,
@@ -161,6 +172,7 @@ impl ShellPicker {
             swatches,
             swatch,
             finish,
+            tab: Tab::Colour,
             row: Row::Colour,
             fetch: if labelled {
                 Fetch::Labelled
@@ -196,6 +208,15 @@ impl ShellPicker {
         self.fetch
     }
 
+    pub fn tab(&self) -> Tab {
+        self.tab
+    }
+
+    /// Y fetches the label while the cart has none and it is not known to have none.
+    pub fn offers_fetch(&self) -> bool {
+        self.fetch != Fetch::Labelled && !self.no_label
+    }
+
     pub fn marker(&self) -> usize {
         self.marker
     }
@@ -204,7 +225,7 @@ impl ShellPicker {
         self.was_marker
     }
 
-    /// The marker row stands where the fetch line would: a cart has one or the other.
+    /// The marker's tab, for a blank cart whose label was looked for and is not there.
     pub fn offers_marker(&self) -> bool {
         self.fetch != Fetch::Labelled && self.no_label
     }
@@ -250,26 +271,26 @@ impl ShellPicker {
         if found == Some(false) {
             self.no_label = true;
         }
-        if self.row == Row::Download {
-            self.row = if ok {
-                Row::Colour
-            } else if self.no_label {
-                Row::Marker
-            } else {
-                Row::Download
-            };
+        // None to fetch: the marker's tab opens, as that is what is left to pick.
+        if found == Some(false) && self.offers_marker() {
+            self.tab = Tab::Marker;
+            self.row = Row::Marker;
         }
     }
 
     fn rows(&self) -> Vec<Row> {
-        let mut rows = vec![Row::Colour];
-        if self.finish_on() {
-            rows.push(Row::Finish);
-        }
+        let mut rows = Vec::new();
         if self.offers_marker() {
-            rows.push(Row::Marker);
-        } else if self.fetch != Fetch::Labelled {
-            rows.push(Row::Download);
+            rows.push(Row::Tabs);
+        }
+        match self.tab {
+            Tab::Colour => {
+                rows.push(Row::Colour);
+                if self.finish_on() {
+                    rows.push(Row::Finish);
+                }
+            }
+            Tab::Marker => rows.push(Row::Marker),
         }
         rows
     }
@@ -284,6 +305,10 @@ impl ShellPicker {
             Press::Left | Press::Right => {
                 let by = if matches!(press, Press::Left) { -1 } else { 1 };
                 match self.row {
+                    Row::Tabs => {
+                        self.tab = if by < 0 { Tab::Colour } else { Tab::Marker };
+                        return Outcome::None;
+                    }
                     Row::Colour => {
                         let to = step(self.swatch, by, self.swatches.len());
                         if to == self.swatch {
@@ -306,7 +331,6 @@ impl ShellPicker {
                         self.marker = to;
                         return Outcome::Marker(self.marker_choice());
                     }
-                    Row::Download => return Outcome::None,
                 }
                 Outcome::Preview(self.choice())
             }
@@ -317,8 +341,8 @@ impl ShellPicker {
                 self.row = rows[step(at, by, rows.len())];
                 Outcome::None
             }
-            Press::Keep if self.row == Row::Download => {
-                if self.fetch != Fetch::Idle {
+            Press::Fetch => {
+                if !self.offers_fetch() || self.fetch != Fetch::Idle {
                     return Outcome::None;
                 }
                 self.fetch = Fetch::Working;
@@ -345,7 +369,16 @@ mod tests {
     use super::*;
 
     fn picker(was: Option<ShellChoice>, labelled: bool) -> ShellPicker {
-        ShellPicker::open("a.gb".into(), "a".into(), was, labelled, false, None, false, 0)
+        ShellPicker::open(
+            "a.gb".into(),
+            "a".into(),
+            was,
+            labelled,
+            false,
+            None,
+            false,
+            0,
+        )
     }
 
     #[test]
@@ -377,11 +410,9 @@ mod tests {
             panic!("no preview");
         };
         assert_eq!(c.finish, ShellFinish::Clear);
-        p.press(Press::Down, 0);
-        assert_eq!(p.row(), Row::Download);
-        assert!(matches!(p.press(Press::Keep, 0), Outcome::Fetch));
+        assert!(matches!(p.press(Press::Fetch, 0), Outcome::Fetch));
         assert!(
-            matches!(p.press(Press::Keep, 0), Outcome::None),
+            matches!(p.press(Press::Fetch, 0), Outcome::None),
             "one fetch at a time"
         );
     }
@@ -398,19 +429,21 @@ mod tests {
     #[test]
     fn a_labelled_cart_offers_no_download() {
         let mut p = picker(ShellChoice::parse("auto f2c230 solid"), true);
-        p.press(Press::Down, 0);
-        p.press(Press::Down, 0);
-        assert_eq!(p.row(), Row::Finish);
+        assert!(!p.offers_fetch());
+        assert!(matches!(p.press(Press::Fetch, 0), Outcome::None));
+        p.press(Press::Up, 0);
+        assert_eq!(p.row(), Row::Colour, "one tab: no tab row");
     }
 
     #[test]
     fn a_cart_with_no_label_to_fetch_offers_a_marker_instead() {
         let mut p = picker(None, false);
-        p.press(Press::Down, 0);
-        assert_eq!(p.row(), Row::Download);
-        p.press(Press::Keep, 0);
+        assert!(!p.offers_marker());
+        p.press(Press::Fetch, 0);
         p.fetched(Some(false));
-        assert_eq!(p.row(), Row::Marker, "the marker takes the fetch line's place");
+        assert!(!p.offers_fetch());
+        assert_eq!(p.tab(), Tab::Marker, "the marker's tab opens");
+        assert_eq!(p.row(), Row::Marker);
         assert_eq!(p.marker_choice(), None, "opens on the shell's own marker");
         let Outcome::Marker(Some(ink)) = p.press(Press::Right, 0) else {
             panic!("no marker preview");
@@ -420,12 +453,27 @@ mod tests {
     }
 
     #[test]
-    fn a_failed_fetch_keeps_the_fetch_line() {
+    fn a_failed_fetch_can_be_tried_again() {
         let mut p = picker(None, false);
-        p.press(Press::Down, 0);
-        p.press(Press::Keep, 0);
+        p.press(Press::Fetch, 0);
         p.fetched(None);
-        assert_eq!(p.row(), Row::Download);
+        assert!(p.offers_fetch());
+        assert!(matches!(p.press(Press::Fetch, 0), Outcome::Fetch));
+    }
+
+    #[test]
+    fn up_reaches_the_tabs_and_sideways_steps_between_them() {
+        let mut p = ShellPicker::open("a.gb".into(), "a".into(), None, false, true, None, false, 0);
+        p.press(Press::Up, 0);
+        assert_eq!(p.row(), Row::Tabs);
+        p.press(Press::Right, 0);
+        assert_eq!(p.tab(), Tab::Marker);
+        p.press(Press::Down, 0);
+        assert_eq!(p.row(), Row::Marker);
+        p.press(Press::Up, 0);
+        p.press(Press::Left, 0);
+        p.press(Press::Down, 0);
+        assert_eq!((p.tab(), p.row()), (Tab::Colour, Row::Colour));
     }
 
     #[test]
@@ -434,7 +482,16 @@ mod tests {
         let p = ShellPicker::open("a.gba".into(), "a".into(), None, false, true, None, true, 0);
         assert_eq!(p.marker(), 1);
         assert!(p.offers_marker());
-        let p = ShellPicker::open("a.gb".into(), "a".into(), None, false, true, Some(gold), false, 0);
+        let p = ShellPicker::open(
+            "a.gb".into(),
+            "a".into(),
+            None,
+            false,
+            true,
+            Some(gold),
+            false,
+            0,
+        );
         assert_eq!(p.marker(), 2);
         assert_eq!(p.marker_choice(), Some(gold));
     }

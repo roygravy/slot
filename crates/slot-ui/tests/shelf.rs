@@ -1068,6 +1068,7 @@ fn a_clear_pak_draws_its_interior_then_the_board_then_the_plastic() {
             colour: [0xff; 3],
             finish: ShellFinish::Clear,
         }),
+        marker: None,
         title: "PAK".into(),
     }]);
     settle(&mut s);

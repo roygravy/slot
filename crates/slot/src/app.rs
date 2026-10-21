@@ -4660,6 +4660,7 @@ impl App {
             Action::GbaDown(Btn::Up) => Press::Up,
             Action::GbaDown(Btn::Down) => Press::Down,
             Action::GbaDown(Btn::A) => Press::Keep,
+            Action::GbaDown(Btn::Y) => Press::Fetch,
             Action::GbaDown(Btn::B) | Action::GbaDown(Btn::Select) => Press::Back,
             _ => return,
         };
@@ -4790,21 +4791,19 @@ impl App {
             finish: picker.finish(),
             finish_on: picker.finish_on(),
             row: match picker.row() {
-                shell_picker::Row::Colour => 0,
-                shell_picker::Row::Finish => 1,
-                shell_picker::Row::Download | shell_picker::Row::Marker => 2,
+                shell_picker::Row::Tabs => slot_ui::PickerRow::Tabs,
+                shell_picker::Row::Colour => slot_ui::PickerRow::Colour,
+                shell_picker::Row::Finish => slot_ui::PickerRow::Finish,
+                shell_picker::Row::Marker => slot_ui::PickerRow::Marker,
             },
-            markers: picker.offers_marker().then(|| {
-                (
-                    picker.marker(),
-                    shell_picker::MARKERS.map(|(_, ink)| ink),
-                )
-            }),
-            download: match picker.fetch() {
-                Fetch::Labelled => None,
-                Fetch::Idle => Some(false),
-                Fetch::Working => Some(true),
-            },
+            tabs: picker
+                .offers_marker()
+                .then(|| usize::from(picker.tab() == shell_picker::Tab::Marker)),
+            marker: picker.marker(),
+            inks: shell_picker::MARKERS.map(|(_, ink)| ink),
+            fetch: picker
+                .offers_fetch()
+                .then(|| picker.fetch() == Fetch::Working),
         };
         slot_ui::draw_shell_picker(self.canvas(), &view, out);
     }

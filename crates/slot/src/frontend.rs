@@ -534,10 +534,10 @@ impl Frontend {
                 (tex, w)
             })
             .collect();
-        let marker = words.pop().expect("the marker row's word");
-        let download = words.split_off(words.len() - 2);
+        let inks = words.split_off(words.len() - crate::shell_picker::MARKERS.len());
+        let tabs = words.split_off(words.len() - 2);
         let finishes = words.split_off(words.len() - 3);
-        let shell_legend = faces
+        let mut shell_legend: Vec<(TexId, u32)> = faces
             .shell_legend
             .into_iter()
             .map(|f| {
@@ -545,15 +545,17 @@ impl Frontend {
                 (tex, w)
             })
             .collect();
+        let fetch_hint = shell_legend.pop().expect("the fetch hint");
         let shell_faces = slot_ui::ShellPickerFaces {
             disc,
             ring,
             original,
             names: words,
             finishes,
-            download: [download[0], download[1]],
-            marker,
+            tabs: [tabs[0], tabs[1]],
+            inks,
             legend: shell_legend,
+            fetch: fetch_hint,
         };
         let roles = faces.link_roles.into_iter().map(&mut up).collect();
         let linked = up(faces.linked);
@@ -1198,17 +1200,19 @@ impl UiFaces {
                 hint_face("A", "Choose"),
             ],
             shell_shapes: slot_ui::shell_picker_shapes(),
-            // The swatches' names, the finishes, the fetch line idle and at work, then the
-            // marker row's word.
+            // The swatches' names, the finishes, the tabs, then the markers' names.
             shell_words: crate::shell_picker::swatch_names()
                 .into_iter()
-                .chain(["Solid", "Clear", "Glitter", "Download Label", "Downloading...", "Marker"])
+                .chain(["Solid", "Clear", "Glitter", "Color", "Marker"])
+                .chain(crate::shell_picker::MARKERS.map(|(name, _)| name))
                 .map(slot_ui::shell_picker_word)
                 .collect(),
             shell_legend: vec![
                 slot_ui::tint_mask(hint_face("B", "Cancel")),
                 slot_ui::tint_mask(arrows_hint_face("Change")),
                 slot_ui::tint_mask(hint_face("A", "Save")),
+                // Last, taken off as the fetch hint, shown only for a cart with no label.
+                slot_ui::tint_mask(hint_face("Y", "Get Label")),
             ],
             link_roles: LinkRow::ALL.iter().map(|r| menu_face(r.text())).collect(),
             linked: menu_face("Linked"),
