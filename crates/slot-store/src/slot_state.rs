@@ -259,6 +259,8 @@ pub struct SlotState {
     pub muted_hp: bool,
     pub clock_set: bool,
     pub utc_offset_min: i16,
+    /// A named zone with its own summer time; wins over `utc_offset_min`.
+    pub time_zone: Option<&'static str>,
     pub rumble: bool,
     /// Home association only; Link holds its own radio lease.
     pub home_wifi_enabled: bool,
@@ -421,6 +423,7 @@ impl Default for SlotState {
             muted_hp: false,
             clock_set: false,
             utc_offset_min: 0,
+            time_zone: None,
             rumble: true,
             home_wifi_enabled: false,
             ff_speed: FF_SPEED_DEFAULT,
@@ -567,6 +570,9 @@ pub fn write_slot_state(root: &Path, s: &SlotState) -> std::io::Result<()> {
     text.push_str(&format!("favorite_mark={}\n", s.favorite_mark.key()));
     text.push_str(&format!("auto_sleep_secs={}\n", s.auto_sleep_secs));
     text.push_str(&format!("home_wifi_enabled={}\n", s.home_wifi_enabled as u8));
+    if let Some(zone) = s.time_zone {
+        text.push_str(&format!("time_zone={zone}\n"));
+    }
     for (key, on) in [
         ("pixel_transparency_gb", s.pixel_transparency_gb),
         ("pixel_transparency_gbc", s.pixel_transparency_gbc),
@@ -628,6 +634,7 @@ fn parse(text: &str) -> Option<SlotState> {
     let mut utc_offset_min = None;
     let mut rumble = None;
     let mut home_wifi_enabled = None;
+    let mut time_zone = None;
     let mut ff_speed = None;
     let mut ff_sound = None;
     let mut shader_gba = None;
@@ -686,6 +693,7 @@ fn parse(text: &str) -> Option<SlotState> {
             "utc_offset_min" => utc_offset_min = Some(offset(value)?),
             "rumble" => rumble = flag(value),
             "home_wifi_enabled" => home_wifi_enabled = flag(value),
+            "time_zone" => time_zone = crate::zone_named(value).map(|z| z.name),
             "ff_speed" => ff_speed = ff_speed_value(value),
             "ff_sound" => ff_sound = flag(value),
             "shader_gba" => shader_gba = Shader::parse(value).filter(|s| Shader::GBA.contains(s)),
@@ -743,6 +751,7 @@ fn parse(text: &str) -> Option<SlotState> {
         muted_hp: muted_hp.or(muted)?,
         clock_set: clock_set?,
         utc_offset_min: utc_offset_min?,
+        time_zone,
         rumble: rumble.unwrap_or(fallback.rumble),
         home_wifi_enabled: home_wifi_enabled.unwrap_or(false),
         ff_speed: ff_speed.unwrap_or(fallback.ff_speed),

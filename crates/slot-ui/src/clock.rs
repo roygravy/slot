@@ -1,6 +1,6 @@
 use slot_gfx::{Canvas, Draw, TexId, OUT_H};
 use slot_store::{
-    civil_from_days, days_from_civil, days_in_month, parse_stamp, UTC_OFFSET_MAX, UTC_OFFSET_MIN,
+    civil_from_days, days_from_civil, days_in_month, parse_stamp, zone_named, Zone, ZONES,
 };
 
 use crate::plate::{blit, centred_hints, hint_width, UndoFace, HINT_H, LEGEND_GAP};
@@ -14,9 +14,7 @@ const YEAR_MAX: i64 = 2099;
 const INK: [u8; 3] = [0xf6, 0xf4, 0xef];
 const BACKDROP: [f32; 4] = [0.06, 0.06, 0.07, 1.0];
 
-const OFFSET_STEP: i64 = 30;
-
-const CELLS: [u32; 11] = [88, 22, 52, 22, 52, 36, 52, 22, 52, 36, 128];
+const CELLS: [u32; 11] = [88, 22, 52, 22, 52, 32, 52, 22, 52, 28, 196];
 const FIELD_CELL: [usize; 6] = [0, 2, 4, 6, 8, 10];
 
 const PICKER_H: u32 = 44;
@@ -58,7 +56,7 @@ pub enum Field {
     Day,
     Hour,
     Minute,
-    Offset,
+    Zone,
 }
 
 impl Field {
@@ -68,8 +66,71 @@ impl Field {
         Field::Day,
         Field::Hour,
         Field::Minute,
-        Field::Offset,
+        Field::Zone,
     ];
+}
+
+/// Where the clock is: a city that keeps its own summer time, or a bare
+/// offset from before cities could be picked.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum TimeZone {
+    Fixed(i64),
+    City(&'static Zone),
+}
+
+impl TimeZone {
+    pub fn from_state(name: Option<&str>, offset_min: i16) -> Self {
+        name.and_then(zone_named)
+            .map_or(TimeZone::Fixed(i64::from(offset_min)), TimeZone::City)
+    }
+
+    pub fn offset_at(&self, utc: i64) -> i64 {
+        match self {
+            TimeZone::Fixed(min) => *min,
+            TimeZone::City(zone) => zone.offset_at(utc),
+        }
+    }
+
+    fn utc_of_local(&self, local: i64) -> i64 {
+        match self {
+            TimeZone::Fixed(min) => local - min * 60,
+            TimeZone::City(zone) => zone.utc_of_local(local),
+        }
+    }
+
+    pub fn city(&self) -> Option<&'static str> {
+        match self {
+            TimeZone::Fixed(_) => None,
+            TimeZone::City(zone) => Some(zone.name),
+        }
+    }
+
+    fn standard_min(&self) -> i64 {
+        match self {
+            TimeZone::Fixed(min) => *min,
+            TimeZone::City(zone) => i64::from(zone.standard_min),
+        }
+    }
+
+    fn step(self, by: i64) -> Self {
+        let at = match self {
+            TimeZone::City(zone) => ZONES.iter().position(|z| z == zone),
+            TimeZone::Fixed(_) => None,
+        };
+        let next = match at {
+            Some(i) => (i as i64 + by).rem_euclid(ZONES.len() as i64) as usize,
+            // From a bare offset, the first city past it in that direction.
+            None if by > 0 => ZONES
+                .iter()
+                .position(|z| i64::from(z.standard_min) > self.standard_min())
+                .unwrap_or(0),
+            None => ZONES
+                .iter()
+                .rposition(|z| i64::from(z.standard_min) < self.standard_min())
+                .unwrap_or(ZONES.len() - 1),
+        };
+        TimeZone::City(&ZONES[next])
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -79,7 +140,10 @@ pub struct ClockPicker {
     day: i64,
     hour: i64,
     minute: i64,
-    offset_min: i64,
+    zone: TimeZone,
+    /// Until the date or time is touched, a new zone keeps the moment and
+    /// moves the time shown, so a clock set over Wi-Fi stays right.
+    typed: bool,
     cursor: usize,
 }
 
@@ -93,16 +157,16 @@ impl ClockPicker {
             day,
             hour: rem / 3600,
             minute: rem / 60 % 60,
-            offset_min: 0,
+            zone: TimeZone::Fixed(0),
+            typed: false,
             cursor: 0,
         }
     }
 
-    pub fn local(utc: i64, offset_min: i16) -> Self {
-        let offset = i64::from(offset_min);
+    pub fn local(utc: i64, zone: TimeZone) -> Self {
         ClockPicker {
-            offset_min: offset,
-            ..ClockPicker::from_secs(utc + offset * 60)
+            zone,
+            ..ClockPicker::from_secs(utc + zone.offset_at(utc) * 60)
         }
     }
 
@@ -113,20 +177,27 @@ impl ClockPicker {
             day,
             hour: 0,
             minute: 0,
-            offset_min: 0,
+            zone: TimeZone::Fixed(0),
+            typed: false,
             cursor: 0,
         }
     }
 
-    pub fn secs(&self) -> i64 {
-        let local = days_from_civil(self.year, self.month, self.day) * DAY
-            + self.hour * 3600
-            + self.minute * 60;
-        local - self.offset_min * 60
+    fn wall(&self) -> i64 {
+        days_from_civil(self.year, self.month, self.day) * DAY + self.hour * 3600 + self.minute * 60
     }
 
+    pub fn secs(&self) -> i64 {
+        self.zone.utc_of_local(self.wall())
+    }
+
+    pub fn zone(&self) -> TimeZone {
+        self.zone
+    }
+
+    /// The offset in force at the time shown.
     pub fn offset_min(&self) -> i64 {
-        self.offset_min
+        self.zone.offset_at(self.secs())
     }
 
     pub fn month(&self) -> i64 {
@@ -162,15 +233,23 @@ impl ClockPicker {
     }
 
     fn step(&mut self, by: i64) {
+        if self.cursor() != Field::Zone {
+            self.typed = true;
+        }
         match self.cursor() {
             Field::Year => self.year = wrap(self.year + by, YEAR_MIN, YEAR_MAX),
             Field::Month => self.month = wrap(self.month + by, 1, 12),
             Field::Day => self.day = wrap(self.day + by, 1, days_in_month(self.year, self.month)),
             Field::Hour => self.hour = wrap(self.hour + by, 0, 23),
             Field::Minute => self.minute = wrap(self.minute + by, 0, 59),
-            Field::Offset => {
-                self.offset_min = (self.offset_min + by * OFFSET_STEP)
-                    .clamp(i64::from(UTC_OFFSET_MIN), i64::from(UTC_OFFSET_MAX))
+            Field::Zone => {
+                let utc = self.secs();
+                self.zone = self.zone.step(by);
+                if !self.typed {
+                    let keep = ClockPicker::local(utc, self.zone);
+                    (self.year, self.month, self.day) = (keep.year, keep.month, keep.day);
+                    (self.hour, self.minute) = (keep.hour, keep.minute);
+                }
             }
         }
         self.day = self.day.min(days_in_month(self.year, self.month));
@@ -184,7 +263,7 @@ impl ClockPicker {
             self.day,
             self.hour,
             self.minute,
-            self.offset_text()
+            self.zone_text()
         )
     }
 
@@ -219,15 +298,19 @@ impl ClockPicker {
             6 => format!("{:02}", self.hour),
             7 => ":".into(),
             8 => format!("{:02}", self.minute),
-            10 => format!("UTC{}", self.offset_text()),
+            10 => self.zone_text(),
             _ => String::new(),
         }
     }
 
-    fn offset_text(&self) -> String {
-        let sign = if self.offset_min < 0 { '-' } else { '+' };
-        let mins = self.offset_min.abs();
-        format!("{sign}{:02}:{:02}", mins / 60, mins % 60)
+    fn zone_text(&self) -> String {
+        if let TimeZone::City(zone) = self.zone {
+            return zone.name.to_string();
+        }
+        let offset = self.offset_min();
+        let sign = if offset < 0 { '-' } else { '+' };
+        let mins = offset.abs();
+        format!("UTC{sign}{:02}:{:02}", mins / 60, mins % 60)
     }
 
     pub fn draw(

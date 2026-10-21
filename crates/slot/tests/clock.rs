@@ -4,7 +4,7 @@ use common::{app_booting_at, app_booting_with_clock, tmp_root_with_carts, Clock}
 use slot::app::{App, Phase};
 use slot_input::{Action, Btn};
 use slot_store::{read_slot_state, write_slot_state, SlotState};
-use slot_ui::{ClockPicker, Field, QuickRow};
+use slot_ui::{ClockPicker, Field, QuickRow, TimeZone};
 use tempfile::TempDir;
 
 #[test]
@@ -104,69 +104,102 @@ fn the_picker_hands_back_utc_rather_than_what_was_typed() {
         c.up();
     }
     let typed = c.secs();
-    c.field(Field::Offset);
-    for _ in 0..10 {
+    c.field(Field::Zone);
+    while c.zone().city() != Some("New York") {
         c.down();
     }
-    assert_eq!(c.offset_min(), -300);
+    assert_eq!(c.offset_min(), -240, "New York keeps summer time in August");
     assert_eq!(
         c.secs(),
-        typed + 300 * 60,
-        "09:00 local at UTC-5 is 14:00 UTC"
+        typed + 240 * 60,
+        "09:00 in New York in August is 13:00 UTC"
     );
 }
 
 #[test]
-fn the_offset_steps_in_half_hours_because_real_zones_do() {
+fn the_zone_walks_the_cities_and_wraps_around_the_globe() {
     let mut c = ClockPicker::from_ymd(2026, 8, 12);
-    c.field(Field::Offset);
+    c.field(Field::Zone);
     c.up();
-    assert_eq!(c.offset_min(), 30);
-    c.up();
-    assert_eq!(c.offset_min(), 60);
-}
-
-#[test]
-fn the_offset_stops_at_the_ends_of_the_real_range() {
-    let mut c = ClockPicker::from_ymd(2026, 8, 12);
-    c.field(Field::Offset);
-    for _ in 0..40 {
+    assert!(c.zone().city().is_some(), "a bare offset stayed a bare offset");
+    let first = c.zone();
+    for _ in 0..slot_store::ZONES.len() {
         c.up();
     }
-    assert_eq!(c.offset_min(), 840, "walked past UTC+14");
-    for _ in 0..80 {
-        c.down();
-    }
-    assert_eq!(c.offset_min(), -720, "walked past UTC-12");
+    assert_eq!(c.zone(), first);
 }
 
 #[test]
-fn the_offset_is_part_of_the_line_of_type() {
+fn the_city_is_part_of_the_line_of_type() {
     let mut c = ClockPicker::from_ymd(2026, 8, 12);
     let before = c.text();
-    c.field(Field::Offset);
-    c.down();
+    c.field(Field::Zone);
+    while c.zone().city() != Some("Amsterdam") {
+        c.up();
+    }
     assert_ne!(c.text(), before);
-    assert!(c.text().contains("-00:30"), "{}", c.text());
+    assert!(c.text().ends_with("Amsterdam"), "{}", c.text());
 }
 
 #[test]
-fn confirming_persists_the_offset_and_sets_the_platform_to_utc() {
+fn only_a_new_zone_keeps_the_moment_and_moves_the_time_shown() {
+    let utc = 1_700_000_000 - 1_700_000_000 % 60;
+    let mut c = ClockPicker::local(utc, TimeZone::Fixed(0));
+    c.field(Field::Zone);
+    while c.zone().city() != Some("Amsterdam") {
+        c.up();
+    }
+    assert_eq!(c.secs(), utc, "picking a city moved the clock");
+    assert!(c.text().contains("23:13"), "{}", c.text());
+}
+
+#[test]
+fn a_zone_after_typing_keeps_the_time_that_was_typed() {
+    let mut c = ClockPicker::from_ymd(2026, 8, 12);
+    c.field(Field::Hour);
+    c.up();
+    c.field(Field::Zone);
+    c.up();
+    assert!(c.text().contains("01:00"), "{}", c.text());
+}
+
+#[test]
+fn confirming_persists_the_city_and_sets_the_platform_to_utc() {
     let d = tmp_root_with_carts(&["Emerald"]);
     let (mut a, clock) = app_booting_at(d.path(), 1_700_000_000);
-    for _ in 0..8 {
+    for _ in 0..5 {
         a.apply(Action::GbaDown(Btn::Right));
     }
-    for _ in 0..4 {
-        a.apply(Action::GbaDown(Btn::Down));
+    while a.picker().unwrap().zone().city() != Some("Athens") {
+        a.apply(Action::GbaDown(Btn::Up));
     }
     a.confirm_clock();
-    assert_eq!(read_slot_state(d.path()).utc_offset_min, -120);
+    assert_eq!(read_slot_state(d.path()).time_zone, Some("Athens"));
     assert_eq!(
         clock.get(),
-        1_700_000_000 + 120 * 60,
-        "the platform was set to local rather than to utc"
+        1_700_000_000,
+        "picking a city moved the platform clock"
     );
+}
+
+#[test]
+fn the_wall_clock_follows_summer_time_in_the_city() {
+    let d = tmp_root_with_carts(&["Emerald"]);
+    write_slot_state(
+        d.path(),
+        &SlotState {
+            clock_set: true,
+            time_zone: Some("Amsterdam"),
+            ..SlotState::default()
+        },
+    )
+    .unwrap();
+    let summer = slot_store::parse_stamp("2026-10-21_18-22-00").unwrap();
+    let (a, _clock) = app_booting_at(d.path(), summer);
+    assert_eq!(a.wall_secs(), summer + 120 * 60);
+    let winter = slot_store::parse_stamp("2026-12-01_18-22-00").unwrap();
+    let (a, _clock) = app_booting_at(d.path(), winter);
+    assert_eq!(a.wall_secs(), winter + 60 * 60);
 }
 
 #[test]
@@ -300,26 +333,26 @@ fn changing_the_minute_moves_the_clock_by_exactly_that_minute() {
 }
 
 #[test]
-fn changing_only_the_offset_moves_utc_by_exactly_that_change() {
+fn changing_only_the_zone_leaves_the_clock_where_it_is() {
     for way in [Way::FirstBoot, Way::QuickMenu] {
         let (d, mut a, clock) = clock_screen(way);
-        let before = a.picker().expect("on the clock").offset_min();
         for _ in 0..5 {
             a.apply(Action::GbaDown(Btn::Right));
         }
         a.apply(Action::GbaDown(Btn::Down));
+        let city = a.picker().expect("on the clock").zone().city();
         clock.advance(OPEN_FOR);
         a.apply(Action::GbaDown(Btn::A));
         assert_eq!(
             clock.get(),
-            AT + OPEN_FOR + 30 * 60,
-            "{way:?}: half an hour west moved the clock by {} s",
+            AT + OPEN_FOR,
+            "{way:?}: a new zone moved the clock by {} s",
             clock.get() - (AT + OPEN_FOR)
         );
         assert_eq!(
-            i64::from(read_slot_state(d.path()).utc_offset_min),
-            before - 30,
-            "{way:?}: the offset was not saved"
+            read_slot_state(d.path()).time_zone,
+            city,
+            "{way:?}: the city was not saved"
         );
     }
 }

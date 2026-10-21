@@ -470,7 +470,7 @@ impl QuickRow {
             QuickRow::Recents => "A shelf with the last 10 games you played.",
             QuickRow::FavoriteMark => "How favorites stand out. Press Y on a cart to mark it.",
             QuickRow::ShowTitles => "Show the selected game's name under the shelf.",
-            QuickRow::DateTime => "Set the clock.",
+            QuickRow::DateTime => "Set the clock and your city.",
             QuickRow::HomeWifi => "Join the networks in Config/wifi.toml. Sets the clock too.",
             QuickRow::Network => "Home Wi-Fi and the network you are on.",
             QuickRow::ConnectedTo => "The home network this device is on now.",

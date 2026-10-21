@@ -16,7 +16,7 @@ use slot_store::{
 use slot_ui::{
     board_from, board_x, board_zoom, cart_box, draw_empty_slot, draw_footer, draw_ground,
     draw_slot_name, ease, foot_y, footer_ink, grown, lid_at, lid_from, lift_of,
-    on_board, repeat_gap, shelf_cart_at, ClockPicker, Draw, FfState, GbShell, Hud, HudKind, Icon,
+    on_board, repeat_gap, shelf_cart_at, ClockPicker, Draw, TimeZone, FfState, GbShell, Hud, HudKind, Icon,
     LinkBadge, Millis, Placed, Polaroids, QuickMenu, QuickMenuFaces, QuickRow,
     QuickValue, Refusal, Shelf, SlotChrome, TexId, Toast, BOARD_W, CART_W, CHIP_H, CHIP_U, CHIP_V,
     CHIP_W, FOOTER_Y, HINT_EDGE, HINT_H, HOP_LIFT, REPEAT_DELAY_MS, SHADOW_H, SHADOW_W, SOCKET_H,
@@ -640,7 +640,7 @@ impl App {
         if app.state.clock_set {
             app.start();
         } else {
-            app.phase = clock_screen(system_secs(), 0, false);
+            app.phase = clock_screen(system_secs(), TimeZone::Fixed(0), false);
         }
         app
     }
@@ -852,12 +852,15 @@ impl App {
         else {
             return;
         };
-        let (moved, offset, from_menu) = (picker.secs() - *seed, picker.offset_min(), *from_menu);
+        let (moved, zone, from_menu) = (picker.secs() - *seed, picker.zone(), *from_menu);
         let utc = self.utc_secs() + moved;
         if let Some(power) = &mut self.power {
             power.set_clock(utc);
         }
-        self.state.utc_offset_min = offset as i16;
+        if let TimeZone::Fixed(offset) = zone {
+            self.state.utc_offset_min = offset as i16;
+        }
+        self.state.time_zone = zone.city();
         self.state.clock_set = true;
         self.persist();
         if from_menu {
@@ -874,7 +877,12 @@ impl App {
     }
 
     pub fn wall_secs(&self) -> i64 {
-        self.utc_secs() + i64::from(self.state.utc_offset_min) * 60
+        let utc = self.utc_secs();
+        utc + self.time_zone().offset_at(utc) * 60
+    }
+
+    fn time_zone(&self) -> TimeZone {
+        TimeZone::from_state(self.state.time_zone, self.state.utc_offset_min)
     }
 
     fn utc_secs(&self) -> i64 {
@@ -1782,7 +1790,7 @@ impl App {
         self.hud.set_headphones(self.headphones);
         let secs = power.now();
         if matches!(self.phase, Phase::SetClock { .. }) || secs < CLOCK_FLOOR {
-            self.phase = clock_screen(secs, 0, false);
+            self.phase = clock_screen(secs, TimeZone::Fixed(0), false);
         }
         self.copy_card_log(&power);
         self.power = Some(power);
@@ -2475,7 +2483,7 @@ impl App {
     fn open_quick_row(&mut self, row: QuickRow) {
         match row {
             QuickRow::DateTime => {
-                self.phase = clock_screen(self.utc_secs(), self.state.utc_offset_min, true);
+                self.phase = clock_screen(self.utc_secs(), self.time_zone(), true);
             }
             QuickRow::About => self.phase = Phase::About,
             QuickRow::Screenshots => self.open_shots(false),
@@ -5522,9 +5530,9 @@ fn ff_next(from: u8, right: bool) -> u8 {
     }]
 }
 
-fn clock_screen(utc: i64, offset_min: i16, from_menu: bool) -> Phase {
+fn clock_screen(utc: i64, zone: TimeZone, from_menu: bool) -> Phase {
     Phase::SetClock {
-        picker: ClockPicker::local(utc, offset_min),
+        picker: ClockPicker::local(utc, zone),
         seed: utc - utc.rem_euclid(60),
         from_menu,
     }
