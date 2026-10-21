@@ -4,6 +4,7 @@
 //! filename. No ROM data leaves the device.
 mod artwork;
 mod catalog;
+pub mod cheats;
 mod pack;
 mod source;
 

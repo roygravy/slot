@@ -69,6 +69,11 @@ fn files_for(dir: &Path, stem: &str) -> Vec<PathBuf> {
     picked.into_iter().map(|n| dir.join(n)).collect()
 }
 
+/// Whether a ROM has any cheat files of its own on the card.
+pub fn has_files(root: &Path, platform: Platform, stem: &str) -> bool {
+    !files_for(&cheat_dir(root, platform), stem).is_empty()
+}
+
 fn unquote(v: &str) -> String {
     let v = v.trim();
     let v = v.strip_prefix('"').unwrap_or(v);

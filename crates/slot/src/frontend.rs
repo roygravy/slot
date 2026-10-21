@@ -37,6 +37,7 @@ const ALERT_INK: [u8; 3] = [0xf0, 0xb4, 0x3c];
 
 pub struct Frontend {
     labels: crate::labels::Labels,
+    _cheats: Option<crate::cheat_fetch::CheatFetch>,
     session: Session,
     start: Instant,
     last: Instant,
@@ -206,6 +207,13 @@ impl Frontend {
                 Vec::new()
             },
         );
+        // Cheat files come only from online, so only with Home Wi-Fi on.
+        let cheats = session.app().home_wifi_on().then(|| {
+            crate::cheat_fetch::CheatFetch::spawn(
+                platform.root().to_path_buf(),
+                session.app().carts().cloned().collect(),
+            )
+        });
         let stale_check =
             Self::check_labels(platform.root(), session.app().carts().cloned().collect());
         session
@@ -224,6 +232,7 @@ impl Frontend {
             rebuild: None,
             stale_check,
             label_fetch: None,
+            _cheats: cheats,
             ui_faces: None,
             rebuild_faces: RebuildFaces::default(),
             link_art: LinkArtBuilder::spawn(),
