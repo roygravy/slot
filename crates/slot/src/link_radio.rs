@@ -78,8 +78,11 @@ pub fn radio_jobs() -> Box<dyn RadioJobs> {
 #[cfg(feature = "device")]
 impl RadioJobs for RadioQueue {
     fn ask(&mut self, job: RadioJob) {
-        if job == RadioJob::Home(false) {
-            HOME_CONNECTED.store(false, Ordering::SeqCst);
+        if let RadioJob::Home(enabled) = job {
+            HOME_WANTED.store(enabled, Ordering::SeqCst);
+            if !enabled {
+                HOME_CONNECTED.store(false, Ordering::SeqCst);
+            }
         }
         let _ = queue().send(job);
     }
@@ -104,6 +107,9 @@ impl RadioJobs for RadioQueue {
 static WARM: AtomicBool = AtomicBool::new(false);
 #[cfg(feature = "device")]
 static HOME_CONNECTED: AtomicBool = AtomicBool::new(false);
+/// Home Wi-Fi switched on: only then is the service asked, every few seconds, how it is.
+#[cfg(feature = "device")]
+static HOME_WANTED: AtomicBool = AtomicBool::new(false);
 #[cfg(feature = "device")]
 static HOME_SSID: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
 
@@ -117,6 +123,11 @@ fn queue() -> &'static Sender<RadioJob> {
                 Ok(job) => job,
                 Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
                 Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                    // With Home Wi-Fi off there is nothing to ask after; a process started every
+                    // few seconds through a game would only cost battery.
+                    if !HOME_WANTED.load(Ordering::SeqCst) {
+                        continue;
+                    }
                     let status = helper()
                         .args(["service", "status"])
                         .output()

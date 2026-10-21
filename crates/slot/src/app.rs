@@ -5672,7 +5672,11 @@ impl App {
     /// The caching banner takes the top bar on the shelf while nothing else is in it.
     pub fn labels_banner_shown(&self) -> bool {
         let now = self.now();
-        self.on_shelf() && !self.hud.visible(now) && self.hud.said(now).is_none()
+        self.on_shelf()
+            && self.core_picker.is_none()
+            && self.shell_picker.is_none()
+            && !self.hud.visible(now)
+            && self.hud.said(now).is_none()
     }
 
     pub fn say_labels_ready(&mut self) {

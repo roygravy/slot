@@ -88,7 +88,25 @@ pub fn write_choice(
     choice: Option<ShellChoice>,
 ) -> std::io::Result<()> {
     let value = choice.map_or_else(|| "auto".to_string(), |c| c.to_value());
-    crate::ini::write(root, LABELS_SHELL_FILE, stem, &value)
+    let path = root.join(LABELS_SHELL_FILE);
+    let mut text = match std::fs::read_to_string(&path) {
+        Ok(text) => text,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(e) => return Err(e),
+    };
+    // The same name spelled with other Unicode (a Mac writes é as e and an accent) is the
+    // same cart: that line goes, or the two would race for it.
+    let wanted = key(stem);
+    for other in crate::ini::parse(&text).into_keys() {
+        if other != stem && key(&other) == wanted {
+            text = crate::ini::set(&text, &other, None)?;
+        }
+    }
+    let text = crate::ini::set(&text, stem, Some(&value))?;
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    crate::atomic::atomic_write(&path, text.as_bytes())
 }
 
 pub fn layered(system: &str, labels: &str) -> HashMap<String, ShellChoice> {
@@ -101,4 +119,32 @@ pub fn layered(system: &str, labels: &str) -> HashMap<String, ShellChoice> {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod write_tests {
+    use super::*;
+
+    #[test]
+    fn a_pick_replaces_the_same_name_in_other_unicode() {
+        let root = std::env::temp_dir().join(format!("slot-shell-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("Labels")).unwrap();
+        let nfd = "Pok\u{65}\u{301}mon";
+        let nfc = "Pok\u{e9}mon";
+        std::fs::write(
+            root.join(LABELS_SHELL_FILE),
+            format!("{nfd} = auto 112233 solid\nOther = auto 445566 clear\n"),
+        )
+        .unwrap();
+        write_choice(&root, nfc, ShellChoice::parse("auto f2c230 glitter")).unwrap();
+        let text = std::fs::read_to_string(root.join(LABELS_SHELL_FILE)).unwrap();
+        let shells = layered("", &text);
+        assert_eq!(shells.len(), 2, "{text}");
+        assert_eq!(shells[&key(nfc)].colour, [0xf2, 0xc2, 0x30]);
+        write_choice(&root, nfc, None).unwrap();
+        let text = std::fs::read_to_string(root.join(LABELS_SHELL_FILE)).unwrap();
+        assert!(!layered("", &text).contains_key(&key(nfc)), "{text}");
+        let _ = std::fs::remove_dir_all(&root);
+    }
 }
