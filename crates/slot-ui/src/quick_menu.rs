@@ -70,10 +70,12 @@ pub enum QuickRow {
     Restart,
     PowerOff,
     HomeWifi,
+    Network,
+    ConnectedTo,
 }
 
 impl QuickRow {
-    pub const ALL: [QuickRow; 62] = [
+    pub const ALL: [QuickRow; 64] = [
         QuickRow::FastForward,
         QuickRow::FastForwardSound,
         QuickRow::Screen,
@@ -136,32 +138,37 @@ impl QuickRow {
         QuickRow::Restart,
         QuickRow::PowerOff,
         QuickRow::HomeWifi,
+        QuickRow::Network,
+        QuickRow::ConnectedTo,
     ];
 
     /// The power menu, held POWER.
     pub const POWER: [QuickRow; 3] = [QuickRow::Sleep, QuickRow::Restart, QuickRow::PowerOff];
 
-    pub const MAIN: [QuickRow; 6] = [
+    pub const MAIN: [QuickRow; 7] = [
         QuickRow::General,
         QuickRow::Screen,
         QuickRow::Game,
+        QuickRow::Network,
         QuickRow::Screenshots,
         QuickRow::Buttons,
         QuickRow::About,
     ];
 
-    pub const GENERAL: [QuickRow; 10] = [
+    pub const GENERAL: [QuickRow; 9] = [
         QuickRow::Wallpaper,
         QuickRow::Theme,
         QuickRow::Recents,
         QuickRow::FavoriteMark,
         QuickRow::ShowTitles,
         QuickRow::DateTime,
-        QuickRow::HomeWifi,
         QuickRow::AutoSleep,
         QuickRow::RememberPosition,
         QuickRow::ResumeGame,
     ];
+
+    /// Home Wi-Fi and what it is connected to.
+    pub const NETWORK: [QuickRow; 2] = [QuickRow::HomeWifi, QuickRow::ConnectedTo];
 
     /// Every screen setting belongs to one system: nothing here reaches across all three.
     pub const SCREEN: [QuickRow; 3] = [QuickRow::ScreenGb, QuickRow::ScreenGbc, QuickRow::ScreenGba];
@@ -267,8 +274,8 @@ impl QuickRow {
             | QuickRow::AutoSleep
             | QuickRow::RememberPosition
             | QuickRow::ResumeGame
-            | QuickRow::BootPicture
-            | QuickRow::HomeWifi => &QuickRow::GENERAL,
+            | QuickRow::BootPicture => &QuickRow::GENERAL,
+            QuickRow::HomeWifi | QuickRow::ConnectedTo => &QuickRow::NETWORK,
             QuickRow::Resume
             | QuickRow::States
             | QuickRow::Cheats
@@ -297,6 +304,7 @@ impl QuickRow {
             QuickRow::GbShader => Some(QuickRow::ScreenGb),
             QuickRow::FastForward => Some(QuickRow::Game),
             QuickRow::Wallpaper => Some(QuickRow::General),
+            QuickRow::HomeWifi => Some(QuickRow::Network),
             QuickRow::AutoSleep => Some(QuickRow::General),
             QuickRow::RememberPosition => Some(QuickRow::General),
             QuickRow::PlayScreen => Some(QuickRow::Settings),
@@ -327,6 +335,7 @@ impl QuickRow {
             QuickRow::Screen => Some(QuickRow::SCREEN[0]),
             QuickRow::Game => Some(QuickRow::GAME[0]),
             QuickRow::General => Some(QuickRow::GENERAL[0]),
+            QuickRow::Network => Some(QuickRow::NETWORK[0]),
             QuickRow::Settings => Some(QuickRow::SETTINGS[0]),
             QuickRow::PlayScreen => Some(QuickRow::PLAY_SCREEN[0]),
             QuickRow::PlayGameplay => Some(QuickRow::GAME[0]),
@@ -411,6 +420,8 @@ impl QuickRow {
             QuickRow::Restart => "Restart",
             QuickRow::PowerOff => "Power Off",
             QuickRow::HomeWifi => "Home Wi-Fi",
+            QuickRow::Network => "Network",
+            QuickRow::ConnectedTo => "Connected To",
         }
     }
 
@@ -461,6 +472,8 @@ impl QuickRow {
             QuickRow::ShowTitles => "Show the selected game's name under the shelf.",
             QuickRow::DateTime => "Set the clock.",
             QuickRow::HomeWifi => "Join the networks in Config/wifi.toml. Sets the clock too.",
+            QuickRow::Network => "Home Wi-Fi and the network you are on.",
+            QuickRow::ConnectedTo => "The home network this device is on now.",
             QuickRow::AutoSleep => "Sleep after this long without a button press.",
             QuickRow::RememberPosition => "Start where you left off on the shelf.",
             QuickRow::ResumeGame => "Power on straight back into the game, its picture as boot screen.",
@@ -479,6 +492,11 @@ impl QuickRow {
         })
     }
 
+    /// A row that shows a value and takes no input.
+    pub fn read_only(self) -> bool {
+        self == QuickRow::ConnectedTo
+    }
+
     pub fn opens(self) -> bool {
         matches!(
             self,
@@ -488,6 +506,7 @@ impl QuickRow {
                 | QuickRow::Screen
                 | QuickRow::Game
                 | QuickRow::General
+                | QuickRow::Network
                 | QuickRow::Resume
                 | QuickRow::States
                 | QuickRow::Cheats
@@ -919,6 +938,8 @@ pub struct QuickMenu<'a> {
     pub hidden: &'a [QuickRow],
     pub values: [Option<QuickValue>; QuickRow::ALL.len()],
     pub clock: Option<[(TexId, u32, u32); 2]>,
+    /// The connected network's name, or that there is none.
+    pub network: Option<[(TexId, u32, u32); 2]>,
     pub wallpaper: Option<[(TexId, u32, u32); 2]>,
     pub faces: Option<&'a QuickMenuFaces>,
     pub ground: Option<TexId>,
@@ -1013,6 +1034,7 @@ impl QuickMenu<'_> {
             }
             let value = match row {
                 QuickRow::DateTime => self.clock.map(|c| c[lit as usize]),
+                QuickRow::ConnectedTo => self.network.map(|c| c[lit as usize]),
                 QuickRow::Wallpaper => self.wallpaper.map(|c| c[lit as usize]),
                 QuickRow::Palette | QuickRow::GbPalettes => self.palette.map(|c| c[lit as usize]),
                 QuickRow::GbaBezel => self.gba_bezel.map(|c| c[lit as usize]),
@@ -1031,7 +1053,7 @@ impl QuickMenu<'_> {
                 }
                 continue;
             };
-            if !lit || row.opens() {
+            if !lit || row.opens() || row.read_only() {
                 tint(out, tex, right + pad - w as f32, y, w, h, colour);
                 continue;
             }
@@ -1067,7 +1089,12 @@ impl QuickMenu<'_> {
             (false, true) => open,
             (false, false) => change,
         };
-        for (tex, w, x) in centred_hints(self.canvas, &[back, other], LEGEND_GAP) {
+        // A row that only tells, like Connected To, has nothing to change.
+        let hints: &[(TexId, u32)] = match self.row.read_only() {
+            true => &[back],
+            false => &[back, other],
+        };
+        for (tex, w, x) in centred_hints(self.canvas, hints, LEGEND_GAP) {
             tint(out, tex, x, LEGEND_Y, w, HINT_H, ink.text);
         }
     }

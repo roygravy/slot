@@ -362,6 +362,7 @@ pub struct App {
     quick_menu_faces: Option<QuickMenuFaces>,
     buttons_faces: Option<slot_ui::ButtonsFaces>,
     quick_clock_faces: Option<[(TexId, u32, u32); 2]>,
+    quick_network_faces: Option<[(TexId, u32, u32); 2]>,
     quick_wallpaper_faces: Option<[(TexId, u32, u32); 2]>,
     quick_palette_faces: Option<[(TexId, u32, u32); 2]>,
     quick_bezel_faces: [Option<[(TexId, u32, u32); 2]>; 3],
@@ -544,6 +545,7 @@ impl App {
             clock_faces: None,
             quick_menu_faces: None,
             quick_clock_faces: None,
+            quick_network_faces: None,
             quick_wallpaper_faces: None,
             buttons_faces: None,
             quick_palette_faces: None,
@@ -1007,6 +1009,8 @@ impl App {
             | QuickRow::Screen
             | QuickRow::Game
             | QuickRow::General
+            | QuickRow::Network
+            | QuickRow::ConnectedTo
             | QuickRow::Wallpaper
             | QuickRow::Resume
             | QuickRow::States
@@ -1051,6 +1055,18 @@ impl App {
 
     pub fn set_quick_menu_faces(&mut self, faces: QuickMenuFaces) {
         self.quick_menu_faces = Some(faces);
+    }
+
+    pub fn set_quick_network_faces(&mut self, dim: (TexId, u32, u32), lit: (TexId, u32, u32)) {
+        self.quick_network_faces = Some([dim, lit]);
+    }
+
+    /// The home network's name while Home Wi-Fi is on and connected.
+    pub fn home_network(&self) -> Option<String> {
+        self.state
+            .home_wifi_enabled
+            .then(|| self.radio.home_ssid())
+            .flatten()
     }
 
     pub fn set_quick_clock_faces(&mut self, dim: (TexId, u32, u32), lit: (TexId, u32, u32)) {
@@ -2467,6 +2483,7 @@ impl App {
             QuickRow::Screen
             | QuickRow::Game
             | QuickRow::General
+            | QuickRow::Network
             | QuickRow::ScreenGba
             | QuickRow::ScreenGbc
             | QuickRow::ScreenGb => {
@@ -2487,6 +2504,7 @@ impl App {
             | QuickRow::RunAhead
             | QuickRow::Rumble
             | QuickRow::HomeWifi
+            | QuickRow::ConnectedTo
             | QuickRow::CheatIcon
             | QuickRow::GbcBlackBorder
             | QuickRow::GbBlackBorder
@@ -2645,6 +2663,8 @@ impl App {
             | QuickRow::Screen
             | QuickRow::Game
             | QuickRow::General
+            | QuickRow::Network
+            | QuickRow::ConnectedTo
             | QuickRow::Resume
             | QuickRow::States
             | QuickRow::Cheats
@@ -3542,6 +3562,7 @@ impl App {
                 hidden: self.hidden_rows(),
                 values: QuickRow::ALL.map(|r| self.quick_value(r)),
                 clock: self.quick_clock_faces,
+                network: self.quick_network_faces,
                 wallpaper: self.quick_wallpaper_faces,
                 faces: self.quick_menu_faces.as_ref(),
                 ground: self.menu_ground(),
@@ -3715,6 +3736,7 @@ impl App {
                 named_as: &named_as,
                 values: QuickRow::ALL.map(|r| self.quick_value(r)),
                 clock: None,
+                network: None,
                 wallpaper: None,
                 faces: self.quick_menu_faces.as_ref(),
                 ground: None,

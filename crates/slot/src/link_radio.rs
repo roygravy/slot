@@ -60,6 +60,11 @@ pub trait RadioJobs: Send {
     fn home_connected(&self) -> bool {
         false
     }
+
+    /// The name of the home network while connected to it.
+    fn home_ssid(&self) -> Option<String> {
+        None
+    }
 }
 
 pub struct RadioQueue;
@@ -83,12 +88,22 @@ impl RadioJobs for RadioQueue {
     fn home_connected(&self) -> bool {
         HOME_CONNECTED.load(Ordering::SeqCst)
     }
+
+    fn home_ssid(&self) -> Option<String> {
+        HOME_SSID
+            .lock()
+            .ok()
+            .and_then(|s| s.clone())
+            .filter(|_| self.home_connected())
+    }
 }
 
 #[cfg(feature = "device")]
 static WARM: AtomicBool = AtomicBool::new(false);
 #[cfg(feature = "device")]
 static HOME_CONNECTED: AtomicBool = AtomicBool::new(false);
+#[cfg(feature = "device")]
+static HOME_SSID: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
 
 #[cfg(feature = "device")]
 fn queue() -> &'static Sender<RadioJob> {
@@ -100,16 +115,19 @@ fn queue() -> &'static Sender<RadioJob> {
                 Ok(job) => job,
                 Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
                 Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-                    let connected = helper()
+                    let status = helper()
                         .args(["service", "status"])
                         .output()
                         .ok()
                         .filter(|o| o.status.success())
-                        .is_some_and(|o| {
-                            String::from_utf8_lossy(&o.stdout)
-                                .split_whitespace()
-                                .any(|v| v == "home_connected=true")
-                        });
+                        .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+                        .unwrap_or_default();
+                    let connected = status
+                        .split_whitespace()
+                        .any(|v| v == "home_connected=true");
+                    if let Ok(mut ssid) = HOME_SSID.lock() {
+                        *ssid = connected.then(|| status_ssid(&status)).flatten();
+                    }
                     HOME_CONNECTED.store(connected, Ordering::SeqCst);
                     continue;
                 }
@@ -180,6 +198,20 @@ fn home_address() -> Option<std::net::Ipv4Addr> {
     parse_lan_reply(&String::from_utf8_lossy(&out.stdout))
 }
 
+/// The network name from `service status`, which sends it hex-encoded as `home_ssid=` so a
+/// name with spaces stays one word.
+pub fn status_ssid(status: &str) -> Option<String> {
+    let hex = status
+        .split_whitespace()
+        .find_map(|w| w.strip_prefix("home_ssid="))?;
+    let bytes: Option<Vec<u8>> = (0..hex.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(hex.get(i..i + 2)?, 16).ok())
+        .collect();
+    let name = String::from_utf8_lossy(&bytes?).into_owned();
+    (!name.is_empty()).then_some(name)
+}
+
 /// `0 192.168.1.24`, the service's answer to `link lan`.
 pub fn parse_lan_reply(reply: &str) -> Option<std::net::Ipv4Addr> {
     let mut words = reply.split_whitespace();
@@ -247,6 +279,10 @@ impl RadioJobs for RadioQueue {
     fn home_connected(&self) -> bool {
         std::env::var_os("SLOT_FAKE_HOME").is_some()
     }
+
+    fn home_ssid(&self) -> Option<String> {
+        std::env::var("SLOT_FAKE_HOME").ok().filter(|s| !s.is_empty())
+    }
 }
 
 #[cfg(test)]
@@ -265,6 +301,14 @@ mod tests {
         jobs.ask(RadioJob::Warm);
         jobs.ask(RadioJob::Cool);
         jobs.ask(RadioJob::Down);
+    }
+
+    #[test]
+    fn the_status_names_the_network_even_with_spaces_in_it() {
+        let status = "home_enabled=true home_connected=true home_error= link= freq=None home_ssid=4b5054204e6574";
+        assert_eq!(status_ssid(status).as_deref(), Some("KPT Net"));
+        assert_eq!(status_ssid("home_connected=false home_ssid="), None);
+        assert_eq!(status_ssid("home_connected=false"), None);
     }
 
     #[cfg(not(feature = "device"))]

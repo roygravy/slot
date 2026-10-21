@@ -82,7 +82,7 @@ The About page is the back of the handheld, credits moulded into the plastic and
 
 ### Home Wi-Fi
 
-Put your networks in `Config/wifi.toml` (copy `wifi.toml.example`) and turn **Home Wi-Fi** on under **General**. From then on it works by itself:
+Put your networks in `Config/wifi.toml` (copy `wifi.toml.example`) and turn **Home Wi-Fi** on under **Network** in the menu. From then on it works by itself:
 
 - A small Wi-Fi mark next to the battery shows when you are on your home network, and the clock sets itself
 - Carts without label art get one in the background, found by the ROM's checksum or name. No Wi-Fi? Put an `Artwork.pack` in `Labels/` and labels come from there. A label you added yourself is never replaced

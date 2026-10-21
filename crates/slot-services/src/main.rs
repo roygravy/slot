@@ -330,18 +330,20 @@ fn serve(root: &Path, run: &Path) -> std::io::Result<()> {
                         );
                     }
                     ("service", "status") => {
+                        let status = home.interface.status();
+                        let up = home.enabled && connected(&status) && home.interface.has_ip();
+                        // Hex, so a network name with spaces stays one word on the line.
+                        let ssid = if up {
+                            config::hex(system::field(&status, "ssid").unwrap_or(""))
+                        } else {
+                            String::new()
+                        };
                         respond(
                             &mut stream,
                             0,
                             &format!(
-                                "home_enabled={} home_connected={} home_error={} link={} freq={:?}",
-                                home.enabled,
-                                home.enabled
-                                    && connected(&home.interface.status())
-                                    && home.interface.has_ip(),
-                                home.error,
-                                link.role,
-                                link.freq
+                                "home_enabled={} home_connected={} home_error={} link={} freq={:?} home_ssid={}",
+                                home.enabled, up, home.error, link.role, link.freq, ssid
                             ),
                         );
                     }

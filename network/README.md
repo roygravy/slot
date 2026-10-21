@@ -4,7 +4,7 @@ Home Wi-Fi, linking over the home network and its service come from Prashant Vai
 
 Copy `Config/wifi.toml.example` to `Config/wifi.toml` on the SD card and enter your network names and passwords. Add one `[[networks]]` block per network, in preferred order. WPA2 personal networks are supported; for an open network use `security = "open"` and omit `password`. Enterprise setup and captive portals are not supported.
 
-Under **General** in the menu, change **Home Wi-Fi** to **On**. It defaults to Off and remembers your choice. Slot tries the configured networks in order and keeps a working connection. Association/DHCP run in the background; the shelf never waits for them. A small Wi-Fi symbol beside the battery appears only after the home connection has an IPv4 address. It indicates LAN connectivity, not internet reachability or signal strength.
+Under **Network** in the menu, change **Home Wi-Fi** to **On**. It defaults to Off and remembers your choice. Slot tries the configured networks in order and keeps a working connection. Association/DHCP run in the background; the shelf never waits for them. A small Wi-Fi symbol beside the battery appears only after the home connection has an IPv4 address. It indicates LAN connectivity, not internet reachability or signal strength.
 
 **Off** disconnects the home network and stops scans/retries without deleting credentials. This ends SSH/SFTP connections using that network. Multiplayer works with Home Wi-Fi On or Off (see below). With neither connection needed, Slot blocks Wi-Fi through rfkill while retaining the initialized driver.
 
