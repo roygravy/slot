@@ -182,9 +182,8 @@ pub fn draw_cheat_badge_in_game(canvas: Canvas, face: (TexId, u32, u32), out: &m
 
 /// The robber in the menu's corner, right after the clock.
 pub fn draw_cheat_badge_in_menu(x: f32, face: (TexId, u32, u32), out: &mut Vec<Draw>) {
-    // On the clock's digits, which run from 14 to 27 in the 40 px plate, sitting a
-    // pixel low so the round badge reads as level with them.
-    let centre = 21.0;
+    // On the clock's digits, which run from 14 to 27 in the 40 px plate.
+    let centre = 20.0;
     out.push(Draw::Tex {
         x: x.round(),
         y: (centre - face.2 as f32 / 2.0 + 0.5).round(),
