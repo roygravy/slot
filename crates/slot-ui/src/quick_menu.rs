@@ -707,7 +707,7 @@ const TYPE_DROP: f32 = 4.0;
 const BAR_INSET: f32 = 4.0;
 const CARET_GAP: f32 = 14.0;
 const CARET_PX: f32 = 24.0;
-const LEGEND_Y: f32 = 427.0;
+pub(crate) const LEGEND_Y: f32 = 427.0;
 /// The help line sits between the rows and the legend.
 const HELP_Y: f32 = 392.0;
 const HELP_H: u32 = 24;

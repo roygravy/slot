@@ -3611,7 +3611,7 @@ impl App {
                     .as_ref()
                     .filter(|_| *from_menu)
                     .map(|f| f.legend[0]);
-                picker.draw(self.canvas(), line, hint, back, out);
+                picker.draw(self.canvas(), self.menu_ground(), self.menu_ink(), line, hint, back, out);
                 return;
             }
             Phase::QuickMenu { row } => QuickMenu {

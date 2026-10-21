@@ -1,4 +1,7 @@
-use slot_gfx::{Canvas, Draw, TexId, OUT_H};
+use slot_gfx::{Canvas, Draw, TexId};
+
+use crate::quick_menu::{draw_menu_ground, LEGEND_Y};
+use crate::theme::Ink;
 use slot_store::{
     civil_from_days, days_from_civil, days_in_month, parse_stamp, zone_named, Zone, ZONES,
 };
@@ -11,8 +14,8 @@ const DAY: i64 = 86_400;
 const YEAR_MIN: i64 = 2000;
 const YEAR_MAX: i64 = 2099;
 
-const INK: [u8; 3] = [0xf6, 0xf4, 0xef];
-const BACKDROP: [f32; 4] = [0.06, 0.06, 0.07, 1.0];
+/// White, so the menu's ink can tint it.
+const INK: [u8; 3] = [0xff, 0xff, 0xff];
 
 /// The last cell holds AM or PM on a 12-hour clock and is gone on a 24-hour one.
 const CELLS: [u32; 11] = [88, 22, 52, 22, 52, 32, 52, 22, 52, 14, 64];
@@ -23,7 +26,6 @@ const PICKER_PX: f32 = 30.0;
 const PICKER_MIN_PX: f32 = 12.0;
 const CARET_H: f32 = 4.0;
 const CARET_GAP: f32 = 6.0;
-const HINT_DROP: f32 = 48.0;
 
 const SET_CLOCK_KEY: &str = "A";
 const SET_CLOCK_LABEL: &str = "set the clock";
@@ -332,32 +334,29 @@ impl ClockPicker {
         }
     }
 
+    /// Drawn on the menu's own ground and in its ink, with the legend where the menu keeps it.
     pub fn draw(
         &self,
         canvas: Canvas,
+        ground: Option<TexId>,
+        ink: Ink,
         line: Option<TexId>,
         hint: Option<TexId>,
         back: Option<(TexId, u32)>,
         out: &mut Vec<Draw>,
     ) {
-        out.push(Draw::Rect {
-            x: 0.0,
-            y: 0.0,
-            w: canvas.w,
-            h: OUT_H as f32,
-            colour: BACKDROP,
-        });
+        draw_menu_ground(canvas, ground, ink, out);
         let w = self.picker_w() as f32;
-        let x = canvas.centred(w);
-        let y = (OUT_H as f32 - PICKER_H as f32) / 2.0 - HINT_DROP / 2.0;
+        let x = canvas.centred(w).round();
+        let y = ((LEGEND_Y - PICKER_H as f32) / 2.0).round();
         if let Some(tex) = line {
-            out.push(Draw::Tex {
+            out.push(Draw::Tint {
                 x,
                 y,
                 w,
                 h: PICKER_H as f32,
                 tex,
-                alpha: 1.0,
+                colour: ink.text,
             });
         }
         let cell = FIELD_CELL[self.cursor];
@@ -366,43 +365,25 @@ impl ClockPicker {
             y: y + PICKER_H as f32 + CARET_GAP,
             w: self.cells()[cell] as f32,
             h: CARET_H,
-            colour: [
-                INK[0] as f32 / 255.0,
-                INK[1] as f32 / 255.0,
-                INK[2] as f32 / 255.0,
-                1.0,
-            ],
+            colour: ink.text,
         });
-        let hint_y = y + PICKER_H as f32 + HINT_DROP;
         let hw = hint_width(SET_CLOCK_KEY, SET_CLOCK_LABEL);
-        let (Some(back), Some(tex)) = (back, hint) else {
-            if let Some(tex) = hint {
-                out.push(Draw::Tex {
-                    x: canvas.centred(hw as f32),
-                    y: hint_y,
-                    w: hw as f32,
-                    h: HINT_H as f32,
-                    tex,
-                    alpha: 1.0,
-                });
-            }
-            return;
-        };
-        for (tex, w, x) in centred_hints(canvas, &[back, (tex, hw)], LEGEND_GAP) {
-            out.push(Draw::Tex {
-                x,
-                y: hint_y,
+        let hints: Vec<(TexId, u32)> = back.into_iter().chain(hint.map(|t| (t, hw))).collect();
+        for (tex, w, x) in centred_hints(canvas, &hints, LEGEND_GAP) {
+            out.push(Draw::Tint {
+                x: x.round(),
+                y: LEGEND_Y,
                 w: w as f32,
                 h: HINT_H as f32,
                 tex,
-                alpha: 1.0,
+                colour: ink.text,
             });
         }
     }
 }
 
 pub fn set_clock_hint_face() -> UndoFace {
-    crate::plate::hint_face(SET_CLOCK_KEY, SET_CLOCK_LABEL)
+    crate::plate::tint_mask(crate::plate::hint_face(SET_CLOCK_KEY, SET_CLOCK_LABEL))
 }
 
 impl ClockPicker {
