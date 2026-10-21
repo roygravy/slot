@@ -49,7 +49,7 @@ const EJECT_HOLD_S: f32 = 0.35;
 
 pub const IN_GAME_MENU: Layout = Layout::Native;
 /// Room between the battery's percentage and the cheats robber in the menu corner.
-const MENU_BADGE_GAP: f32 = 8.0;
+const MENU_BADGE_GAP: f32 = 4.0;
 
 const POWER_ON_S: f32 = 0.22;
 
