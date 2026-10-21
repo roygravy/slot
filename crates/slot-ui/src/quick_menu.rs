@@ -145,8 +145,8 @@ impl QuickRow {
         QuickRow::General,
         QuickRow::Screen,
         QuickRow::Game,
-        QuickRow::Buttons,
         QuickRow::Screenshots,
+        QuickRow::Buttons,
         QuickRow::About,
     ];
 
