@@ -96,7 +96,7 @@ pub use quick_menu::{
     quick_row_top, quick_value_face, QuickMenu, QuickMenuFaces, QuickRow, QuickValue, QUICK_EDGE,
     quick_first, quick_pitch, window_first, QUICK_LABEL_X, QUICK_PITCH, SUB_ROWS,
 };
-pub use rebuild::{rebuild_count_face, rebuild_title_face, RebuildScreen};
+pub use rebuild::{rebuild_banner_box, rebuild_banner_face, RebuildBanner};
 pub use refusal::Refusal;
 pub use shot_page::{ShotFaces, ShotPage, SHOT_H, SHOT_W};
 pub use shelf::{foot_y, repeat_gap, rest_y, Shelf, DROP_MARGIN, GLOW_GOLD, GLOW_MARGIN, GLOW_WHITE, REPEAT_DELAY_MS, STAR_PX};

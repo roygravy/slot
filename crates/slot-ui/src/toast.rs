@@ -27,11 +27,12 @@ pub enum Toast {
     CardUnwritable,
     ScreenshotSaved,
     GameReset,
+    LabelsReady,
     Palette(GbPalette),
 }
 
 impl Toast {
-    const FIXED: [Toast; 19] = [
+    const FIXED: [Toast; 20] = [
         Toast::StateSaved,
         Toast::StateLoaded,
         Toast::NeedsGpsp,
@@ -51,6 +52,7 @@ impl Toast {
         Toast::ShaderGbcLcd,
         Toast::EffectsOn,
         Toast::EffectsOff,
+        Toast::LabelsReady,
     ];
 
     pub fn all() -> Vec<Toast> {
@@ -99,6 +101,7 @@ impl Toast {
             Toast::CardUnwritable => "Can't write to SD card",
             Toast::ScreenshotSaved => "Screenshot Saved",
             Toast::GameReset => "Game Reset",
+            Toast::LabelsReady => "Labels Ready",
             Toast::Palette(p) => p.label(),
         }
     }

@@ -2,6 +2,8 @@ use std::time::{Duration, Instant};
 
 use slot_gfx::{Compositor, Draw, ScreenEffect, TexId, OUT_H, OUT_W};
 
+/// Labels cached quicker than this are done before the banner would show them.
+const REBUILD_BANNER_AFTER: Duration = Duration::from_millis(600);
 const PAPER: &[u8] = include_bytes!("../assets/paper.png");
 const GBA_LCD_OVERLAY: &[u8] = include_bytes!("../assets/gba_lcd_overlay.png");
 use slot_input::{InputSource, Millis};
@@ -12,10 +14,10 @@ use slot_ui::{
     chip_shadow_face, clock_text, date_time_text_in, default_game_bezel_face, footer_ink, game_bezel_face,
     gb_cart_shadow, hint_coloured, hint_face, icon_face, menu_face, photo_face,
     quick_caret_face, quick_label_face, quick_legend_faces, quick_pointer_face, quick_value_face,
-    rebuild_count_face, rebuild_title_face, set_clock_hint_face, slot_back, slot_back_light,
+    rebuild_banner_face, set_clock_hint_face, slot_back, slot_back_light,
     slot_front, slot_front_light, socket_face, title_face, toast_face,
     wallpaper_face, word_ink, CartFace, GbShell, Icon, LinkBadge, QuickMenuFaces,
-    QuickRow, QuickValue, RebuildScreen, Toast, UndoFace, ALERT_PX, BOLT_PX,
+    QuickRow, QuickValue, RebuildBanner, Toast, UndoFace, ALERT_PX, BOLT_PX,
     HUD_ICON_PX, HUD_INK, LEGEND,
 };
 
@@ -74,9 +76,7 @@ pub struct Frontend {
 
 #[derive(Default)]
 struct RebuildFaces {
-    title: Option<(TexId, u32, u32)>,
-    count: Option<TexId>,
-    count_size: (u32, u32),
+    line: Option<TexId>,
     shown: Option<usize>,
 }
 
@@ -730,9 +730,8 @@ impl Frontend {
         self.grab_screenshot(compositor);
         self.load_resume_picture(compositor);
         compositor.begin_frame(self.session.app().layout());
-        if self.draw_rebuild(compositor) {
-            return;
-        }
+        self.poll_ui_faces(compositor);
+        self.poll_rebuild();
         if let Some(frame) = self.session.frame() {
             compositor.upload_game(&frame);
             crate::latency::taken();
@@ -810,6 +809,7 @@ impl Frontend {
         self.draws.clear();
         self.session.app().draw(&mut self.draws);
         compositor.draw_list(&self.draws);
+        self.draw_rebuild(compositor);
     }
 
     pub fn drive_emulator(&mut self) {
@@ -835,10 +835,6 @@ impl Frontend {
             self.core_asked = None;
             self.core_built = None;
         }
-    }
-
-    pub fn rebuilding_labels(&self) -> bool {
-        self.rebuild.is_some()
     }
 
     fn check_labels(
@@ -875,48 +871,53 @@ impl Frontend {
         }
     }
 
-    fn draw_rebuild(&mut self, compositor: &mut Compositor) -> bool {
+    /// New labels are cached on worker threads while the shelf is in use; they wait
+    /// while a game runs. On the shelf a banner along the top counts them.
+    fn poll_rebuild(&mut self) {
         self.poll_label_check();
-        self.poll_ui_faces(compositor);
         let Some(rebuild) = &self.rebuild else {
-            return false;
+            return;
         };
         if rebuild.finished() {
+            // A handful done before the banner ever showed needs no word that they are.
+            if self.rebuild_faces.shown.is_some() {
+                self.session.app_mut().say_labels_ready();
+            }
             self.rebuild = None;
-            self.last = Instant::now();
-            return false;
+            self.rebuild_faces.shown = None;
+            return;
         }
-        let faces = &mut self.rebuild_faces;
-        let title = *faces.title.get_or_insert_with(|| {
-            let f = rebuild_title_face("Caching New Labels");
-            (compositor.create_texture(f.w, f.h, &f.rgba), f.w, f.h)
-        });
+        rebuild.set_paused(!self.session.app().labels_may_cache());
+    }
+
+    fn draw_rebuild(&mut self, compositor: &mut Compositor) {
+        let Some(rebuild) = &self.rebuild else {
+            return;
+        };
+        if !self.session.app().labels_banner_shown()
+            || rebuild.started().elapsed() < REBUILD_BANNER_AFTER
+        {
+            return;
+        }
         let done = rebuild.done();
+        let faces = &mut self.rebuild_faces;
         if faces.shown != Some(done) {
-            let f = rebuild_count_face(&format!("{done} / {}", rebuild.total()));
-            faces.count_size = (f.w, f.h);
-            upload(compositor, &mut faces.count, f);
+            let f = rebuild_banner_face(&format!("Caching Labels  {done} / {}", rebuild.total()));
+            upload_rgba(compositor, &mut faces.line, f.w, f.h, &f.rgba);
             faces.shown = Some(done);
         }
-        let screen = RebuildScreen {
-            title: Some(title),
-            count: faces
-                .count
-                .map(|tex| (tex, faces.count_size.0, faces.count_size.1)),
+        let banner = RebuildBanner {
+            line: faces.line,
             fraction: done as f32 / rebuild.total().max(1) as f32,
         };
         self.draws.clear();
-        screen.draw(self.session.app().canvas(), &mut self.draws);
+        banner.draw(self.session.app().canvas(), &mut self.draws);
         compositor.draw_list(&self.draws);
-        true
     }
 
     pub fn advance(&mut self, input: &mut dyn InputSource) {
         let now = self.now();
         let events = input.poll(now);
-        if self.rebuild.is_some() {
-            return;
-        }
         self.session
             .set_menu_dpad_display(input.menu_dpad_display());
         self.session.feed(events, now);

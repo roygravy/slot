@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::thread;
-use std::time::UNIX_EPOCH;
+use std::time::{Duration, Instant, UNIX_EPOCH};
 
 use slot_store::Cart;
 use slot_ui::{cover, label_size};
@@ -78,6 +78,8 @@ pub fn cache_path(root: &Path, cart: &Cart) -> PathBuf {
 
 pub struct Rebuild {
     done: Arc<AtomicUsize>,
+    paused: Arc<AtomicBool>,
+    started: Instant,
     total: usize,
 }
 
@@ -86,18 +88,25 @@ impl Rebuild {
         let total = carts.len();
         let done = Arc::new(AtomicUsize::new(0));
         let next = Arc::new(AtomicUsize::new(0));
+        let paused = Arc::new(AtomicBool::new(false));
         let carts = Arc::new(carts);
-        let threads = thread::available_parallelism().map_or(1, |n| n.get());
+        // The shelf is in use while they are cached: one core is left to it.
+        let threads =
+            thread::available_parallelism().map_or(1, |n| n.get().saturating_sub(1).max(1));
         for n in 0..threads.min(total) {
-            let (root, carts, next, done) = (
+            let (root, carts, next, done, paused) = (
                 root.to_path_buf(),
                 carts.clone(),
                 next.clone(),
                 done.clone(),
+                paused.clone(),
             );
             let spawned = thread::Builder::new()
                 .name(format!("slot-labels-{n}"))
                 .spawn(move || loop {
+                    while paused.load(Ordering::Relaxed) {
+                        thread::sleep(Duration::from_millis(100));
+                    }
                     let Some(cart) = carts.get(next.fetch_add(1, Ordering::Relaxed)) else {
                         return;
                     };
@@ -108,7 +117,21 @@ impl Rebuild {
                 eprintln!("slot: label cache: rebuild thread failed to start: {e}");
             }
         }
-        Rebuild { done, total }
+        Rebuild {
+            done,
+            paused,
+            started: Instant::now(),
+            total,
+        }
+    }
+
+    /// A game is being played: the workers wait between labels so it has the cores.
+    pub fn set_paused(&self, paused: bool) {
+        self.paused.store(paused, Ordering::Relaxed);
+    }
+
+    pub fn started(&self) -> Instant {
+        self.started
     }
 
     pub fn done(&self) -> usize {

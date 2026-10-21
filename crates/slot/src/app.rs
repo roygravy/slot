@@ -5481,6 +5481,28 @@ impl App {
         self.hud.said(self.now())
     }
 
+    /// New labels are cached in the background while no game is running.
+    pub fn labels_may_cache(&self) -> bool {
+        matches!(
+            self.phase,
+            Phase::SetClock { .. }
+                | Phase::Shelf
+                | Phase::QuickMenu { .. }
+                | Phase::About
+                | Phase::Buttons { .. }
+        )
+    }
+
+    /// The caching banner takes the top bar on the shelf while nothing else is in it.
+    pub fn labels_banner_shown(&self) -> bool {
+        let now = self.now();
+        self.on_shelf() && !self.hud.visible(now) && self.hud.said(now).is_none()
+    }
+
+    pub fn say_labels_ready(&mut self) {
+        self.hud.toast(Toast::LabelsReady, self.now());
+    }
+
     pub fn card_alarm(&self) -> bool {
         self.hud.alarmed()
     }
