@@ -2674,7 +2674,8 @@ impl App {
     /// SELECT + B or A: every screen effect of the playing system on or off together, its
     /// filter, Pixel Transparency and Ghosting.
     /// SELECT + B: the screen effects chosen for this system off, or those same ones back on.
-    /// With none chosen, on brings the standard set: LCD filter, Pixel Transparency, Ghosting.
+    /// With none chosen, on brings the standard look: Dot Matrix in the DMG palette for the GB,
+    /// the LCD filter for the GBC and GBA.
     fn toggle_effects(&mut self) {
         if !matches!(self.phase, Phase::Inserting { .. } | Phase::Playing { .. }) {
             return;
@@ -2716,9 +2717,13 @@ impl App {
             | *transparency as u8 * TRANSPARENCY
             | *ghosting as u8 * GHOSTING
             | *border as u8 * BORDER;
+        let mut standard = false;
         let (to, on) = match shown {
             0 => match *saved {
-                0 => (SHADER | TRANSPARENCY | GHOSTING, true),
+                0 => {
+                    standard = true;
+                    (SHADER, true)
+                }
                 kept => (kept, true),
             },
             chosen => {
@@ -2731,6 +2736,14 @@ impl App {
         *ghosting = to & GHOSTING != 0;
         *border = to & BORDER != 0 && platform != Platform::Gba;
         self.lcd_ghosting_pending = Some(*ghosting);
+        if standard && platform == Platform::Gb && !self.state.gb_palettes {
+            self.state.gb_palettes = true;
+            self.state.gb_palette = GbPalette::DEFAULT;
+            if self.palette_capable {
+                self.palette_live = true;
+                self.palette_pending = Some(Some(GbPalette::DEFAULT));
+            }
+        }
         self.persist();
         let said = if on { Toast::EffectsOn } else { Toast::EffectsOff };
         self.hud.toast(said, self.now());
