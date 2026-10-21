@@ -101,40 +101,43 @@ fn printed(x: f32, p: Printed, out: &mut Vec<Draw>) {
     draw_printed(x, FOOTER_Y, p, out);
 }
 
-/// The home Wi-Fi mark: two arcs over a dot, as tall as the battery gauge.
-pub const WIFI_H: u32 = 12;
-const WIFI_RADII: [f32; 2] = [5.6, 10.2];
-const WIFI_STROKE: f32 = 2.0;
-const WIFI_DOT: f32 = 1.5;
+/// The home Wi-Fi mark as a phone draws it: three thick bands fanning up from a point.
+pub const WIFI_H: u32 = 13;
+/// Each band's share of the fan, and the clear gap between bands.
+const WIFI_GAP_FRAC: f32 = 0.12;
 /// The same gap the gauge keeps before its percentage.
-const WIFI_GAP: f32 = 9.0;
+const WIFI_GAP: f32 = 7.0;
 
 pub fn wifi_w() -> u32 {
-    let outer = WIFI_RADII[1] + WIFI_STROKE / 2.0;
-    (2.0 * outer * std::f32::consts::FRAC_1_SQRT_2).ceil() as u32 + 2
+    (WIFI_H as f32 * std::f32::consts::SQRT_2).round() as u32
 }
 
-/// Drawn rather than taken from the symbol font, so its strokes match the gauge's walls.
+/// Drawn smooth rather than taken from the symbol font, so it matches the battery's weight.
 pub fn wifi_face(ink: [u8; 3]) -> crate::plate::UndoFace {
     const SS: u32 = 4;
     let (w, h) = (wifi_w(), WIFI_H);
-    let (cx, cy) = (w as f32 / 2.0, h as f32 - WIFI_DOT * 0.9);
-    let half = WIFI_STROKE / 2.0;
+    let r = h as f32 - 0.2;
+    let (cx, cy) = (w as f32 / 2.0, h as f32 - 0.1);
+    let band = r / 3.0;
+    let gap = r * WIFI_GAP_FRAC;
+    let tilt = std::f32::consts::FRAC_1_SQRT_2;
     let lit = |x: f32, y: f32| -> bool {
         let (dx, dy) = (x - cx, y - cy);
         let d = (dx * dx + dy * dy).sqrt();
-        if d <= WIFI_DOT {
-            return true;
-        }
-        WIFI_RADII.iter().any(|&r| {
-            if dy < 0.0 && dx.abs() <= -dy {
-                return (d - r).abs() <= half;
+        let within = dy < 0.0 && dx.abs() <= -dy;
+        (0..3).any(|i| {
+            let outer = r - i as f32 * band;
+            let inner = if i == 2 { 0.0 } else { outer - band + gap };
+            if within && d >= inner && d <= outer {
+                return true;
             }
-            // Round ends at 45 degrees either side of straight up.
-            let e = r * std::f32::consts::FRAC_1_SQRT_2;
-            [(-e, -e), (e, -e)]
-                .iter()
-                .any(|(ex, ey)| ((dx - ex).powi(2) + (dy - ey).powi(2)).sqrt() <= half)
+            // Round ends, as wide as the band, at 45 degrees either side of straight up.
+            let (mid, half) = ((outer + inner) / 2.0, (outer - inner) / 2.0);
+            i < 2
+                && [-1.0f32, 1.0].iter().any(|side| {
+                    let (ex, ey) = (side * mid * tilt, -mid * tilt);
+                    ((dx - ex).powi(2) + (dy - ey).powi(2)).sqrt() <= half
+                })
         })
     };
     let mut rgba = Vec::with_capacity((w * h * 4) as usize);

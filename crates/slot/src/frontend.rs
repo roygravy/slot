@@ -1187,14 +1187,15 @@ fn sync_clock(app: &mut App, compositor: &mut Compositor, clocks: &mut Clocks) {
             app.set_shelf_title_face(id, w);
         }
     }
-    let battery_shown = app
-        .battery()
-        .map(|b| format!("{}%", b.percent))
+    let battery = app.battery();
+    let battery_shown = battery
+        .map(|b| format!("{}{:?}", b.percent, b.charge))
         .unwrap_or_default();
     if battery_shown != clocks.battery {
         clocks.battery = battery_shown.clone();
-        if !battery_shown.is_empty() {
-            let face = word_ink(&battery_shown, clocks.ink);
+        if let Some(b) = battery {
+            let charging = b.charge == slot_power::Charge::Charging;
+            let face = slot_ui::battery_face(b.percent, charging, clocks.ink);
             let w = face.w;
             let id = upload(compositor, &mut clocks.battery_tex, face);
             app.set_battery_percent_face(id, w);
