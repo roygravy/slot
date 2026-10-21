@@ -11,19 +11,19 @@ use crate::text::{self, Layout};
 pub const BOLT_PX: f32 = 18.0;
 
 /// The capsule; the nub sits past it.
-pub const GAUGE_W: f32 = 30.0;
-pub const GAUGE_H: f32 = 14.0;
+pub const GAUGE_W: f32 = 38.0;
+pub const GAUGE_H: f32 = 18.0;
 const _: () = assert!(GAUGE_H < GAUGE_W);
 const NUB_GAP: f32 = 1.0;
-const NUB_W: f32 = 2.0;
-const NUB_H: f32 = 5.0;
-const RADIUS: f32 = 4.0;
+const NUB_W: f32 = 2.5;
+const NUB_H: f32 = 7.0;
+const RADIUS: f32 = 5.0;
 /// The capsule's own corner, kept for callers that size against the old outline.
 pub const WALL: f32 = 2.0;
 
-const NUMBER_PX: f32 = 11.5;
-const BOLT_W: f32 = 6.0;
-const BOLT_H: f32 = 10.0;
+const NUMBER_PX: f32 = 14.5;
+const BOLT_W: f32 = 8.0;
+const BOLT_H: f32 = 13.0;
 const BOLT_GAP: f32 = 1.0;
 
 /// How much of the ink the empty part of the capsule and the nub keep.
@@ -145,6 +145,8 @@ fn in_rounded(x: f32, y: f32, left: f32, top: f32, w: f32, h: f32, r: f32) -> bo
 
 /// A lightning bolt in a `BOLT_W` by `BOLT_H` box.
 fn in_bolt(x: f32, y: f32) -> bool {
+    // Drawn in a 6 by 10 box, scaled to the bolt's own.
+    let (x, y) = (x * 6.0 / BOLT_W, y * 10.0 / BOLT_H);
     const P: [(f32, f32); 6] = [
         (3.8, 0.0),
         (0.2, 5.8),

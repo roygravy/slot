@@ -76,7 +76,7 @@ pub use link_art::{
 pub use plate::{
     arrows_hint_coloured, arrows_hint_face, arrows_hint_width, cap_width, centred_hints,
     hint_coloured, hint_face, hint_quad, hint_row, hint_width, title_face, title_line_face,
-    tint_mask, word_face, word_ink, word_width, Hint, UndoFace, ARROW_GAP, CAP, CAP_GAP, HINT_EDGE, HINT_GAP,
+    status_clock_face, tint_mask, word_face, word_ink, word_width, Hint, UndoFace, ARROW_GAP, CAP, CAP_GAP, HINT_EDGE, HINT_GAP,
     HINT_H, LEGEND_GAP, TITLE_H, TITLE_LINE_H, TITLE_W,
 };
 pub use polaroids::{photo_face, ConfirmFaces, PhotoFace, Polaroids, DOT, LEGEND, PHOTO_H, PHOTO_W};

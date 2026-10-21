@@ -1157,7 +1157,7 @@ fn sync_clock(app: &mut App, compositor: &mut Compositor, clocks: &mut Clocks) {
     }
     let shown = hhmm(app.wall_secs());
     if shown != clocks.shown {
-        let face = word_ink(&shown, clocks.ink);
+        let face = slot_ui::status_clock_face(&shown, clocks.ink);
         clocks.shown = shown;
         let w = face.w;
         let id = upload(compositor, &mut clocks.shelf, face);

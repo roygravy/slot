@@ -102,7 +102,7 @@ fn printed(x: f32, p: Printed, out: &mut Vec<Draw>) {
 }
 
 /// The home Wi-Fi mark as a phone draws it: three thick bands fanning up from a point.
-pub const WIFI_H: u32 = 13;
+pub const WIFI_H: u32 = 17;
 /// Each band's share of the fan, and the clear gap between bands.
 const WIFI_GAP_FRAC: f32 = 0.12;
 /// The same gap the gauge keeps before its percentage.

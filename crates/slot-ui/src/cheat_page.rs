@@ -22,7 +22,7 @@ const LEGEND_Y: f32 = 427.0;
 const EMPTY_Y: f32 = 170.0;
 
 /// The robber's height in the menu corner (a pixel taller than the battery) and in play.
-pub const BADGE_MENU_H: u32 = 13;
+pub const BADGE_MENU_H: u32 = 15;
 pub const BADGE_GAME_H: u32 = 22;
 /// In play the robber mirrors the fast-forward badge: this far in from the bottom left.
 const BADGE_GAME_X: f32 = 14.0;
@@ -182,9 +182,9 @@ pub fn draw_cheat_badge_in_game(canvas: Canvas, face: (TexId, u32, u32), out: &m
 
 /// The robber in the menu's corner, right after the clock.
 pub fn draw_cheat_badge_in_menu(x: f32, face: (TexId, u32, u32), out: &mut Vec<Draw>) {
-    // On the clock's digits, which run from 14 to 25 in the 40 px plate, sitting a
+    // On the clock's digits, which run from 14 to 27 in the 40 px plate, sitting a
     // pixel low so the round badge reads as level with them.
-    let centre = 20.0;
+    let centre = 21.0;
     out.push(Draw::Tex {
         x: x.round(),
         y: (centre - face.2 as f32 / 2.0 + 0.5).round(),
