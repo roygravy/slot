@@ -14,8 +14,9 @@ const YEAR_MAX: i64 = 2099;
 const INK: [u8; 3] = [0xf6, 0xf4, 0xef];
 const BACKDROP: [f32; 4] = [0.06, 0.06, 0.07, 1.0];
 
-const CELLS: [u32; 11] = [88, 22, 52, 22, 52, 32, 52, 22, 52, 28, 196];
-const FIELD_CELL: [usize; 6] = [0, 2, 4, 6, 8, 10];
+/// The last cell holds AM or PM on a 12-hour clock and is gone on a 24-hour one.
+const CELLS: [u32; 11] = [88, 22, 52, 22, 52, 32, 52, 22, 52, 14, 64];
+const FIELD_CELL: [usize; 5] = [0, 2, 4, 6, 8];
 
 const PICKER_H: u32 = 44;
 const PICKER_PX: f32 = 30.0;
@@ -31,6 +32,17 @@ pub fn clock_label(stamp: &str) -> String {
     parse_stamp(stamp).map(hhmm).unwrap_or_default()
 }
 
+/// The time of day as the status bar shows it: 18:05, or 6:05 PM on a 12-hour clock.
+pub fn clock_text(secs: i64, h24: bool) -> String {
+    if h24 {
+        return hhmm(secs);
+    }
+    let rem = secs.rem_euclid(DAY);
+    let (hour, minute) = (rem / 3600, rem / 60 % 60);
+    let half = if hour < 12 { "AM" } else { "PM" };
+    format!("{}:{minute:02} {half}", (hour + 11) % 12 + 1)
+}
+
 pub fn hhmm(secs: i64) -> String {
     let rem = secs.rem_euclid(DAY);
     format!("{:02}:{:02}", rem / 3600, rem / 60 % 60)
@@ -39,6 +51,15 @@ pub fn hhmm(secs: i64) -> String {
 const MONTHS: [&str; 12] = [
     "JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC",
 ];
+
+pub fn date_time_text_in(secs: i64, h24: bool) -> String {
+    let (_, month, day) = civil_from_days(secs.div_euclid(DAY));
+    let name = MONTHS
+        .get((month - 1) as usize)
+        .copied()
+        .unwrap_or_default();
+    format!("{name} {day} {}", clock_text(secs, h24))
+}
 
 pub fn date_time_text(secs: i64) -> String {
     let (_, month, day) = civil_from_days(secs.div_euclid(DAY));
@@ -56,17 +77,15 @@ pub enum Field {
     Day,
     Hour,
     Minute,
-    Zone,
 }
 
 impl Field {
-    pub const ALL: [Field; 6] = [
+    pub const ALL: [Field; 5] = [
         Field::Year,
         Field::Month,
         Field::Day,
         Field::Hour,
         Field::Minute,
-        Field::Zone,
     ];
 }
 
@@ -112,6 +131,11 @@ impl TimeZone {
         }
     }
 
+    /// The next city east (`right`) or west.
+    pub fn next(self, right: bool) -> Self {
+        self.step(if right { 1 } else { -1 })
+    }
+
     fn step(self, by: i64) -> Self {
         let at = match self {
             TimeZone::City(zone) => ZONES.iter().position(|z| z == zone),
@@ -140,10 +164,9 @@ pub struct ClockPicker {
     day: i64,
     hour: i64,
     minute: i64,
+    /// Picked in General, not here; the picker only turns what it shows into UTC.
     zone: TimeZone,
-    /// Until the date or time is touched, a new zone keeps the moment and
-    /// moves the time shown, so a clock set over Wi-Fi stays right.
-    typed: bool,
+    h24: bool,
     cursor: usize,
 }
 
@@ -158,9 +181,15 @@ impl ClockPicker {
             hour: rem / 3600,
             minute: rem / 60 % 60,
             zone: TimeZone::Fixed(0),
-            typed: false,
+            h24: true,
             cursor: 0,
         }
+    }
+
+    /// Shows the hour on a 12-hour clock, with AM or PM after the minute, when `h24` is off.
+    pub fn hours24(mut self, h24: bool) -> Self {
+        self.h24 = h24;
+        self
     }
 
     pub fn local(utc: i64, zone: TimeZone) -> Self {
@@ -178,7 +207,7 @@ impl ClockPicker {
             hour: 0,
             minute: 0,
             zone: TimeZone::Fixed(0),
-            typed: false,
+            h24: true,
             cursor: 0,
         }
     }
@@ -233,54 +262,53 @@ impl ClockPicker {
     }
 
     fn step(&mut self, by: i64) {
-        if self.cursor() != Field::Zone {
-            self.typed = true;
-        }
         match self.cursor() {
             Field::Year => self.year = wrap(self.year + by, YEAR_MIN, YEAR_MAX),
             Field::Month => self.month = wrap(self.month + by, 1, 12),
             Field::Day => self.day = wrap(self.day + by, 1, days_in_month(self.year, self.month)),
             Field::Hour => self.hour = wrap(self.hour + by, 0, 23),
             Field::Minute => self.minute = wrap(self.minute + by, 0, 59),
-            Field::Zone => {
-                let utc = self.secs();
-                self.zone = self.zone.step(by);
-                if !self.typed {
-                    let keep = ClockPicker::local(utc, self.zone);
-                    (self.year, self.month, self.day) = (keep.year, keep.month, keep.day);
-                    (self.hour, self.minute) = (keep.hour, keep.minute);
-                }
-            }
         }
         self.day = self.day.min(days_in_month(self.year, self.month));
     }
 
     pub fn text(&self) -> String {
         format!(
-            "{:04}-{:02}-{:02} {:02}:{:02} {}",
+            "{:04}-{:02}-{:02} {}:{:02}{}",
             self.year,
             self.month,
             self.day,
-            self.hour,
+            self.cell_text(6),
             self.minute,
-            self.zone_text()
+            match self.h24 {
+                true => String::new(),
+                false => format!(" {}", self.cell_text(10)),
+            }
         )
     }
 
     pub fn face(&self) -> UndoFace {
-        let w = picker_w();
+        let w = self.picker_w();
         let mut rgba = vec![0u8; (w * PICKER_H * 4) as usize];
-        for (i, cell) in CELLS.iter().enumerate() {
+        for (i, cell) in self.cells().iter().enumerate() {
             let text = self.cell_text(i);
             if text.is_empty() {
                 continue;
             }
+            // A 12-hour hour of one digit sits against its colon, as 6:00 does.
+            let (cell, x) = match (i, self.h24, text::label_font()) {
+                (6, false, Some(font)) => {
+                    let tight = (text::line_width(font, &text, PICKER_PX, 0.0).ceil() as u32 + 4).min(*cell);
+                    (tight, self.cell_x(i) + cell - tight)
+                }
+                _ => (*cell, self.cell_x(i)),
+            };
             let mut buf = vec![0u8; (cell * PICKER_H * 4) as usize];
             if let Some(font) = text::label_font() {
-                let layout = text::fit(font, &text, *cell as f32, 1, PICKER_PX, PICKER_MIN_PX);
-                text::draw_centred(&mut buf, *cell, PICKER_H, &layout, INK);
+                let layout = text::fit(font, &text, cell as f32, 1, PICKER_PX, PICKER_MIN_PX);
+                text::draw_centred(&mut buf, cell, PICKER_H, &layout, INK);
             }
-            blit(&mut rgba, w, &buf, *cell, PICKER_H, cell_x(i), 0);
+            blit(&mut rgba, w, &buf, cell, PICKER_H, x, 0);
         }
         UndoFace {
             rgba,
@@ -295,22 +323,13 @@ impl ClockPicker {
             1 | 3 => "-".into(),
             2 => format!("{:02}", self.month),
             4 => format!("{:02}", self.day),
-            6 => format!("{:02}", self.hour),
+            6 if self.h24 => format!("{:02}", self.hour),
+            6 => format!("{}", (self.hour + 11) % 12 + 1),
             7 => ":".into(),
             8 => format!("{:02}", self.minute),
-            10 => self.zone_text(),
+            10 if !self.h24 => if self.hour < 12 { "AM" } else { "PM" }.into(),
             _ => String::new(),
         }
-    }
-
-    fn zone_text(&self) -> String {
-        if let TimeZone::City(zone) = self.zone {
-            return zone.name.to_string();
-        }
-        let offset = self.offset_min();
-        let sign = if offset < 0 { '-' } else { '+' };
-        let mins = offset.abs();
-        format!("UTC{sign}{:02}:{:02}", mins / 60, mins % 60)
     }
 
     pub fn draw(
@@ -328,7 +347,7 @@ impl ClockPicker {
             h: OUT_H as f32,
             colour: BACKDROP,
         });
-        let w = picker_w() as f32;
+        let w = self.picker_w() as f32;
         let x = canvas.centred(w);
         let y = (OUT_H as f32 - PICKER_H as f32) / 2.0 - HINT_DROP / 2.0;
         if let Some(tex) = line {
@@ -343,9 +362,9 @@ impl ClockPicker {
         }
         let cell = FIELD_CELL[self.cursor];
         out.push(Draw::Rect {
-            x: x + cell_x(cell) as f32,
+            x: x + self.cell_x(cell) as f32,
             y: y + PICKER_H as f32 + CARET_GAP,
-            w: CELLS[cell] as f32,
+            w: self.cells()[cell] as f32,
             h: CARET_H,
             colour: [
                 INK[0] as f32 / 255.0,
@@ -386,12 +405,22 @@ pub fn set_clock_hint_face() -> UndoFace {
     crate::plate::hint_face(SET_CLOCK_KEY, SET_CLOCK_LABEL)
 }
 
-fn picker_w() -> u32 {
-    CELLS.iter().sum()
-}
+impl ClockPicker {
+    fn cells(&self) -> [u32; 11] {
+        let mut cells = CELLS;
+        if self.h24 {
+            (cells[9], cells[10]) = (0, 0);
+        }
+        cells
+    }
 
-fn cell_x(cell: usize) -> u32 {
-    CELLS[..cell].iter().sum()
+    fn picker_w(&self) -> u32 {
+        self.cells().iter().sum()
+    }
+
+    fn cell_x(&self, cell: usize) -> u32 {
+        self.cells()[..cell].iter().sum()
+    }
 }
 
 fn wrap(v: i64, lo: i64, hi: i64) -> i64 {

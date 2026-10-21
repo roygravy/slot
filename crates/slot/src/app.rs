@@ -363,6 +363,7 @@ pub struct App {
     buttons_faces: Option<slot_ui::ButtonsFaces>,
     quick_clock_faces: Option<[(TexId, u32, u32); 2]>,
     quick_network_faces: Option<[(TexId, u32, u32); 2]>,
+    quick_zone_faces: Option<[(TexId, u32, u32); 2]>,
     quick_wallpaper_faces: Option<[(TexId, u32, u32); 2]>,
     quick_palette_faces: Option<[(TexId, u32, u32); 2]>,
     quick_bezel_faces: [Option<[(TexId, u32, u32); 2]>; 3],
@@ -547,6 +548,7 @@ impl App {
             quick_menu_faces: None,
             quick_clock_faces: None,
             quick_network_faces: None,
+            quick_zone_faces: None,
             quick_wallpaper_faces: None,
             buttons_faces: None,
             quick_palette_faces: None,
@@ -627,6 +629,7 @@ impl App {
         app.root = Some(root.to_path_buf());
         app.state = read_slot_state(root);
         app.radio.ask(RadioJob::Home(app.state.home_wifi_enabled));
+        app.radio.ask(RadioJob::Time(app.state.auto_time));
         app.restock_recents();
         app.restock_favorites();
         if app.state.remember_position {
@@ -642,7 +645,7 @@ impl App {
         if app.state.clock_set {
             app.start();
         } else {
-            app.phase = clock_screen(system_secs(), TimeZone::Fixed(0), false);
+            app.phase = clock_screen(system_secs(), app.time_zone(), app.state.clock_24h, false);
         }
         app
     }
@@ -981,6 +984,8 @@ impl App {
             QuickRow::GbcShader => Some(QuickValue::flag(self.state.shader_gbc != Shader::Off)),
             QuickRow::Rumble => Some(QuickValue::flag(self.state.rumble)),
             QuickRow::HomeWifi => Some(QuickValue::flag(self.state.home_wifi_enabled)),
+            QuickRow::AutoTime => Some(QuickValue::flag(self.state.auto_time)),
+            QuickRow::Clock24 => Some(QuickValue::flag(self.state.clock_24h)),
             QuickRow::CheatIcon => Some(QuickValue::flag(self.state.cheat_icon)),
             QuickRow::GbcBlackBorder => Some(QuickValue::flag(self.state.gbc_black_border)),
             QuickRow::GbBlackBorder => Some(QuickValue::flag(self.state.gb_black_border)),
@@ -1014,6 +1019,7 @@ impl App {
                 slot_store::Appearance::Light => QuickValue::Light,
             }),
             QuickRow::DateTime
+            | QuickRow::TimeZone
             | QuickRow::About
             | QuickRow::Screenshots
             | QuickRow::Screen
@@ -1065,6 +1071,25 @@ impl App {
 
     pub fn set_quick_menu_faces(&mut self, faces: QuickMenuFaces) {
         self.quick_menu_faces = Some(faces);
+    }
+
+    pub fn set_quick_zone_faces(&mut self, dim: (TexId, u32, u32), lit: (TexId, u32, u32)) {
+        self.quick_zone_faces = Some([dim, lit]);
+    }
+
+    /// The clock's city for Time Zone, or its bare offset from before cities.
+    pub fn zone_name(&self) -> String {
+        match self.time_zone() {
+            TimeZone::City(zone) => zone.name.to_string(),
+            TimeZone::Fixed(min) => {
+                let sign = if min < 0 { '-' } else { '+' };
+                format!("UTC{sign}{:02}:{:02}", min.abs() / 60, min.abs() % 60)
+            }
+        }
+    }
+
+    pub fn clock_24h(&self) -> bool {
+        self.state.clock_24h
     }
 
     pub fn set_quick_network_faces(&mut self, dim: (TexId, u32, u32), lit: (TexId, u32, u32)) {
@@ -1798,7 +1823,7 @@ impl App {
         self.hud.set_headphones(self.headphones);
         let secs = power.now();
         if matches!(self.phase, Phase::SetClock { .. }) || secs < CLOCK_FLOOR {
-            self.phase = clock_screen(secs, TimeZone::Fixed(0), false);
+            self.phase = clock_screen(secs, self.time_zone(), self.state.clock_24h, false);
         }
         self.copy_card_log(&power);
         self.power = Some(power);
@@ -2490,8 +2515,10 @@ impl App {
 
     fn open_quick_row(&mut self, row: QuickRow) {
         match row {
+            // Auto Time keeps the clock; Date & Time only opens when it is off.
+            QuickRow::DateTime if self.state.auto_time => {}
             QuickRow::DateTime => {
-                self.phase = clock_screen(self.utc_secs(), self.time_zone(), true);
+                self.phase = clock_screen(self.utc_secs(), self.time_zone(), self.state.clock_24h, true);
             }
             QuickRow::About => self.phase = Phase::About,
             QuickRow::Screenshots => self.open_shots(false),
@@ -2521,6 +2548,9 @@ impl App {
             | QuickRow::Rumble
             | QuickRow::HomeWifi
             | QuickRow::ConnectedTo
+            | QuickRow::AutoTime
+            | QuickRow::TimeZone
+            | QuickRow::Clock24
             | QuickRow::CheatIcon
             | QuickRow::GbcBlackBorder
             | QuickRow::GbBlackBorder
@@ -2620,6 +2650,11 @@ impl App {
             self.persist();
             return;
         }
+        if row == QuickRow::TimeZone {
+            self.state.time_zone = self.time_zone().next(right).city();
+            self.persist();
+            return;
+        }
         let s = &mut self.state;
         match row {
             QuickRow::FastForward => {
@@ -2656,6 +2691,11 @@ impl App {
                 s.home_wifi_enabled = !s.home_wifi_enabled;
                 self.radio.ask(RadioJob::Home(s.home_wifi_enabled));
             }
+            QuickRow::AutoTime => {
+                s.auto_time = !s.auto_time;
+                self.radio.ask(RadioJob::Time(s.auto_time));
+            }
+            QuickRow::Clock24 => s.clock_24h = !s.clock_24h,
             QuickRow::CheatIcon => s.cheat_icon = !s.cheat_icon,
             QuickRow::GbcBlackBorder => s.gbc_black_border = !s.gbc_black_border,
             QuickRow::GbBlackBorder => s.gb_black_border = !s.gb_black_border,
@@ -2674,6 +2714,7 @@ impl App {
             | QuickRow::FavoriteMark
             | QuickRow::ShowTitles
             | QuickRow::DateTime
+            | QuickRow::TimeZone
             | QuickRow::About
             | QuickRow::Screenshots
             | QuickRow::Screen
@@ -3579,6 +3620,8 @@ impl App {
                 values: QuickRow::ALL.map(|r| self.quick_value(r)),
                 clock: self.quick_clock_faces,
                 network: self.quick_network_faces,
+                zone: self.quick_zone_faces,
+                locked: self.state.auto_time.then_some(QuickRow::DateTime),
                 wallpaper: self.quick_wallpaper_faces,
                 faces: self.quick_menu_faces.as_ref(),
                 ground: self.menu_ground(),
@@ -3752,6 +3795,8 @@ impl App {
                 values: QuickRow::ALL.map(|r| self.quick_value(r)),
                 clock: None,
                 network: None,
+                zone: None,
+                locked: None,
                 wallpaper: None,
                 faces: self.quick_menu_faces.as_ref(),
                 ground: None,
@@ -5539,9 +5584,9 @@ fn ff_next(from: u8, right: bool) -> u8 {
     }]
 }
 
-fn clock_screen(utc: i64, zone: TimeZone, from_menu: bool) -> Phase {
+fn clock_screen(utc: i64, zone: TimeZone, h24: bool, from_menu: bool) -> Phase {
     Phase::SetClock {
-        picker: ClockPicker::local(utc, zone),
+        picker: ClockPicker::local(utc, zone).hours24(h24),
         seed: utc - utc.rem_euclid(60),
         from_menu,
     }

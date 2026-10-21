@@ -4,7 +4,7 @@ use common::{app_booting_at, app_booting_with_clock, tmp_root_with_carts, Clock}
 use slot::app::{App, Phase};
 use slot_input::{Action, Btn};
 use slot_store::{read_slot_state, write_slot_state, SlotState};
-use slot_ui::{ClockPicker, Field, QuickRow, TimeZone};
+use slot_ui::{clock_text, date_time_text_in, ClockPicker, Field, QuickRow, TimeZone};
 use tempfile::TempDir;
 
 #[test]
@@ -97,92 +97,6 @@ fn a_day_the_new_month_does_not_have_is_pulled_back() {
 }
 
 #[test]
-fn the_picker_hands_back_utc_rather_than_what_was_typed() {
-    let mut c = ClockPicker::from_ymd(2026, 8, 12);
-    c.field(Field::Hour);
-    for _ in 0..9 {
-        c.up();
-    }
-    let typed = c.secs();
-    c.field(Field::Zone);
-    while c.zone().city() != Some("New York") {
-        c.down();
-    }
-    assert_eq!(c.offset_min(), -240, "New York keeps summer time in August");
-    assert_eq!(
-        c.secs(),
-        typed + 240 * 60,
-        "09:00 in New York in August is 13:00 UTC"
-    );
-}
-
-#[test]
-fn the_zone_walks_the_cities_and_wraps_around_the_globe() {
-    let mut c = ClockPicker::from_ymd(2026, 8, 12);
-    c.field(Field::Zone);
-    c.up();
-    assert!(c.zone().city().is_some(), "a bare offset stayed a bare offset");
-    let first = c.zone();
-    for _ in 0..slot_store::ZONES.len() {
-        c.up();
-    }
-    assert_eq!(c.zone(), first);
-}
-
-#[test]
-fn the_city_is_part_of_the_line_of_type() {
-    let mut c = ClockPicker::from_ymd(2026, 8, 12);
-    let before = c.text();
-    c.field(Field::Zone);
-    while c.zone().city() != Some("Amsterdam") {
-        c.up();
-    }
-    assert_ne!(c.text(), before);
-    assert!(c.text().ends_with("Amsterdam"), "{}", c.text());
-}
-
-#[test]
-fn only_a_new_zone_keeps_the_moment_and_moves_the_time_shown() {
-    let utc = 1_700_000_000 - 1_700_000_000 % 60;
-    let mut c = ClockPicker::local(utc, TimeZone::Fixed(0));
-    c.field(Field::Zone);
-    while c.zone().city() != Some("Amsterdam") {
-        c.up();
-    }
-    assert_eq!(c.secs(), utc, "picking a city moved the clock");
-    assert!(c.text().contains("23:13"), "{}", c.text());
-}
-
-#[test]
-fn a_zone_after_typing_keeps_the_time_that_was_typed() {
-    let mut c = ClockPicker::from_ymd(2026, 8, 12);
-    c.field(Field::Hour);
-    c.up();
-    c.field(Field::Zone);
-    c.up();
-    assert!(c.text().contains("01:00"), "{}", c.text());
-}
-
-#[test]
-fn confirming_persists_the_city_and_sets_the_platform_to_utc() {
-    let d = tmp_root_with_carts(&["Emerald"]);
-    let (mut a, clock) = app_booting_at(d.path(), 1_700_000_000);
-    for _ in 0..5 {
-        a.apply(Action::GbaDown(Btn::Right));
-    }
-    while a.picker().unwrap().zone().city() != Some("Athens") {
-        a.apply(Action::GbaDown(Btn::Up));
-    }
-    a.confirm_clock();
-    assert_eq!(read_slot_state(d.path()).time_zone, Some("Athens"));
-    assert_eq!(
-        clock.get(),
-        1_700_000_000,
-        "picking a city moved the platform clock"
-    );
-}
-
-#[test]
 fn the_wall_clock_follows_summer_time_in_the_city() {
     let d = tmp_root_with_carts(&["Emerald"]);
     write_slot_state(
@@ -272,6 +186,7 @@ fn clock_screen(way: Way) -> (TempDir, App, Clock) {
             &SlotState {
                 clock_set: true,
                 utc_offset_min: -300,
+                auto_time: false,
                 ..SlotState::default()
             },
         )
@@ -333,26 +248,102 @@ fn changing_the_minute_moves_the_clock_by_exactly_that_minute() {
 }
 
 #[test]
-fn changing_only_the_zone_leaves_the_clock_where_it_is() {
-    for way in [Way::FirstBoot, Way::QuickMenu] {
-        let (d, mut a, clock) = clock_screen(way);
-        for _ in 0..5 {
-            a.apply(Action::GbaDown(Btn::Right));
-        }
-        a.apply(Action::GbaDown(Btn::Down));
-        let city = a.picker().expect("on the clock").zone().city();
-        clock.advance(OPEN_FOR);
-        a.apply(Action::GbaDown(Btn::A));
-        assert_eq!(
-            clock.get(),
-            AT + OPEN_FOR,
-            "{way:?}: a new zone moved the clock by {} s",
-            clock.get() - (AT + OPEN_FOR)
-        );
-        assert_eq!(
-            read_slot_state(d.path()).time_zone,
-            city,
-            "{way:?}: the city was not saved"
-        );
-    }
+fn the_picker_in_a_city_hands_back_utc_rather_than_what_was_typed() {
+    let ny = slot_store::zone_named("New York").unwrap();
+    let utc = slot_store::parse_stamp("2026-08-12_13-00-00").unwrap();
+    let mut c = ClockPicker::local(utc, TimeZone::City(ny));
+    assert!(c.text().contains("09:00"), "{}", c.text());
+    c.field(Field::Hour);
+    c.up();
+    assert_eq!(c.secs(), utc + 3600);
 }
+
+#[test]
+fn the_time_zone_walks_the_cities_and_wraps_around_the_globe() {
+    let first = TimeZone::Fixed(0).next(true);
+    assert!(first.city().is_some(), "a bare offset stayed a bare offset");
+    let mut z = first;
+    for _ in 0..slot_store::ZONES.len() {
+        z = z.next(true);
+    }
+    assert_eq!(z, first);
+    assert_eq!(first.next(true).next(false), first);
+}
+
+#[test]
+fn a_12_hour_clock_says_am_and_pm() {
+    let evening = slot_store::parse_stamp("2026-10-21_18-05-00").unwrap();
+    assert_eq!(clock_text(evening, true), "18:05");
+    assert_eq!(clock_text(evening, false), "6:05 PM");
+    let midnight = slot_store::parse_stamp("2026-10-21_00-30-00").unwrap();
+    assert_eq!(clock_text(midnight, false), "12:30 AM");
+    let noon = slot_store::parse_stamp("2026-10-21_12-00-00").unwrap();
+    assert_eq!(clock_text(noon, false), "12:00 PM");
+    assert_eq!(date_time_text_in(evening, false), "OCT 21 6:05 PM");
+}
+
+#[test]
+fn the_12_hour_picker_shows_am_and_pm_and_keeps_the_moment() {
+    let utc = slot_store::parse_stamp("2026-10-21_18-05-00").unwrap();
+    let c = ClockPicker::local(utc, TimeZone::Fixed(0)).hours24(false);
+    assert!(c.text().ends_with("6:05 PM"), "{}", c.text());
+    assert_eq!(c.secs(), utc);
+}
+
+fn general_row(state: SlotState, row: QuickRow) -> (TempDir, App) {
+    let d = tmp_root_with_carts(&["Emerald", "Fusion"]);
+    write_slot_state(d.path(), &SlotState { clock_set: true, ..state }).unwrap();
+    let (mut a, _clock) = app_booting_at(d.path(), AT);
+    a.apply(Action::QuickMenu);
+    for _ in 0..QuickRow::General.position(&[]) {
+        a.apply(Action::GbaDown(Btn::Down));
+    }
+    a.apply(Action::GbaDown(Btn::A));
+    for _ in 0..row.position(a.hidden_rows()) {
+        a.apply(Action::GbaDown(Btn::Down));
+    }
+    assert_eq!(a.quick_menu(), Some(row));
+    (d, a)
+}
+
+#[test]
+fn time_zone_steps_through_the_cities_and_is_saved() {
+    let (d, mut a) = general_row(
+        SlotState {
+            time_zone: Some("Amsterdam"),
+            ..SlotState::default()
+        },
+        QuickRow::TimeZone,
+    );
+    a.apply(Action::GbaDown(Btn::Right));
+    assert_eq!(a.zone_name(), "Berlin");
+    a.apply(Action::GbaDown(Btn::Left));
+    a.apply(Action::GbaDown(Btn::Left));
+    assert_eq!(a.zone_name(), "Lisbon");
+    a.apply(Action::QuickMenu);
+    assert_eq!(read_slot_state(d.path()).time_zone, Some("Lisbon"));
+}
+
+#[test]
+fn date_and_time_stays_shut_while_auto_time_is_on() {
+    let (_d, mut a) = general_row(SlotState::default(), QuickRow::DateTime);
+    a.apply(Action::GbaDown(Btn::A));
+    assert!(!matches!(a.phase(), Phase::SetClock { .. }), "opened while locked");
+    assert_eq!(a.quick_menu(), Some(QuickRow::DateTime));
+}
+
+#[test]
+fn auto_time_and_the_24_hour_clock_are_on_until_turned_off() {
+    let (d, mut a) = general_row(SlotState::default(), QuickRow::AutoTime);
+    assert!(read_slot_state(d.path()).auto_time);
+    a.apply(Action::GbaDown(Btn::Right));
+    a.apply(Action::GbaDown(Btn::Down));
+    a.apply(Action::GbaDown(Btn::Down));
+    a.apply(Action::GbaDown(Btn::Right));
+    assert!(!a.clock_24h());
+    a.apply(Action::QuickMenu);
+    let saved = read_slot_state(d.path());
+    assert!(!saved.auto_time);
+    assert!(!saved.clock_24h);
+}
+

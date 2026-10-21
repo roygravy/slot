@@ -9,8 +9,8 @@ use slot_power::{Platform, Power};
 use slot_store::{format_stamp, BezelPick, Platform as Console};
 use slot_ui::{
     arrows_hint_coloured, arrows_hint_face, badge_face, bezel_face, cart_shadow, chip_face,
-    chip_shadow_face, date_time_text, default_game_bezel_face, footer_ink, game_bezel_face,
-    gb_cart_shadow, hhmm, hint_coloured, hint_face, icon_face, menu_face, photo_face,
+    chip_shadow_face, clock_text, date_time_text_in, default_game_bezel_face, footer_ink, game_bezel_face,
+    gb_cart_shadow, hint_coloured, hint_face, icon_face, menu_face, photo_face,
     quick_caret_face, quick_label_face, quick_legend_faces, quick_pointer_face, quick_value_face,
     rebuild_count_face, rebuild_title_face, set_clock_hint_face, slot_back, slot_back_light,
     slot_front, slot_front_light, socket_face, title_face, toast_face,
@@ -62,6 +62,7 @@ pub struct Frontend {
     shot_pending: bool,
     quick_clock: QuickClock,
     quick_network: QuickClock,
+    quick_zone: QuickClock,
     quick_palette: QuickPalette,
     wallpaper: WallpaperSync,
     game_bezel: BezelSync,
@@ -231,6 +232,7 @@ impl Frontend {
             shot_pending: false,
             quick_clock: QuickClock::default(),
             quick_network: QuickClock::default(),
+            quick_zone: QuickClock::default(),
             quick_palette: QuickPalette::default(),
             wallpaper: WallpaperSync::default(),
             game_bezel: BezelSync::default(),
@@ -743,6 +745,7 @@ impl Frontend {
         sync_shots(self.session.app_mut(), compositor, &mut self.shot_tex);
         sync_quick_clock(self.session.app_mut(), compositor, &mut self.quick_clock);
         sync_quick_network(self.session.app_mut(), compositor, &mut self.quick_network);
+        sync_quick_zone(self.session.app_mut(), compositor, &mut self.quick_zone);
         sync_quick_palette(self.session.app_mut(), compositor, &mut self.quick_palette);
         sync_wallpaper(self.session.app_mut(), compositor, &mut self.wallpaper);
         sync_game_bezel(self.session.app_mut(), compositor, &mut self.game_bezel);
@@ -1155,7 +1158,7 @@ fn sync_clock(app: &mut App, compositor: &mut Compositor, clocks: &mut Clocks) {
             app.set_clock_faces(line, hint);
         }
     }
-    let shown = hhmm(app.wall_secs());
+    let shown = clock_text(app.wall_secs(), app.clock_24h());
     if shown != clocks.shown {
         let face = slot_ui::status_clock_face(&shown, clocks.ink);
         clocks.shown = shown;
@@ -1326,11 +1329,31 @@ fn sync_quick_network(app: &mut App, compositor: &mut Compositor, state: &mut Qu
     state.shown = text;
 }
 
+/// Time Zone on the General page: the clock's city.
+fn sync_quick_zone(app: &mut App, compositor: &mut Compositor, state: &mut QuickClock) {
+    if app.quick_menu().is_none() {
+        return;
+    }
+    let text = app.zone_name();
+    if text == state.shown {
+        return;
+    }
+    let (dim, lit) = (
+        quick_value_face(&text, false),
+        quick_value_face(&text, true),
+    );
+    let (dim_size, lit_size) = ((dim.w, dim.h), (lit.w, lit.h));
+    let dim = upload(compositor, &mut state.dim, dim);
+    let lit = upload(compositor, &mut state.lit, lit);
+    app.set_quick_zone_faces((dim, dim_size.0, dim_size.1), (lit, lit_size.0, lit_size.1));
+    state.shown = text;
+}
+
 fn sync_quick_clock(app: &mut App, compositor: &mut Compositor, state: &mut QuickClock) {
     if app.quick_menu().is_none() {
         return;
     }
-    let text = date_time_text(app.wall_secs());
+    let text = date_time_text_in(app.wall_secs(), app.clock_24h());
     if text == state.shown {
         return;
     }

@@ -250,6 +250,12 @@ fn ensure_time() {
     }
 }
 
+/// Stops the network setting the clock, so a time set by hand stays.
+fn stop_time() {
+    let ctl = std::env::var("SLOT_NTP_CTL").unwrap_or_else(|_| "/usr/bin/timedatectl".into());
+    let _ = output(&ctl, &["set-ntp", "false"]);
+}
+
 fn serve(root: &Path, run: &Path) -> std::io::Result<()> {
     fs::create_dir_all(run)?;
     fs::set_permissions(run, fs::Permissions::from_mode(0o700))?;
@@ -268,7 +274,13 @@ fn serve(root: &Path, run: &Path) -> std::io::Result<()> {
     listener.set_nonblocking(true)?;
     let mut home = Home::new(run);
     let mut link = Link::new(run);
-    home.enable(slot_store::read_slot_state(root).home_wifi_enabled, root);
+    let state = slot_store::read_slot_state(root);
+    home.enable(state.home_wifi_enabled, root);
+    // Off when the player keeps the clock by hand, so the network never moves it.
+    let mut auto_time = state.auto_time;
+    if !auto_time {
+        stop_time();
+    }
     // The frontend may update the restored preference over this socket.
     let mut warm: Option<(String, Instant)> = None;
     let mut ntp_at = Instant::now();
@@ -313,6 +325,15 @@ fn serve(root: &Path, run: &Path) -> std::io::Result<()> {
                 match (domain, action) {
                     ("home", "on" | "off") => {
                         home.enable(action == "on", root);
+                        respond(&mut stream, 0, "ACCEPTED");
+                    }
+                    ("time", "auto" | "manual") => {
+                        auto_time = action == "auto";
+                        if auto_time {
+                            ntp_at = Instant::now();
+                        } else {
+                            stop_time();
+                        }
                         respond(&mut stream, 0, "ACCEPTED");
                     }
                     ("home", "reload") => {
@@ -400,7 +421,7 @@ fn serve(root: &Path, run: &Path) -> std::io::Result<()> {
             Err(e) => return Err(e),
         }
         let now = Instant::now();
-        if now >= ntp_at {
+        if auto_time && now >= ntp_at {
             ensure_time();
             ntp_at = now + Duration::from_secs(60);
         }
@@ -505,7 +526,7 @@ fn main() {
         return;
     }
     if args.len() != 2 {
-        eprintln!("usage: slot-services home on|off|reload | link warm|cool|host|join|down | service status|stop");
+        eprintln!("usage: slot-services home on|off|reload | time auto|manual | link warm|cool|host|join|down | service status|stop");
         std::process::exit(2);
     }
     let pid = std::env::var("SLOT_OWNER_PID")

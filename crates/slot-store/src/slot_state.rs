@@ -261,6 +261,10 @@ pub struct SlotState {
     pub utc_offset_min: i16,
     /// A named zone with its own summer time; wins over `utc_offset_min`.
     pub time_zone: Option<&'static str>,
+    /// The clock follows the network over Home Wi-Fi.
+    pub auto_time: bool,
+    /// 24-hour clock; off shows 6:00 PM.
+    pub clock_24h: bool,
     pub rumble: bool,
     /// Home association only; Link holds its own radio lease.
     pub home_wifi_enabled: bool,
@@ -424,6 +428,8 @@ impl Default for SlotState {
             clock_set: false,
             utc_offset_min: 0,
             time_zone: None,
+            auto_time: true,
+            clock_24h: true,
             rumble: true,
             home_wifi_enabled: false,
             ff_speed: FF_SPEED_DEFAULT,
@@ -570,6 +576,8 @@ pub fn write_slot_state(root: &Path, s: &SlotState) -> std::io::Result<()> {
     text.push_str(&format!("favorite_mark={}\n", s.favorite_mark.key()));
     text.push_str(&format!("auto_sleep_secs={}\n", s.auto_sleep_secs));
     text.push_str(&format!("home_wifi_enabled={}\n", s.home_wifi_enabled as u8));
+    text.push_str(&format!("auto_time={}\n", s.auto_time as u8));
+    text.push_str(&format!("clock_24h={}\n", s.clock_24h as u8));
     if let Some(zone) = s.time_zone {
         text.push_str(&format!("time_zone={zone}\n"));
     }
@@ -635,6 +643,8 @@ fn parse(text: &str) -> Option<SlotState> {
     let mut rumble = None;
     let mut home_wifi_enabled = None;
     let mut time_zone = None;
+    let mut auto_time = None;
+    let mut clock_24h = None;
     let mut ff_speed = None;
     let mut ff_sound = None;
     let mut shader_gba = None;
@@ -693,6 +703,8 @@ fn parse(text: &str) -> Option<SlotState> {
             "utc_offset_min" => utc_offset_min = Some(offset(value)?),
             "rumble" => rumble = flag(value),
             "home_wifi_enabled" => home_wifi_enabled = flag(value),
+            "auto_time" => auto_time = flag(value),
+            "clock_24h" => clock_24h = flag(value),
             "time_zone" => time_zone = crate::zone_named(value).map(|z| z.name),
             "ff_speed" => ff_speed = ff_speed_value(value),
             "ff_sound" => ff_sound = flag(value),
@@ -752,6 +764,8 @@ fn parse(text: &str) -> Option<SlotState> {
         clock_set: clock_set?,
         utc_offset_min: utc_offset_min?,
         time_zone,
+        auto_time: auto_time.unwrap_or(true),
+        clock_24h: clock_24h.unwrap_or(true),
         rumble: rumble.unwrap_or(fallback.rumble),
         home_wifi_enabled: home_wifi_enabled.unwrap_or(false),
         ff_speed: ff_speed.unwrap_or(fallback.ff_speed),

@@ -72,10 +72,13 @@ pub enum QuickRow {
     HomeWifi,
     Network,
     ConnectedTo,
+    AutoTime,
+    TimeZone,
+    Clock24,
 }
 
 impl QuickRow {
-    pub const ALL: [QuickRow; 64] = [
+    pub const ALL: [QuickRow; 67] = [
         QuickRow::FastForward,
         QuickRow::FastForwardSound,
         QuickRow::Screen,
@@ -140,6 +143,9 @@ impl QuickRow {
         QuickRow::HomeWifi,
         QuickRow::Network,
         QuickRow::ConnectedTo,
+        QuickRow::AutoTime,
+        QuickRow::TimeZone,
+        QuickRow::Clock24,
     ];
 
     /// The power menu, held POWER.
@@ -155,12 +161,15 @@ impl QuickRow {
         QuickRow::About,
     ];
 
-    pub const GENERAL: [QuickRow; 9] = [
+    pub const GENERAL: [QuickRow; 12] = [
         QuickRow::Wallpaper,
         QuickRow::Theme,
         QuickRow::Recents,
         QuickRow::FavoriteMark,
         QuickRow::ShowTitles,
+        QuickRow::AutoTime,
+        QuickRow::TimeZone,
+        QuickRow::Clock24,
         QuickRow::DateTime,
         QuickRow::AutoSleep,
         QuickRow::RememberPosition,
@@ -267,6 +276,9 @@ impl QuickRow {
             QuickRow::Wallpaper
             | QuickRow::WallpaperTint
             | QuickRow::DateTime
+            | QuickRow::AutoTime
+            | QuickRow::TimeZone
+            | QuickRow::Clock24
             | QuickRow::Theme
             | QuickRow::Recents
             | QuickRow::FavoriteMark
@@ -372,6 +384,9 @@ impl QuickRow {
                 "Black Border"
             }
             QuickRow::DateTime => "Date & Time",
+            QuickRow::AutoTime => "Auto Time",
+            QuickRow::TimeZone => "Time Zone",
+            QuickRow::Clock24 => "24-Hour Time",
             QuickRow::About => "About",
             QuickRow::Screenshots | QuickRow::GameScreenshots => "Screenshots",
             QuickRow::GbaShader | QuickRow::GbcShader | QuickRow::Shader => "LCD Filter",
@@ -470,7 +485,10 @@ impl QuickRow {
             QuickRow::Recents => "A shelf with the last 10 games you played.",
             QuickRow::FavoriteMark => "How favorites stand out. Press Y on a cart to mark it.",
             QuickRow::ShowTitles => "Show the selected game's name under the shelf.",
-            QuickRow::DateTime => "Set the clock and your city.",
+            QuickRow::DateTime => "Set the date and time yourself.",
+            QuickRow::AutoTime => "Set by the internet over Home Wi-Fi.",
+            QuickRow::TimeZone => "Your city, for summer and winter time.",
+            QuickRow::Clock24 => "Off shows the time as 6:00 PM.",
             QuickRow::HomeWifi => "Join the networks in Config/wifi.toml. Sets the clock too.",
             QuickRow::Network => "Home Wi-Fi and the network you are on.",
             QuickRow::ConnectedTo => "The home network this device is on now.",
@@ -940,6 +958,10 @@ pub struct QuickMenu<'a> {
     pub clock: Option<[(TexId, u32, u32); 2]>,
     /// The connected network's name, or that there is none.
     pub network: Option<[(TexId, u32, u32); 2]>,
+    /// The clock's city, on Time Zone.
+    pub zone: Option<[(TexId, u32, u32); 2]>,
+    /// A row shown faded that takes no input, like Date & Time while Auto Time is on.
+    pub locked: Option<QuickRow>,
     pub wallpaper: Option<[(TexId, u32, u32); 2]>,
     pub faces: Option<&'a QuickMenuFaces>,
     pub ground: Option<TexId>,
@@ -1009,7 +1031,12 @@ impl QuickMenu<'_> {
             }
             let y = top + pitch * (i - first) as f32 + TYPE_DROP;
             let lit = row == self.row;
-            let colour = if lit { ink.on_bar } else { ink.dim };
+            let colour = match (lit, self.locked == Some(row)) {
+                (true, true) => [ink.on_bar[0], ink.on_bar[1], ink.on_bar[2], ink.on_bar[3] * 0.45],
+                (true, false) => ink.on_bar,
+                (false, true) => [ink.dim[0], ink.dim[1], ink.dim[2], ink.dim[3] * 0.45],
+                (false, false) => ink.dim,
+            };
             let named = self
                 .named_as
                 .iter()
@@ -1035,6 +1062,7 @@ impl QuickMenu<'_> {
             let value = match row {
                 QuickRow::DateTime => self.clock.map(|c| c[lit as usize]),
                 QuickRow::ConnectedTo => self.network.map(|c| c[lit as usize]),
+                QuickRow::TimeZone => self.zone.map(|c| c[lit as usize]),
                 QuickRow::Wallpaper => self.wallpaper.map(|c| c[lit as usize]),
                 QuickRow::Palette | QuickRow::GbPalettes => self.palette.map(|c| c[lit as usize]),
                 QuickRow::GbaBezel => self.gba_bezel.map(|c| c[lit as usize]),
@@ -1053,7 +1081,7 @@ impl QuickMenu<'_> {
                 }
                 continue;
             };
-            if !lit || row.opens() || row.read_only() {
+            if !lit || row.opens() || row.read_only() || self.locked == Some(row) {
                 tint(out, tex, right + pad - w as f32, y, w, h, colour);
                 continue;
             }
@@ -1090,7 +1118,7 @@ impl QuickMenu<'_> {
             (false, false) => change,
         };
         // A row that only tells, like Connected To, has nothing to change.
-        let hints: &[(TexId, u32)] = match self.row.read_only() {
+        let hints: &[(TexId, u32)] = match self.row.read_only() || self.locked == Some(self.row) {
             true => &[back],
             false => &[back, other],
         };

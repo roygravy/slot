@@ -45,6 +45,8 @@ pub enum RadioFail {
 pub enum RadioJob {
     /// Desired home connectivity, independent of the Link lease.
     Home(bool),
+    /// The clock follows the network (true) or is kept by hand.
+    Time(bool),
     Warm,
     /// Release Link preparation, retaining the home connection.
     Cool,
@@ -136,6 +138,11 @@ fn queue() -> &'static Sender<RadioJob> {
                 RadioJob::Home(enabled) => {
                     let _ = helper()
                         .args(["home", if enabled { "on" } else { "off" }])
+                        .status();
+                }
+                RadioJob::Time(auto) => {
+                    let _ = helper()
+                        .args(["time", if auto { "auto" } else { "manual" }])
                         .status();
                 }
                 RadioJob::Warm => WARM.store(run("warm"), Ordering::SeqCst),
