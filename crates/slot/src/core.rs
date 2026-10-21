@@ -145,7 +145,15 @@ pub fn palette_for(
     rom: &Path,
     link: Option<u8>,
 ) -> Option<GbPalette> {
-    chosen.filter(|_| link.is_none() && platform != Platform::Gba && dmg_only(rom))
+    // A cart on the GB shelf is played as a Game Boy, whatever its header says: some Game Boy
+    // games mark themselves as Game Boy Color only and run fine on the DMG. On the GBC shelf
+    // only a cart that cannot do colour takes a palette.
+    let fits = match platform {
+        Platform::Gb => true,
+        Platform::Gbc => dmg_only(rom),
+        Platform::Gba => false,
+    };
+    chosen.filter(|_| link.is_none() && fits)
 }
 
 pub fn dmg_only(rom: &Path) -> bool {
@@ -359,7 +367,12 @@ pub fn apply_core_options(
     if which == Core::Gambatte {
         let (key, value) = lcd_ghosting_option(which, true);
         core.set_option(key, value);
-        core.set_option("gambatte_gb_hwmode", "Auto");
+        // A palette means a Game Boy: run the cart as one, so the palette always takes.
+        let model = match (palette, platform) {
+            (Some(_), Platform::Gb) => "GB",
+            _ => "Auto",
+        };
+        core.set_option("gambatte_gb_hwmode", model);
         core.set_option("gambatte_gb_bootloader", "enabled");
         core.set_option("gambatte_gbc_color_correction_mode", "accurate");
         core.set_option("gambatte_gbc_frontlight_position", "central");
