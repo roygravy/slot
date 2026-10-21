@@ -22,6 +22,18 @@ impl LinkRole {
     }
 }
 
+/// Which network the link runs over, decided by the service when the link starts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LinkNet {
+    /// The private network: a soft-AP the host brings up and the joiner associates to, at fixed
+    /// addresses. What a device with no Wi-Fi connection gets.
+    Direct,
+    /// The home network the device is already on, at `local`. No radio to bring up: the other
+    /// handheld is found by name rather than by address.
+    Lan { local: std::net::Ipv4Addr },
+}
+
+/// Three, not one, because the screen says a different sentence for each and only two of them
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RadioFail {
     NoHost,
@@ -68,7 +80,6 @@ impl RadioJobs for RadioQueue {
     fn warmed(&self) -> bool {
         WARM.load(Ordering::SeqCst)
     }
-
     fn home_connected(&self) -> bool {
         HOME_CONNECTED.load(Ordering::SeqCst)
     }
@@ -84,8 +95,6 @@ fn queue() -> &'static Sender<RadioJob> {
     static Q: OnceLock<Sender<RadioJob>> = OnceLock::new();
     Q.get_or_init(|| {
         let (tx, rx) = channel::<RadioJob>();
-        // Between jobs the service is asked every few seconds whether home is up, for the
-        // footer's Wi-Fi mark.
         std::thread::spawn(move || loop {
             let job = match rx.recv_timeout(std::time::Duration::from_secs(3)) {
                 Ok(job) => job,
@@ -144,22 +153,52 @@ fn helper() -> std::process::Command {
     c
 }
 
-#[cfg(feature = "device")]
-fn link(verb: &str) -> std::process::Command {
-    let mut c = helper();
-    c.arg("link").arg(verb);
-    c
-}
-
 /// A best-effort preparation/cleanup command served by the bundled daemon.
 #[cfg(feature = "device")]
 fn run(sub: &str) -> bool {
-    link(sub).status().is_ok_and(|status| status.success())
+    helper()
+        .arg("link")
+        .arg(sub)
+        .status()
+        .is_ok_and(|status| status.success())
 }
 
+/// The home network's address, if the service says the device is on one. `link lan`
+/// answers at once and starts nothing, so this is the whole cost of asking.
 #[cfg(feature = "device")]
-pub fn up(role: LinkRole, cancel: &Cancel) -> Result<(), RadioFail> {
-    let mut child = link(role.arg())
+fn home_address() -> Option<std::net::Ipv4Addr> {
+    let out = helper()
+        .arg("link")
+        .arg("lan")
+        .stdin(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    parse_lan_reply(&String::from_utf8_lossy(&out.stdout))
+}
+
+/// `0 192.168.1.24`, the service's answer to `link lan`.
+pub fn parse_lan_reply(reply: &str) -> Option<std::net::Ipv4Addr> {
+    let mut words = reply.split_whitespace();
+    (words.next()? == "0").then_some(())?;
+    words.next()?.parse().ok()
+}
+
+///
+/// A device that is already on the home network links over it and this returns at once: there
+/// is no radio to bring up, and nothing to share a channel with. Only a device with no
+/// connection gets the private network, and only that path takes any time.
+#[cfg(feature = "device")]
+pub fn up(role: LinkRole, cancel: &Cancel) -> Result<LinkNet, RadioFail> {
+    if let Some(local) = home_address() {
+        return Ok(LinkNet::Lan { local });
+    }
+    let mut child = helper()
+        .arg("link")
+        .arg(role.arg())
         .spawn()
         .map_err(|e| RadioFail::Radio(format!("link {} would not start: {e}", role.arg())))?;
     loop {
@@ -169,7 +208,7 @@ pub fn up(role: LinkRole, cancel: &Cancel) -> Result<(), RadioFail> {
             return Err(RadioFail::Cancelled);
         }
         match child.try_wait() {
-            Ok(Some(status)) if status.success() => return Ok(()),
+            Ok(Some(status)) if status.success() => return Ok(LinkNet::Direct),
             Ok(Some(status)) if status.code() == Some(3) => return Err(RadioFail::NoHost),
             Ok(Some(status)) => {
                 return Err(RadioFail::Radio(format!(
@@ -185,12 +224,12 @@ pub fn up(role: LinkRole, cancel: &Cancel) -> Result<(), RadioFail> {
 
 #[cfg(feature = "device")]
 pub fn down() {
-    let _ = link("down").status();
+    let _ = helper().arg("link").arg("down").status();
 }
 
 #[cfg(not(feature = "device"))]
-pub fn up(_role: LinkRole, _cancel: &Cancel) -> Result<(), RadioFail> {
-    Ok(())
+pub fn up(_role: LinkRole, _cancel: &Cancel) -> Result<LinkNet, RadioFail> {
+    Ok(LinkNet::Direct)
 }
 
 #[cfg(not(feature = "device"))]
