@@ -14,6 +14,8 @@ pub struct Cart {
     pub title: String,
     pub code: String,
     pub shell: Option<crate::ShellChoice>,
+    /// The ink a blank cart's title is written in, when one was picked.
+    pub marker: Option<[u8; 3]>,
 }
 
 impl Cart {
@@ -61,6 +63,7 @@ pub fn scan(root: &Path) -> Result<Vec<Cart>, StoreError> {
         &read(crate::CART_SHELL_FILE),
         &read(crate::LABELS_SHELL_FILE),
     );
+    let markers = crate::markers(&read(crate::CART_MARKER_FILE));
     let mut carts = Vec::new();
     for platform in Platform::ALL {
         let dir = root.join("Games").join(platform.dir_name());
@@ -94,6 +97,7 @@ pub fn scan(root: &Path) -> Result<Vec<Cart>, StoreError> {
                 title: String::new(),
                 code: String::new(),
                 shell: shells.get(&crate::cart_shell::key(stem)).copied(),
+                marker: markers.get(&crate::cart_shell::key(stem)).copied(),
                 label,
                 rom,
             });

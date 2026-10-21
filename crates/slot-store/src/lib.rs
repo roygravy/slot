@@ -1,4 +1,5 @@
 mod atomic;
+mod cart_marker;
 pub mod cart_shell;
 mod config;
 mod core;
@@ -14,6 +15,9 @@ mod stamp;
 mod zone;
 
 pub use atomic::atomic_write;
+pub use cart_marker::{
+    has_no_label, markers, note_no_label, write_marker, CART_MARKER_FILE, NO_LABEL_FILE,
+};
 pub use cart_shell::{
     write_choice as write_shell_choice, Outline, ShellChoice, ShellFinish, CART_SHELL_FILE,
     LABELS_SHELL_FILE,

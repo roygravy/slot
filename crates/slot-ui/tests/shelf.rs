@@ -15,6 +15,7 @@ fn shelf_with(n: usize) -> Shelf {
                 label: None,
                 code: String::new(),
                 shell: None,
+                marker: None,
                 title: format!("GAME {i}"),
             })
             .collect(),
@@ -824,6 +825,7 @@ fn gb_shelf_with(n: usize) -> Shelf {
                 label: None,
                 code: String::new(),
                 shell: None,
+                marker: None,
                 title: format!("PAK {i}"),
             })
             .collect(),
@@ -901,6 +903,7 @@ fn a_colour_pak_and_a_grey_one_are_backed_by_their_own_shells() {
                 label: None,
                 code: String::new(),
                 shell: None,
+                marker: None,
                 title: (*stem).to_uppercase(),
             }
         })
@@ -964,6 +967,7 @@ fn a_cart_pushed_onto_the_row_draws_rather_than_stopping_the_device() {
         label: None,
         code: String::new(),
         shell: None,
+        marker: None,
         title: "PUSHED".into(),
     });
     settle(&mut s);
@@ -983,6 +987,7 @@ fn a_clear_cart_is_drawn_over_its_board_and_a_solid_one_is_not() {
         label: None,
         code: code.into(),
         shell: None,
+        marker: None,
         title: stem.to_uppercase(),
     };
     let board = TexId::from_raw(80);
@@ -1014,6 +1019,7 @@ fn a_clear_cart_draws_its_interior_then_the_board_then_the_plastic() {
         label: None,
         code: "BPEE".into(),
         shell: None,
+        marker: None,
         title: "GAME".into(),
     }]);
     settle(&mut s);
@@ -1092,6 +1098,7 @@ fn only_a_clear_cart_has_anything_behind_its_plastic() {
         label: None,
         code: code.into(),
         shell: None,
+        marker: None,
         title: stem.to_uppercase(),
     };
     let (interior, board) = (TexId::from_raw(81), TexId::from_raw(80));
@@ -1123,6 +1130,7 @@ fn a_pak_is_classed_when_it_is_drawn_not_when_the_shelf_is_built() {
             label: None,
             code: String::new(),
             shell: None,
+            marker: None,
             title: stem.to_uppercase(),
         })
         .collect();
@@ -1161,6 +1169,7 @@ fn mixed_shelf(platforms: &[Platform]) -> Shelf {
                 label: None,
                 code: String::new(),
                 shell: None,
+                marker: None,
                 title: format!("MIXED {i}"),
             })
             .collect(),

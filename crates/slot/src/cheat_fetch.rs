@@ -231,6 +231,7 @@ mod tests {
             title: String::new(),
             code: String::new(),
             shell: None,
+            marker: None,
         }
     }
 

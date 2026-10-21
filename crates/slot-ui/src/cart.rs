@@ -260,7 +260,7 @@ pub fn cart_face_with(cart: &Cart, art: Option<Vec<u8>>) -> CartFace {
     let mut face = shell_face(&s, &shell_for(cart));
     // The sticker's rounded corners show the recess under it, in the shell's own plastic.
     plastic_label_bed(&s, &mut face);
-    let label = art.unwrap_or_else(|| generated_label(&s, &label_text(cart)));
+    let label = art.unwrap_or_else(|| generated_label(&s, &label_text(cart), cart.marker));
     paste_label(&s, &mut face, &label);
     clip_to_silhouette(&s, &mut face);
     face
@@ -640,8 +640,9 @@ fn plastic_label_bed(s: &Spec, face: &mut CartFace) {
 }
 
 /// A cart with no label art has no sticker at all: its title is written straight onto the
-/// plastic in marker, dark on a Game Boy pak and white on a GBA cart's dark shell.
-fn generated_label(s: &Spec, title: &str) -> Vec<u8> {
+/// plastic in marker, dark on a Game Boy pak and white on a GBA cart's dark shell, unless
+/// another marker was picked for it.
+fn generated_label(s: &Spec, title: &str, marker: Option<[u8; 3]>) -> Vec<u8> {
     let (_, _, lw, lh) = s.label;
     let mut seed: u64 = 0x9e37_79b9_7f4a_7c15;
     for b in title.as_bytes() {
@@ -663,6 +664,7 @@ fn generated_label(s: &Spec, title: &str) -> Vec<u8> {
         Mould::Gba => ([0xf2, 0xf0, 0xea], 245),
         Mould::Notched | Mould::Rounded => ([0x1b, 0x1c, 0x24], 235),
     };
+    let ink = marker.unwrap_or(ink);
     for (i, a) in text::marker_coverage(lw, lh, &layout, seed)
         .into_iter()
         .enumerate()

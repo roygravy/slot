@@ -11,6 +11,7 @@ fn cart(stem: &str) -> Cart {
         title: "".into(),
         code: "".into(),
         shell: None,
+        marker: None,
     }
 }
 

@@ -1,5 +1,6 @@
 //! The shell picker: a shelf cart lifted onto the menu's ground, a row of colours under it,
-//! the finishes under those, and a line to fetch its label when it has none.
+//! the finishes under those, and a line to fetch its label when it has none, or when there is
+//! none to fetch, the markers its title can be written in.
 use crate::board::{board_in, Placed};
 use crate::draw::{Canvas, Draw, TexId, OUT_H, OUT_W};
 use crate::plate::{centred_hints, tint_mask, word_face, UndoFace, HINT_EDGE, HINT_H, LEGEND_GAP};
@@ -19,6 +20,10 @@ const SWATCH_Y: f32 = 304.0;
 const FINISH_Y: f32 = 338.0;
 const FINISH_GAP: f32 = 34.0;
 const DOWNLOAD_Y: f32 = 376.0;
+const MARKER_DISC: f32 = 16.0;
+const MARKER_RING: f32 = 26.0;
+const MARKER_PITCH: f32 = 28.0;
+const MARKER_GAP: f32 = 20.0;
 const LEGEND_Y: f32 = 430.0;
 const BOX_PAD_X: f32 = 10.0;
 const BOX_PAD_Y: f32 = 2.0;
@@ -34,6 +39,7 @@ pub struct ShellPickerFaces {
     pub finishes: Vec<(TexId, u32)>,
     /// The fetch line idle, then at work.
     pub download: [(TexId, u32); 2],
+    pub marker: (TexId, u32),
     pub legend: Vec<(TexId, u32)>,
 }
 
@@ -55,10 +61,13 @@ pub struct ShellPickerView<'a> {
     pub swatch: usize,
     pub finish: usize,
     pub finish_on: bool,
-    /// 0 colours, 1 finish, 2 the fetch line.
+    /// 0 colours, 1 finish, 2 the fetch line or the markers.
     pub row: usize,
     /// None when the cart has a label; Some(at work) otherwise.
     pub download: Option<bool>,
+    /// In the fetch line's place for a cart with no label to fetch: the marker chosen and
+    /// the inks offered.
+    pub markers: Option<(usize, [[u8; 3]; 3])>,
 }
 
 /// A white disc, a white ring for the chosen swatch and the cart's-own swatch (a ring with a
@@ -287,7 +296,51 @@ pub fn draw_shell_picker(canvas: Canvas, v: &ShellPickerView, out: &mut Vec<Draw
         x += w + FINISH_GAP;
     }
 
-    if let Some(working) = v.download {
+    if let Some((chosen, inks)) = v.markers {
+        let face = v.faces.marker;
+        let w = seen(face.1);
+        let n = inks.len() as f32;
+        let total = w + MARKER_GAP + MARKER_PITCH * (n - 1.0) + MARKER_DISC;
+        let x = canvas.centred(total);
+        out.push(word(face, x, DOWNLOAD_Y, ink(focus(2))));
+        let cy = DOWNLOAD_Y + HINT_H as f32 / 2.0;
+        let first = x + w + MARKER_GAP + MARKER_DISC / 2.0;
+        for (i, c) in inks.iter().enumerate() {
+            let cx = first + MARKER_PITCH * i as f32;
+            let rim = MARKER_DISC + 2.0;
+            out.push(tint(
+                v.faces.disc,
+                cx - rim / 2.0,
+                cy - rim / 2.0,
+                rim,
+                rim,
+                ink(faded(v.ink.dim, 0.45)),
+            ));
+            out.push(tint(
+                v.faces.disc,
+                cx - MARKER_DISC / 2.0,
+                cy - MARKER_DISC / 2.0,
+                MARKER_DISC,
+                MARKER_DISC,
+                ink([
+                    c[0] as f32 / 255.0,
+                    c[1] as f32 / 255.0,
+                    c[2] as f32 / 255.0,
+                    1.0,
+                ]),
+            ));
+            if i == chosen {
+                out.push(tint(
+                    v.faces.ring,
+                    cx - MARKER_RING / 2.0,
+                    cy - MARKER_RING / 2.0,
+                    MARKER_RING,
+                    MARKER_RING,
+                    ink(focus(2)),
+                ));
+            }
+        }
+    } else if let Some(working) = v.download {
         let face = v.faces.download[usize::from(working)];
         let w = seen(face.1);
         let x = canvas.centred(w);

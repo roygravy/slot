@@ -534,6 +534,7 @@ impl Frontend {
                 (tex, w)
             })
             .collect();
+        let marker = words.pop().expect("the marker row's word");
         let download = words.split_off(words.len() - 2);
         let finishes = words.split_off(words.len() - 3);
         let shell_legend = faces
@@ -551,6 +552,7 @@ impl Frontend {
             names: words,
             finishes,
             download: [download[0], download[1]],
+            marker,
             legend: shell_legend,
         };
         let roles = faces.link_roles.into_iter().map(&mut up).collect();
@@ -922,6 +924,7 @@ impl Frontend {
                 let got = match slot_labels::Downloader::default().prepare(&root, &cart) {
                     Ok(path) => LabelFetched::Found(path),
                     Err(slot_labels::Error::Unavailable(_) | slot_labels::Error::Image(_)) => {
+                        slot_store::note_no_label(&root, cart.platform, &cart.stem);
                         LabelFetched::Missing
                     }
                     Err(e) => {
@@ -1195,10 +1198,11 @@ impl UiFaces {
                 hint_face("A", "Choose"),
             ],
             shell_shapes: slot_ui::shell_picker_shapes(),
-            // The swatches' names, the finishes, then the fetch line idle and at work.
+            // The swatches' names, the finishes, the fetch line idle and at work, then the
+            // marker row's word.
             shell_words: crate::shell_picker::swatch_names()
                 .into_iter()
-                .chain(["Solid", "Clear", "Glitter", "Download Label", "Downloading..."])
+                .chain(["Solid", "Clear", "Glitter", "Download Label", "Downloading...", "Marker"])
                 .map(slot_ui::shell_picker_word)
                 .collect(),
             shell_legend: vec![

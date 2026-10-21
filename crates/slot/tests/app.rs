@@ -35,6 +35,7 @@ fn app_with_carts(stems: &[&str]) -> App {
                 label: None,
                 code: String::new(),
                 shell: None,
+                marker: None,
                 title: stem.to_uppercase(),
             })
             .collect(),
@@ -317,6 +318,7 @@ fn app_with_platforms(carts: &[(Platform, &str)]) -> App {
                 label: None,
                 code: String::new(),
                 shell: None,
+                marker: None,
                 title: stem.to_uppercase(),
             })
             .collect(),

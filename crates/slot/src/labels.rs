@@ -27,7 +27,14 @@ impl Labels {
             .name("slot-labels".into())
             .spawn(move || {
                 let mut downloader = slot_labels::Downloader::default();
-                run(carts, stopped, out, |cart| downloader.prepare(&root, cart));
+                run(carts, stopped, out, |cart| {
+                    let got = downloader.prepare(&root, cart);
+                    // Looked for and not there: the shell picker offers a marker instead.
+                    if matches!(got, Err(slot_labels::Error::Unavailable(_))) {
+                        slot_store::note_no_label(&root, cart.platform, &cart.stem);
+                    }
+                    got
+                });
             })
         {
             eprintln!("slot: labels: worker failed to start: {e}");
@@ -164,6 +171,7 @@ mod tests {
             title: "".into(),
             code: "".into(),
             shell: None,
+            marker: None,
         };
         let (_stop, stopped) = mpsc::channel();
         let (out, _ready) = mpsc::sync_channel(1);
@@ -196,6 +204,7 @@ mod tests {
             title: "".into(),
             code: "".into(),
             shell: None,
+            marker: None,
         };
         for terminal in [false, true] {
             let (_stop, stopped) = mpsc::channel();
@@ -236,6 +245,7 @@ mod tests {
             title: "".into(),
             code: "".into(),
             shell: None,
+            marker: None,
         };
         let (stop, stopped) = mpsc::channel();
         let (out, _ready) = mpsc::sync_channel(1);
@@ -266,6 +276,7 @@ mod tests {
             title: "".into(),
             code: "".into(),
             shell: None,
+            marker: None,
         };
         let mut existing = cart.clone();
         existing.label = Some(dir.path().join("Custom.png"));
@@ -298,6 +309,7 @@ mod tests {
                     title: "".into(),
                     code: "".into(),
                     shell: None,
+                    marker: None,
                 }
             })
             .collect();

@@ -4632,11 +4632,19 @@ impl App {
         let Some(cart) = self.shelf().carts.get(self.shelf().index) else {
             return;
         };
+        let no_label = cart.label.is_none()
+            && self
+                .root
+                .as_ref()
+                .is_some_and(|root| slot_store::has_no_label(root, cart.platform, &cart.stem));
         let picker = ShellPicker::open(
             cart.rom.clone(),
             cart.stem.clone(),
             cart.shell,
             cart.label.is_some(),
+            no_label,
+            cart.marker,
+            cart.platform == Platform::Gba,
             self.now(),
         );
         self.shell_picker = Some(picker);
@@ -4660,14 +4668,26 @@ impl App {
             return;
         };
         let (rom, stem) = (picker.rom.clone(), picker.stem.clone());
+        let was_marker = picker.was_marker();
+        let marker = picker.marker_choice();
         match picker.press(press, now) {
             Outcome::None => {}
-            Outcome::Preview(choice) | Outcome::Revert(choice) => self.restyle(&rom, choice),
-            Outcome::Save(choice) => {
-                self.restyle(&rom, choice);
+            Outcome::Preview(choice) => self.restyle(&rom, choice, marker),
+            Outcome::Marker(ink) => {
+                let choice = self.shell_picker.as_ref().and_then(|p| p.choice());
+                self.restyle(&rom, choice, ink);
+            }
+            Outcome::Revert(choice, ink) => self.restyle(&rom, choice, ink),
+            Outcome::Save(choice, ink) => {
+                self.restyle(&rom, choice, ink);
                 if let Some(root) = &self.root {
                     if let Err(e) = slot_store::write_shell_choice(root, &stem, choice) {
                         eprintln!("slot: shell: could not write {}: {e}", slot_store::LABELS_SHELL_FILE);
+                    }
+                    if ink != was_marker {
+                        if let Err(e) = slot_store::write_marker(root, &stem, ink) {
+                            eprintln!("slot: shell: could not write {}: {e}", slot_store::CART_MARKER_FILE);
+                        }
                     }
                 }
             }
@@ -4675,14 +4695,21 @@ impl App {
         }
     }
 
-    /// Draw every shelf's copy of a cart again in another shell.
-    fn restyle(&mut self, rom: &Path, choice: Option<slot_store::ShellChoice>) {
+    /// Draw every shelf's copy of a cart again in another shell or marker.
+    fn restyle(
+        &mut self,
+        rom: &Path,
+        choice: Option<slot_store::ShellChoice>,
+        marker: Option<[u8; 3]>,
+    ) {
         for (_, shelf) in &mut self.shelves {
             for index in 0..shelf.carts.len() {
-                if shelf.carts[index].rom != rom || shelf.carts[index].shell == choice {
+                let cart = &mut shelf.carts[index];
+                if cart.rom != rom || (cart.shell == choice && cart.marker == marker) {
                     continue;
                 }
-                shelf.carts[index].shell = choice;
+                cart.shell = choice;
+                cart.marker = marker;
                 self.orphaned.extend(shelf.take_face(index));
                 self.orphaned.extend(shelf.take_interior(index));
             }
@@ -4701,7 +4728,7 @@ impl App {
             _ => {
                 self.hud.toast(Toast::TurnOnWifi, self.now());
                 if let Some(picker) = &mut self.shell_picker {
-                    picker.fetched(false);
+                    picker.fetched(None);
                 }
             }
         }
@@ -4722,7 +4749,7 @@ impl App {
         self.hud.toast(toast, self.now());
         if let Some(picker) = &mut self.shell_picker {
             if picker.rom == rom {
-                picker.fetched(found == Some(true));
+                picker.fetched(found);
             }
         }
     }
@@ -4765,8 +4792,14 @@ impl App {
             row: match picker.row() {
                 shell_picker::Row::Colour => 0,
                 shell_picker::Row::Finish => 1,
-                shell_picker::Row::Download => 2,
+                shell_picker::Row::Download | shell_picker::Row::Marker => 2,
             },
+            markers: picker.offers_marker().then(|| {
+                (
+                    picker.marker(),
+                    shell_picker::MARKERS.map(|(_, ink)| ink),
+                )
+            }),
             download: match picker.fetch() {
                 Fetch::Labelled => None,
                 Fetch::Idle => Some(false),
