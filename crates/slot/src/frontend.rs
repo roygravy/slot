@@ -162,6 +162,7 @@ struct Clocks {
 struct ShelfLook {
     slot: [(TexId, TexId); 4],
     bolt: [TexId; 2],
+    wifi: [TexId; 2],
     port: [Option<TexId>; 2],
     legend: [Vec<(TexId, u32)>; 2],
     applied: Option<(bool, bool, bool)>,
@@ -356,9 +357,14 @@ impl Frontend {
             compositor.create_texture(dark_bolt.w, dark_bolt.h, &dark_bolt.rgba),
             compositor.create_texture(light_bolt.w, light_bolt.h, &light_bolt.rgba),
         ];
+        let wifi = [false, true].map(|light| {
+            let f = icon_face(Icon::Wifi, slot_ui::WIFI_PX, footer_ink(light));
+            compositor.create_texture(f.w, f.h, &f.rgba)
+        });
         self.look = Some(ShelfLook {
             slot,
             bolt,
+            wifi,
             port: [None, None],
             legend: [Vec::new(), Vec::new()],
             applied: None,
@@ -390,6 +396,7 @@ impl Frontend {
                 look.applied == Some((light, legend_ready, port_ready)),
                 look.slot,
                 look.bolt[i],
+                look.wifi[i],
                 look.bolt[0],
                 look.port[i],
                 look.legend[i].clone(),
@@ -397,7 +404,8 @@ impl Frontend {
                 port_ready,
             )
         });
-        let Some((done, slot, bolt, hud_bolt, port, legend, legend_ready, port_ready)) = ready
+        let Some((done, slot, bolt, wifi, hud_bolt, port, legend, legend_ready, port_ready)) =
+            ready
         else {
             return;
         };
@@ -406,6 +414,7 @@ impl Frontend {
         }
         self.session.app_mut().set_slot_sets(slot);
         self.session.app_mut().set_bolt_face(bolt);
+        self.session.app_mut().set_wifi_face(wifi);
         self.session.app_mut().set_hud_bolt_face(hud_bolt);
         if let Some(tex) = port {
             self.session.app_mut().set_link_port(tex);

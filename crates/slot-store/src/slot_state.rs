@@ -260,6 +260,8 @@ pub struct SlotState {
     pub clock_set: bool,
     pub utc_offset_min: i16,
     pub rumble: bool,
+    /// Home association only; Link holds its own radio lease.
+    pub home_wifi_enabled: bool,
     pub ff_speed: u8,
     pub ff_sound: bool,
     pub shader_gba: Shader,
@@ -420,6 +422,7 @@ impl Default for SlotState {
             clock_set: false,
             utc_offset_min: 0,
             rumble: true,
+            home_wifi_enabled: false,
             ff_speed: FF_SPEED_DEFAULT,
             ff_sound: false,
             shader_gba: Shader::GbaLcd,
@@ -563,6 +566,7 @@ pub fn write_slot_state(root: &Path, s: &SlotState) -> std::io::Result<()> {
     text.push_str(&format!("wallpaper_tint={}\n", s.wallpaper_tint.key()));
     text.push_str(&format!("favorite_mark={}\n", s.favorite_mark.key()));
     text.push_str(&format!("auto_sleep_secs={}\n", s.auto_sleep_secs));
+    text.push_str(&format!("home_wifi_enabled={}\n", s.home_wifi_enabled as u8));
     for (key, on) in [
         ("pixel_transparency_gb", s.pixel_transparency_gb),
         ("pixel_transparency_gbc", s.pixel_transparency_gbc),
@@ -623,6 +627,7 @@ fn parse(text: &str) -> Option<SlotState> {
     let mut clock_set = None;
     let mut utc_offset_min = None;
     let mut rumble = None;
+    let mut home_wifi_enabled = None;
     let mut ff_speed = None;
     let mut ff_sound = None;
     let mut shader_gba = None;
@@ -680,6 +685,7 @@ fn parse(text: &str) -> Option<SlotState> {
             "clock_set" => clock_set = Some(level(value, 1)? == 1),
             "utc_offset_min" => utc_offset_min = Some(offset(value)?),
             "rumble" => rumble = flag(value),
+            "home_wifi_enabled" => home_wifi_enabled = flag(value),
             "ff_speed" => ff_speed = ff_speed_value(value),
             "ff_sound" => ff_sound = flag(value),
             "shader_gba" => shader_gba = Shader::parse(value).filter(|s| Shader::GBA.contains(s)),
@@ -738,6 +744,7 @@ fn parse(text: &str) -> Option<SlotState> {
         clock_set: clock_set?,
         utc_offset_min: utc_offset_min?,
         rumble: rumble.unwrap_or(fallback.rumble),
+        home_wifi_enabled: home_wifi_enabled.unwrap_or(false),
         ff_speed: ff_speed.unwrap_or(fallback.ff_speed),
         ff_sound: ff_sound.unwrap_or(fallback.ff_sound),
         shader_gba: shader_gba.unwrap_or(fallback.shader_gba),

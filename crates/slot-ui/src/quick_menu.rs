@@ -69,10 +69,11 @@ pub enum QuickRow {
     Sleep,
     Restart,
     PowerOff,
+    HomeWifi,
 }
 
 impl QuickRow {
-    pub const ALL: [QuickRow; 61] = [
+    pub const ALL: [QuickRow; 62] = [
         QuickRow::FastForward,
         QuickRow::FastForwardSound,
         QuickRow::Screen,
@@ -134,6 +135,7 @@ impl QuickRow {
         QuickRow::Sleep,
         QuickRow::Restart,
         QuickRow::PowerOff,
+        QuickRow::HomeWifi,
     ];
 
     /// The power menu, held POWER.
@@ -148,13 +150,14 @@ impl QuickRow {
         QuickRow::About,
     ];
 
-    pub const GENERAL: [QuickRow; 9] = [
+    pub const GENERAL: [QuickRow; 10] = [
         QuickRow::Wallpaper,
         QuickRow::Theme,
         QuickRow::Recents,
         QuickRow::FavoriteMark,
         QuickRow::ShowTitles,
         QuickRow::DateTime,
+        QuickRow::HomeWifi,
         QuickRow::AutoSleep,
         QuickRow::RememberPosition,
         QuickRow::ResumeGame,
@@ -264,7 +267,8 @@ impl QuickRow {
             | QuickRow::AutoSleep
             | QuickRow::RememberPosition
             | QuickRow::ResumeGame
-            | QuickRow::BootPicture => &QuickRow::GENERAL,
+            | QuickRow::BootPicture
+            | QuickRow::HomeWifi => &QuickRow::GENERAL,
             QuickRow::Resume
             | QuickRow::States
             | QuickRow::Cheats
@@ -406,6 +410,7 @@ impl QuickRow {
             QuickRow::Sleep => "Sleep",
             QuickRow::Restart => "Restart",
             QuickRow::PowerOff => "Power Off",
+            QuickRow::HomeWifi => "Home Wi-Fi",
         }
     }
 
@@ -455,6 +460,7 @@ impl QuickRow {
             QuickRow::FavoriteMark => "How favorites stand out. Press Y on a cart to mark it.",
             QuickRow::ShowTitles => "Show the selected game's name under the shelf.",
             QuickRow::DateTime => "Set the clock.",
+            QuickRow::HomeWifi => "Join the networks in Config/wifi.toml. Sets the clock too.",
             QuickRow::AutoSleep => "Sleep after this long without a button press.",
             QuickRow::RememberPosition => "Start where you left off on the shelf.",
             QuickRow::ResumeGame => "Power on straight back into the game, its picture as boot screen.",

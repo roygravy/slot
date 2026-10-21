@@ -57,7 +57,9 @@ pub use cart::{
 };
 pub use clock::{clock_label, date_time_text, hhmm, set_clock_hint_face, ClockPicker, Field};
 pub use draw::{Canvas, Draw, Layout, TexId, OUT_H, OUT_W};
-pub use footer::{corner_gauge_end, draw_corners, draw_footer, Printed, FOOTER_Y};
+pub use footer::{
+    corner_gauge_end, draw_corners, draw_footer, draw_home_wifi, Printed, FOOTER_Y, WIFI_PX,
+};
 pub use hud::{
     badge_at, ff_badge, footer_ink, FfState, Hud, HudKind, LinkBadge, Millis, ALARM_BAND_H,
     HUD_ICON_PX, HUD_INK, HUD_MS, LINK_HOST_INK, LINK_JOIN_INK, PLATE_H,

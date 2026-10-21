@@ -409,6 +409,7 @@ pub struct App {
     random_wallpaper: Option<Option<String>>,
     battery_percent: slot_ui::Printed,
     bolt: Option<TexId>,
+    wifi: Option<TexId>,
     hud_bolt: Option<TexId>,
     /// GBA dark, GBA light, Game Boy dark, Game Boy light.
     slot_sets: Option<[(TexId, TexId); 4]>,
@@ -578,6 +579,7 @@ impl App {
             random_wallpaper: None,
             battery_percent: slot_ui::Printed::default(),
             bolt: None,
+            wifi: None,
             hud_bolt: None,
             slot_sets: None,
             shelf_platform: slot_ui::Printed::default(),
@@ -620,6 +622,7 @@ impl App {
         let mut app = App::new(carts);
         app.root = Some(root.to_path_buf());
         app.state = read_slot_state(root);
+        app.radio.ask(RadioJob::Home(app.state.home_wifi_enabled));
         app.restock_recents();
         app.restock_favorites();
         if app.state.remember_position {
@@ -965,6 +968,7 @@ impl App {
             QuickRow::GbShader => Some(QuickValue::flag(self.state.shader_gb != Shader::Off)),
             QuickRow::GbcShader => Some(QuickValue::flag(self.state.shader_gbc != Shader::Off)),
             QuickRow::Rumble => Some(QuickValue::flag(self.state.rumble)),
+            QuickRow::HomeWifi => Some(QuickValue::flag(self.state.home_wifi_enabled)),
             QuickRow::CheatIcon => Some(QuickValue::flag(self.state.cheat_icon)),
             QuickRow::GbcBlackBorder => Some(QuickValue::flag(self.state.gbc_black_border)),
             QuickRow::GbBlackBorder => Some(QuickValue::flag(self.state.gb_black_border)),
@@ -1366,6 +1370,14 @@ impl App {
 
     pub fn set_wallpaper(&mut self, face: TexId) {
         self.wallpaper = Some(face);
+    }
+
+    pub fn set_wifi_face(&mut self, face: TexId) {
+        self.wifi = Some(face);
+    }
+
+    pub fn home_connected(&self) -> bool {
+        self.radio.home_connected()
     }
 
     pub fn set_bolt_face(&mut self, bolt: TexId) {
@@ -2450,6 +2462,7 @@ impl App {
             | QuickRow::GbPalettes
             | QuickRow::RunAhead
             | QuickRow::Rumble
+            | QuickRow::HomeWifi
             | QuickRow::CheatIcon
             | QuickRow::GbcBlackBorder
             | QuickRow::GbBlackBorder
@@ -2581,6 +2594,10 @@ impl App {
                 s.shader_gbc = to;
             }
             QuickRow::Rumble => s.rumble = !s.rumble,
+            QuickRow::HomeWifi => {
+                s.home_wifi_enabled = !s.home_wifi_enabled;
+                self.radio.ask(RadioJob::Home(s.home_wifi_enabled));
+            }
             QuickRow::CheatIcon => s.cheat_icon = !s.cheat_icon,
             QuickRow::GbcBlackBorder => s.gbc_black_border = !s.gbc_black_border,
             QuickRow::GbBlackBorder => s.gb_black_border = !s.gb_black_border,
@@ -3560,6 +3577,9 @@ impl App {
                     footer_ink(self.light()),
                     out,
                 );
+                if self.state.home_wifi_enabled && self.radio.home_connected() {
+                    slot_ui::draw_home_wifi(self.battery, self.battery_percent, self.wifi, out);
+                }
             }
             Phase::Buttons { page } => {
                 slot_ui::ButtonsHelp {
@@ -5467,7 +5487,10 @@ fn free_stamp(ring: &StateRing, now: i64) -> String {
         .list()
         .map(|l| l.into_iter().map(|e| e.stamp).collect())
         .unwrap_or_default();
-    let mut secs = now;
+    // Network time may move the clock backwards. Keep a new snapshot after the newest stored
+    // one so eviction cannot throw away the save just made.
+    let newest = taken.iter().filter_map(|s| slot_store::parse_stamp(s)).max();
+    let mut secs = newest.map_or(now, |latest| now.max(latest.saturating_add(1)));
     let mut stamp = format_stamp(secs);
     while taken.contains(&stamp) {
         secs += 1;
@@ -5481,5 +5504,26 @@ fn bezel_slot(platform: Platform) -> usize {
         Platform::Gba => 0,
         Platform::Gb => 1,
         Platform::Gbc => 2,
+    }
+}
+
+#[cfg(test)]
+mod network_time_tests {
+    use super::*;
+
+    #[test]
+    fn backward_clock_correction_does_not_evict_the_new_snapshot() {
+        let d = tempfile::tempdir().unwrap();
+        let ring = StateRing::new(d.path(), Platform::Gba, Core::Mgba, "Example");
+        let now = 1_800_000_000;
+        for n in 0..slot_store::RING_MAX {
+            ring.push(&[n as u8], &[], &format_stamp(now + n as i64))
+                .unwrap();
+        }
+        let stamp = free_stamp(&ring, now - 3600);
+        ring.push(b"latest", &[], &stamp).unwrap();
+        assert_eq!(ring.list().unwrap()[0].stamp, stamp);
+        assert_eq!(ring.read(&stamp).unwrap().0, b"latest");
+        assert_eq!(ring.list().unwrap().len(), slot_store::RING_MAX);
     }
 }

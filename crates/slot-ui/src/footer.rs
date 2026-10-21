@@ -85,3 +85,32 @@ pub(crate) fn draw_printed(x: f32, y: f32, p: Printed, out: &mut Vec<Draw>) {
 fn printed(x: f32, p: Printed, out: &mut Vec<Draw>) {
     draw_printed(x, FOOTER_Y, p, out);
 }
+
+pub const WIFI_PX: f32 = 18.0;
+const WIFI_GAP: f32 = 12.0;
+
+/// The home connection mark, just past the battery's percentage on the shelf footer.
+pub fn draw_home_wifi(
+    battery: Option<Battery>,
+    percent: Printed,
+    icon: Option<TexId>,
+    out: &mut Vec<Draw>,
+) {
+    let Some(tex) = icon else {
+        return;
+    };
+    let x = FOOTER_MARGIN
+        + if battery.is_some() {
+            crate::battery::gauge_width(battery, percent.w) + WIFI_GAP
+        } else {
+            0.0
+        };
+    out.push(Draw::Tex {
+        x: x.round(),
+        y: (FOOTER_Y + (HINT_H as f32 - WIFI_PX) / 2.0).round(),
+        w: WIFI_PX,
+        h: WIFI_PX,
+        tex,
+        alpha: 1.0,
+    });
+}

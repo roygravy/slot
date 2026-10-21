@@ -24,10 +24,11 @@ pub enum Icon {
     /// A robber's masked face: cheats are on.
     Cheats,
     Power,
+    Wifi,
 }
 
 impl Icon {
-    pub const ALL: [Icon; 14] = [
+    pub const ALL: [Icon; 15] = [
         Icon::Volume,
         Icon::VolumeZero,
         Icon::VolumeMuted,
@@ -42,6 +43,7 @@ impl Icon {
         Icon::HeadphonesMuted,
         Icon::Cheats,
         Icon::Power,
+        Icon::Wifi,
     ];
 
     pub fn index(self) -> usize {
@@ -64,6 +66,7 @@ impl Icon {
             Icon::HeadphonesMuted => '\u{f07ce}',
             Icon::Cheats => '\u{f1058}',
             Icon::Power => '\u{f011}',
+            Icon::Wifi => '\u{f1eb}',
         }
     }
 }

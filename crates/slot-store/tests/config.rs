@@ -1,10 +1,11 @@
 use slot_store::{move_config, read_slot_state};
 
-const FILES: [(&str, &str); 4] = [
+const FILES: [(&str, &str); 5] = [
     ("slot.state", "slot.state"),
     ("selected_core.ini", "selected_core.txt"),
     ("video_mode.ini", "video_mode.txt"),
     ("cart_shell.ini", "cart_shell.txt"),
+    ("wifi.toml", "wifi.toml"),
 ];
 
 #[test]
