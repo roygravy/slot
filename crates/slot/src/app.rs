@@ -5049,6 +5049,11 @@ impl App {
         self.now().saturating_sub(self.dozed_at) >= power.timeout().as_millis() as Millis
     }
 
+    /// Something is going on that is not a press: Auto Sleep starts counting again.
+    pub fn keep_awake(&mut self) {
+        self.last_activity = self.now();
+    }
+
     fn auto_sleep_expired(&self) -> bool {
         let timeout = Millis::from(self.state.auto_sleep_secs) * 1_000;
         timeout > 0

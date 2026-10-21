@@ -415,3 +415,26 @@ fn a_tap_sleeps_and_letting_go_mid_countdown_does_nothing() {
     a.apply(Action::PowerTap);
     assert!(matches!(a.phase(), Phase::Doze { .. }), "a tap did not sleep");
 }
+
+fn run_for(s: &mut Session, ms: Millis) {
+    let mut t = s.app().now();
+    for _ in 0..ms / FRAME_MS {
+        t += FRAME_MS;
+        s.feed([], t);
+        s.update(FRAME_MS as f32 / 1000.0);
+    }
+}
+
+#[test]
+fn auto_sleep_waits_while_a_button_is_held() {
+    let d = tmp_root_with_carts(&["Emerald", "Ruby"]);
+    let (mut s, _) = session_with_platform(d.path());
+    let now = s.app().now();
+    s.feed([RawEvent::Down(Btn::B)], now);
+    run_for(&mut s, 65_000);
+    assert!(!matches!(s.app().phase(), Phase::Doze { .. }), "held B is not idle");
+    let now = s.app().now();
+    s.feed([RawEvent::Up(Btn::B)], now);
+    run_for(&mut s, 65_000);
+    assert!(matches!(s.app().phase(), Phase::Doze { .. }), "a minute idle sleeps");
+}

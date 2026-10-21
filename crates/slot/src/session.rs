@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use slot_input::{Action, Gestures, Millis, RawEvent};
+use slot_input::{Action, Btn, Gestures, Millis, RawEvent};
 use slot_retro::Rumble;
 use slot_store::Platform;
 use slot_ui::FfState;
@@ -66,6 +66,8 @@ pub struct Session {
     pad: Pad,
     rewinding: bool,
     fast: bool,
+    /// The buttons down right now, lid and POWER aside: holding one is not being idle.
+    held: Vec<Btn>,
     motor: u16,
     pulse: Option<(Millis, u16)>,
     prefetch: Prefetch,
@@ -88,6 +90,7 @@ impl Session {
             pad: Pad::default(),
             rewinding: false,
             fast: false,
+            held: Vec::new(),
             motor: 0,
             pulse: None,
             prefetch: Prefetch::default(),
@@ -202,6 +205,12 @@ impl Session {
         let mut actions = Vec::new();
         let latched = self.gestures.ff_latched();
         for ev in events {
+            match ev {
+                RawEvent::Down(Btn::Lid | Btn::Power) | RawEvent::Up(Btn::Lid | Btn::Power) => {}
+                RawEvent::Down(b) if !self.held.contains(&b) => self.held.push(b),
+                RawEvent::Up(b) => self.held.retain(|h| *h != b),
+                _ => {}
+            }
             actions.extend(self.gestures.feed(ev, now));
         }
         actions.extend(self.gestures.tick(now));
@@ -272,6 +281,10 @@ impl Session {
     }
 
     pub fn update(&mut self, dt: f32) {
+        // A button held down, or fast forward or rewind running, keeps Auto Sleep away.
+        if !self.held.is_empty() || self.fast || self.rewinding {
+            self.app.keep_awake();
+        }
         self.bridge_link(|app| app.update(dt));
         if let Some(emu) = &self.emu {
             emu.set_volume(self.app.output_volume());
