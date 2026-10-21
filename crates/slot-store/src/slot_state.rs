@@ -304,6 +304,10 @@ pub struct SlotState {
     pub resume_game: bool,
     /// Powering off in a game leaves its picture as the boot screen.
     pub boot_picture: bool,
+    /// The effects SELECT + B switched off, to switch back on: GB, GBC, GBA. 0 for none.
+    pub effects_saved_gb: u8,
+    pub effects_saved_gbc: u8,
+    pub effects_saved_gba: u8,
 }
 
 impl SlotState {
@@ -454,6 +458,9 @@ impl Default for SlotState {
             remember_position: false,
             resume_game: true,
             boot_picture: true,
+            effects_saved_gb: 0,
+            effects_saved_gbc: 0,
+            effects_saved_gba: 0,
         }
     }
 }
@@ -571,6 +578,13 @@ pub fn write_slot_state(root: &Path, s: &SlotState) -> std::io::Result<()> {
     text.push_str(&format!("gb_black_border={}\n", s.gb_black_border as u8));
     text.push_str(&format!("resume_game={}\n", s.resume_game as u8));
     text.push_str(&format!("boot_picture={}\n", s.boot_picture as u8));
+    for (key, saved) in [
+        ("effects_saved_gb", s.effects_saved_gb),
+        ("effects_saved_gbc", s.effects_saved_gbc),
+        ("effects_saved_gba", s.effects_saved_gba),
+    ] {
+        text.push_str(&format!("{key}={saved}\n"));
+    }
     text.push_str(&format!("in_game_menu={}\n", s.in_game_menu as u8));
     text.push_str(&format!(
         "remember_position={}\n",
@@ -647,6 +661,9 @@ fn parse(text: &str) -> Option<SlotState> {
     let mut lcd_ghosting_gba = None;
     let mut in_game_menu = None;
     let mut remember_position = None;
+    let mut effects_saved_gb = None;
+    let mut effects_saved_gbc = None;
+    let mut effects_saved_gba = None;
     for line in text.lines().filter(|l| !l.is_empty()) {
         let Some((key, value)) = line.split_once('=') else {
             continue;
@@ -699,6 +716,9 @@ fn parse(text: &str) -> Option<SlotState> {
             "lcd_ghosting_gba" => lcd_ghosting_gba = flag(value),
             "in_game_menu" => in_game_menu = flag(value),
             "remember_position" => remember_position = flag(value),
+            "effects_saved_gb" => effects_saved_gb = value.parse().ok(),
+            "effects_saved_gbc" => effects_saved_gbc = value.parse().ok(),
+            "effects_saved_gba" => effects_saved_gba = value.parse().ok(),
             "shader_gb" => shader_gb = Shader::parse(value).filter(|s| Shader::GB.contains(s)),
             "shader_gbc" => shader_gbc = Shader::parse(value).map(Shader::for_gbc),
             _ => {}
@@ -765,6 +785,9 @@ fn parse(text: &str) -> Option<SlotState> {
         lcd_ghosting_gba: lcd_ghosting_gba.or(lcd_ghosting).unwrap_or(fallback.lcd_ghosting_gba),
         in_game_menu: in_game_menu.unwrap_or(fallback.in_game_menu),
         remember_position: remember_position.unwrap_or(fallback.remember_position),
+        effects_saved_gb: effects_saved_gb.unwrap_or(fallback.effects_saved_gb),
+        effects_saved_gbc: effects_saved_gbc.unwrap_or(fallback.effects_saved_gbc),
+        effects_saved_gba: effects_saved_gba.unwrap_or(fallback.effects_saved_gba),
     })
 }
 

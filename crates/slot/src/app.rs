@@ -2673,19 +2673,26 @@ impl App {
 
     /// SELECT + B or A: every screen effect of the playing system on or off together, its
     /// filter, Pixel Transparency and Ghosting.
+    /// SELECT + B: the screen effects chosen for this system off, or those same ones back on.
+    /// With none chosen, on brings the standard set: LCD filter, Pixel Transparency, Ghosting.
     fn toggle_effects(&mut self) {
         if !matches!(self.phase, Phase::Inserting { .. } | Phase::Playing { .. }) {
             return;
         }
+        const SHADER: u8 = 1;
+        const TRANSPARENCY: u8 = 2;
+        const GHOSTING: u8 = 4;
+        const BORDER: u8 = 8;
         let platform = self.playing_platform();
         let s = &mut self.state;
         let mut no_border = false;
-        let (shader, transparency, ghosting, border, filter) = match platform {
+        let (shader, transparency, ghosting, border, saved, filter) = match platform {
             Platform::Gb => (
                 &mut s.shader_gb,
                 &mut s.pixel_transparency_gb,
                 &mut s.lcd_ghosting_gb,
                 &mut s.gb_black_border,
+                &mut s.effects_saved_gb,
                 Shader::Grid,
             ),
             Platform::Gbc => (
@@ -2693,6 +2700,7 @@ impl App {
                 &mut s.pixel_transparency_gbc,
                 &mut s.lcd_ghosting_gbc,
                 &mut s.gbc_black_border,
+                &mut s.effects_saved_gbc,
                 Shader::GbcLcd,
             ),
             Platform::Gba => (
@@ -2700,15 +2708,29 @@ impl App {
                 &mut s.pixel_transparency_gba,
                 &mut s.lcd_ghosting_gba,
                 &mut no_border,
+                &mut s.effects_saved_gba,
                 Shader::GbaLcd,
             ),
         };
-        let on = !(*shader != Shader::Off || *transparency || *ghosting || *border);
-        *shader = if on { filter } else { Shader::Off };
-        *transparency = on;
-        *ghosting = on;
-        *border = on && platform != Platform::Gba;
-        self.lcd_ghosting_pending = Some(on);
+        let shown = (*shader != Shader::Off) as u8 * SHADER
+            | *transparency as u8 * TRANSPARENCY
+            | *ghosting as u8 * GHOSTING
+            | *border as u8 * BORDER;
+        let (to, on) = match shown {
+            0 => match *saved {
+                0 => (SHADER | TRANSPARENCY | GHOSTING, true),
+                kept => (kept, true),
+            },
+            chosen => {
+                *saved = chosen;
+                (0, false)
+            }
+        };
+        *shader = if to & SHADER != 0 { filter } else { Shader::Off };
+        *transparency = to & TRANSPARENCY != 0;
+        *ghosting = to & GHOSTING != 0;
+        *border = to & BORDER != 0 && platform != Platform::Gba;
+        self.lcd_ghosting_pending = Some(*ghosting);
         self.persist();
         let said = if on { Toast::EffectsOn } else { Toast::EffectsOff };
         self.hud.toast(said, self.now());
