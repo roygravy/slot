@@ -112,3 +112,20 @@ fn nothing_starred_writes_no_favorites_file() {
     write_slot_state(d.path(), &clocked()).unwrap();
     assert!(!d.path().join("Config/favorites.txt").exists());
 }
+
+#[test]
+fn a_card_from_slot_keeps_its_favorites_and_recents_on_the_first_boot() {
+    let root = tmp_root();
+    let config = root.path().join("Config");
+    std::fs::write(config.join("slot.state"), "clock_set=1\nshader_gb=simpletex\n").unwrap();
+    std::fs::write(config.join("recents.txt"), "gb/Tetris\n").unwrap();
+    std::fs::write(config.join("favorites.txt"), "gba/Emerald\n").unwrap();
+
+    let s = read_slot_state(root.path());
+    assert!(s.is_favorite(Platform::Gba, "Emerald"));
+    assert_eq!(s.recents, vec![favorite(Platform::Gb, "Tetris")]);
+
+    let again = read_slot_state(root.path());
+    assert_eq!(again.favorites, s.favorites);
+    assert_eq!(again.recents, s.recents);
+}

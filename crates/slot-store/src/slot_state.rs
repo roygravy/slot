@@ -475,6 +475,11 @@ pub fn read_slot_state(root: &Path) -> SlotState {
         .and_then(|b| String::from_utf8(b).ok())
         .and_then(|s| parse(&s))
         .unwrap_or_default();
+    // Read the lists before the profile below writes the state back: writing it writes them
+    // too, and an unread list would be written out empty.
+    s.recents = read_list(root, RECENTS_FILE);
+    s.recents.truncate(RECENTS_MAX);
+    s.favorites = read_list(root, FAVORITES_FILE);
     let text = std::fs::read_to_string(state_path(root)).unwrap_or_default();
     if !text
         .lines()
@@ -494,9 +499,6 @@ pub fn read_slot_state(root: &Path) -> SlotState {
         }
         let _ = write_slot_state(root, &s);
     }
-    s.recents = read_list(root, RECENTS_FILE);
-    s.recents.truncate(RECENTS_MAX);
-    s.favorites = read_list(root, FAVORITES_FILE);
     s
 }
 
