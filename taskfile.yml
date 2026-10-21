@@ -406,6 +406,9 @@ tasks:
         cp vendor/gambatte-src.tar.gz "{{.OUT}}/System/licenses/gambatte-${sha}.tar.gz"
         cp vendor/gambatte_libretro.so.meta "{{.OUT}}/System/licenses/gambatte-${sha}.meta"
         cp vendor/gambatte-GPL-2.0.txt "{{.OUT}}/System/licenses/gambatte-GPL-2.0.txt"
+        for p in cores/gambatte/*.patch; do
+          cp "$p" "{{.OUT}}/System/licenses/gambatte-$(basename "$p")"
+        done
       - 'echo "device tree ready at {{.OUT}}, copy its contents to SD2"'
 
   deploy:device:
@@ -445,6 +448,9 @@ tasks:
         adb push vendor/gambatte-src.tar.gz "{{.SD}}/System/licenses/gambatte-${sha}.tar.gz"
         adb push vendor/gambatte_libretro.so.meta "{{.SD}}/System/licenses/gambatte-${sha}.meta"
         adb push vendor/gambatte-GPL-2.0.txt "{{.SD}}/System/licenses/gambatte-GPL-2.0.txt"
+        for p in cores/gambatte/*.patch; do
+          adb push "$p" "{{.SD}}/System/licenses/gambatte-$(basename "$p")"
+        done
       - adb shell 'chmod +x {{.SD}}/System/slot && sync'
       - adb reboot
       - adb wait-for-device

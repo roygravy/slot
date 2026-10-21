@@ -37,8 +37,10 @@ build() {
 		exit 1
 	fi
 
+	# The source sits inside slot.'s own checkout, where git apply would skip every
+	# file as outside its directory; stop it looking for a repository above the source.
 	for p in "$here"/*.patch; do
-		git -C "$src" apply -p1 "$p"
+		GIT_CEILING_DIRECTORIES="$(cd "$work" && pwd)" git -C "$src" apply -p1 "$p"
 	done
 
 	CFLAGS="$device_cflags" make -C "$src" platform=arm64 \

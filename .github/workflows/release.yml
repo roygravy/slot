@@ -48,6 +48,9 @@ jobs:
           for p in cores/mgba/*.patch; do
             test -f "$out/System/licenses/mgba-$(basename "$p")"
           done
+          for p in cores/gambatte/*.patch; do
+            test -f "$out/System/licenses/gambatte-$(basename "$p")"
+          done
 
       - name: Package
         id: package

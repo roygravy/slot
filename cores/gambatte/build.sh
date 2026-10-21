@@ -1,6 +1,8 @@
 #!/bin/sh
 set -eu
 
+here="$(cd "$(dirname "$0")" && pwd)"
+
 device_cflags="-mcpu=cortex-a53 -mtune=cortex-a53"
 
 usage() {
@@ -8,11 +10,19 @@ usage() {
 	exit 2
 }
 
+sha256() {
+	if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1"; else shasum -a 256 "$1"; fi |
+		cut -d' ' -f1
+}
+
 stamp() {
 	echo "commit=$1"
 	echo "source=https://github.com/libretro/gambatte-libretro/archive/$1.tar.gz"
 	echo "device_platform=rpi3_64"
 	echo "device_cflags=$device_cflags"
+	for p in "$here"/*.patch; do
+		echo "patch=$(basename "$p") sha256:$(sha256 "$p")"
+	done
 }
 
 build() {
@@ -26,6 +36,12 @@ build() {
 		echo "$tarball does not hold the complete gambatte-libretro-$commit source archive" >&2
 		exit 1
 	fi
+
+	# The source sits inside slot.'s own checkout, where git apply would skip every
+	# file as outside its directory; stop it looking for a repository above the source.
+	for p in "$here"/*.patch; do
+		GIT_CEILING_DIRECTORIES="$(cd "$work" && pwd)" git -C "$src" apply -p1 "$p"
+	done
 
 	CFLAGS="$device_cflags" make -C "$src" platform="$platform" \
 		GIT_VERSION="\"$(printf %s "$commit" | cut -c1-7)\"" \
