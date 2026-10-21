@@ -27,6 +27,8 @@ pub const fn label_panel(w: u32, h: u32) -> (u32, u32, u32, u32) {
 }
 
 pub const LABEL_WELL: [u8; 3] = [0x8d, 0x8d, 0x90];
+/// Stickers have rounded corners, like the printed ones.
+const LABEL_RADIUS: f32 = 6.0;
 
 pub const LABEL_X: u32 = label_panel(CART_W, CART_H).0;
 pub const LABEL_Y: u32 = label_panel(CART_W, CART_H).1;
@@ -256,13 +258,9 @@ pub fn label_size(cart: &Cart) -> (u32, u32) {
 pub fn cart_face_with(cart: &Cart, art: Option<Vec<u8>>) -> CartFace {
     let s = spec(shape_of(cart));
     let mut face = shell_face(&s, &shell_for(cart));
-    let label = match art {
-        Some(rgba) => rgba,
-        None => {
-            plastic_label_bed(&s, &mut face);
-            generated_label(&s, &label_text(cart))
-        }
-    };
+    // The sticker's rounded corners show the recess under it, in the shell's own plastic.
+    plastic_label_bed(&s, &mut face);
+    let label = art.unwrap_or_else(|| generated_label(&s, &label_text(cart)));
     paste_label(&s, &mut face, &label);
     clip_to_silhouette(&s, &mut face);
     face
@@ -683,7 +681,7 @@ fn paste_label(s: &Spec, face: &mut CartFace, label: &[u8]) {
     for y in 0..lh {
         for x in 0..lw {
             let src = ((y * lw + x) * 4) as usize;
-            let a = label[src + 3] as u32;
+            let a = label[src + 3] as u32 * corner_cover(x, y, lw, lh, LABEL_RADIUS) / 255;
             if a == 0 {
                 continue;
             }
@@ -695,6 +693,18 @@ fn paste_label(s: &Spec, face: &mut CartFace, label: &[u8]) {
             }
         }
     }
+}
+
+/// How much of a pixel a sticker with rounded corners covers, 0 to 255.
+fn corner_cover(x: u32, y: u32, w: u32, h: u32, r: f32) -> u32 {
+    if r <= 0.0 {
+        return 255;
+    }
+    let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
+    let cx = px.clamp(r, w as f32 - r);
+    let cy = py.clamp(r, h as f32 - r);
+    let d = ((px - cx).powi(2) + (py - cy).powi(2)).sqrt();
+    ((r + 0.5 - d).clamp(0.0, 1.0) * 255.0) as u32
 }
 
 fn hsv_to_rgb(h: f32, s: f32, v: f32) -> [u8; 3] {
