@@ -28,11 +28,15 @@ pub enum Toast {
     ScreenshotSaved,
     GameReset,
     LabelsReady,
+    LabelDownloaded,
+    NoLabelFound,
+    LabelFailed,
+    TurnOnWifi,
     Palette(GbPalette),
 }
 
 impl Toast {
-    const FIXED: [Toast; 20] = [
+    const FIXED: [Toast; 24] = [
         Toast::StateSaved,
         Toast::StateLoaded,
         Toast::NeedsGpsp,
@@ -53,6 +57,10 @@ impl Toast {
         Toast::EffectsOn,
         Toast::EffectsOff,
         Toast::LabelsReady,
+        Toast::LabelDownloaded,
+        Toast::NoLabelFound,
+        Toast::LabelFailed,
+        Toast::TurnOnWifi,
     ];
 
     pub fn all() -> Vec<Toast> {
@@ -102,6 +110,10 @@ impl Toast {
             Toast::ScreenshotSaved => "Screenshot Saved",
             Toast::GameReset => "Game Reset",
             Toast::LabelsReady => "Labels Ready",
+            Toast::LabelDownloaded => "Label Downloaded",
+            Toast::NoLabelFound => "No Label Found",
+            Toast::LabelFailed => "Download Failed",
+            Toast::TurnOnWifi => "Turn On Home Wi-Fi",
             Toast::Palette(p) => p.label(),
         }
     }

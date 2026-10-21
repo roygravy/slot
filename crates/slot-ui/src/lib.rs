@@ -28,6 +28,7 @@ mod refusal;
 mod shelf;
 mod shot_page;
 mod shell;
+mod shell_picker;
 mod silhouette;
 mod slot_chrome;
 mod sticker;
@@ -104,6 +105,9 @@ pub use shell::{
     gb_plastics, gb_table_shells, gba_plastics, gba_shell_for,
     lookup_order_is_exact_then_family_then_default, shell_for, shell_presets, table_keys, Finish,
     Shell, DEFAULT_SHELL, DMG_SHELL, DUAL_MODE_SHELL, GB_CLEAR_SHELL,
+};
+pub use shell_picker::{
+    draw_shell_picker, shell_picker_shapes, shell_picker_word, ShellPickerFaces, ShellPickerView,
 };
 pub use silhouette::{gb_silhouette, silhouette, GbShell};
 pub use slot_chrome::{

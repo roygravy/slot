@@ -80,6 +80,17 @@ pub fn choices(text: &str) -> HashMap<String, ShellChoice> {
         .collect()
 }
 
+/// A shell picked on the shelf, written where the studio writes its picks: the labels file,
+/// which wins over Config's. None hands the cart back to its automatic shell.
+pub fn write_choice(
+    root: &std::path::Path,
+    stem: &str,
+    choice: Option<ShellChoice>,
+) -> std::io::Result<()> {
+    let value = choice.map_or_else(|| "auto".to_string(), |c| c.to_value());
+    crate::ini::write(root, LABELS_SHELL_FILE, stem, &value)
+}
+
 pub fn layered(system: &str, labels: &str) -> HashMap<String, ShellChoice> {
     let mut out = choices(system);
     for (stem, value) in crate::ini::parse(labels) {

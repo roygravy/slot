@@ -41,6 +41,7 @@ pub const BUTTON_PAGES: [(&str, &[(&str, &str)]); 7] = [
             ("Hold A", "Start the game fresh"),
             ("Y", "Favorite or unfavorite"),
             ("START", "Emulator choice (GBA)"),
+            ("SELECT", "Cart color and label"),
         ],
     ),
     (

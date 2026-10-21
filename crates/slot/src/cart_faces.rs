@@ -15,8 +15,9 @@ const WORKERS: usize = 2;
 
 type Key = (usize, usize);
 
-/// A cart's face and, for a clear GBA cart, the game-coloured inside it is drawn over.
-type Built = (Key, CartFace, Option<CartFace>);
+/// A cart's face and, for a clear GBA cart, the game-coloured inside it is drawn over, with
+/// the cart as it was drawn: one restyled or labelled since is drawn again.
+type Built = (Key, CartFace, Option<CartFace>, Cart);
 
 #[derive(Default)]
 struct Queue {
@@ -58,8 +59,8 @@ impl CartFaces {
 
     pub fn sync(&mut self, app: &mut App, compositor: &mut Compositor) {
         self.free.extend(app.shed_faces());
-        while let Ok((key, face, interior)) = self.built.try_recv() {
-            self.place(app, compositor, key, face, interior);
+        while let Ok(built) = self.built.try_recv() {
+            self.place(app, compositor, built);
         }
         let wants = app.face_wants();
         if wants != self.asked {
@@ -73,11 +74,17 @@ impl CartFaces {
             .map(|w| (w.shelf, w.index))
             .collect();
         while !waiting.is_empty() {
-            let Ok((key, face, interior)) = self.built.recv() else {
+            let Ok(built) = self.built.recv() else {
                 return;
             };
-            waiting.retain(|k| *k != key);
-            self.place(app, compositor, key, face, interior);
+            let key = built.0;
+            if self.place(app, compositor, built) {
+                waiting.retain(|k| *k != key);
+            } else {
+                let wants = app.face_wants();
+                self.requeue(app, &wants);
+                self.asked = wants;
+            }
         }
     }
 
@@ -110,15 +117,15 @@ impl CartFaces {
         }
     }
 
-    fn place(
-        &mut self,
-        app: &mut App,
-        compositor: &mut Compositor,
-        key: Key,
-        face: CartFace,
-        interior: Option<CartFace>,
-    ) {
+    fn place(&mut self, app: &mut App, compositor: &mut Compositor, built: Built) -> bool {
+        let (key, face, interior, drawn) = built;
         self.pending.remove(&key);
+        let now = app.face_cart(key.0, key.1);
+        if now.is_some_and(|c| c.shell != drawn.shell || c.label != drawn.label) {
+            // Asked for again on the next pass, as the cart is now.
+            self.asked.clear();
+            return false;
+        }
         self.asked.retain(|w| (w.shelf, w.index) != key);
         let tex = self.texture(compositor, &face);
         self.free.extend(app.set_cart_face(key.0, key.1, tex));
@@ -126,6 +133,7 @@ impl CartFaces {
             let tex = self.texture(compositor, &interior);
             self.free.extend(app.set_cart_interior(key.0, key.1, tex));
         }
+        true
     }
 }
 
@@ -154,7 +162,7 @@ fn work(queue: &Shared, outbox: &Sender<Built>, root: &Path) {
         };
         let face = cart_face_with(&cart, label_art(root, &cart));
         let interior = shows_interior(&cart).then(|| cart_interior(&cart));
-        if outbox.send((key, face, interior)).is_err() {
+        if outbox.send((key, face, interior, cart)).is_err() {
             return;
         }
     }

@@ -25,6 +25,7 @@ use slot_ui::{
 
 use crate::audio::Sfx;
 use crate::core_picker::{Chip, CorePicker, Outcome, Press};
+use crate::shell_picker::{self, Fetch, ShellPicker};
 use crate::link_kind::{link_carried, link_kind, serial_option, LinkKind};
 use crate::link_radio::{radio_jobs, LinkRole, RadioJob, RadioJobs};
 use crate::link_screen::LinkSprites;
@@ -312,6 +313,10 @@ pub struct App {
     /// When POWER went down, while it is held towards powering off.
     power_held_since: Option<Millis>,
     core_picker: Option<CorePicker>,
+    shell_picker: Option<ShellPicker>,
+    shell_picker_faces: Option<slot_ui::ShellPickerFaces>,
+    /// A cart whose label the shell picker asked for, for the frontend to fetch.
+    label_ask: Option<Cart>,
     core_board_face: Option<TexId>,
     core_interior_face: Option<TexId>,
     core_lid_face: Option<TexId>,
@@ -500,6 +505,9 @@ impl App {
             alert_face: None,
             power_held_since: None,
             core_picker: None,
+            shell_picker: None,
+            shell_picker_faces: None,
+            label_ask: None,
             core_board_face: None,
             core_interior_face: None,
             core_lid_face: None,
@@ -755,7 +763,7 @@ impl App {
         match self.phase {
             Phase::SetClock { .. } => true,
             Phase::QuickMenu { .. } => vertical,
-            Phase::Shelf => vertical && self.core_picker.is_none(),
+            Phase::Shelf => vertical && self.core_picker.is_none() && self.shell_picker.is_none(),
             Phase::Polaroids { .. } => !vertical,
             Phase::Playing { .. } => vertical && self.in_game_menu.is_some(),
             _ => false,
@@ -2205,8 +2213,12 @@ impl App {
         let now = self.now();
         match self.phase {
             Phase::Shelf => match action {
+                _ if self.shell_picker.is_some() => self.shell_picker_input(action),
                 Action::GbaDown(Btn::Start) if self.core_picker.is_none() => {
                     self.open_core_picker()
+                }
+                Action::GbaDown(Btn::Select) if self.core_picker.is_none() => {
+                    self.open_shell_picker()
                 }
                 _ if self.core_picker.is_some() => self.core_picker_input(action),
                 Action::GbaDown(Btn::Up) => self.jump_letter(-1),
@@ -3070,6 +3082,9 @@ impl App {
         if self.core_picker.is_some_and(|p| p.finished(now)) {
             self.core_picker = None;
         }
+        if self.shell_picker.as_ref().is_some_and(|p| p.finished(now)) {
+            self.shell_picker = None;
+        }
         if !self.on_shelf() {
             self.shelf_mut().release_hold();
         }
@@ -3842,6 +3857,9 @@ impl App {
         if let Some(picker) = self.core_picker_shown() {
             self.draw_core_picker(&picker, out);
         }
+        if let Some(picker) = &self.shell_picker {
+            self.draw_shell_picker(picker, out);
+        }
         if let Some(menu) = self.game_menu {
             self.draw_game_menu(menu, out);
         }
@@ -3859,7 +3877,10 @@ impl App {
     }
 
     pub fn shelf_shake(&self) -> f32 {
-        self.shake_when(self.on_shelf() && self.core_picker.is_none(), self.now())
+        self.shake_when(
+            self.on_shelf() && self.core_picker.is_none() && self.shell_picker.is_none(),
+            self.now(),
+        )
     }
 
     fn shake_when(&self, mine: bool, now: Millis) -> f32 {
@@ -4598,6 +4619,161 @@ impl App {
         self.core_picker = Some(picker);
         self.shelf_mut().release_hold();
         self.play_held = None;
+    }
+
+    pub fn set_shell_picker_faces(&mut self, faces: slot_ui::ShellPickerFaces) {
+        self.shell_picker_faces = Some(faces);
+    }
+
+    fn open_shell_picker(&mut self) {
+        if self.shell_picker_faces.is_none() {
+            return;
+        }
+        let Some(cart) = self.shelf().carts.get(self.shelf().index) else {
+            return;
+        };
+        let picker = ShellPicker::open(
+            cart.rom.clone(),
+            cart.stem.clone(),
+            cart.shell,
+            cart.label.is_some(),
+            self.now(),
+        );
+        self.shell_picker = Some(picker);
+        self.shelf_mut().release_hold();
+        self.play_held = None;
+    }
+
+    fn shell_picker_input(&mut self, action: Action) {
+        use shell_picker::{Outcome, Press};
+        let press = match action {
+            Action::GbaDown(Btn::Left) | Action::ShelfLeft => Press::Left,
+            Action::GbaDown(Btn::Right) | Action::ShelfRight => Press::Right,
+            Action::GbaDown(Btn::Up) => Press::Up,
+            Action::GbaDown(Btn::Down) => Press::Down,
+            Action::GbaDown(Btn::A) => Press::Keep,
+            Action::GbaDown(Btn::B) | Action::GbaDown(Btn::Select) => Press::Back,
+            _ => return,
+        };
+        let now = self.now();
+        let Some(picker) = &mut self.shell_picker else {
+            return;
+        };
+        let (rom, stem) = (picker.rom.clone(), picker.stem.clone());
+        match picker.press(press, now) {
+            Outcome::None => {}
+            Outcome::Preview(choice) | Outcome::Revert(choice) => self.restyle(&rom, choice),
+            Outcome::Save(choice) => {
+                self.restyle(&rom, choice);
+                if let Some(root) = &self.root {
+                    if let Err(e) = slot_store::write_shell_choice(root, &stem, choice) {
+                        eprintln!("slot: shell: could not write {}: {e}", slot_store::LABELS_SHELL_FILE);
+                    }
+                }
+            }
+            Outcome::Fetch => self.ask_label(&rom),
+        }
+    }
+
+    /// Draw every shelf's copy of a cart again in another shell.
+    fn restyle(&mut self, rom: &Path, choice: Option<slot_store::ShellChoice>) {
+        for (_, shelf) in &mut self.shelves {
+            for index in 0..shelf.carts.len() {
+                if shelf.carts[index].rom != rom || shelf.carts[index].shell == choice {
+                    continue;
+                }
+                shelf.carts[index].shell = choice;
+                self.orphaned.extend(shelf.take_face(index));
+                self.orphaned.extend(shelf.take_interior(index));
+            }
+        }
+    }
+
+    /// The label is fetched off the frame loop: from the artwork pack, or online with Home
+    /// Wi-Fi on. With neither there is nowhere to fetch it from.
+    fn ask_label(&mut self, rom: &Path) {
+        let pack = self.root.as_ref().is_some_and(|root| {
+            root.join("Labels").join(slot_labels::build::PACK).is_file()
+        });
+        let cart = self.shelf().carts.iter().find(|c| c.rom == rom).cloned();
+        match cart {
+            Some(cart) if pack || self.home_wifi_on() => self.label_ask = Some(cart),
+            _ => {
+                self.hud.toast(Toast::TurnOnWifi, self.now());
+                if let Some(picker) = &mut self.shell_picker {
+                    picker.fetched(false);
+                }
+            }
+        }
+    }
+
+    pub fn take_label_ask(&mut self) -> Option<Cart> {
+        self.label_ask.take()
+    }
+
+    /// The fetch the shell picker asked for came back: Some(found) or None when it failed
+    /// for want of a connection.
+    pub fn label_fetched(&mut self, rom: &Path, found: Option<bool>) {
+        let toast = match found {
+            Some(true) => Toast::LabelDownloaded,
+            Some(false) => Toast::NoLabelFound,
+            None => Toast::LabelFailed,
+        };
+        self.hud.toast(toast, self.now());
+        if let Some(picker) = &mut self.shell_picker {
+            if picker.rom == rom {
+                picker.fetched(found == Some(true));
+            }
+        }
+    }
+
+    fn draw_shell_picker(&self, picker: &ShellPicker, out: &mut Vec<Draw>) {
+        let Some(faces) = &self.shell_picker_faces else {
+            return;
+        };
+        let Some((cart, face)) = self.shelf().find(&picker.stem) else {
+            return;
+        };
+        let (w, h) = slot_ui::cart_box(cart.platform);
+        let (rest, scale) = self.shelf().selected_at(self.canvas());
+        let from = slot_ui::Placed {
+            x: rest,
+            y: slot_ui::foot_y(h as f32) - h as f32 * scale,
+            w: w as f32 * scale,
+            h: h as f32 * scale,
+        };
+        let swatches: Vec<(Option<[u8; 3]>, usize)> = picker
+            .swatches()
+            .iter()
+            .map(|s| (s.colour(), s.name_index()))
+            .collect();
+        let light = self.light_ground();
+        let view = slot_ui::ShellPickerView {
+            faces,
+            ink: slot_ui::theme::ink(light),
+            ground: slot_ui::theme::menu_flat(light),
+            cart: face,
+            behind: self.shelf().behind(&picker.stem),
+            gba: cart.platform == Platform::Gba,
+            cart_box: (w, h),
+            from,
+            openness: picker.openness(self.now()),
+            swatches: &swatches,
+            swatch: picker.swatch(),
+            finish: picker.finish(),
+            finish_on: picker.finish_on(),
+            row: match picker.row() {
+                shell_picker::Row::Colour => 0,
+                shell_picker::Row::Finish => 1,
+                shell_picker::Row::Download => 2,
+            },
+            download: match picker.fetch() {
+                Fetch::Labelled => None,
+                Fetch::Idle => Some(false),
+                Fetch::Working => Some(true),
+            },
+        };
+        slot_ui::draw_shell_picker(self.canvas(), &view, out);
     }
 
     fn core_faces_ready(&self) -> bool {

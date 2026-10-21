@@ -47,6 +47,7 @@ pub struct Frontend {
     cart_faces: CartFaces,
     rebuild: Option<Rebuild>,
     stale_check: Option<std::sync::mpsc::Receiver<Vec<slot_store::Cart>>>,
+    label_fetch: Option<std::sync::mpsc::Receiver<(slot_store::Cart, LabelFetched)>>,
     ui_faces: Option<std::sync::mpsc::Receiver<UiFaces>>,
     rebuild_faces: RebuildFaces,
     link_art: LinkArtBuilder,
@@ -72,6 +73,12 @@ pub struct Frontend {
     link_shot: Option<TexId>,
     link_shot_size: (u32, u32),
     link_shot_shown: bool,
+}
+
+enum LabelFetched {
+    Found(std::path::PathBuf),
+    Missing,
+    Failed,
 }
 
 #[derive(Default)]
@@ -216,6 +223,7 @@ impl Frontend {
             cart_faces,
             rebuild: None,
             stale_check,
+            label_fetch: None,
             ui_faces: None,
             rebuild_faces: RebuildFaces::default(),
             link_art: LinkArtBuilder::spawn(),
@@ -508,6 +516,34 @@ impl Frontend {
                 (tex, w)
             })
             .collect();
+        let [disc, ring, original] = faces.shell_shapes.map(|f| up(f).0);
+        let mut words: Vec<(TexId, u32)> = faces
+            .shell_words
+            .into_iter()
+            .map(|f| {
+                let (tex, w, _) = up(f);
+                (tex, w)
+            })
+            .collect();
+        let download = words.split_off(words.len() - 2);
+        let finishes = words.split_off(words.len() - 3);
+        let shell_legend = faces
+            .shell_legend
+            .into_iter()
+            .map(|f| {
+                let (tex, w, _) = up(f);
+                (tex, w)
+            })
+            .collect();
+        let shell_faces = slot_ui::ShellPickerFaces {
+            disc,
+            ring,
+            original,
+            names: words,
+            finishes,
+            download: [download[0], download[1]],
+            legend: shell_legend,
+        };
         let roles = faces.link_roles.into_iter().map(&mut up).collect();
         let linked = up(faces.linked);
         let mut pack = |faces: Vec<UndoFace>| -> Vec<(TexId, u32)> {
@@ -547,6 +583,7 @@ impl Frontend {
         });
         app.set_core_part_faces(sockets, chips, blank, shadow);
         app.set_core_legend_faces(core_legend);
+        app.set_shell_picker_faces(shell_faces);
         app.set_link_menu_faces(roles);
         app.set_link_linked_face(linked);
         app.set_link_legend_faces(link_legend);
@@ -737,6 +774,7 @@ impl Frontend {
             crate::latency::taken();
         }
         self.sync_labels();
+        self.fetch_asked_label();
         self.cart_faces.sync(self.session.app_mut(), compositor);
         sync_clock(self.session.app_mut(), compositor, &mut self.clocks);
         sync_about(self.session.app_mut(), compositor, &mut self.about);
@@ -834,6 +872,59 @@ impl Frontend {
         {
             self.core_asked = None;
             self.core_built = None;
+        }
+    }
+
+    /// The shell picker asked for one cart's label: fetched on a thread of its own, as the
+    /// background worker fetches them, and attached when it comes.
+    fn fetch_asked_label(&mut self) {
+        if let Some(rx) = &self.label_fetch {
+            let (cart, got) = match rx.try_recv() {
+                Ok(got) => got,
+                Err(std::sync::mpsc::TryRecvError::Empty) => return,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    self.label_fetch = None;
+                    return;
+                }
+            };
+            self.label_fetch = None;
+            let app = self.session.app_mut();
+            let found = match got {
+                LabelFetched::Found(path) => {
+                    app.attach_label(&cart.rom, path);
+                    Some(true)
+                }
+                LabelFetched::Missing => Some(false),
+                LabelFetched::Failed => None,
+            };
+            app.label_fetched(&cart.rom, found);
+            return;
+        }
+        let Some(cart) = self.session.app_mut().take_label_ask() else {
+            return;
+        };
+        let Some(root) = self.session.app().root().map(|r| r.to_path_buf()) else {
+            return;
+        };
+        let (tx, rx) = std::sync::mpsc::channel();
+        let spawned = std::thread::Builder::new()
+            .name("slot-label-ask".into())
+            .spawn(move || {
+                let got = match slot_labels::Downloader::default().prepare(&root, &cart) {
+                    Ok(path) => LabelFetched::Found(path),
+                    Err(slot_labels::Error::Unavailable(_) | slot_labels::Error::Image(_)) => {
+                        LabelFetched::Missing
+                    }
+                    Err(e) => {
+                        eprintln!("slot: labels: {}: {e}", cart.stem);
+                        LabelFetched::Failed
+                    }
+                };
+                let _ = tx.send((cart, got));
+            });
+        match spawned {
+            Ok(_) => self.label_fetch = Some(rx),
+            Err(e) => eprintln!("slot: labels: fetch thread failed to start: {e}"),
         }
     }
 
@@ -1022,6 +1113,9 @@ struct UiFaces {
     blank_chip: CartFace,
     chip_shadow: CartFace,
     core_legend: Vec<UndoFace>,
+    shell_shapes: [UndoFace; 3],
+    shell_words: Vec<UndoFace>,
+    shell_legend: Vec<UndoFace>,
     link_roles: Vec<UndoFace>,
     linked: UndoFace,
     link_legend: Vec<UndoFace>,
@@ -1090,6 +1184,18 @@ impl UiFaces {
                 hint_face("B", "Cancel"),
                 arrows_hint_face("Swap"),
                 hint_face("A", "Choose"),
+            ],
+            shell_shapes: slot_ui::shell_picker_shapes(),
+            // The swatches' names, the finishes, then the fetch line idle and at work.
+            shell_words: crate::shell_picker::swatch_names()
+                .into_iter()
+                .chain(["Solid", "Clear", "Glitter", "Download Label", "Downloading..."])
+                .map(slot_ui::shell_picker_word)
+                .collect(),
+            shell_legend: vec![
+                slot_ui::tint_mask(hint_face("B", "Cancel")),
+                slot_ui::tint_mask(arrows_hint_face("Change")),
+                slot_ui::tint_mask(hint_face("A", "Save")),
             ],
             link_roles: LinkRow::ALL.iter().map(|r| menu_face(r.text())).collect(),
             linked: menu_face("Linked"),

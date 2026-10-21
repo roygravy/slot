@@ -40,6 +40,7 @@ pub mod prefetch;
 pub mod resample;
 pub mod rewind;
 pub mod screenshot;
+pub mod shell_picker;
 pub mod shots;
 pub mod root;
 pub mod session;
