@@ -24,7 +24,7 @@ fn switcher_with(n: usize) -> Polaroids {
 
 fn draw(p: &Polaroids) -> Vec<Draw> {
     let mut out = Vec::new();
-    p.draw(None, Printed::default(), None, Printed::default(), &mut out);
+    p.draw(None, Printed::default(), None, Printed::default(), None, &mut out);
     out
 }
 

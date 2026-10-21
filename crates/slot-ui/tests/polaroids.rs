@@ -113,7 +113,7 @@ fn the_index_clamps_at_both_ends() {
 }
 
 #[test]
-fn the_gauge_stays_clear_of_the_title_on_the_left() {
+fn the_gauge_stays_clear_of_the_title_on_the_right() {
     let p = switcher();
     let mut out = Vec::new();
     p.draw(
@@ -124,6 +124,7 @@ fn the_gauge_stays_clear_of_the_title_on_the_left() {
         Printed { face: None, w: 30 },
         Some(TexId::from_raw(7)),
         Printed::default(),
+        None,
         &mut out,
     );
     let gauge: Vec<_> = out
@@ -137,18 +138,15 @@ fn the_gauge_stays_clear_of_the_title_on_the_left() {
             _ => None,
         })
         .collect();
-    assert!(!gauge.is_empty(), "no gauge drew at the left margin at all");
-    let leftmost = gauge.iter().map(|(x, _)| *x).fold(f32::MAX, f32::min);
-    assert_eq!(leftmost, 16.0, "the plate margin is 16");
+    assert!(!gauge.is_empty(), "no gauge drew at the right margin at all");
     let rightmost = gauge.iter().map(|(x, w)| x + w).fold(0.0, f32::max);
-    assert!(
-        rightmost < 180.0,
-        "the gauge reached into the title's texture"
-    );
+    assert_eq!(rightmost, OUT_W as f32 - 16.0, "the plate margin is 16");
+    let leftmost = gauge.iter().map(|(x, _)| *x).fold(f32::MAX, f32::min);
+    assert!(leftmost > 500.0, "the gauge reached into the title's texture");
 }
 
 #[test]
-fn the_clock_stays_clear_of_the_title_on_the_right() {
+fn the_clock_stays_clear_of_the_title_on_the_left() {
     let p = switcher();
     let mut out = Vec::new();
     p.draw(
@@ -156,25 +154,25 @@ fn the_clock_stays_clear_of_the_title_on_the_right() {
         Printed::default(),
         None,
         Printed { face: None, w: 40 },
+        None,
         &mut out,
     );
     let clock: Vec<_> = out
         .iter()
         .filter_map(|d| match *d {
-            Draw::Rect { x, y, w, .. } | Draw::Tex { x, y, w, .. } if y < PLATE_H && x > 540.0 => {
+            Draw::Rect { x, y, w, .. } | Draw::Tex { x, y, w, .. }
+                if y < PLATE_H && x < 140.0 && w < OUT_W as f32 =>
+            {
                 Some((x, w))
             }
             _ => None,
         })
         .collect();
-    assert!(!clock.is_empty(), "no clock drew past the title at all");
+    assert!(!clock.is_empty(), "no clock drew left of the title at all");
     let leftmost = clock.iter().map(|(x, _)| *x).fold(f32::MAX, f32::min);
-    assert!(
-        leftmost > 540.0,
-        "the clock reached into the title's texture"
-    );
+    assert_eq!(leftmost, 16.0, "the plate margin is 16");
     let rightmost = clock.iter().map(|(x, w)| x + w).fold(0.0, f32::max);
-    assert_eq!(rightmost, OUT_W as f32 - 16.0, "the plate margin is 16");
+    assert!(rightmost < 140.0, "the clock reached into the title's texture");
 }
 
 #[test]
@@ -186,6 +184,7 @@ fn a_switcher_with_no_gauge_still_shows_its_clock() {
         Printed::default(),
         None,
         Printed { face: None, w: 40 },
+        None,
         &mut out,
     );
     assert!(
@@ -209,6 +208,7 @@ fn nothing_on_the_plate_moves_when_the_charge_state_changes() {
         percent,
         None,
         clock,
+        None,
         &mut idle,
     );
     let mut charging = Vec::new();
@@ -220,6 +220,7 @@ fn nothing_on_the_plate_moves_when_the_charge_state_changes() {
         percent,
         Some(TexId::from_raw(7)),
         clock,
+        None,
         &mut charging,
     );
     for q in &idle {

@@ -411,6 +411,7 @@ pub struct App {
     battery_percent: slot_ui::Printed,
     bolt: Option<TexId>,
     wifi: Option<TexId>,
+    hud_wifi: Option<TexId>,
     hud_bolt: Option<TexId>,
     /// GBA dark, GBA light, Game Boy dark, Game Boy light.
     slot_sets: Option<[(TexId, TexId); 4]>,
@@ -582,6 +583,7 @@ impl App {
             battery_percent: slot_ui::Printed::default(),
             bolt: None,
             wifi: None,
+            hud_wifi: None,
             hud_bolt: None,
             slot_sets: None,
             shelf_platform: slot_ui::Printed::default(),
@@ -1396,7 +1398,8 @@ impl App {
         self.wallpaper = Some(face);
     }
 
-    pub fn set_wifi_face(&mut self, face: TexId) {
+    pub fn set_wifi_face(&mut self, face: TexId, hud: TexId) {
+        self.hud_wifi = Some(hud);
         self.wifi = Some(face);
     }
 
@@ -1411,6 +1414,11 @@ impl App {
 
     pub fn set_bolt_face(&mut self, bolt: TexId) {
         self.bolt = Some(bolt);
+    }
+
+    /// The Wi-Fi mark, only while home Wi-Fi is on and connected.
+    fn wifi_shown(&self, face: Option<TexId>) -> Option<TexId> {
+        (self.state.home_wifi_enabled && self.radio.home_connected()).then_some(face).flatten()
     }
 
     pub fn set_hud_bolt_face(&mut self, bolt: TexId) {
@@ -3627,12 +3635,10 @@ impl App {
                     self.battery_percent,
                     self.bolt,
                     self.shelf_clock,
+                    self.wifi_shown(self.wifi),
                     footer_ink(self.light()),
                     out,
                 );
-                if self.state.home_wifi_enabled && self.radio.home_connected() {
-                    slot_ui::draw_home_wifi(self.battery, self.battery_percent, self.wifi, out);
-                }
             }
             Phase::Buttons { page } => {
                 slot_ui::ButtonsHelp {
@@ -3700,6 +3706,7 @@ impl App {
                         self.battery_percent,
                         self.hud_bolt,
                         self.shelf_clock,
+                        self.wifi_shown(self.hud_wifi),
                         out,
                     );
                 }
@@ -3768,10 +3775,11 @@ impl App {
                     self.battery_percent,
                     self.hud_bolt,
                     self.shelf_clock,
+                    self.wifi_shown(self.hud_wifi),
                     out,
                 );
                 if let (true, Some([menu, _])) = (self.cheat_icon_shown(), self.cheat_badges) {
-                    let x = slot_ui::corner_gauge_end(self.battery, self.battery_percent) + MENU_BADGE_GAP;
+                    let x = slot_ui::corner_clock_end(self.shelf_clock) + MENU_BADGE_GAP;
                     slot_ui::draw_cheat_badge_in_menu(x, menu, out);
                 }
             }
@@ -5055,6 +5063,7 @@ impl App {
                 self.battery_percent,
                 self.hud_bolt,
                 self.shelf_clock,
+                self.wifi_shown(self.hud_wifi),
                 out,
             );
         }

@@ -374,7 +374,7 @@ impl Frontend {
             compositor.create_texture(light_bolt.w, light_bolt.h, &light_bolt.rgba),
         ];
         let wifi = [false, true].map(|light| {
-            let f = icon_face(Icon::Wifi, slot_ui::WIFI_PX, footer_ink(light));
+            let f = slot_ui::wifi_face(footer_ink(light));
             compositor.create_texture(f.w, f.h, &f.rgba)
         });
         self.look = Some(ShelfLook {
@@ -412,7 +412,7 @@ impl Frontend {
                 look.applied == Some((light, legend_ready, port_ready)),
                 look.slot,
                 look.bolt[i],
-                look.wifi[i],
+                (look.wifi[i], look.wifi[0]),
                 look.bolt[0],
                 look.port[i],
                 look.legend[i].clone(),
@@ -430,7 +430,7 @@ impl Frontend {
         }
         self.session.app_mut().set_slot_sets(slot);
         self.session.app_mut().set_bolt_face(bolt);
-        self.session.app_mut().set_wifi_face(wifi);
+        self.session.app_mut().set_wifi_face(wifi.0, wifi.1);
         self.session.app_mut().set_hud_bolt_face(hud_bolt);
         if let Some(tex) = port {
             self.session.app_mut().set_link_port(tex);
