@@ -179,6 +179,42 @@ tasks:
         mv "$tmp/LICENSE" "{{.ASSETS}}/{{.TTF}}.LICENSE.txt"
         echo "fetched {{.ASSETS}}/{{.TTF}}"
 
+  labels:index:
+    desc: Rebuild the CRC32 index of LaunchBox cart fronts built into slot-labels
+    cmds:
+      - |
+        set -euo pipefail
+        tmp="$(mktemp -d)"
+        trap 'rm -rf "$tmp"' EXIT
+        curl -fsSL -o "$tmp/Metadata.zip" https://gamesdb.launchbox-app.com/Metadata.zip
+        unzip -q "$tmp/Metadata.zip" Metadata.xml -d "$tmp"
+        dat=https://raw.githubusercontent.com/libretro/libretro-database/master/metadat/no-intro
+        for p in Game%20Boy Game%20Boy%20Color Game%20Boy%20Advance; do
+          curl -fsSL -o "$tmp/$p.dat" "$dat/Nintendo%20-%20$p.dat"
+        done
+        cargo run --release -q -p slot-labels --example launchbox-index -- "$tmp/Metadata.xml" \
+          "$tmp/Game%20Boy.dat" "$tmp/Game%20Boy%20Color.dat" "$tmp/Game%20Boy%20Advance.dat" \
+          > crates/slot-labels/data/launchbox.tsv
+
+  labels:pack:
+    desc: Build the optional dist-device/Artwork.pack from the LaunchBox index, CACHE keeps downloads
+    vars:
+      CACHE: '{{.CACHE | default "target/artwork-cache"}}'
+    cmds:
+      - |
+        set -euo pipefail
+        tmp="$(mktemp -d)"
+        trap 'rm -rf "$tmp"' EXIT
+        mkdir -p dist-device
+        dat=https://raw.githubusercontent.com/libretro/libretro-database/master/metadat/no-intro
+        for p in Game%20Boy Game%20Boy%20Color Game%20Boy%20Advance; do
+          curl -fsSL -o "$tmp/$p.dat" "$dat/Nintendo%20-%20$p.dat"
+        done
+        cargo run --release -q -p slot-labels --example artwork-pack -- \
+          crates/slot-labels/data/launchbox.tsv "{{.CACHE}}" dist-device/Artwork.pack \
+          "$tmp/Game%20Boy.dat" "$tmp/Game%20Boy%20Color.dat" "$tmp/Game%20Boy%20Advance.dat"
+        ls -l dist-device/Artwork.pack
+
   sdcard:
     desc: Create an empty content root, ROOT defaults to ./sdcard
     deps: [build]

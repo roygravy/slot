@@ -34,6 +34,7 @@ const DOZE_TIMEOUT: Duration = Duration::from_secs(300);
 const ALERT_INK: [u8; 3] = [0xf0, 0xb4, 0x3c];
 
 pub struct Frontend {
+    labels: crate::labels::Labels,
     session: Session,
     start: Instant,
     last: Instant,
@@ -184,12 +185,25 @@ impl Frontend {
         let cart_faces = CartFaces::spawn(platform.root().to_path_buf());
         let mut session = Session::boot_with(platform.root().to_path_buf(), sink);
         crate::boot_time::mark("session");
+        // Missing labels come from the artwork pack or, with Home Wi-Fi on, from LaunchBox.
+        // With neither there is nothing to fetch them from, so no ROM is read for it.
+        let fetch = session.app().home_wifi_on()
+            || platform.root().join("Labels").join(slot_labels::build::PACK).is_file();
+        let labels = crate::labels::Labels::spawn(
+            platform.root().to_path_buf(),
+            if fetch {
+                session.app().carts().cloned().collect()
+            } else {
+                Vec::new()
+            },
+        );
         let stale_check =
             Self::check_labels(platform.root(), session.app().carts().cloned().collect());
         session
             .app_mut()
             .set_power(Power::new(platform, DOZE_TIMEOUT));
         Frontend {
+            labels,
             session,
             start: now,
             last: now,
@@ -719,6 +733,7 @@ impl Frontend {
             compositor.upload_game(&frame);
             crate::latency::taken();
         }
+        self.sync_labels();
         self.cart_faces.sync(self.session.app_mut(), compositor);
         sync_clock(self.session.app_mut(), compositor, &mut self.clocks);
         sync_about(self.session.app_mut(), compositor, &mut self.about);
@@ -797,6 +812,23 @@ impl Frontend {
 
     pub fn step_emulator(&self, present: Duration, timeout: Duration) -> bool {
         self.session.step_emulator(present, timeout)
+    }
+
+    /// A label the background worker fetched: the cart takes it and its face is drawn again.
+    fn sync_labels(&mut self) {
+        let Some(ready) = self.labels.take() else {
+            return;
+        };
+        let Some(path) = ready.cart.label else {
+            return;
+        };
+        self.session.app_mut().attach_label(&ready.cart.rom, path);
+        if self.core_asked.as_deref() == Some(ready.cart.stem.as_str())
+            || self.core_built.as_deref() == Some(ready.cart.stem.as_str())
+        {
+            self.core_asked = None;
+            self.core_built = None;
+        }
     }
 
     pub fn rebuilding_labels(&self) -> bool {

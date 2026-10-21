@@ -80,6 +80,16 @@ The About page is the back of the handheld, credits moulded into the plastic and
 
 <img src=".github/resources/gravy/about.png" width="100%" alt="The About page in dark and light">
 
+### Home Wi-Fi
+
+Put your networks in `Config/wifi.toml` (copy `wifi.toml.example`) and turn **Home Wi-Fi** on under **General**. From then on it works by itself:
+
+- A small Wi-Fi mark next to the battery shows when you are on your home network, and the clock sets itself
+- Carts without label art get one in the background, found by the ROM's checksum or name. No Wi-Fi? Put an `Artwork.pack` in `Labels/` and labels come from there. A label you added yourself is never replaced
+- Two handhelds at home link over your home network, no ad hoc network needed. Away from home the usual direct link still works
+
+More in [network/README.md](network/README.md).
+
 ### And a handful of smaller things
 
 - Tap **POWER** to sleep; hold it and a bar counts down to power off
@@ -148,6 +158,7 @@ slot. x GRAVY builds the same way slot. does; see [the slot. README](SLOT_README
 - **Permanent Marker** by Font Diner (Apache 2.0) for the handwritten titles
 - **Liberation Sans** by Red Hat (SIL OFL 1.1), subset as "slot Serial", for the serial sticker on the About page
 - The cheats from the **[libretro-database](https://github.com/libretro/libretro-database)** by the libretro team and contributors (CC BY-SA 4.0)
+- **Home Wi-Fi**, the label scraping and linking over the home network come from **[Prashant Vaibhav's fork](https://github.com/pvaibhav/slot)** of slot.
 - **Goodboy Galaxy** (demo), **Hauntsfield** and **Mud Warriors**, the free games in the screenshots
 
 Like slot., slot. x GRAVY was put together with help from Claude.

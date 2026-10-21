@@ -1376,6 +1376,11 @@ impl App {
         self.wifi = Some(face);
     }
 
+    /// The menu's Home Wi-Fi setting, whether or not a network is up yet.
+    pub fn home_wifi_on(&self) -> bool {
+        self.state.home_wifi_enabled
+    }
+
     pub fn home_connected(&self) -> bool {
         self.radio.home_connected()
     }
@@ -1480,6 +1485,25 @@ impl App {
             let n = shelf.carts.len();
             shelf.set_faces(faces.by_ref().take(n).collect());
         }
+    }
+
+    /// Attach a label fetched in the background to every shelf's copy of its cart, and let
+    /// those faces go so they are drawn again with it. The shelf, selection and phase stay put.
+    /// A cart that already has a label, its own or an earlier download, keeps it.
+    pub fn attach_label(&mut self, rom: &Path, label: std::path::PathBuf) -> Vec<TexId> {
+        let mut faces = Vec::new();
+        for (_, shelf) in &mut self.shelves {
+            for index in 0..shelf.carts.len() {
+                if shelf.carts[index].rom != rom || shelf.carts[index].label.is_some() {
+                    continue;
+                }
+                shelf.carts[index].label = Some(label.clone());
+                faces.extend(shelf.take_face(index));
+                self.orphaned.extend(shelf.take_interior(index));
+            }
+        }
+        self.orphaned.extend(faces.iter().copied());
+        faces
     }
 
     pub fn face_wants(&self) -> Vec<FaceWant> {

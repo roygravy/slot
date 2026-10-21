@@ -242,6 +242,11 @@ impl RadioJobs for RadioQueue {
     fn warmed(&self) -> bool {
         true
     }
+
+    /// Off-device there is no home network; SLOT_FAKE_HOME pretends there is, for previews.
+    fn home_connected(&self) -> bool {
+        std::env::var_os("SLOT_FAKE_HOME").is_some()
+    }
 }
 
 #[cfg(test)]
