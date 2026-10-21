@@ -474,10 +474,11 @@ fn shelves_of(carts: Vec<Cart>) -> Vec<(Rack, Shelf)> {
 impl App {
     pub fn new(carts: Vec<Cart>) -> Self {
         let shelves = shelves_of(carts);
+        // The first shelf with carts on it: GB, then GBC, then GBA. An empty GB shelf would
+        // leave a card without GB games on a bare shelf, and a single cart out of reach.
         let shelf_at = shelves
             .iter()
-            .position(|(platform, _)| *platform == Rack::Of(Platform::Gb))
-            .or_else(|| shelves.iter().position(|(_, s)| !s.carts.is_empty()))
+            .position(|(_, s)| !s.carts.is_empty())
             .unwrap_or(0);
         let state_writer = crate::state_writer::StateWriter::spawn();
         let card_writes = state_writer.card_writes();
