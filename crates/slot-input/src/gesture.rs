@@ -157,6 +157,12 @@ impl Gestures {
                     out.retain(|a| {
                         !matches!(a, Action::GbaDown(Btn::Start) | Action::GbaDown(Btn::Select))
                     });
+                    // SELECT's release is no tap for the game, and a START that went down
+                    // first is let go before the reset.
+                    self.mark_chorded();
+                    if b == Btn::Select {
+                        out.push(Action::GbaUp(Btn::Start));
+                    }
                     out.push(Action::ResetGame);
                 }
                 out
