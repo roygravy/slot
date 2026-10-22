@@ -283,6 +283,34 @@ impl Shelf {
         [self.interiors.get(i).copied().flatten(), board]
     }
 
+    /// The shadow a cart standing at `at` throws on the shelf, as a raised favourite's does
+    /// when `rise` lifts it off; `fade` takes it away as the cart leaves the shelf.
+    pub fn draw_drop(&self, stem: &str, at: Placed, scale: f32, rise: f32, fade: f32, out: &mut Vec<Draw>) {
+        let Some(i) = self.carts.iter().position(|c| c.stem == stem) else {
+            return;
+        };
+        let col = match self.shell(i) {
+            None => 0,
+            Some(GbShell::Notched) => 1,
+            Some(GbShell::Rounded) => 2,
+        };
+        let Some(tex) = self.drops[col] else {
+            return;
+        };
+        let m = DROP_MARGIN as f32 * scale;
+        out.push(Draw::Tex {
+            x: at.x - m,
+            y: at.y - m + DROP_FALL * scale + rise * 0.5,
+            w: at.w + 2.0 * m,
+            h: at.h + 2.0 * m,
+            tex,
+            alpha: DROP_ALPHA
+                * fade
+                * (1.0 + rise / LIFT * 0.3).min(1.6)
+                * if self.light_ground { 0.55 } else { 1.0 },
+        });
+    }
+
     pub fn find(&self, stem: &str) -> Option<(&Cart, Option<TexId>)> {
         let i = self.carts.iter().position(|c| c.stem == stem)?;
         Some((&self.carts[i], self.face(i)))

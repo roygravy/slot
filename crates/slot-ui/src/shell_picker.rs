@@ -1,7 +1,7 @@
 //! The shell picker: a shelf cart lifted onto the menu's ground, a row of colours under it and
 //! the finishes under those; for a blank cart with no label to fetch, a second tab holds the
 //! markers its title can be written in.
-use crate::board::{board_in, Placed};
+use crate::board::{board_in, lift_of, slide_of, Placed, SLIDE_SHARE};
 use crate::draw::{Canvas, Draw, TexId, OUT_H, OUT_W};
 use crate::plate::{centred_hints, tint_mask, word_face, UndoFace, HINT_EDGE, HINT_H, LEGEND_GAP};
 use crate::slot_chrome::ease;
@@ -25,6 +25,13 @@ const TAB_GAP: f32 = 34.0;
 const TABBED_DROP: f32 = 34.0;
 const MARKER_PITCH: f32 = 40.0;
 const LEGEND_Y: f32 = 430.0;
+/// How far the cart rises off the shelf while its neighbours part, before it lifts into place.
+const HOP: f32 = 22.0;
+/// The rows rise this far into place as the cart arrives, one after the other.
+const RISE_IN: f32 = 26.0;
+const STAGGER: f32 = 0.12;
+/// The rows wait until the cart has nearly cleared them.
+const ROWS_START: f32 = 0.3;
 const BOX_PAD_X: f32 = 10.0;
 const BOX_PAD_Y: f32 = 2.0;
 /// The finish chosen while the row is elsewhere: a quiet box, the ink on it.
@@ -155,8 +162,20 @@ fn seen(w: u32) -> f32 {
     w.saturating_sub(HINT_EDGE) as f32
 }
 
+/// How far the cart stands above its place on the shelf as the picker opens.
+pub fn shell_picker_hop(openness: f32) -> f32 {
+    HOP * slide_of(openness.clamp(0.0, 1.0))
+}
+
 pub fn draw_shell_picker(canvas: Canvas, v: &ShellPickerView, out: &mut Vec<Draw>) {
-    let open = ease(v.openness.clamp(0.0, 1.0));
+    let p = v.openness.clamp(0.0, 1.0);
+    let open = lift_of(p);
+    // The rows arrive one after another as the cart settles, each a beat behind the last.
+    let raw = ((p - SLIDE_SHARE) / (1.0 - SLIDE_SHARE)).clamp(0.0, 1.0);
+    let stage = |i: f32| {
+        let start = ROWS_START + i * STAGGER;
+        ease(((raw - start) / (1.0 - ROWS_START - 3.0 * STAGGER)).clamp(0.0, 1.0))
+    };
     out.push(Draw::Rect {
         x: 0.0,
         y: 0.0,
@@ -173,12 +192,16 @@ pub fn draw_shell_picker(canvas: Canvas, v: &ShellPickerView, out: &mut Vec<Draw
         w: cw * scale,
         h: ch * scale,
     };
+    let from = Placed {
+        y: v.from.y - shell_picker_hop(p),
+        ..v.from
+    };
     let at = |a: f32, b: f32| a + (b - a) * open;
     let cart = Placed {
-        x: at(v.from.x, to.x),
-        y: at(v.from.y, to.y),
-        w: at(v.from.w, to.w),
-        h: at(v.from.h, to.h),
+        x: at(from.x, to.x),
+        y: at(from.y, to.y),
+        w: at(from.w, to.w),
+        h: at(from.h, to.h),
     };
     if let Some(tex) = v.cart {
         let inside = if v.gba { board_in(cart) } else { cart };
@@ -202,7 +225,8 @@ pub fn draw_shell_picker(canvas: Canvas, v: &ShellPickerView, out: &mut Vec<Draw
         });
     }
 
-    let ink = |c: [f32; 4]| faded(c, open);
+    let ink = |c: [f32; 4], k: f32| faded(c, k);
+    let rise = |y: f32, k: f32| y + RISE_IN * (1.0 - k);
     let focus = |row: PickerRow| if v.row == row { v.ink.text } else { v.ink.dim };
     let word = |(tex, w): (TexId, u32), x: f32, y: f32, colour: [f32; 4]| {
         tint(tex, x.round(), y, w as f32, HINT_H as f32, colour)
@@ -213,7 +237,9 @@ pub fn draw_shell_picker(canvas: Canvas, v: &ShellPickerView, out: &mut Vec<Draw
                      current: bool,
                      y: f32,
                      gap: f32,
+                     k: f32,
                      out: &mut Vec<Draw>| {
+        let y = rise(y, k);
         let widths: Vec<f32> = faces.iter().map(|&(_, w)| seen(w)).collect();
         let total = widths.iter().sum::<f32>() + gap * (widths.len().saturating_sub(1)) as f32;
         let mut x = canvas.centred(total);
@@ -226,7 +252,7 @@ pub fn draw_shell_picker(canvas: Canvas, v: &ShellPickerView, out: &mut Vec<Draw
                         y: y - BOX_PAD_Y,
                         w: (w + 2.0 * BOX_PAD_X).round(),
                         h: HINT_H as f32 + 2.0 * BOX_PAD_Y,
-                        colour: ink(if on { v.ink.bar } else { RESTING_BOX }),
+                        colour: ink(if on { v.ink.bar } else { RESTING_BOX }, k),
                     });
                     if on {
                         v.ink.on_bar
@@ -238,7 +264,7 @@ pub fn draw_shell_picker(canvas: Canvas, v: &ShellPickerView, out: &mut Vec<Draw
             };
             // Off for the cart's own shell: the finish waits, faint, for a colour.
             let alpha = if chosen.is_none() { 0.35 } else { 1.0 };
-            out.push(word(face, x, y, ink(faded(colour, alpha))));
+            out.push(word(face, x, y, ink(faded(colour, alpha), k)));
             x += w + gap;
         }
     };
@@ -251,6 +277,7 @@ pub fn draw_shell_picker(canvas: Canvas, v: &ShellPickerView, out: &mut Vec<Draw
             v.row == PickerRow::Tabs,
             TAB_Y,
             TAB_GAP,
+            stage(0.0),
             out,
         );
     }
@@ -261,8 +288,8 @@ pub fn draw_shell_picker(canvas: Canvas, v: &ShellPickerView, out: &mut Vec<Draw
             out.push(word(
                 face,
                 canvas.centred(seen(face.1)),
-                NAME_Y + drop,
-                ink(focus(PickerRow::Marker)),
+                rise(NAME_Y + drop, stage(0.0)),
+                ink(focus(PickerRow::Marker), stage(0.0)),
             ));
         }
         let n = v.inks.len() as f32;
@@ -271,11 +298,11 @@ pub fn draw_shell_picker(canvas: Canvas, v: &ShellPickerView, out: &mut Vec<Draw
             swatch(
                 v,
                 first + MARKER_PITCH * i as f32,
-                SWATCH_Y + drop,
+                rise(SWATCH_Y + drop, stage(1.0)),
                 Some(c),
                 i == v.marker,
                 focus(PickerRow::Marker),
-                &ink,
+                &|c| ink(c, stage(1.0)),
                 out,
             );
         }
@@ -286,8 +313,8 @@ pub fn draw_shell_picker(canvas: Canvas, v: &ShellPickerView, out: &mut Vec<Draw
                 out.push(word(
                     face,
                     canvas.centred(seen(face.1)),
-                    NAME_Y + drop,
-                    ink(focus(PickerRow::Colour)),
+                    rise(NAME_Y + drop, stage(0.0)),
+                    ink(focus(PickerRow::Colour), stage(0.0)),
                 ));
             }
         }
@@ -297,11 +324,11 @@ pub fn draw_shell_picker(canvas: Canvas, v: &ShellPickerView, out: &mut Vec<Draw
             swatch(
                 v,
                 first + SWATCH_PITCH * i as f32,
-                SWATCH_Y + drop,
+                rise(SWATCH_Y + drop, stage(1.0)),
                 colour,
                 i == v.swatch,
                 focus(PickerRow::Colour),
-                &ink,
+                &|c| ink(c, stage(1.0)),
                 out,
             );
         }
@@ -311,6 +338,7 @@ pub fn draw_shell_picker(canvas: Canvas, v: &ShellPickerView, out: &mut Vec<Draw
             v.row == PickerRow::Finish,
             FINISH_Y + drop,
             FINISH_GAP,
+            stage(2.0),
             out,
         );
     }
@@ -326,10 +354,10 @@ pub fn draw_shell_picker(canvas: Canvas, v: &ShellPickerView, out: &mut Vec<Draw
         out.push(tint(
             tex,
             x,
-            LEGEND_Y,
+            rise(LEGEND_Y, stage(3.0)),
             w as f32,
             HINT_H as f32,
-            ink(faded(v.ink.text, if busy { 0.35 } else { 1.0 })),
+            ink(faded(v.ink.text, if busy { 0.35 } else { 1.0 }), stage(3.0)),
         ));
     }
 }

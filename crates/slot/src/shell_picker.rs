@@ -6,8 +6,9 @@ use std::path::PathBuf;
 use slot_input::Millis;
 use slot_store::{Outline, ShellChoice, ShellFinish};
 
-const OPEN_MS: f32 = 260.0;
-const CLOSE_MS: f32 = 200.0;
+/// The core picker's pace: the shelf parts and the cart rises, then it lifts into place.
+const OPEN_MS: f32 = crate::core_picker::OPEN_MS as f32;
+const CLOSE_MS: f32 = crate::core_picker::CLOSE_MS as f32;
 
 /// The colours offered, in the order they sit along the row.
 pub const PALETTE: [(&str, [u8; 3]); 11] = [
@@ -133,7 +134,8 @@ pub struct ShellPicker {
     own_marker: usize,
     marker: usize,
     opened: Millis,
-    closed: Option<Millis>,
+    /// When it began to close, and how far open it was then.
+    closed: Option<(Millis, f32)>,
 }
 
 impl ShellPicker {
@@ -251,7 +253,7 @@ impl ShellPicker {
 
     pub fn openness(&self, now: Millis) -> f32 {
         match self.closed {
-            Some(at) => 1.0 - (now.saturating_sub(at) as f32 / CLOSE_MS).min(1.0),
+            Some((at, from)) => (from - now.saturating_sub(at) as f32 / CLOSE_MS).max(0.0),
             None => (now.saturating_sub(self.opened) as f32 / OPEN_MS).min(1.0),
         }
     }
@@ -349,11 +351,11 @@ impl ShellPicker {
                 Outcome::Fetch
             }
             Press::Keep => {
-                self.closed = Some(now);
+                self.closed = Some((now, self.openness(now)));
                 Outcome::Save(self.choice(), self.marker_choice())
             }
             Press::Back => {
-                self.closed = Some(now);
+                self.closed = Some((now, self.openness(now)));
                 if self.choice() == self.was && self.marker_choice() == self.was_marker {
                     Outcome::None
                 } else {

@@ -107,7 +107,7 @@ pub use shell::{
     Shell, DEFAULT_SHELL, DMG_SHELL, DUAL_MODE_SHELL, GB_CLEAR_SHELL,
 };
 pub use shell_picker::{
-    draw_shell_picker, shell_picker_shapes, shell_picker_word, PickerRow, ShellPickerFaces,
+    draw_shell_picker, shell_picker_hop, shell_picker_shapes, shell_picker_word, PickerRow, ShellPickerFaces,
     ShellPickerView,
 };
 pub use silhouette::{gb_silhouette, silhouette, GbShell};

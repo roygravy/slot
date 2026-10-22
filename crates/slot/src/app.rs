@@ -3663,6 +3663,34 @@ impl App {
             Phase::Shelf => {
                 self.draw_background(out);
                 match (self.core_picker_shown(), self.selected_stem()) {
+                    _ if self.shell_picker.is_some() => {
+                        // The studio: the shelf parts around the cart and fades as it lifts.
+                        let picker = self.shell_picker.as_ref().unwrap();
+                        let open = ease(picker.openness(self.now()));
+                        self.shelf().draw_row(
+                            self.canvas(),
+                            Some(&picker.stem),
+                            0.0,
+                            open,
+                            1.0 - open,
+                            out,
+                        );
+                        draw_empty_slot(self.canvas(), self.slot_faces(), out);
+                        draw_slot_name(
+                            self.canvas(),
+                            self.shelf_platform,
+                            self.slot_name_alpha() * (1.0 - open),
+                            self.menu_ink().text,
+                            out,
+                        );
+                        slot_ui::draw_slot_title(
+                            self.canvas(),
+                            self.shelf_title,
+                            self.title_alpha() * (1.0 - open),
+                            self.menu_ink().text,
+                            out,
+                        );
+                    }
                     (Some(picker), Some(stem)) => {
                         let open = ease(picker.openness(self.now()));
                         let dim = 1.0 + (CORE_PICKER_DIM - 1.0) * open;
@@ -4780,6 +4808,16 @@ impl App {
             w: w as f32 * scale,
             h: h as f32 * scale,
         };
+        let openness = picker.openness(self.now());
+        // Its shadow stays on the shelf as it rises, and goes as it lifts away.
+        self.shelf().draw_drop(
+            &picker.stem,
+            from,
+            scale,
+            slot_ui::shell_picker_hop(openness),
+            1.0 - slot_ui::lift_of(openness),
+            out,
+        );
         let swatches: Vec<(Option<[u8; 3]>, usize)> = picker
             .swatches()
             .iter()
@@ -4795,7 +4833,7 @@ impl App {
             gba: cart.platform == Platform::Gba,
             cart_box: (w, h),
             from,
-            openness: picker.openness(self.now()),
+            openness,
             swatches: &swatches,
             swatch: picker.swatch(),
             finish: picker.finish(),
