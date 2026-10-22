@@ -203,6 +203,7 @@ pub fn draw_shell_picker(canvas: Canvas, v: &ShellPickerView, out: &mut Vec<Draw
         w: at(from.w, to.w),
         h: at(from.h, to.h),
     };
+    let cart_from = out.len();
     if let Some(tex) = v.cart {
         let inside = if v.gba { board_in(cart) } else { cart };
         for tex in v.behind.into_iter().flatten() {
@@ -225,6 +226,7 @@ pub fn draw_shell_picker(canvas: Canvas, v: &ShellPickerView, out: &mut Vec<Draw
         });
     }
 
+    let cart_to = out.len();
     let ink = |c: [f32; 4], k: f32| faded(c, k);
     let rise = |y: f32, k: f32| y + RISE_IN * (1.0 - k);
     let focus = |row: PickerRow| if v.row == row { v.ink.text } else { v.ink.dim };
@@ -360,6 +362,9 @@ pub fn draw_shell_picker(canvas: Canvas, v: &ShellPickerView, out: &mut Vec<Draw
             ink(faded(v.ink.text, if busy { 0.35 } else { 1.0 }), stage(3.0)),
         ));
     }
+    // The cart goes over the rows, so they slip out from under it as it moves.
+    let cart: Vec<Draw> = out.drain(cart_from..cart_to).collect();
+    out.extend(cart);
 }
 
 /// One disc on a row, with a faint rim so the darkest still stands off the ground, and the
