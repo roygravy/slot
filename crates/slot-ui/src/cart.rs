@@ -257,10 +257,11 @@ pub fn label_size(cart: &Cart) -> (u32, u32) {
 
 pub fn cart_face_with(cart: &Cart, art: Option<Vec<u8>>) -> CartFace {
     let s = spec(shape_of(cart));
-    let mut face = shell_face(&s, &shell_for(cart));
+    let shell = shell_for(cart);
+    let mut face = shell_face(&s, &shell);
     // The sticker's rounded corners show the recess under it, in the shell's own plastic.
     plastic_label_bed(&s, &mut face);
-    let label = art.unwrap_or_else(|| generated_label(&s, &label_text(cart), cart.marker));
+    let label = art.unwrap_or_else(|| generated_label(&s, &shell, &label_text(cart), cart.marker));
     paste_label(&s, &mut face, &label);
     clip_to_silhouette(&s, &mut face);
     face
@@ -689,9 +690,9 @@ fn screw_dimple(dx: f32, dy: f32, radius: f32) -> f32 {
 }
 
 /// A cart with no label art has no sticker at all: its title is written straight onto the
-/// plastic in marker, dark on a Game Boy pak and white on a GBA cart's dark shell, unless
-/// another marker was picked for it.
-fn generated_label(s: &Spec, title: &str, marker: Option<[u8; 3]>) -> Vec<u8> {
+/// plastic in marker, dark on a Game Boy pak and white on a GBA cart or any near-black pak,
+/// unless another marker was picked for it.
+fn generated_label(s: &Spec, shell: &Shell, title: &str, marker: Option<[u8; 3]>) -> Vec<u8> {
     let (_, _, lw, lh) = s.label;
     let mut seed: u64 = 0x9e37_79b9_7f4a_7c15;
     for b in title.as_bytes() {
@@ -709,9 +710,10 @@ fn generated_label(s: &Spec, title: &str, marker: Option<[u8; 3]>) -> Vec<u8> {
     };
     let mut layout = text::fit_box(font, title, room_w, room_h, MAX_LINES, max_px, MIN_PX);
     layout.tracking = 0.0;
+    let near_black = shell.colour.iter().map(|&c| u32::from(c)).sum::<u32>() < 3 * 0x30;
     let (ink, strength) = match s.mould {
-        Mould::Gba => ([0xf2, 0xf0, 0xea], 245),
-        Mould::Notched | Mould::Rounded => ([0x1b, 0x1c, 0x24], 235),
+        Mould::Notched | Mould::Rounded if !near_black => ([0x1b, 0x1c, 0x24], 235),
+        _ => ([0xf2, 0xf0, 0xea], 245),
     };
     let ink = marker.unwrap_or(ink);
     for (i, a) in text::marker_coverage(lw, lh, &layout, seed)
