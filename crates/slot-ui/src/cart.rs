@@ -630,13 +630,62 @@ fn plastic_label_bed(s: &Spec, face: &mut CartFace) {
                 (_, 0) => 1.05,
                 _ => 0.95,
             };
+            let dimple = match s.mould {
+                Mould::Gba => 1.0,
+                Mould::Notched | Mould::Rounded => screw_dimple(
+                    (x + lx) as f32 - s.w as f32 * 0.5,
+                    (y + ly) as f32 - s.h as f32 * 0.522,
+                    s.w as f32 * DIMPLE_RADIUS,
+                ),
+            };
             let d = (((y + ly) * s.w + x + lx) * 4) as usize;
             for c in 0..3 {
-                face.rgba[d + c] = (mean[c] * wall + noise).clamp(0.0, 255.0) as u8;
+                face.rgba[d + c] = (mean[c] * wall * dimple + noise).clamp(0.0, 255.0) as u8;
             }
             face.rgba[d + 3] = mean[3] as u8;
         }
     }
+}
+
+/// The screw dimple's radius as a share of the shell's width.
+const DIMPLE_RADIUS: f32 = 8.0 / 312.0;
+
+/// A Game Boy pak's bare label recess shows a small round sink mark where the screw post on the
+/// back meets the front: a shallow dish with a soft rim and a tiny bump in its middle. Returns
+/// how much a pixel at (dx, dy) from its centre is lit, lit from above like the rest of the
+/// shell, averaged over 4x4 samples.
+fn screw_dimple(dx: f32, dy: f32, radius: f32) -> f32 {
+    if dx.abs() > radius * 1.5 || dy.abs() > radius * 1.5 {
+        return 1.0;
+    }
+    let profile = |t: f32| {
+        let dish = if t < 1.0 {
+            -(1.0 - t * t).max(0.0).powf(0.6) + 0.25 * (-(t / 0.28).powi(2)).exp()
+        } else {
+            0.0
+        };
+        dish + 0.18 * (-((t - 1.02) / 0.10).powi(2)).exp()
+    };
+    let depth = radius * 0.22;
+    let (lx, ly, lz) = {
+        let (x, y, z) = (-0.25f32, -0.75f32, 0.62f32);
+        let n = (x * x + y * y + z * z).sqrt();
+        (x / n, y / n, z / n)
+    };
+    let mut sum = 0.0;
+    for sy in 0..4 {
+        for sx in 0..4 {
+            let px = dx + (sx as f32 + 0.5) / 4.0 - 0.5;
+            let py = dy + (sy as f32 + 0.5) / 4.0 - 0.5;
+            let r = (px * px + py * py).sqrt().max(1e-3);
+            let t = r / radius;
+            let slope = (profile(t + 0.02) - profile(t - 0.02)) / 0.04 * depth / radius;
+            let (gx, gy) = (slope * px / r, slope * py / r);
+            let lit = (-gx * lx - gy * ly + lz) / (gx * gx + gy * gy + 1.0).sqrt();
+            sum += 1.0 + (lit / lz - 1.0) * 1.1;
+        }
+    }
+    sum / 16.0
 }
 
 /// A cart with no label art has no sticker at all: its title is written straight onto the
