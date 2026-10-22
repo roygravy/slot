@@ -12,7 +12,7 @@ use crate::{Battery, Charge, LedState, Platform};
 
 const TOP_STEP: u32 = 9;
 
-const BACKLIGHT_FLOOR: f64 = 1.0;
+const BACKLIGHT_FLOOR: f64 = 8.0 / 255.0;
 
 const BACKLIGHT_CURVE: f64 = 1.75;
 
@@ -414,8 +414,9 @@ fn backlight_value(step: u8, max: u32) -> u32 {
         return 0;
     }
     let t = f64::from(step - 1) / f64::from(TOP_STEP - 1);
-    let span = f64::from(max) - BACKLIGHT_FLOOR;
-    (BACKLIGHT_FLOOR + span * t.powf(BACKLIGHT_CURVE)).round() as u32
+    let floor = (f64::from(max) * BACKLIGHT_FLOOR).round().max(1.0);
+    let span = f64::from(max) - floor;
+    (floor + span * t.powf(BACKLIGHT_CURVE)).round() as u32
 }
 
 fn run_shutdown_command(action: &str) -> bool {
