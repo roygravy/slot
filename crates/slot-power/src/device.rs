@@ -580,7 +580,10 @@ impl Platform for DevicePlatform {
     }
 
     fn poweroff(&mut self) -> ! {
-        self.breadcrumb("poweroff: reached slot, about to sync");
+        self.breadcrumb("poweroff: reached slot, unloading the WiFi driver");
+        let _ = Command::new("rmmod").arg(WIFI_MODULE).status();
+        self.breadcrumb("poweroff: WiFi driver unloaded, about to sync");
+        let _ = Command::new("sync").status();
         self.breadcrumb("poweroff: sync returned, about to signal init");
         shutdown_until_system_acts("poweroff")
     }
