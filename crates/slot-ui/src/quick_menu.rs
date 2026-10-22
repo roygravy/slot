@@ -31,7 +31,6 @@ pub enum QuickRow {
     Turbo,
     Rewind,
     GbPalettes,
-    RunAhead,
     Theme,
     Wallpaper,
     General,
@@ -78,7 +77,7 @@ pub enum QuickRow {
 }
 
 impl QuickRow {
-    pub const ALL: [QuickRow; 67] = [
+    pub const ALL: [QuickRow; 66] = [
         QuickRow::FastForward,
         QuickRow::FastForwardSound,
         QuickRow::Screen,
@@ -102,7 +101,6 @@ impl QuickRow {
         QuickRow::Turbo,
         QuickRow::Rewind,
         QuickRow::GbPalettes,
-        QuickRow::RunAhead,
         QuickRow::Theme,
         QuickRow::Wallpaper,
         QuickRow::General,
@@ -203,11 +201,10 @@ impl QuickRow {
         QuickRow::GbBlackBorder,
     ];
 
-    pub const GAME: [QuickRow; 9] = [
+    pub const GAME: [QuickRow; 8] = [
         QuickRow::FastForward,
         QuickRow::FastForwardSound,
         QuickRow::Rewind,
-        QuickRow::RunAhead,
         QuickRow::Turbo,
         QuickRow::Rumble,
         QuickRow::InGameMenu,
@@ -267,7 +264,6 @@ impl QuickRow {
             QuickRow::FastForward
             | QuickRow::FastForwardSound
             | QuickRow::Rewind
-            | QuickRow::RunAhead
             | QuickRow::Turbo
             | QuickRow::Rumble
             | QuickRow::CheatIcon
@@ -397,7 +393,6 @@ impl QuickRow {
             QuickRow::Turbo => "Turbo Buttons",
             QuickRow::Rewind => "Rewind",
             QuickRow::GbPalettes => "Palette",
-            QuickRow::RunAhead => "Run-Ahead",
             QuickRow::Theme => "Theme",
             QuickRow::Wallpaper => "Wallpaper",
             QuickRow::General => "General",
@@ -471,7 +466,6 @@ impl QuickRow {
             QuickRow::FastForward => "How fast the game runs while you hold R2.",
             QuickRow::FastForwardSound => "Hear the game while it fast-forwards.",
             QuickRow::Rewind => "Hold L2 in a game to go back in time.",
-            QuickRow::RunAhead => "Buttons respond one frame sooner. Uses more battery.",
             QuickRow::Turbo => "Hold X for rapid A, hold Y for rapid B.",
             QuickRow::Rumble => "Let games that support it shake the device.",
             QuickRow::CheatIcon => "Show a masked robber while any cheat is on.",

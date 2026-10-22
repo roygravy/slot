@@ -34,7 +34,7 @@ pub use scan::{initial, is_hidden, listing, scan, sort_key, Cart, StoreError};
 pub use slot_state::{
     read_slot_state, write_slot_state, Appearance, BezelPick, FavoriteMark, Recent, Shader, SlotState,
     WallpaperPick, WallpaperTint, AUTO_SLEEP_DEFAULT_SECS, AUTO_SLEEP_OPTIONS_SECS, BLUE_LIGHT_MAX,
-    BRIGHTNESS_MAX, FF_SPEEDS, FF_SPEED_DEFAULT, RECENTS_MAX, RUN_AHEAD_MAX, UTC_OFFSET_MAX,
+    BRIGHTNESS_MAX, FF_SPEEDS, FF_SPEED_DEFAULT, RECENTS_MAX, UTC_OFFSET_MAX,
     UTC_OFFSET_MIN, VOLUME_MAX,
 };
 pub use zone::{zone_named, Summer, Zone, ZONES};

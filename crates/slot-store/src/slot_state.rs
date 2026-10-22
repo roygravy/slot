@@ -15,8 +15,6 @@ pub const FF_SPEEDS: [u8; 4] = [2, 3, 4, 6];
 
 pub const FF_SPEED_DEFAULT: u8 = 6;
 
-pub const RUN_AHEAD_MAX: u8 = 1;
-
 pub const RECENTS_MAX: usize = 10;
 pub const AUTO_SLEEP_OPTIONS_SECS: [u16; 4] = [0, 30, 60, 300];
 pub const AUTO_SLEEP_DEFAULT_SECS: u16 = 60;
@@ -276,7 +274,6 @@ pub struct SlotState {
     pub eject_save: bool,
     pub turbo: bool,
     pub rewind: bool,
-    pub runahead: u8,
     pub gb_palettes: bool,
     pub gb_palette: GbPalette,
     pub appearance: Appearance,
@@ -440,7 +437,6 @@ impl Default for SlotState {
             eject_save: true,
             turbo: true,
             rewind: true,
-            runahead: 0,
             gb_palettes: true,
             gb_palette: GbPalette::DEFAULT,
             appearance: Appearance::Dark,
@@ -546,7 +542,7 @@ fn write_list(root: &Path, name: &str, list: &[Recent]) -> std::io::Result<()> {
 
 pub fn write_slot_state(root: &Path, s: &SlotState) -> std::io::Result<()> {
     let mut text = format!(
-        "cart={}\ncart_platform={}\nbrightness={}\nblue_light={}\nvolume={}\nvolume_hp={}\nmuted={}\nmuted_hp={}\nclock_set={}\nutc_offset_min={}\nrumble={}\nff_speed={}\nff_sound={}\nshader_gba={}\nshader_gb={}\neject_save={}\nturbo={}\nrewind={}\nrunahead={}\ngb_palettes={}\ngb_palette={}\nappearance={}\nwallpaper={}\n",
+        "cart={}\ncart_platform={}\nbrightness={}\nblue_light={}\nvolume={}\nvolume_hp={}\nmuted={}\nmuted_hp={}\nclock_set={}\nutc_offset_min={}\nrumble={}\nff_speed={}\nff_sound={}\nshader_gba={}\nshader_gb={}\neject_save={}\nturbo={}\nrewind={}\ngb_palettes={}\ngb_palette={}\nappearance={}\nwallpaper={}\n",
         s.cart.as_deref().unwrap_or(""),
         s.cart_platform.map_or(String::new(), platform_key),
         s.brightness,
@@ -565,7 +561,6 @@ pub fn write_slot_state(root: &Path, s: &SlotState) -> std::io::Result<()> {
         s.eject_save as u8,
         s.turbo as u8,
         s.rewind as u8,
-        s.runahead,
         s.gb_palettes as u8,
         s.gb_palette.core_name(),
         s.appearance.name(),
@@ -653,7 +648,6 @@ fn parse(text: &str) -> Option<SlotState> {
     let mut eject_save = None;
     let mut turbo = None;
     let mut rewind = None;
-    let mut runahead = None;
     let mut gb_palettes = None;
     let mut gb_palette = None;
     let mut appearance = None;
@@ -712,7 +706,6 @@ fn parse(text: &str) -> Option<SlotState> {
             "eject_save" => eject_save = flag(value),
             "turbo" => turbo = flag(value),
             "rewind" => rewind = flag(value),
-            "runahead" => runahead = level(value, RUN_AHEAD_MAX),
             "gb_palettes" => gb_palettes = flag(value),
             "gb_palette" => gb_palette = GbPalette::parse(value),
             "appearance" => appearance = Appearance::parse(value),
@@ -778,7 +771,6 @@ fn parse(text: &str) -> Option<SlotState> {
         eject_save: eject_save.unwrap_or(fallback.eject_save),
         turbo: turbo.unwrap_or(fallback.turbo),
         rewind: rewind.unwrap_or(fallback.rewind),
-        runahead: runahead.unwrap_or(fallback.runahead),
         gb_palettes: gb_palettes.unwrap_or(fallback.gb_palettes),
         gb_palette: gb_palette.unwrap_or(fallback.gb_palette),
         appearance: appearance.unwrap_or(fallback.appearance),
