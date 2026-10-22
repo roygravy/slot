@@ -37,7 +37,8 @@ const ALERT_INK: [u8; 3] = [0xf0, 0xb4, 0x3c];
 
 pub struct Frontend {
     labels: crate::labels::Labels,
-    _cheats: Option<crate::cheat_fetch::CheatFetch>,
+    // Started once Home Wi-Fi is connected, not at boot: the network is not up yet then.
+    cheat_fetch: Option<crate::cheat_fetch::CheatFetch>,
     session: Session,
     start: Instant,
     last: Instant,
@@ -207,13 +208,6 @@ impl Frontend {
                 Vec::new()
             },
         );
-        // Cheat files come only from online, so only with Home Wi-Fi on.
-        let cheats = session.app().home_wifi_on().then(|| {
-            crate::cheat_fetch::CheatFetch::spawn(
-                platform.root().to_path_buf(),
-                session.app().carts().cloned().collect(),
-            )
-        });
         let stale_check =
             Self::check_labels(platform.root(), session.app().carts().cloned().collect());
         session
@@ -232,7 +226,7 @@ impl Frontend {
             rebuild: None,
             stale_check,
             label_fetch: None,
-            _cheats: cheats,
+            cheat_fetch: None,
             ui_faces: None,
             rebuild_faces: RebuildFaces::default(),
             link_art: LinkArtBuilder::spawn(),
@@ -1029,6 +1023,23 @@ impl Frontend {
         let dt = self.last.elapsed().as_secs_f32();
         self.last = Instant::now();
         self.session.update(dt);
+        self.fetch_cheats_once_online();
+    }
+
+    /// Cheat files come only from online: their worker starts the first time Home Wi-Fi is
+    /// connected, whether that is shortly after boot or after it is switched on in the menu.
+    fn fetch_cheats_once_online(&mut self) {
+        let app = self.session.app();
+        if self.cheat_fetch.is_some() || !app.home_wifi_on() || !app.home_connected() {
+            return;
+        }
+        let Some(root) = app.root().map(|r| r.to_path_buf()) else {
+            return;
+        };
+        self.cheat_fetch = Some(crate::cheat_fetch::CheatFetch::spawn(
+            root,
+            app.carts().cloned().collect(),
+        ));
     }
 
     pub fn app(&self) -> &crate::app::App {
@@ -1045,6 +1056,7 @@ impl Frontend {
             .set_menu_dpad_display(input.menu_dpad_display());
         self.session.feed(events, now);
         self.session.update(dt);
+        self.fetch_cheats_once_online();
     }
 
     fn now(&self) -> Millis {

@@ -2389,12 +2389,13 @@ impl App {
         Some((self.playing_platform(), stem))
     }
 
-    /// Read the cheats of the game in the slot, unless they are read already.
+    /// Read the cheats of the game in the slot, unless they are read already. A game that had
+    /// none is read again, as its files may have been fetched while it ran.
     fn load_cheats(&mut self) {
         let Some(key) = self.cart_in_slot() else {
             return;
         };
-        if self.cheats_for.as_ref() == Some(&key) {
+        if self.cheats_for.as_ref() == Some(&key) && !self.cheats.is_empty() {
             return;
         }
         self.cheats = match self.root() {

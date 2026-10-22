@@ -16,6 +16,8 @@ const CACHE: &str = "System/Cache/Cheats";
 const INDEX_DAYS: u64 = 7;
 const RETRY: Duration = Duration::from_secs(30);
 const PACE: Duration = Duration::from_millis(500);
+/// Network failures in a row before the worker gives up until the next boot.
+const TRIES: u8 = 5;
 
 pub(crate) struct CheatFetch {
     // Dropping it wakes and ends the worker; a transfer in flight ends at its timeout.
@@ -108,6 +110,8 @@ fn run(root: &Path, carts: Vec<Cart>, stop: &Receiver<()>, source: &dyn Source) 
     let _ = std::fs::create_dir_all(root.join(CACHE));
     let mut indexes: HashMap<Platform, Vec<String>> = HashMap::new();
     let mut failures = 0u8;
+    // Platforms whose list could not be had: their carts are not noted as having no cheats.
+    let mut unlisted: Vec<Platform> = Vec::new();
     let mut done: Vec<(Platform, String)> = Vec::new();
     for cart in carts {
         // A game on two shelves (its own and Recents or Favorites) is asked after once.
@@ -132,6 +136,7 @@ fn run(root: &Path, carts: Vec<Cart>, stop: &Receiver<()>, source: &dyn Source) 
                                     &index_path(root, shelf),
                                     (index.join("\n") + "\n").as_bytes(),
                                 );
+                                failures = 0;
                                 // A new list may hold what the old one did not.
                                 let _ = std::fs::remove_file(checked_path(root, shelf));
                                 break index;
@@ -139,12 +144,13 @@ fn run(root: &Path, carts: Vec<Cart>, stop: &Receiver<()>, source: &dyn Source) 
                             Err(Error::Network(e)) => {
                                 failures += 1;
                                 eprintln!("slot: cheats: {e}");
-                                if failures >= 3 || !wait(stop, RETRY) {
+                                if failures >= TRIES || !wait(stop, RETRY * failures as u32) {
                                     return;
                                 }
                             }
                             Err(e) => {
                                 eprintln!("slot: cheats: {}: {e}", shelf.dir_name());
+                                unlisted.push(shelf);
                                 break Vec::new();
                             }
                         }
@@ -159,6 +165,9 @@ fn run(root: &Path, carts: Vec<Cart>, stop: &Receiver<()>, source: &dyn Source) 
             }
         }
         if found.is_empty() {
+            if shelves(cart.platform).iter().any(|s| unlisted.contains(s)) {
+                continue;
+            }
             note_checked(root, cart.platform, &cart.stem);
             done.push((cart.platform, cart.stem));
             continue;
@@ -189,9 +198,11 @@ fn run(root: &Path, carts: Vec<Cart>, stop: &Receiver<()>, source: &dyn Source) 
         }
         if offline {
             failures += 1;
-            if failures >= 3 || !wait(stop, RETRY) {
+            if failures >= TRIES || !wait(stop, RETRY * failures as u32) {
                 return;
             }
+        } else {
+            failures = 0;
         }
         done.push((cart.platform, cart.stem));
     }
@@ -206,6 +217,7 @@ mod tests {
         index: Vec<String>,
         asked: RefCell<Vec<String>>,
         offline: bool,
+        unlisted: bool,
     }
 
     impl Source for Fake {
@@ -213,6 +225,9 @@ mod tests {
             self.asked.borrow_mut().push("index".into());
             if self.offline {
                 return Err(Error::Network("offline".into()));
+            }
+            if self.unlisted {
+                return Err(Error::Unavailable("no list".into()));
             }
             Ok(self.index.clone())
         }
@@ -246,6 +261,7 @@ mod tests {
             ],
             asked: RefCell::default(),
             offline: false,
+            unlisted: false,
         };
         let carts = vec![
             cart(root, Platform::Gba, "Game (USA)"),
@@ -278,6 +294,7 @@ mod tests {
             index: Vec::new(),
             asked: RefCell::default(),
             offline: true,
+            unlisted: false,
         };
         let (stop, stopped) = mpsc::channel();
         // A stop already sent ends the waits between tries at once.
@@ -289,5 +306,20 @@ mod tests {
             &fake,
         );
         assert_eq!(fake.asked.borrow().len(), 1);
+    }
+
+    #[test]
+    fn a_list_that_could_not_be_had_marks_no_cart_as_without_cheats() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let fake = Fake {
+            index: Vec::new(),
+            asked: RefCell::default(),
+            offline: false,
+            unlisted: true,
+        };
+        let (_stop, stopped) = mpsc::channel();
+        run(root, vec![cart(root, Platform::Gba, "Game")], &stopped, &fake);
+        assert!(checked(root, Platform::Gba).is_empty());
     }
 }
