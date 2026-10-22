@@ -617,6 +617,16 @@ fn plastic_label_bed(s: &Spec, face: &mut CartFace) {
         return;
     }
     let mean = sum.map(|v| (v / n) as f32);
+    // Where the screw post on the back meets the front: on a Game Boy pak in the middle of the
+    // shell, on a GBA cart centred in the recess and a little above its middle.
+    let (dimple_x, dimple_y, dimple_r) = match s.mould {
+        Mould::Gba => (lw as f32 * 0.5, lh as f32 * 0.30, s.w as f32 * 8.5 / 360.0),
+        Mould::Notched | Mould::Rounded => (
+            s.w as f32 * 0.5 - lx as f32,
+            s.h as f32 * 0.522 - ly as f32,
+            s.w as f32 * 8.0 / 312.0,
+        ),
+    };
     let mut grain: u64 = 0x2545_f491_4f6c_dd1d;
     for y in 0..lh {
         for x in 0..lw {
@@ -630,14 +640,7 @@ fn plastic_label_bed(s: &Spec, face: &mut CartFace) {
                 (_, 0) => 1.05,
                 _ => 0.95,
             };
-            let dimple = match s.mould {
-                Mould::Gba => 1.0,
-                Mould::Notched | Mould::Rounded => screw_dimple(
-                    (x + lx) as f32 - s.w as f32 * 0.5,
-                    (y + ly) as f32 - s.h as f32 * 0.522,
-                    s.w as f32 * DIMPLE_RADIUS,
-                ),
-            };
+            let dimple = screw_dimple(x as f32 - dimple_x, y as f32 - dimple_y, dimple_r);
             let d = (((y + ly) * s.w + x + lx) * 4) as usize;
             for c in 0..3 {
                 face.rgba[d + c] = (mean[c] * wall * dimple + noise).clamp(0.0, 255.0) as u8;
@@ -647,10 +650,7 @@ fn plastic_label_bed(s: &Spec, face: &mut CartFace) {
     }
 }
 
-/// The screw dimple's radius as a share of the shell's width.
-const DIMPLE_RADIUS: f32 = 8.0 / 312.0;
-
-/// A Game Boy pak's bare label recess shows a small round sink mark where the screw post on the
+/// A bare label recess shows a small round sink mark where the screw post on the
 /// back meets the front: a shallow dish with a soft rim and a tiny bump in its middle. Returns
 /// how much a pixel at (dx, dy) from its centre is lit, lit from above like the rest of the
 /// shell, averaged over 4x4 samples.
