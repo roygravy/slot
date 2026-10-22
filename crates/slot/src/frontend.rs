@@ -1084,6 +1084,11 @@ impl Frontend {
     pub fn boot_picture(&mut self) -> Option<(Vec<u8>, u32, u32)> {
         self.session.app_mut().take_boot_picture()
     }
+
+    pub fn stop(&mut self) {
+        self.session.app_mut().flush_resume();
+        self.session.app_mut().settle_saves();
+    }
 }
 
 fn link_legend_faces(ink: [u8; 3]) -> Vec<UndoFace> {

@@ -1,3 +1,10 @@
+macro_rules! eprintln {
+    ($($arg:tt)*) => {{
+        use std::io::Write as _;
+        let _ = writeln!(std::io::stderr(), $($arg)*);
+    }};
+}
+
 mod atomic;
 mod cart_marker;
 pub mod cart_shell;
@@ -14,7 +21,7 @@ mod slot_state;
 mod stamp;
 mod zone;
 
-pub use atomic::atomic_write;
+pub use atomic::{atomic_write, sweep_temps};
 pub use cart_marker::{
     has_no_label, markers, note_no_label, write_marker, CART_MARKER_FILE, NO_LABEL_FILE,
 };

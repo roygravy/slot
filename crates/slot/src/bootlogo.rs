@@ -173,25 +173,51 @@ pub fn compose_over(
     Some(Bmp { width, height, rgb })
 }
 
-pub fn install(wordmark: &[u8], dir: &Path) -> io::Result<Outcome> {
-    let Some(mark) = decode(wordmark) else {
-        return Ok(Outcome::Invalid);
-    };
+struct Plan {
+    logo: Vec<u8>,
+    current: Option<Vec<u8>>,
+    original: Option<Vec<u8>>,
+}
+
+fn plan(wordmark: &[u8], dir: &Path) -> Result<Plan, Outcome> {
+    let mark = decode(wordmark).ok_or(Outcome::Invalid)?;
     let current = fs::read(dir.join(LOGO)).ok();
     let original = fs::read(dir.join(ORIGINAL)).ok();
-    let Some(panel) = original.as_deref().or(current.as_deref()).and_then(size) else {
-        return Ok(Outcome::Invalid);
-    };
+    let panel = original
+        .as_deref()
+        .or(current.as_deref())
+        .and_then(size)
+        .ok_or(Outcome::Invalid)?;
     // The boot screen is the dark menus' flat ground, so boot, menus and shelf share a tone.
     let flat = slot_ui::theme::MENU_FLAT_DARK;
     let ground: Vec<u8> = (0..OUT_W * OUT_H).flat_map(|_| [flat[0], flat[1], flat[2], 255]).collect();
-    let composed = compose_over(&mark, panel, &ground, (OUT_W, OUT_H));
-    let Some(logo) = composed.map(|b| encode(&b)) else {
-        return Ok(Outcome::Invalid);
-    };
+    let logo = compose_over(&mark, panel, &ground, (OUT_W, OUT_H))
+        .map(|b| encode(&b))
+        .ok_or(Outcome::Invalid)?;
     if current.as_deref() == Some(&logo[..]) {
-        return Ok(Outcome::Same);
+        return Err(Outcome::Same);
     }
+    Ok(Plan {
+        logo,
+        current,
+        original,
+    })
+}
+
+/// What `install` would end in without writing anything, or `None` when it would write.
+pub fn pending(wordmark: &[u8], dir: &Path) -> Option<Outcome> {
+    plan(wordmark, dir).err()
+}
+
+pub fn install(wordmark: &[u8], dir: &Path) -> io::Result<Outcome> {
+    let Plan {
+        logo,
+        current,
+        original,
+    } = match plan(wordmark, dir) {
+        Ok(plan) => plan,
+        Err(outcome) => return Ok(outcome),
+    };
     if let Some(current) = &current {
         if original.is_none() {
             replace(dir, ORIGINAL, current)?;
@@ -235,13 +261,13 @@ pub fn chosen(card: &Path) -> Option<Vec<u8>> {
 }
 
 /// Run `f` on the mounted boot-resource partition.
-fn on_partition(f: impl FnOnce(&Path)) {
+fn on_partition(rw: bool, f: impl FnOnce(&Path)) {
     let Some(device) = partition(PARTITION) else {
         eprintln!("slot: bootlogo: no {PARTITION} partition");
         return;
     };
     if fs::create_dir_all(MOUNT).is_err()
-        || !run("mount", &["-t", "vfat", "-o", "rw,noatime", &device, MOUNT])
+        || !run("mount", &["-t", "vfat", "-o", if rw { "rw,noatime" } else { "ro,noatime" }, &device, MOUNT])
     {
         eprintln!("slot: bootlogo: could not mount {device}");
         return;
@@ -256,11 +282,18 @@ pub fn refresh(card: &Path) {
     let Some(logo) = chosen(card) else {
         return;
     };
-    on_partition(|dir| match install(&logo, dir) {
-        Ok(Outcome::Installed) => eprintln!("slot: bootlogo: installed"),
-        Ok(Outcome::Invalid) => eprintln!("slot: bootlogo: no logo fits this panel, left alone"),
-        Ok(_) => {}
-        Err(e) => eprintln!("slot: bootlogo: {e}"),
+    // Mounted read-only unless the logo changes, so a power cut at boot cannot hurt the partition.
+    on_partition(false, |dir| match pending(&logo, dir) {
+        Some(Outcome::Invalid) => eprintln!("slot: bootlogo: no logo fits this panel, left alone"),
+        Some(_) => {}
+        None if !run("mount", &["-o", "remount,rw,noatime", MOUNT]) => {
+            eprintln!("slot: bootlogo: could not remount {MOUNT} to write the logo")
+        }
+        None => match install(&logo, dir) {
+            Ok(Outcome::Installed) => eprintln!("slot: bootlogo: installed"),
+            Ok(_) => {}
+            Err(e) => eprintln!("slot: bootlogo: {e}"),
+        },
     });
 }
 
@@ -311,7 +344,7 @@ pub fn install_picture(card: &Path, rgba: &[u8], size: (usize, usize)) {
             eprintln!("slot: bootlogo: {}: {e}", path.display());
         }
     }
-    on_partition(|dir| match install_bmp(rgba, size, dir) {
+    on_partition(true, |dir| match install_bmp(rgba, size, dir) {
         Ok(Outcome::Installed) => eprintln!("slot: bootlogo: the game's picture is the boot screen"),
         Ok(_) => eprintln!("slot: bootlogo: the game's picture does not fit this panel"),
         Err(e) => eprintln!("slot: bootlogo: {e}"),

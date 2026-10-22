@@ -541,9 +541,15 @@ impl Session {
         self.app
             .set_video_mode(crate::video_mode::video_mode_for(&self.root, stem));
         self.app.set_link_loaded(serial);
-        let resume = (!self.app.starting_clean())
-            .then(|| persist::read_resume(&self.root, platform, core, stem))
-            .flatten();
+        let resume = match self.app.starting_clean() {
+            true => Ok(None),
+            false => persist::read_resume(&self.root, platform, core, stem),
+        };
+        // A read the card failed is not an empty file: the game runs, but nothing of it is
+        // written back over the save or resume state that could not be read.
+        let resume = self.app.card_read("resume", resume);
+        let resume_unread = resume.is_none();
+        let resume = resume.flatten();
         if core == slot_store::Core::Gambatte {
             if let Some(status) = gambatte_boot_rom_status(&self.root, platform) {
                 eprintln!("slot: Gambatte boot ROM: {status}");
@@ -574,13 +580,22 @@ impl Session {
         opened.core.set_option(ghosting_key, ghosting_value);
         self.app.set_named_core(opened.named);
         launch("core opened");
-        let sav = persist::read_sav(&self.root, platform, stem);
+        let sav = self.app.card_read("save", persist::read_sav(&self.root, platform, stem));
+        let sav_unread = sav.is_none();
+        let sav = sav.flatten();
         launch("save read");
         let ring = self.sink.ring();
         let emu = match player.filter(|_| platform == Platform::Gba) {
             Some(p) => EmuHandle::spawn_linked(opened.core, rom, ring, sav, resume, p),
             None => EmuHandle::spawn(opened.core, rom, ring, sav, resume),
         };
+        if sav_unread {
+            emu.refuse_save_ram();
+        }
+        if resume_unread {
+            emu.refuse_resume();
+        }
+        self.app.set_resume_unread(resume_unread);
         emu.set_volume(self.app.output_volume());
         emu.set_driven(self.driven);
         self.app.set_snapshot(Box::new(emu.snapshot()));

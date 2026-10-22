@@ -6,7 +6,7 @@ use std::io::Write;
 use std::os::unix::io::AsRawFd;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use crate::{Battery, Charge, LedState, Platform};
 
@@ -23,6 +23,8 @@ const RUN_DIR: &str = "/run";
 const CARD_LOG: &str = "/data/slot-card.log";
 
 const WIFI_MODULE: &str = "8821cs";
+
+const WIFI_UNLOAD_WAIT: Duration = Duration::from_secs(5);
 
 const KERNEL_LINES: usize = 40;
 
@@ -279,6 +281,30 @@ struct FfEvent {
 #[cfg(unix)]
 extern "C" {
     fn ioctl(fd: c_int, request: c_ulong, ...) -> c_int;
+    fn dup2(old: c_int, new: c_int) -> c_int;
+}
+
+fn unload_wifi() {
+    let Ok(mut rmmod) = Command::new("rmmod").arg(WIFI_MODULE).spawn() else {
+        return;
+    };
+    let until = Instant::now() + WIFI_UNLOAD_WAIT;
+    while Instant::now() < until {
+        if !matches!(rmmod.try_wait(), Ok(None)) {
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+}
+
+fn release_logs() {
+    #[cfg(unix)]
+    if let Ok(null) = fs::OpenOptions::new().write(true).open("/dev/null") {
+        unsafe {
+            dup2(null.as_raw_fd(), 1);
+            dup2(null.as_raw_fd(), 2);
+        }
+    }
 }
 
 fn upload(node: &fs::File, id: i16) -> Option<i16> {
@@ -571,20 +597,24 @@ impl Platform for DevicePlatform {
     }
 
     fn restart(&mut self) -> ! {
-        self.breadcrumb("restart: reached slot, unloading the WiFi driver");
-        let _ = Command::new("rmmod").arg(WIFI_MODULE).status();
-        self.breadcrumb("restart: WiFi driver unloaded, about to sync");
+        self.breadcrumb("restart: reached slot, syncing before the WiFi driver unloads");
+        let _ = Command::new("sync").status();
+        unload_wifi();
+        self.breadcrumb("restart: WiFi driver unloaded or given up on, about to sync");
         let _ = Command::new("sync").status();
         self.breadcrumb("restart: sync returned, about to signal init");
+        release_logs();
         shutdown_until_system_acts("reboot")
     }
 
     fn poweroff(&mut self) -> ! {
-        self.breadcrumb("poweroff: reached slot, unloading the WiFi driver");
-        let _ = Command::new("rmmod").arg(WIFI_MODULE).status();
-        self.breadcrumb("poweroff: WiFi driver unloaded, about to sync");
+        self.breadcrumb("poweroff: reached slot, syncing before the WiFi driver unloads");
+        let _ = Command::new("sync").status();
+        unload_wifi();
+        self.breadcrumb("poweroff: WiFi driver unloaded or given up on, about to sync");
         let _ = Command::new("sync").status();
         self.breadcrumb("poweroff: sync returned, about to signal init");
+        release_logs();
         shutdown_until_system_acts("poweroff")
     }
 

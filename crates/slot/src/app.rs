@@ -441,6 +441,7 @@ pub struct App {
     autosave_at: Millis,
     pending_save: Option<std::thread::JoinHandle<()>>,
     card_writes: Arc<crate::card_log::CardWrites>,
+    resume_unread: bool,
     card_read_only: bool,
     card_check_at: Millis,
     battery_at: Millis,
@@ -616,6 +617,7 @@ impl App {
             autosave_at: AUTOSAVE_MS,
             pending_save: None,
             card_writes,
+            resume_unread: false,
             card_read_only: false,
             card_check_at: 0,
             battery_at: BATTERY_POLL_MS,
@@ -2033,6 +2035,26 @@ impl App {
 
     pub fn gb_palette(&self) -> Option<GbPalette> {
         self.state.gb_palettes.then_some(self.state.gb_palette)
+    }
+
+    /// A card read as `Some` file contents (or none on the card), or `None` when the card failed it.
+    pub fn card_read(
+        &self,
+        what: &str,
+        read: std::io::Result<Option<Vec<u8>>>,
+    ) -> Option<Option<Vec<u8>>> {
+        match read {
+            Ok(bytes) => Some(bytes),
+            Err(e) => {
+                eprintln!("slot: {what} read: {e}");
+                self.card_writes.failed(what, &e);
+                None
+            }
+        }
+    }
+
+    pub fn set_resume_unread(&mut self, unread: bool) {
+        self.resume_unread = unread;
     }
 
     pub fn set_palette_live(&mut self, live: bool) {
@@ -3466,7 +3488,7 @@ impl App {
         let Some(snapshot) = &self.snapshot else {
             return;
         };
-        if snapshot.resume_trusted() {
+        if snapshot.resume_trusted() || self.resume_unread {
             return;
         }
         if !self.named_core {
@@ -4495,6 +4517,7 @@ impl App {
         };
         let (state, sav) = trusted_write(snapshot.as_ref(), state, "eject");
         let state = state.filter(|_| self.state.eject_save);
+        self.state_writer.flush();
         match persist::eject(
             root,
             self.platform,
@@ -4502,11 +4525,12 @@ impl App {
             stem,
             state.as_deref(),
             sav.as_deref(),
+            &self.state,
         ) {
             Ok(()) => {
                 self.state.cart = None;
                 self.state.cart_platform = None;
-                self.card_writes.ok();
+                self.card_writes.ok("eject");
             }
             Err(e) => {
                 eprintln!("slot: eject: {e}");
@@ -5644,7 +5668,9 @@ impl App {
         };
         let thumb = snapshot.thumb().unwrap_or_default();
         let stamp = free_stamp(&ring, self.wall_secs());
-        if let Err(e) = ring.push(&state, &thumb, &stamp) {
+        let pushed = ring.push(&state, &thumb, &stamp);
+        self.card_writes.wrote("save state", &pushed);
+        if let Err(e) = pushed {
             eprintln!("slot: save: {e}");
             return;
         }
