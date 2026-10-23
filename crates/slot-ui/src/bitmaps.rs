@@ -92,6 +92,16 @@ const SLOT_BACK_GB_DARK_PNG: &[u8] = include_bytes!("../../../assets/slot_back_g
 const SLOT_FRONT_GB_DARK_PNG: &[u8] = include_bytes!("../../../assets/slot_front_gb_dark.png");
 const SLOT_BACK_GB_LIGHT_PNG: &[u8] = include_bytes!("../../../assets/slot_back_gb_light.png");
 const SLOT_FRONT_GB_LIGHT_PNG: &[u8] = include_bytes!("../../../assets/slot_front_gb_light.png");
+const SLOT_BACK_NES_DARK_PNG: &[u8] = include_bytes!("../../../assets/slot_back_nes_dark.png");
+const SLOT_FRONT_NES_DARK_PNG: &[u8] = include_bytes!("../../../assets/slot_front_nes_dark.png");
+const SLOT_BACK_NES_LIGHT_PNG: &[u8] = include_bytes!("../../../assets/slot_back_nes_light.png");
+const SLOT_FRONT_NES_LIGHT_PNG: &[u8] = include_bytes!("../../../assets/slot_front_nes_light.png");
+const SLOT_BACK_SNES_DARK_PNG: &[u8] = include_bytes!("../../../assets/slot_back_snes_dark.png");
+const SLOT_FRONT_SNES_DARK_PNG: &[u8] = include_bytes!("../../../assets/slot_front_snes_dark.png");
+const SLOT_BACK_SNES_LIGHT_PNG: &[u8] = include_bytes!("../../../assets/slot_back_snes_light.png");
+const SLOT_FRONT_SNES_LIGHT_PNG: &[u8] = include_bytes!("../../../assets/slot_front_snes_light.png");
+const NES_LID_DARK_PNG: &[u8] = include_bytes!("../../../assets/nes_lid_dark.png");
+const NES_LID_LIGHT_PNG: &[u8] = include_bytes!("../../../assets/nes_lid_light.png");
 const PORT_DARK_PNG: &[u8] = include_bytes!("../../../assets/link_port_dark.png");
 const PORT_LIGHT_PNG: &[u8] = include_bytes!("../../../assets/link_port_light.png");
 const PLUG_HOST_PNG: &[u8] = include_bytes!("../../../assets/link_plug_host.png");
@@ -252,6 +262,36 @@ pub fn slot_front_gb(light: bool) -> &'static [u8] {
     match light {
         false => load(SLOT_FRONT_GB_DARK_PNG, SLOT_W, SLOT_H, &D),
         true => load(SLOT_FRONT_GB_LIGHT_PNG, SLOT_W, SLOT_H, &L),
+    }
+}
+
+/// The NES band (`nes`) or the SNES one, behind (`front` false) or in front of the cart, in the
+/// dark or the light housing. The NES back has its lid shut; the front leaves the lid's mouth open.
+pub fn slot_tv(nes: bool, front: bool, light: bool) -> &'static [u8] {
+    static P: [OnceLock<Vec<u8>>; 8] = [const { OnceLock::new() }; 8];
+    let bytes = match (nes, front, light) {
+        (true, false, false) => SLOT_BACK_NES_DARK_PNG,
+        (true, true, false) => SLOT_FRONT_NES_DARK_PNG,
+        (true, false, true) => SLOT_BACK_NES_LIGHT_PNG,
+        (true, true, true) => SLOT_FRONT_NES_LIGHT_PNG,
+        (false, false, false) => SLOT_BACK_SNES_DARK_PNG,
+        (false, true, false) => SLOT_FRONT_SNES_DARK_PNG,
+        (false, false, true) => SLOT_BACK_SNES_LIGHT_PNG,
+        (false, true, true) => SLOT_FRONT_SNES_LIGHT_PNG,
+    };
+    let i = usize::from(nes) * 4 + usize::from(front) * 2 + usize::from(light);
+    load(bytes, SLOT_W, SLOT_H, &P[i])
+}
+
+pub const NES_LID_W: u32 = 256;
+
+/// The NES lid, shut: the band's own plastic, as wide as the mouth and as deep as the band.
+pub fn nes_lid(light: bool) -> &'static [u8] {
+    static D: OnceLock<Vec<u8>> = OnceLock::new();
+    static L: OnceLock<Vec<u8>> = OnceLock::new();
+    match light {
+        false => load(NES_LID_DARK_PNG, NES_LID_W, SLOT_H, &D),
+        true => load(NES_LID_LIGHT_PNG, NES_LID_W, SLOT_H, &L),
     }
 }
 

@@ -172,7 +172,8 @@ struct Clocks {
 }
 
 struct ShelfLook {
-    slot: [(TexId, TexId); 4],
+    slot: [(TexId, TexId); 8],
+    nes_lids: [TexId; 2],
     bolt: [TexId; 2],
     wifi: [TexId; 2],
     port: [Option<TexId>; 2],
@@ -370,8 +371,27 @@ impl Frontend {
                     upload(slot_ui::slot_back_gb(true)),
                     upload(slot_ui::slot_front_gb(true)),
                 ),
+                (
+                    upload(slot_ui::slot_tv(true, false, false)),
+                    upload(slot_ui::slot_tv(true, true, false)),
+                ),
+                (
+                    upload(slot_ui::slot_tv(true, false, true)),
+                    upload(slot_ui::slot_tv(true, true, true)),
+                ),
+                (
+                    upload(slot_ui::slot_tv(false, false, false)),
+                    upload(slot_ui::slot_tv(false, true, false)),
+                ),
+                (
+                    upload(slot_ui::slot_tv(false, false, true)),
+                    upload(slot_ui::slot_tv(false, true, true)),
+                ),
             ]
         };
+        let nes_lids = [false, true].map(|light| {
+            compositor.create_texture(slot_ui::NES_LID_W, slot_ui::SLOT_H, slot_ui::nes_lid(light))
+        });
         let dark_bolt = icon_face(Icon::Charging, BOLT_PX, footer_ink(false));
         let light_bolt = icon_face(Icon::Charging, BOLT_PX, footer_ink(true));
         let bolt = [
@@ -384,6 +404,7 @@ impl Frontend {
         });
         self.look = Some(ShelfLook {
             slot,
+            nes_lids,
             bolt,
             wifi,
             port: [None, None],
@@ -415,7 +436,7 @@ impl Frontend {
             let port_ready = look.port[i].is_some();
             (
                 look.applied == Some((light, legend_ready, port_ready)),
-                look.slot,
+                (look.slot, look.nes_lids),
                 look.bolt[i],
                 (look.wifi[i], look.wifi[0]),
                 look.bolt[0],
@@ -433,7 +454,7 @@ impl Frontend {
         if done {
             return;
         }
-        self.session.app_mut().set_slot_sets(slot);
+        self.session.app_mut().set_slot_sets(slot.0, slot.1);
         self.session.app_mut().set_bolt_face(bolt);
         self.session.app_mut().set_wifi_face(wifi.0, wifi.1);
         self.session.app_mut().set_hud_bolt_face(hud_bolt);

@@ -1,6 +1,7 @@
 use slot_gfx::{Canvas, Draw, TexId, OUT_H};
 use slot_store::Cart;
 
+use crate::bitmaps::{Mould, NES_LID_W};
 use crate::cart::{cart_box, label_colour, label_text, seated_box, SEATED_W};
 use crate::footer::Printed;
 use crate::icon::icon_box;
@@ -96,6 +97,10 @@ pub struct SlotChrome<'a> {
     pub canvas: Canvas,
     /// How much higher the cart stands once seated.
     pub lift: f32,
+    /// The NES lid, shut, in the theme's housing.
+    pub lid: Option<TexId>,
+    /// The light housing, for the NES lid's tab.
+    pub light: bool,
 }
 
 /// The Game Boy slot seats a pak this much higher, so its top lines up with the housing's top
@@ -136,14 +141,28 @@ impl SlotChrome<'_> {
         let (w0, h0) = (cw * scale, ch * scale);
         let (sw, sh) = seated_box(mould);
         let (sw, sh) = (sw as f32, sh as f32);
-        let (foot0, seated_foot) = (foot_y(ch), SEATED_Y + sh - self.lift);
-        let catch = catch_at(foot0, seated_foot);
-        let travel = travel(seat, catch);
-        let k = (travel / catch).min(1.0);
-        let (cw, ch) = (w0 + (sw - w0) * k, h0 + (sh - h0) * k);
-        let centre = self.rest + w0 / 2.0;
-        let x = centre + (canvas.w / 2.0 - centre) * k - cw / 2.0;
-        let y = foot0 + (seated_foot - foot0) * travel - ch;
+        let foot0 = foot_y(ch);
+        let (x, y, cw, ch, lid) = match tv_pose(mould, seat, canvas.w / 2.0, (sw, sh)) {
+            Some(pose) => {
+                // Off the shelf it shrinks to its seated size on the way to the slot.
+                let k = pose.leave;
+                let (x0, y0) = (self.rest, foot0 - h0);
+                let lerp = |a: f32, b: f32| a + (b - a) * k;
+                let (x, y) = (lerp(x0, pose.x), lerp(y0, pose.y));
+                (x, y, lerp(w0, sw), lerp(h0, sh), pose.lid)
+            }
+            None => {
+                let seated_foot = SEATED_Y + sh - self.lift;
+                let catch = catch_at(foot0, seated_foot);
+                let travel = travel(seat, catch);
+                let k = (travel / catch).min(1.0);
+                let (cw, ch) = (w0 + (sw - w0) * k, h0 + (sh - h0) * k);
+                let centre = self.rest + w0 / 2.0;
+                let x = centre + (canvas.w / 2.0 - centre) * k - cw / 2.0;
+                let y = foot0 + (seated_foot - foot0) * travel - ch;
+                (x, y, cw, ch, None)
+            }
+        };
         let cart_alpha = if seat >= 1.0 && !held { chrome } else { 1.0 };
         for tex in self.behind.into_iter().flatten() {
             out.push(Draw::Tex {
@@ -194,6 +213,11 @@ impl SlotChrome<'_> {
             });
         }
 
+        let front_alpha = if self.over { chrome } else { slot_alpha };
+        if let (Some(theta), Some(tex)) = (lid, self.lid) {
+            draw_lid(canvas, tex, theta, self.light, front_alpha, out);
+        }
+
         if self.over && chrome < 1.0 && self.slot.is_none() {
             front_bands(canvas, |x, y, w, h, _| {
                 out.push(Draw::Rect {
@@ -205,12 +229,7 @@ impl SlotChrome<'_> {
                 });
             });
         }
-        draw_slot_front(
-            canvas,
-            self.slot,
-            if self.over { chrome } else { slot_alpha },
-            out,
-        );
+        draw_slot_front(canvas, self.slot, front_alpha, out);
 
         if self.game && opening && !self.over {
             out.push(Draw::Game);
@@ -400,4 +419,184 @@ fn travel(seat: f32, catch: f32) -> f32 {
 
 pub fn ease(u: f32) -> f32 {
     u * u * u * (u * (u * 6.0 - 15.0) + 10.0)
+}
+
+/// Seconds an NES or SNES cart takes from the shelf until it is seated, at its own, slower pace:
+/// the NES lid swings open, the cart slides in against the spring, takes a last push and the lid
+/// drops shut; the SNES cart slides down into its slot and takes the same push. None for the
+/// Game Boys and the GBA, which keep the slot's own quick insert.
+pub fn insert_seconds(mould: Mould) -> Option<f32> {
+    match mould {
+        Mould::Nes => Some(NES_T),
+        Mould::SnesNtsc | Mould::SnesPal => Some(SNES_T),
+        _ => None,
+    }
+}
+
+/// How far into the insert, 0 to 1, the board snaps into the connector: the click.
+pub fn click_at(mould: Mould) -> f32 {
+    match mould {
+        Mould::Nes => NES_CLICK / NES_T,
+        Mould::SnesNtsc | Mould::SnesPal => SNES_CLICK / SNES_T,
+        _ => 1.0,
+    }
+}
+
+const NES_T: f32 = 3.70;
+const NES_CLICK: f32 = 2.94;
+const SNES_T: f32 = 2.20;
+const SNES_CLICK: f32 = 2.14;
+
+/// Where an NES or SNES cart is, `seat` into its insert: its seated-size box once it has left
+/// the shelf (`leave` runs 0 to 1 on the way), and the NES lid's opening in degrees.
+struct TvPose {
+    x: f32,
+    y: f32,
+    leave: f32,
+    lid: Option<f32>,
+}
+
+fn tv_pose(mould: Mould, seat: f32, cx: f32, (sw, sh): (f32, f32)) -> Option<TvPose> {
+    let x = cx - sw / 2.0;
+    let lerp = |a: f32, b: f32, u: f32| a + (b - a) * u;
+    match mould {
+        Mould::Nes => {
+            let t = seat * NES_T;
+            let wait = BAND_Y - 6.0 - sh;
+            let slid = BAND_Y - 14.0;
+            let home = BAND_Y + 6.0;
+            let (leave, y, lid) = match t {
+                t if t < 0.50 => (smooth(t / 0.50), wait, 0.0),
+                t if t < 0.60 => (1.0, wait, 0.0),
+                t if t < 1.10 => (1.0, wait, 90.0 * smooth((t - 0.60) / 0.50)),
+                t if t < 1.25 => (1.0, wait, 90.0),
+                t if t < 2.65 => (1.0, lerp(wait, slid, resist((t - 1.25) / 1.40)), 90.0),
+                t if t < 2.70 => (1.0, slid, 90.0),
+                t if t < 3.00 => (1.0, lerp(slid, home, seat_push((t - 2.70) / 0.30)), 90.0),
+                t if t < 3.25 => (1.0, home, 90.0),
+                t if t < 3.55 => {
+                    let u = (t - 3.25) / 0.30;
+                    (1.0, home, 90.0 * (1.0 - u * u))
+                }
+                t => {
+                    // The lid lands and bounces once.
+                    let u = ((t - 3.55) / 0.15).min(1.0);
+                    (1.0, home, 7.0 * (u * std::f32::consts::PI).sin())
+                }
+            };
+            Some(TvPose { x, y, leave, lid: Some(lid) })
+        }
+        Mould::SnesNtsc | Mould::SnesPal => {
+            let t = seat * SNES_T;
+            let pal = mould == Mould::SnesPal;
+            let wait = BAND_Y - sh - 8.0;
+            // NTSC: the slot's edge meets the third line on the cart's side grips. A PAL cart goes
+            // in as deep and so stands a little prouder.
+            let out = if pal { (86.0 - 42.6) / 86.0 } else { 132.0 / 257.0 };
+            let home = BAND_Y - sh * out - if pal { 5.0 } else { 0.0 };
+            let slid = home - 14.0;
+            let (leave, y) = match t {
+                t if t < 0.50 => (smooth(t / 0.50), wait),
+                t if t < 0.65 => (1.0, wait),
+                t if t < 1.85 => (1.0, lerp(wait, slid, resist((t - 0.65) / 1.20))),
+                t if t < 1.90 => (1.0, slid),
+                t => (1.0, lerp(slid, home, seat_push((t - 1.90) / 0.30))),
+            };
+            Some(TvPose { x, y, leave, lid: None })
+        }
+        _ => None,
+    }
+}
+
+fn smooth(u: f32) -> f32 {
+    let u = u.clamp(0.0, 1.0);
+    u * u * (3.0 - 2.0 * u)
+}
+
+/// Sliding in against the spring: slowing as it goes, with a few small catches.
+fn resist(u: f32) -> f32 {
+    let u = u.clamp(0.0, 1.0);
+    let base = 1.0 - (1.0 - u).powf(2.2);
+    let catch = 0.012 * (u * std::f32::consts::PI * 6.0).sin() * (1.0 - u);
+    (base - catch.abs()).clamp(0.0, 1.0)
+}
+
+/// The last push, as a hand does it: the thumb presses and the cart picks up speed, the board
+/// bites the connector and stalls a moment, then it gives way, snaps home and settles.
+fn seat_push(u: f32) -> f32 {
+    let u = u.clamp(0.0, 1.0);
+    if u < 0.38 {
+        let v = u / 0.38;
+        0.45 * v * v
+    } else if u < 0.50 {
+        let v = (u - 0.38) / 0.12;
+        0.45 + 0.04 * (1.0 - (1.0 - v).powi(2))
+    } else if u < 0.80 {
+        let v = (u - 0.50) / 0.30;
+        0.49 + 0.54 * (1.0 - (1.0 - v).powi(3))
+    } else {
+        let v = (u - 0.80) / 0.20;
+        1.03 - 0.03 * (1.0 - (1.0 - v).powi(2))
+    }
+}
+
+/// The NES lid, seen from straight above: hinged on the screen's bottom edge, it swings up toward
+/// the camera. Its top panel foreshortens down to the hinge while its front, as long as the
+/// panel, turns its face to the camera upside down, with the small tab on its free edge.
+fn draw_lid(canvas: Canvas, tex: TexId, theta: f32, light: bool, alpha: f32, out: &mut Vec<Draw>) {
+    if alpha <= 0.0 {
+        return;
+    }
+    let (w, l) = (NES_LID_W as f32, MOUTH_H);
+    let x = canvas.centred(w);
+    if theta <= 0.01 {
+        out.push(Draw::Tex { x, y: BAND_Y, w, h: l, tex, alpha });
+        return;
+    }
+    let hinge = OUT_H as f32;
+    let (sin, cos) = theta.to_radians().sin_cos();
+    // The well under the lid.
+    out.push(band(x, BAND_Y, w, l, opening(), alpha));
+    // Turning toward the camera lifts the plastic a touch, nothing more: one colour.
+    let sheen = |y: f32, h: f32, k: f32, out: &mut Vec<Draw>| {
+        out.push(band(x, y, w, h, [1.0, 1.0, 1.0, 0.06 * k], alpha));
+    };
+    let fold = hinge - l * cos;
+    if hinge - fold > 0.5 {
+        out.push(Draw::Tex { x, y: fold, w, h: hinge - fold, tex, alpha });
+        sheen(fold, hinge - fold, sin, out);
+    }
+    let fh = l * sin;
+    if fh <= 0.5 {
+        return;
+    }
+    let top = fold - fh;
+    // Its shadow on the ground above, a soft band that deepens as it stands up.
+    let shadow = if light { 0.27 } else { 0.43 };
+    for k in 0..4 {
+        let spread = (7.0 * sin + 2.0) * (1.0 - k as f32 / 4.0);
+        out.push(band(x, top - spread, w, spread + 1.0, [0.0, 0.0, 0.0, shadow / 4.0], alpha));
+    }
+    out.push(Draw::Part {
+        x,
+        y: top,
+        w,
+        h: fh,
+        tex,
+        alpha,
+        uv: [0.0, 1.0, 1.0, -1.0],
+    });
+    sheen(top, fh, 1.0, out);
+    // The tab: lighter, rounded, standing proud of the free edge.
+    let base: [f32; 3] = if light { [182.0, 179.0, 173.0] } else { [41.0, 41.0, 44.0] };
+    let shade = |k: f32, add: f32| {
+        let c = base.map(|v| ((v * k + add) / 255.0).min(1.0));
+        [c[0], c[1], c[2], 1.0]
+    };
+    let th = (4.0 * sin).max(1.0);
+    let tw = (w * 0.17).round();
+    let tx = canvas.w / 2.0 - tw / 2.0;
+    out.push(band(tx, top - th + 1.0, tw, th + 1.0, shade(0.7, 0.0), alpha));
+    out.push(band(tx + 1.0, top - th + 1.0, tw - 2.0, th, shade(1.18, 14.0), alpha));
+    out.push(band(tx + 3.0, top - th + 1.0, tw - 6.0, 1.0, shade(1.18, 39.0), alpha));
 }

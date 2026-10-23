@@ -420,7 +420,8 @@ pub struct App {
     hud_wifi: Option<TexId>,
     hud_bolt: Option<TexId>,
     /// GBA dark, GBA light, Game Boy dark, Game Boy light.
-    slot_sets: Option<[(TexId, TexId); 4]>,
+    slot_sets: Option<[(TexId, TexId); 8]>,
+    nes_lids: Option<[TexId; 2]>,
     shelf_platform: slot_ui::Printed,
     shelf_title: slot_ui::Printed,
     name_pending: bool,
@@ -597,6 +598,7 @@ impl App {
             hud_wifi: None,
             hud_bolt: None,
             slot_sets: None,
+            nes_lids: None,
             shelf_platform: slot_ui::Printed::default(),
             shelf_title: slot_ui::Printed::default(),
             name_pending: false,
@@ -1463,8 +1465,9 @@ impl App {
         self.hud_bolt = Some(bolt);
     }
 
-    pub fn set_slot_sets(&mut self, sets: [(TexId, TexId); 4]) {
+    pub fn set_slot_sets(&mut self, sets: [(TexId, TexId); 8], nes_lids: [TexId; 2]) {
         self.slot_sets = Some(sets);
+        self.nes_lids = Some(nes_lids);
     }
 
     pub fn set_shelf_platform_face(&mut self, face: TexId, w: u32) {
@@ -1938,13 +1941,32 @@ impl App {
         }
     }
 
-    /// The slot art for the platform showing: the GBA slot, or the Game Boy's for GB and GBC
-    /// carts, in the theme's housing.
+    /// The slot art for the platform showing: the GBA slot, the Game Boy's for GB and GBC
+    /// carts, the NES band with its lid or the SNES band, in the theme's housing.
     fn slot_faces(&self) -> Option<(TexId, TexId)> {
         let sets = self.slot_sets?;
-        // Until the NES and SNES have slots of their own, they borrow the Game Boy's and GBA's.
-        let gb = !matches!(self.slot_platform(), Platform::Gba | Platform::Snes);
-        Some(sets[usize::from(gb) * 2 + usize::from(self.light())])
+        let kind = match self.slot_platform() {
+            Platform::Gba => 0,
+            Platform::Gb | Platform::Gbc => 1,
+            Platform::Nes => 2,
+            Platform::Snes => 3,
+        };
+        Some(sets[kind * 2 + usize::from(self.light())])
+    }
+
+    /// How many seconds an NES or SNES insert takes for each second of the slot's own: they go
+    /// in at their own pace. 1 for the handhelds.
+    fn insert_pace(&self, stem: &str) -> f32 {
+        self.shelf()
+            .find(stem)
+            .and_then(|(cart, _)| slot_ui::insert_seconds(slot_ui::mould_of(cart)))
+            .map_or(1.0, |s| s / SEATED_AT)
+    }
+
+    fn click_at(&self, stem: &str) -> f32 {
+        self.shelf()
+            .find(stem)
+            .map_or(1.0, |(cart, _)| slot_ui::click_at(slot_ui::mould_of(cart)))
     }
 
     pub fn status_ink(&self) -> [u8; 3] {
@@ -3112,6 +3134,12 @@ impl App {
         }
         let mut touched = false;
         let at = self.shelf_at;
+        let (pace, click) = match &self.phase {
+            Phase::Inserting { cart, .. } | Phase::Ejecting { cart, .. } => {
+                (self.insert_pace(cart), self.click_at(cart))
+            }
+            _ => (1.0, 1.0),
+        };
         let next = match &mut self.phase {
             Phase::Shelf => {
                 let shelf = &mut self.shelves[at].1;
@@ -3127,8 +3155,9 @@ impl App {
                 ..
             } => {
                 let was = *t;
-                *t += dt;
-                let at = SEATED_AT - Sfx::Insert.lead();
+                // Up to seated the cart moves at its own console's pace; the hold after is the same.
+                *t += if was < SEATED_AT { dt / pace } else { dt };
+                let at = SEATED_AT * click - Sfx::Insert.lead() / pace;
                 touched = !*resumed && was < at && *t >= at;
                 (*t >= INSERT_S && *core_ready).then(|| Phase::Playing {
                     cart: std::mem::take(cart),
@@ -3137,7 +3166,8 @@ impl App {
             Phase::Ejecting { t, .. } => {
                 if self.screen <= 0.0 {
                     let was = *t;
-                    *t += dt;
+                    // An NES or SNES cart comes out the way it went in, twice as fast.
+                    *t += if was < 0.0 { dt } else { dt * 2.0 / pace };
                     touched = was < 0.0 && *t >= 0.0;
                 }
                 (*t >= EJECT_S).then_some(Phase::Shelf)
@@ -3973,6 +4003,11 @@ impl App {
             canvas: self.canvas(),
             // Every cart seats with its top level with the slot's top edge.
             lift: slot_ui::GB_SEAT_LIFT,
+            lid: self
+                .nes_lids
+                .filter(|_| cart.platform == Platform::Nes)
+                .map(|l| l[usize::from(self.light())]),
+            light: self.light(),
         }
         .draw(out);
     }
