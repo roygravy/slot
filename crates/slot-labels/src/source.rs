@@ -7,7 +7,9 @@ const BASE: &str = "https://gamesdb.launchbox-app.com";
 pub(crate) const IMAGE: &str = "https://images.launchbox-app.com/";
 
 pub(crate) fn allowed_url(url: &str) -> bool {
-    url.starts_with(&format!("{BASE}/")) || url.starts_with(IMAGE)
+    url.starts_with(&format!("{BASE}/"))
+        || url.starts_with(IMAGE)
+        || url.starts_with(crate::slot_art::BASE)
 }
 
 fn unavailable(message: &str) -> Error {

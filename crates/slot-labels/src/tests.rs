@@ -15,6 +15,11 @@ fn cart(stem: &str) -> Cart {
     }
 }
 
+/// No Cart Studio set: these carts are dressed from LaunchBox.
+fn no_art() -> Option<slot_art::Index> {
+    Some(slot_art::Index::new())
+}
+
 fn image_bytes(w: u32, h: u32) -> Vec<u8> {
     // The top and bottom have different colours: catches upside-down/top-centering errors.
     let im = RgbImage::from_fn(w, h, |_, y| {
@@ -241,7 +246,7 @@ fn end_to_end_writes_exact_filename_and_skips_existing_without_network() {
         image: image_bytes(600, 355),
     };
     let mut cache = HashMap::new();
-    let file = prepare(&mut http, &mut cache, "", dir.path(), &cart, None).unwrap();
+    let file = prepare(&mut http, &mut cache, &mut no_art(), "", dir.path(), &cart, None).unwrap();
     assert_eq!(
         file,
         dir.path().join("Labels/GBA/Advance Wars (USA) (Rev 1).png")
@@ -249,7 +254,7 @@ fn end_to_end_writes_exact_filename_and_skips_existing_without_network() {
     let bytes = std::fs::read(&file).unwrap();
     assert_eq!(image::load_from_memory(&bytes).unwrap().width(), 264);
     assert_eq!(http.calls.len(), 2);
-    prepare(&mut http, &mut cache, "", dir.path(), &cart, None).unwrap();
+    prepare(&mut http, &mut cache, &mut no_art(), "", dir.path(), &cart, None).unwrap();
     assert_eq!(http.calls.len(), 2);
     assert_eq!(std::fs::read(file).unwrap(), bytes);
 }
@@ -273,10 +278,10 @@ fn corrupt_download_is_not_published_and_can_be_retried() {
         image: b"truncated".to_vec(),
     };
     let mut cache = HashMap::new();
-    assert!(prepare(&mut http, &mut cache, "", dir.path(), &cart, None).is_err());
+    assert!(prepare(&mut http, &mut cache, &mut no_art(), "", dir.path(), &cart, None).is_err());
     assert!(!dir.path().join("Labels").exists());
     http.image = image_bytes(600, 355);
-    assert!(prepare(&mut http, &mut cache, "", dir.path(), &cart, None).is_ok());
+    assert!(prepare(&mut http, &mut cache, &mut no_art(), "", dir.path(), &cart, None).is_ok());
     assert_eq!(
         http.calls.len(),
         3,
@@ -331,6 +336,7 @@ fn verified_identity_selects_artwork_but_preserves_rom_filename() {
     let file = prepare(
         &mut http,
         &mut HashMap::new(),
+        &mut no_art(),
         "",
         dir.path(),
         &cart,
@@ -377,6 +383,7 @@ fn an_indexed_rom_skips_the_search_and_falls_through_unusable_candidates() {
     let file = prepare(
         &mut http,
         &mut HashMap::new(),
+        &mut no_art(),
         "CBF43926\tgone.png\tbox.png\tcart.png\n",
         dir.path(),
         &cart,
@@ -432,6 +439,7 @@ fn a_rom_in_the_artwork_pack_is_labelled_without_the_network() {
     let file = prepare(
         &mut NoNetwork,
         &mut HashMap::new(),
+        &mut no_art(),
         "",
         dir.path(),
         &rom_on_gbc_shelf(dir.path()),
@@ -461,6 +469,7 @@ fn a_pack_without_the_rom_or_a_damaged_pack_leaves_it_to_the_network() {
         prepare(
             &mut http,
             &mut HashMap::new(),
+            &mut no_art(),
             "CBF43926\tcart.png\n",
             dir.path(),
             &rom_on_gbc_shelf(dir.path()),
@@ -469,4 +478,38 @@ fn a_pack_without_the_rom_or_a_damaged_pack_leaves_it_to_the_network() {
         .unwrap();
         assert_eq!(http.calls, ["https://images.launchbox-app.com/cart.png"]);
     }
+}
+
+#[test]
+fn the_cart_studio_set_dresses_a_game_boy_cart_before_launchbox_is_asked() {
+    struct Studio(Vec<String>, u32);
+    impl Transport for Studio {
+        fn get(&mut self, url: &str) -> Result<Vec<u8>, Error> {
+            self.0.push(url.into());
+            if url.ends_with("index.json") {
+                Ok(format!(r#"{{"{:08X}":{{"support-texture":"GB/support-texture/x.png"}}}}"#, self.1).into_bytes())
+            } else {
+                Ok(image_bytes(366, 326))
+            }
+        }
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let rom = dir.path().join("Games/GB/Anything.gb");
+    std::fs::create_dir_all(rom.parent().unwrap()).unwrap();
+    std::fs::write(&rom, b"123456789").unwrap();
+    let mut cart = cart("Anything");
+    cart.platform = slot_store::Platform::Gb;
+    cart.rom = rom;
+    let mut http = Studio(Vec::new(), 0xCBF4_3926);
+    let file = prepare(&mut http, &mut HashMap::new(), &mut None, "", dir.path(), &cart, None).unwrap();
+    assert_eq!(
+        http.0,
+        [
+            "https://art.slot-cfw.fyi/index.json",
+            "https://art.slot-cfw.fyi/GB/support-texture/x.png"
+        ]
+    );
+    let label = image::open(file).unwrap();
+    assert_eq!((label.width(), label.height()), label_size(slot_store::Platform::Gb));
+    assert!(dir.path().join("System/Cache/Labels/slot-art.tsv").is_file(), "index kept on the card");
 }
