@@ -15,7 +15,9 @@ const CAROUSEL: f32 = 0.88;
 const SIDE_ALPHA: f32 = 1.0;
 
 pub fn rest_y(h: f32) -> f32 {
-    let y = if h > CART_H as f32 {
+    // A tall pak (Game Boy, NES) centres in the gap; a wide cart (GBA, SNES) stands on the
+    // GBA's ground, so every wide cart sits at the same height.
+    let y = if h > TALL_H {
         (OUT_H as f32 - MOUTH_H - h) / 2.0
     } else {
         (OUT_H + CART_H) as f32 / 2.0 - h
@@ -24,6 +26,9 @@ pub fn rest_y(h: f32) -> f32 {
     // whole pixel so the 312×337 bitmap hits the RG SP panel 1:1.
     y.round()
 }
+
+/// Taller than any wide cart, shorter than any pak.
+const TALL_H: f32 = 300.0;
 
 pub fn foot_y(h: f32) -> f32 {
     rest_y(h) + h
