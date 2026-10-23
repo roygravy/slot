@@ -35,6 +35,17 @@ pub const MARKERS: [(&str, [u8; 3]); 3] = [
 
 pub const FINISHES: [ShellFinish; 3] =
     [ShellFinish::Solid, ShellFinish::Clear, ShellFinish::Glitter];
+/// An NES cart is painted metallic, as the gold ones were, instead of glittering.
+pub const NES_FINISHES: [ShellFinish; 3] =
+    [ShellFinish::Solid, ShellFinish::Clear, ShellFinish::Metallic];
+
+/// Every finish's name, in the order of its face: the ones a cart is offered index into it.
+pub const FINISH_NAMES: [(ShellFinish, &str); 4] = [
+    (ShellFinish::Solid, "Solid"),
+    (ShellFinish::Clear, "Clear"),
+    (ShellFinish::Glitter, "Glitter"),
+    (ShellFinish::Metallic, "Metallic"),
+];
 
 /// A swatch on the row: the cart's own shell, a colour set elsewhere (the studio) that the
 /// palette does not hold, or one of the palette's.
@@ -146,6 +157,8 @@ pub struct ShellPicker {
     swatches: Vec<Swatch>,
     swatch: usize,
     finish: usize,
+    /// The finishes the row offers: an NES cart's has metallic in glitter's place.
+    finishes: [ShellFinish; 3],
     tab: Tab,
     row: Row,
     fetch: Fetch,
@@ -202,6 +215,7 @@ impl ShellPicker {
             swatches,
             swatch,
             finish,
+            finishes: FINISHES,
             tab: Tab::Colour,
             row: Row::Colour,
             fetch: if labelled {
@@ -246,6 +260,21 @@ impl ShellPicker {
 
     pub fn finish(&self) -> usize {
         self.finish
+    }
+
+    /// An NES cart: metallic instead of glitter.
+    pub fn with_metallic(mut self) -> Self {
+        self.finishes = NES_FINISHES;
+        if let Some(c) = self.was.filter(|c| c.finish != ShellFinish::Own) {
+            self.finish = self.finishes.iter().position(|f| *f == c.finish).unwrap_or(0);
+        }
+        self
+    }
+
+    /// The offered finishes' names, as places in `FINISH_NAMES`.
+    pub fn finish_faces(&self) -> [usize; 3] {
+        self.finishes
+            .map(|f| FINISH_NAMES.iter().position(|(n, _)| *n == f).unwrap_or(0))
     }
 
     pub fn row(&self) -> Row {
@@ -331,7 +360,7 @@ impl ShellPicker {
             Some(colour) => Some(ShellChoice {
                 outline,
                 colour,
-                finish: FINISHES[self.finish],
+                finish: self.finishes[self.finish],
             }),
             None if outline != Outline::Auto && self.model.is_some() => Some(ShellChoice {
                 outline,
@@ -439,7 +468,7 @@ impl ShellPicker {
                         self.swatch = to;
                     }
                     Row::Finish => {
-                        let to = step(self.finish, by, FINISHES.len());
+                        let to = step(self.finish, by, self.finishes.len());
                         if to == self.finish {
                             return Outcome::None;
                         }

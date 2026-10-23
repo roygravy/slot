@@ -567,7 +567,7 @@ impl Frontend {
         let found = words.split_off(words.len() - 2);
         let tabs = words.split_off(words.len() - 3);
         let models = words.split_off(words.len() - 4);
-        let finishes = words.split_off(words.len() - 3);
+        let finishes = words.split_off(words.len() - crate::shell_picker::FINISH_NAMES.len());
         let mut shell_legend: Vec<(TexId, u32)> = faces
             .shell_legend
             .into_iter()
@@ -1339,7 +1339,8 @@ impl UiFaces {
             // the markers' names.
             shell_words: crate::shell_picker::swatch_names()
                 .into_iter()
-                .chain(["Solid", "Clear", "Glitter", "NTSC", "PAL", "GB", "GBC", "Color", "Label", "Marker", "Looking", "None Found"])
+                .chain(crate::shell_picker::FINISH_NAMES.map(|(_, name)| name))
+                .chain(["NTSC", "PAL", "GB", "GBC", "Color", "Label", "Marker", "Looking", "None Found"])
                 .chain(crate::shell_picker::MARKERS.map(|(name, _)| name))
                 .map(slot_ui::shell_picker_word)
                 .collect(),

@@ -4770,6 +4770,7 @@ impl App {
             }
             Platform::Gb => picker.with_model(0),
             Platform::Gbc => picker.with_model(1),
+            Platform::Nes => picker.with_metallic(),
             _ => picker,
         };
         self.label_was = label_was;
@@ -5032,6 +5033,7 @@ impl App {
             swatches: &swatches,
             swatch: picker.swatch(),
             finish: picker.finish(),
+            finishes: picker.finish_faces(),
             finish_on: picker.finish_on(),
             model: picker
                 .model()

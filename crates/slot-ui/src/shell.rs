@@ -6,6 +6,14 @@ pub enum Finish {
     Solid,
     Translucent,
     Glitter,
+    Metallic,
+}
+
+impl Finish {
+    /// See-through plastic: clear, and glitter, which is clear plastic with flecks in it.
+    pub fn clear(self) -> bool {
+        matches!(self, Finish::Translucent | Finish::Glitter)
+    }
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -87,6 +95,7 @@ pub fn shell_for(cart: &Cart) -> Shell {
             ShellFinish::Solid => Some(Finish::Solid),
             ShellFinish::Clear => Some(Finish::Translucent),
             ShellFinish::Glitter => Some(Finish::Glitter),
+            ShellFinish::Metallic => Some(Finish::Metallic),
             ShellFinish::Own => None,
         };
         if let Some(finish) = finish {

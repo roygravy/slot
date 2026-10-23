@@ -208,7 +208,7 @@ pub fn cart_face(cart: &Cart) -> CartFace {
 }
 
 pub fn is_clear(cart: &Cart) -> bool {
-    shell_for(cart).finish != Finish::Solid
+    shell_for(cart).finish.clear()
 }
 
 /// Whether the shelf draws this cart's coloured interior under its plastic: any clear cart.
@@ -543,7 +543,7 @@ fn overlay(base: u8, colour: u8) -> u8 {
 }
 
 fn shell_face(s: &Spec, shell: &Shell) -> CartFace {
-    let clear = shell.finish != Finish::Solid;
+    let clear = shell.finish.clear();
     let src = bitmaps::shell_asset(s.mould, clear);
     assert_eq!(
         src.len(),
@@ -579,6 +579,9 @@ fn shell_face(s: &Spec, shell: &Shell) -> CartFace {
             };
         }
     }
+    if shell.finish == Finish::Metallic {
+        metal(&mut rgba, src, s, shell.colour);
+    }
     if shell.finish == Finish::Glitter {
         for y in 0..s.h {
             for x in 0..s.w {
@@ -600,6 +603,44 @@ fn shell_face(s: &Spec, shell: &Shell) -> CartFace {
         w: s.w,
         h: s.h,
     }
+}
+
+/// Gold paint, as on Nintendo's gold NES carts: the moulding's light and shade pushed harder,
+/// a broad soft highlight running down the cart at a slant with a duller band after it, and a
+/// faint fine grain in the paint. The label box is left as it is.
+fn metal(rgba: &mut [u8], neutral: &[u8], s: &Spec, colour: [u8; 3]) {
+    let (lx, ly, lw, lh) = s.label;
+    let shine = lerp(colour, [0xff; 3], 150, 255);
+    for y in 0..s.h {
+        for x in 0..s.w {
+            if (lx..lx + lw).contains(&x) && (ly..ly + lh).contains(&y) {
+                continue;
+            }
+            let i = ((y * s.w + x) * 4) as usize;
+            if rgba[i + 3] == 0 {
+                continue;
+            }
+            let shade = (neutral[i..i + 3].iter().map(|&c| c as f32).sum::<f32>() / 3.0 / 128.0)
+                .clamp(0.0, 2.0);
+            let lit = 0.12 + 0.95 * shade.powf(2.2);
+            let u = x as f32 / s.w as f32 * 0.75 + y as f32 / s.h as f32 * 0.25;
+            let band = |at: f32, width: f32| (-((u - at) / width).powi(2)).exp();
+            let highlight = 0.75 * band(0.30, 0.08) + 0.30 * band(0.56, 0.06);
+            let dull = 1.0 - 0.32 * band(0.76, 0.10) - 0.15 * band(0.12, 0.06);
+            let grain = 1.0 + ((fleck_noise(x, y) % 9) as f32 - 4.0) * 0.006;
+            for c in 0..3 {
+                let body = colour[c] as f32 * lit * dull * grain;
+                let v = body + (shine[c] as f32 - body).max(0.0) * highlight * shade.min(1.2);
+                rgba[i + c] = v.clamp(0.0, 255.0) as u8;
+            }
+        }
+    }
+}
+
+fn fleck_noise(x: u32, y: u32) -> u32 {
+    let mut h = x.wrapping_mul(0x9e37_79b9) ^ y.wrapping_mul(0x85eb_ca6b);
+    h ^= h >> 15;
+    h.wrapping_mul(0x2c1b_3c6d) >> 7
 }
 
 fn fleck(x: u32, y: u32) -> bool {

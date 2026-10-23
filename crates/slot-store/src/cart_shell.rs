@@ -17,6 +17,8 @@ pub enum ShellFinish {
     Solid,
     Clear,
     Glitter,
+    /// Gold paint, as Nintendo's gold NES carts wear.
+    Metallic,
     /// The cart's own colour and finish: only its outline was picked (an SNES cart's NTSC or
     /// PAL shape). The colour is not used.
     Own,
@@ -47,6 +49,7 @@ impl ShellChoice {
             "solid" => ShellFinish::Solid,
             "clear" => ShellFinish::Clear,
             "glitter" => ShellFinish::Glitter,
+            "metallic" => ShellFinish::Metallic,
             "own" => ShellFinish::Own,
             _ => return None,
         };
@@ -67,6 +70,7 @@ impl ShellChoice {
             ShellFinish::Solid => "solid",
             ShellFinish::Clear => "clear",
             ShellFinish::Glitter => "glitter",
+            ShellFinish::Metallic => "metallic",
             ShellFinish::Own => "own",
         };
         let [r, g, b] = self.colour;

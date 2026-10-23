@@ -78,6 +78,8 @@ pub struct ShellPickerView<'a> {
     pub swatch: usize,
     pub finish: usize,
     pub finish_on: bool,
+    /// The finishes offered, as places in the faces' finishes.
+    pub finishes: [usize; 3],
     /// For a cart with two shapes: where its pair starts in the faces' models, and the one
     /// picked.
     pub model: Option<(usize, usize)>,
@@ -422,8 +424,9 @@ pub fn draw_shell_picker(canvas: Canvas, v: &ShellPickerView, out: &mut Vec<Draw
                 out,
             );
         }
+        let finishes: Vec<(TexId, u32)> = v.finishes.iter().map(|&f| v.faces.finishes[f]).collect();
         boxed_row(
-            &v.faces.finishes,
+            &finishes,
             v.finish_on.then_some(v.finish),
             v.row == PickerRow::Finish,
             FINISH_Y + drop,
