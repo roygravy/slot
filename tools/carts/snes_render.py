@@ -75,14 +75,12 @@ height -= label * 2.0  # as deep as the PAL cart's (Roy)
 window = rect(0.194, 0.617, 0.809, 1.05, 0.03)
 height -= window * 4.5  # deep, and runs out through the bottom edge (Roy's photo)
 yy, xx = np.mgrid[0:h, 0:w]
-# a very shallow half-pipe down the middle of the window, no hard walls: it runs out of the
-# window's top wall and fades smoothly into the floor towards the bottom (Roy)
-across = np.clip(np.abs(xx - U(0.5)) / (0.105 * w), 0, 1)
-pipe = 0.5 * (1 + np.cos(np.pi * across))  # a soft dish, no edges anywhere
-t = np.clip((yy - V(0.70)) / (V(0.95) - V(0.70)), 0, 1)
-fade = 1 - t * t * (3 - 2 * t)
-pipe *= fade
-height -= pipe * window * 3.0
+# a channel down the middle of the window with straight side walls; its floor curves up
+# like a half-pipe lying on its side and meets the window floor smoothly near the bottom (Roy)
+pipe = rect(0.40, 0.55, 0.60, 1.05)
+t = np.clip((yy - V(0.617)) / (V(0.95) - V(0.617)), 0, 1)
+fade = 1 - t * t * (3 - 2 * t)  # level at the top, easing into the floor at the bottom
+height -= pipe * window * fade * 4.0
 gaps = gamebit(0.087, 0.917, height) | gamebit(0.913, 0.917, height)
 height *= cart
 hs = nd.gaussian_filter(height, SS * 0.55)
@@ -95,11 +93,10 @@ grey *= 1 - sides * 0.42 * np.exp(-near / 0.014)
 # and the walls of the deep window and the pipe shade the floor next to them
 wall = nd.distance_transform_edt(np.pad(window, ((1, 0), (1, 1)), constant_values=False))[1:, 1:-1] / w
 grey *= 1 - window * 0.30 * np.exp(-wall / 0.010)
-# the head-on light can't see a sideways curve, so the pipe is shaded by hand like a round
-# trough: brightest where it faces you, darker up its flanks, lightening again at the lip
-a = np.clip(np.abs(xx - U(0.5)) / (0.115 * w), 0, 1)
-turn = a ** 3 * (1 - a) ** 0.6 / 0.144  # steepest, so darkest, near the lip
-grey *= 1 - 0.16 * nd.gaussian_filter(turn * fade * window, SS)
+# the head-on light can't see the side walls, so they shade the channel floor by hand,
+# fading out as the channel gets shallower
+side = nd.distance_transform_edt(pipe) / w
+grey *= 1 - (pipe & window) * fade * 0.45 * np.exp(-side / 0.010)
 A = save(grey3(grey), cart, 'snes_neutral.png')
 m = np.zeros((H, W, 4), np.uint8); m[..., :3] = 255; m[..., 3] = (A * 255).round().astype(np.uint8)
 Image.fromarray(m, 'RGBA').save(f'{out}/snes_cart.png')
