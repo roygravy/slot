@@ -42,7 +42,12 @@ def grey3(g): return np.repeat(g[..., None], 3, 2)
 # the raised centre only stands out at the top: the bottom is one straight edge (Roy's photo)
 centre = rect(0.156, 0.0, 0.844, 1.0, 0.007)
 cart = rect(0.0, 0.032, 1.0, 0.993, 0.014) | rect(0.156, 0.0, 0.844, 0.5, 0.007)
-dist = nd.distance_transform_edt(cart)
+# a small fillet where the raised centre steps down to the side pieces, not a hard inner corner
+fr = int(0.006 * w)
+fy, fx = np.mgrid[-fr:fr + 1, -fr:fr + 1]
+cart = nd.binary_closing(np.pad(cart, fr), fx * fx + fy * fy <= fr * fr)[fr:-fr, fr:-fr]
+# padded, so the edges on the image border get the same bevel as the rest
+dist = nd.distance_transform_edt(np.pad(cart, 1))[1:-1, 1:-1]
 edge = np.clip(dist / (3.0 * SS), 0, 1) ** 0.5
 
 def gamebit(u, v, height):
@@ -72,6 +77,7 @@ height -= window * 2.6
 yy, xx = np.mgrid[0:h, 0:w]
 for u in (0.405, 0.594):
     t = np.clip((V(0.854) - yy) / (V(0.854) - V(0.627)), 0, 1)
+    t *= np.clip((yy - V(0.627)) / (V(0.66) - V(0.627)), 0, 1)  # eases in, no bright speck at the top
     ridge = (np.abs(xx - U(u)) < 0.004 * w) & (yy > V(0.627)) & (yy < V(0.854)) & window
     height += ridge * t * 1.6
 gaps = gamebit(0.087, 0.917, height) | gamebit(0.913, 0.917, height)
