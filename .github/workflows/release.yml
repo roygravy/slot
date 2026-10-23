@@ -21,18 +21,20 @@ jobs:
       - name: Install zip, cmake and Task
         run: |
           set -eu
+          # A test build from a branch: its name's slashes cannot stand in a folder or zip name.
+          echo "BUILD_NAME=$(printf %s "$GITHUB_REF_NAME" | tr / -)" >> "$GITHUB_ENV"
           sed -i '/bullseye-security/d' /etc/apt/sources.list
           apt-get -o Acquire::Check-Valid-Until=false update
           apt-get install -y --no-install-recommends zip cmake
           curl -fsSL https://taskfile.dev/install.sh | sh -s -- -b /usr/local/bin
 
       - name: Build the tree
-        run: task dist:device OUT="slot-${GITHUB_REF_NAME}"
+        run: task dist:device OUT="slot-${BUILD_NAME}"
 
       - name: Check what is about to ship
         run: |
           set -eu
-          out="slot-${GITHUB_REF_NAME}"
+          out="slot-${BUILD_NAME}"
           file "$out/System/slot" | grep -q aarch64
           file "$out/System/slot-services" | grep -q aarch64
           file "$out/System/slot-net/iw" | grep -q aarch64
@@ -61,7 +63,7 @@ jobs:
         id: package
         run: |
           set -eu
-          out="slot-${GITHUB_REF_NAME}"
+          out="slot-${BUILD_NAME}"
           zip="$out-h700.zip"
           zip -qry "$zip" "$out"
           echo "zip=$zip" >> "$GITHUB_OUTPUT"
