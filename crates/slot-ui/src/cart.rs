@@ -667,11 +667,21 @@ fn plastic_label_bed(s: &Spec, face: &mut CartFace) {
                 _ => 0.95,
             };
             let dimple = screw_dimple(x as f32 - dimple_x, y as f32 - dimple_y, dimple_r);
+            // A TV cart's rendered well already has round corners: the bed follows them, so no
+            // square corner shows past the sticker's.
+            let cover = match (s.mould.tv(), s.square_top) {
+                (false, _) => 255,
+                (true, true) => corner_cover(x, y + lh, lw, 2 * lh, s.radius),
+                (true, false) => corner_cover(x, y, lw, lh, s.radius),
+            } as f32
+                / 255.0;
             let d = (((y + ly) * s.w + x + lx) * 4) as usize;
             for c in 0..3 {
-                face.rgba[d + c] = (mean[c] * wall * dimple + noise).clamp(0.0, 255.0) as u8;
+                let bed = (mean[c] * wall * dimple + noise).clamp(0.0, 255.0);
+                face.rgba[d + c] = (bed * cover + face.rgba[d + c] as f32 * (1.0 - cover)) as u8;
             }
-            face.rgba[d + 3] = mean[3] as u8;
+            let alpha = mean[3] * cover + face.rgba[d + 3] as f32 * (1.0 - cover);
+            face.rgba[d + 3] = alpha as u8;
         }
     }
 }

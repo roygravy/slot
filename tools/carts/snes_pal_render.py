@@ -88,9 +88,9 @@ for v in VENTS:
     band = rect(-0.05, v, 1.05, v + VH, VH * h / w / 2)
     vent |= (rect(-0.05, v, 0.040, v + VH, VH * h / w / 2) | rect(0.960, v, 1.05, v + VH, VH * h / w / 2))
 vd = nd.distance_transform_edt(np.pad(vent, 1))[1:-1, 1:-1]
-height -= nd.gaussian_filter(vent.astype(np.float32), 0.5 * SS) * 3.0
+height -= nd.gaussian_filter(vent.astype(np.float32), 0.5 * SS) * 2.2
 # the label recess: deep, with big rounded corners
-label = rect(0.081, 0.054, 0.923, 0.486, 0.004)  # square corners; the sticker on it is round (Roy)
+label = rect(0.081, 0.054, 0.923, 0.486, 0.036)  # about the sticker's own radius (Roy)
 height -= label * 2.0
 # the middle plate below the label and the side pieces either side; a fine seam marks the plate's
 # edges all the way up to the top rim (no step across the side pieces: Roy)
@@ -122,7 +122,7 @@ grey *= 1 - 0.5 * nd.gaussian_filter((wells & ~holes).astype(np.float32), 0.6 * 
 grey *= 1 - 0.24 * nd.gaussian_filter(slot.astype(np.float32), 0.8 * SS) * (1 + 0.3 * mid)
 grey = np.where(holes, grey * 0.5, grey)
 # the side vents are cut deep: their floor sits in shadow
-grey *= 1 - 0.58 * nd.gaussian_filter(vent.astype(np.float32), 0.4 * SS)
+grey *= 1 - 0.45 * nd.gaussian_filter(vent.astype(np.float32), 0.4 * SS)
 # the rounded ends turn away from the light: a soft sheen where they start to curve, then the
 # plastic darkens as it turns toward the side
 turn = np.sqrt(np.clip(1 - t * t, 0, 1))
