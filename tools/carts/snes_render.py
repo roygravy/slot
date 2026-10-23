@@ -17,7 +17,7 @@ def disc(u, v, r):
 def light(height, gain=1.5, blur=0.55):
     hs = nd.gaussian_filter(height, SS * blur)
     gy, gx = np.gradient(hs)
-    lx, ly, lz = -0.25, -0.75, 0.62
+    lx, ly, lz = 0.0, -0.75, 0.62  # head on, so the cart's halves mirror (Roy)
     n = np.sqrt(lx * lx + ly * ly + lz * lz); lx, ly, lz = lx / n, ly / n, lz / n
     lam = (-gx * lx - gy * ly + lz) / np.sqrt(gx * gx + gy * gy + 1)
     occ = np.clip((nd.gaussian_filter(hs, 6 * SS) - hs) * 0.05, 0, 0.22)
@@ -45,6 +45,19 @@ cart = rect(0.0, 0.032, 1.0, 0.993, 0.014) | rect(0.156, 0.0, 0.844, 0.5, 0.007)
 dist = nd.distance_transform_edt(cart)
 edge = np.clip(dist / (3.0 * SS), 0, 1) ** 0.5
 
+def gamebit(u, v, height):
+    """The security screw both SNES carts have (Roy's photo): a dark gap round a flush head
+    with six round lobes, in a shallow countersink. Returns the gap, for its shadow."""
+    r = np.sqrt((xx - U(u)) ** 2 + (yy - V(v)) ** 2) / w
+    th = np.arctan2(yy - V(v), xx - U(u))
+    lobes = 0.0105 * (1 + 0.09 * np.cos(6 * th))
+    sink = r < 0.017
+    gap = (r < 0.0135) & (r >= lobes)
+    head = r < lobes
+    height -= sink * 0.8 + gap * 3.0
+    height += head * np.sqrt(np.clip(1 - (r / 0.0115) ** 2, 0, 1)) * 0.8
+    return gap
+
 # ---- front ----
 height = edge * 10
 sides = cart & ~centre
@@ -61,13 +74,11 @@ for u in (0.405, 0.594):
     t = np.clip((V(0.854) - yy) / (V(0.854) - V(0.627)), 0, 1)
     ridge = (np.abs(xx - U(u)) < 0.004 * w) & (yy > V(0.627)) & (yy < V(0.854)) & window
     height += ridge * t * 1.6
-screw_ring = disc(0.087, 0.917, 0.018) | disc(0.913, 0.917, 0.018)
-screw_hole = disc(0.087, 0.917, 0.011) | disc(0.913, 0.917, 0.011)
-height -= screw_ring * 1.0 + screw_hole * 3.0
+gaps = gamebit(0.087, 0.917, height) | gamebit(0.913, 0.917, height)
 height *= cart
 hs = nd.gaussian_filter(height, SS * 0.55)
 grey = 119 * light(height) + grain(1.2)  # the Game Boy carts' level (Roy)
-grey = np.where(screw_hole, grey * 0.55, grey)
+grey *= 1 - 0.65 * nd.gaussian_filter(gaps.astype(np.float32), 0.5 * SS)
 A = save(grey3(grey), cart, 'snes_neutral.png')
 m = np.zeros((H, W, 4), np.uint8); m[..., :3] = 255; m[..., 3] = (A * 255).round().astype(np.uint8)
 Image.fromarray(m, 'RGBA').save(f'{out}/snes_cart.png')

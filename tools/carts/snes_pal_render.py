@@ -17,7 +17,7 @@ def disc(u, v, r):
 def light(height, gain=1.5, blur=0.9):
     hs = nd.gaussian_filter(height, SS * blur)
     gy, gx = np.gradient(hs)
-    lx, ly, lz = -0.2, -0.55, 0.81
+    lx, ly, lz = 0.0, -0.55, 0.81
     n = np.sqrt(lx * lx + ly * ly + lz * lz); lx, ly, lz = lx / n, ly / n, lz / n
     lam = (-gx * lx - gy * ly + lz) / np.sqrt(gx * gx + gy * gy + 1)
     occ = np.clip((nd.gaussian_filter(hs, 6 * SS) - hs) * 0.05, 0, 0.22)
@@ -44,7 +44,7 @@ def grey3(g): return np.repeat(g[..., None], 3, 2)
 def crisp(height, gain=1.7):
     hs = nd.gaussian_filter(height, SS * 0.55)
     gy, gx = np.gradient(hs)
-    lx, ly, lz = -0.25, -0.75, 0.62
+    lx, ly, lz = 0.0, -0.75, 0.62  # head on, so the cart's halves mirror (Roy)
     n = np.sqrt(lx * lx + ly * ly + lz * lz); lx, ly, lz = lx / n, ly / n, lz / n
     lam = (-gx * lx - gy * ly + lz) / np.sqrt(gx * gx + gy * gy + 1)
     occ = np.clip((nd.gaussian_filter(hs, 6 * SS) - hs) * 0.05, 0, 0.22)
@@ -80,6 +80,19 @@ R = 0.085 * w
 t = np.clip((R - dx) / R, 0, 1)                    # 0 where the front is flat, 1 at the very side
 height -= np.where(cart, (R - np.sqrt(np.clip(R * R - (R * t) ** 2, 0, None))) / SS * 0.9, 0)
 
+def gamebit(u, v, height):
+    """The security screw both SNES carts have (Roy's photo): a dark gap round a flush head
+    with six round lobes, in a shallow countersink. Returns the gap, for its shadow."""
+    r = np.sqrt((xx - U(u)) ** 2 + (yy - V(v)) ** 2) / w
+    th = np.arctan2(yy - V(v), xx - U(u))
+    lobes = 0.0105 * (1 + 0.09 * np.cos(6 * th))
+    sink = r < 0.017
+    gap = (r < 0.0135) & (r >= lobes)
+    head = r < lobes
+    height -= sink * 0.8 + gap * 3.0
+    height += head * np.sqrt(np.clip(1 - (r / 0.0115) ** 2, 0, 1)) * 0.8
+    return gap
+
 # ---- front ----
 # vents: five soft rounded grooves running in from each side, and where each one meets the side
 # the outline itself has a small rounded notch (Roy's Top Gear close-up)
@@ -105,7 +118,7 @@ rim = rect(0.199, 0.621, 0.824, 0.709, 0.033)
 rim_d = nd.distance_transform_edt(np.pad(rim, 1))[1:-1, 1:-1]
 height += np.sin(np.clip(rim_d / (2.0 * SS), 0, 1) * np.pi / 2) * 0.5
 slot_in = nd.distance_transform_edt(np.pad(slot, 1))[1:-1, 1:-1]
-height -= np.sin(np.clip(slot_in / (2.2 * SS), 0, 1) * np.pi / 2) * 3.4
+height -= np.sin(np.clip(slot_in / (2.2 * SS), 0, 1) * np.pi / 2) * 4.6  # deeper (Roy)
 mid = rect(0.397, 0.62, 0.596, 0.72) & slot
 height -= mid * 0.6
 period = V(0.696 - 0.634) / 4.5
@@ -113,21 +126,14 @@ ribs = 0.5 + 0.5 * np.cos((yy - V(0.634)) / period * 2 * np.pi)
 height += slot * ribs * 0.9 * np.clip(slot_in / (1.5 * SS), 0, 1)
 # screws: a deep round well with the screw head, its hole off to the upper right
 # real carts: a small screw head sitting in a shallow countersink
-wells = disc(0.063, 0.929, 0.019) | disc(0.937, 0.929, 0.019)
-holes = disc(0.063, 0.929, 0.011) | disc(0.937, 0.929, 0.011)
-height -= wells * 2.6
-# the screw head is domed, so it catches the light on one side (Roy: it read faint)
-for u in (0.063, 0.937):
-    rr = np.sqrt((xx - U(u)) ** 2 + (yy - V(0.929)) ** 2) / (0.011 * w)
-    height += np.sqrt(np.clip(1 - rr * rr, 0, 1)) * 2.4
+gaps = gamebit(0.063, 0.929, height) | gamebit(0.937, 0.929, height)
 height *= cart
 # the flat face sits at the Game Boy carts' level, so the same colour reads the same (Roy)
 grey = 119 * crisp(height) + grain(1.2)
 # the recess and the wells catch less light than the open plastic
 grey *= 1 - 0.06 * nd.gaussian_filter(label.astype(np.float32), SS)
-grey *= 1 - 0.5 * nd.gaussian_filter((wells & ~holes).astype(np.float32), 0.6 * SS)
-grey *= 1 - 0.20 * nd.gaussian_filter(slot.astype(np.float32), 0.8 * SS) * (1 + 0.08 * mid)
-grey = np.where(holes, grey * 0.8, grey)
+grey *= 1 - 0.65 * nd.gaussian_filter(gaps.astype(np.float32), 0.5 * SS)
+grey *= 1 - 0.27 * nd.gaussian_filter(slot.astype(np.float32), 0.8 * SS) * (1 + 0.08 * mid)
 # the side vents are cut deep: their floor sits in shadow
 grey *= 1 - 0.20 * nd.gaussian_filter(vent.astype(np.float32), 0.4 * SS)
 # the rounded ends turn away from the light: a soft sheen where they start to curve, then the
