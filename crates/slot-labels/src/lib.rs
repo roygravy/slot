@@ -51,9 +51,12 @@ impl From<std::io::Error> for Error {
 /// The size a label is prepared at: the label well slot draws on that platform's cart.
 pub fn label_size(platform: Platform) -> (u32, u32) {
     match platform {
-        // Until the NES and SNES have moulds of their own, they borrow the GB's and GBA's.
-        Platform::Gba | Platform::Snes => (264, 136),
-        Platform::Gb | Platform::Nes => (220, 195),
+        Platform::Gba => (264, 136),
+        Platform::Gb => (220, 195),
+        // The NES label is tall; the SNES one is the NTSC sticker, which the shelf crops to the
+        // flatter PAL sticker when the cart takes that mould.
+        Platform::Nes => (141, 228),
+        Platform::Snes => (221, 109),
         Platform::Gbc => (223, 199),
     }
 }
