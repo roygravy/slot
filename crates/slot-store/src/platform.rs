@@ -10,6 +10,10 @@ pub enum Platform {
     Snes,
 }
 
+/// A TV console's frame: its 256 columns as the composite signal smears them, which the
+/// core's NTSC filter draws 602 wide.
+pub const TV_CANVAS: (u32, u32) = (602, 224);
+
 impl Platform {
     pub const ALL: [Platform; 5] = [
         Platform::Gb,
@@ -52,7 +56,7 @@ impl Platform {
         match self {
             Platform::Gba => (240, 160),
             Platform::Gb | Platform::Gbc => (160, 144),
-            Platform::Nes | Platform::Snes => (256, 224),
+            Platform::Nes | Platform::Snes => TV_CANVAS,
         }
     }
 
@@ -61,7 +65,7 @@ impl Platform {
     pub fn canvas(self) -> (u32, u32) {
         match self {
             Platform::Gba | Platform::Gb | Platform::Gbc => (240, 160),
-            Platform::Nes | Platform::Snes => (256, 224),
+            Platform::Nes | Platform::Snes => TV_CANVAS,
         }
     }
 

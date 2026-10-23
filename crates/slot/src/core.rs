@@ -403,12 +403,15 @@ pub fn apply_core_options(
         core.set_option("fceumm_overscan_v_bottom", "8");
         core.set_option("fceumm_overscan_h_left", "0");
         core.set_option("fceumm_overscan_h_right", "0");
+        // The picture as a composite cable carried it to the TV: colour fringes and all.
+        core.set_option("fceumm_ntsc_filter", "composite");
     }
     if which == Core::Snes9x {
         core.set_option("snes9x_overscan", "disabled");
         // High-resolution screens blend to 256 wide, as a TV's blur showed them.
         core.set_option("snes9x_hires_blend", "merge");
         core.set_option("snes9x_audio_interpolation", "gaussian");
+        core.set_option("snes9x_blargg", "composite");
     }
 }
 

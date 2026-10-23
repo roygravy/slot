@@ -119,7 +119,7 @@ void main() {
         vec3 glow = vec3(0.0);
         for (int j = -1; j <= 1; j++) {
             for (int i = -1; i <= 1; i++) {
-                vec2 o = vec2(float(i) * 2.0, float(j) * 2.0);
+                vec2 o = vec2(float(i) * 2.0 * u_src.x / 256.0, float(j) * 2.0);
                 float w = (i == 0 ? 2.0 : 1.0) * (j == 0 ? 2.0 : 1.0) / 16.0;
                 glow += texture2D(u_game, (floor(at) + o + 0.5) / u_src).rgb * w;
             }
