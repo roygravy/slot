@@ -61,7 +61,7 @@ flat = lz
 shade = lam / flat
 # soft occlusion: recesses read a touch darker
 occ = np.clip((nd.gaussian_filter(hs, 6 * SS) - hs) * 0.05, 0, 0.22)
-grey = 128 * (1 + (shade - 1) * 1.5) * (1 - occ)
+grey = 119 * (1 + (shade - 1) * 1.5) * (1 - occ)
 grip_soft = nd.gaussian_filter((grip & ~(hs > hs[grip].mean() + 2)).astype(np.float32), SS)
 grey *= 1 - 0.22 * grip_soft
 grey *= 1 - 0.07 * nd.gaussian_filter(tri.astype(np.float32), SS / 2)

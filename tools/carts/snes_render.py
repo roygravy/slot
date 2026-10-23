@@ -66,7 +66,7 @@ screw_hole = disc(0.087, 0.917, 0.011) | disc(0.913, 0.917, 0.011)
 height -= screw_ring * 1.0 + screw_hole * 3.0
 height *= cart
 hs = nd.gaussian_filter(height, SS * 0.55)
-grey = 128 * light(height) + grain(1.2)
+grey = 119 * light(height) + grain(1.2)  # the Game Boy carts' level (Roy)
 grey = np.where(screw_hole, grey * 0.55, grey)
 A = save(grey3(grey), cart, 'snes_neutral.png')
 m = np.zeros((H, W, 4), np.uint8); m[..., :3] = 255; m[..., 3] = (A * 255).round().astype(np.uint8)

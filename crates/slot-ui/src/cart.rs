@@ -702,10 +702,12 @@ fn plastic_label_bed(s: &Spec, face: &mut CartFace) {
             grain ^= grain >> 7;
             grain ^= grain << 17;
             let noise = (grain % 11) as f32 - 5.0;
+            // The well's walls are in the shell's art already: the bed is only its floor, a
+            // shade darker with one line of shadow under its top and left wall, so no second rim
+            // shows inside the first.
             let wall = match (x.min(y), (lw - 1 - x).min(lh - 1 - y)) {
-                (0..=1, _) => 0.84,
-                (2..=3, _) => 0.90,
-                (_, 0) => 1.05,
+                (0, _) => 0.88,
+                (_, 0) => 1.02,
                 _ => 0.95,
             };
             let (dx, dy) = (x as f32 - dimple_x, y as f32 - dimple_y);
