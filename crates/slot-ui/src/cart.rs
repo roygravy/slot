@@ -73,6 +73,8 @@ struct Spec {
     label: (u32, u32, u32, u32),
     /// The sticker wraps over the cart's top edge: square at the top, rounded below.
     square_top: bool,
+    /// The sticker's corner radius, concentric with its well's.
+    radius: f32,
     mask: &'static [u8],
     mould: Mould,
     paint: &'static [u8],
@@ -147,6 +149,11 @@ fn spec(mould: Mould) -> Spec {
         h,
         label,
         square_top,
+        // The PAL/SFC sticker sits in a deep well with big round corners (Roy's photo).
+        radius: match mould {
+            Mould::SnesPal => 10.0,
+            _ => LABEL_RADIUS,
+        },
         mask: mould_mask(mould),
         mould,
         paint: match mould {
@@ -759,8 +766,8 @@ fn paste_label(s: &Spec, face: &mut CartFace, label: &[u8]) {
             // A sticker that wraps over the top edge is square there: measure its corners
             // as if it went on above.
             let cover = match s.square_top {
-                true => corner_cover(x, y + lh, lw, 2 * lh, LABEL_RADIUS),
-                false => corner_cover(x, y, lw, lh, LABEL_RADIUS),
+                true => corner_cover(x, y + lh, lw, 2 * lh, s.radius),
+                false => corner_cover(x, y, lw, lh, s.radius),
             };
             let a = label[src + 3] as u32 * cover / 255;
             if a == 0 {
