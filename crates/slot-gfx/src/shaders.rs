@@ -80,7 +80,7 @@ uniform float u_pixel_transparency;
 varying vec2 v_uv;
 const vec3 offsets = vec3(3.141592654) * vec3(1.0 / 2.0, 1.0 / 2.0 - 2.0 / 3.0, 1.0 / 2.0 - 4.0 / 3.0);
 const float TV_SCANLINE = 0.72;
-const float TV_MASK = 0.0;
+const float TV_MASK = 0.18;
 const float TV_GLOW = 0.08;
 const vec3 luma_coeff = vec3(0.2126, 0.7152, 0.0722);
 vec2 grid_band(vec2 x) {
