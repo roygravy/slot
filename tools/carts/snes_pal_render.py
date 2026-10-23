@@ -68,7 +68,7 @@ VH = 0.022
 # where each vent meets the side, the outline has a small rounded notch
 for v in VENTS:
     for cx in (-0.002 * w, w + 0.002 * w):
-        cart &= ~(((_x - cx) / (0.012 * w)) ** 2 + ((_y - V(v + VH / 2)) / (VH * h * 0.5)) ** 2 < 1)
+        cart &= ~(((_x - cx) / (0.006 * w)) ** 2 + ((_y - V(v + VH / 2)) / (VH * h * 0.4)) ** 2 < 1)  # shallow (Roy 2026-10-23)
 dist = nd.distance_transform_edt(np.pad(cart, 1))[1:-1, 1:-1]
 height = np.sin(np.clip(dist / (4.0 * SS), 0, 1) * np.pi / 2) * 10
 yy, xx = np.mgrid[0:h, 0:w]
@@ -88,7 +88,7 @@ for v in VENTS:
     band = rect(-0.05, v, 1.05, v + VH, VH * h / w / 2)
     vent |= (rect(-0.05, v, 0.040, v + VH, VH * h / w / 2) | rect(0.960, v, 1.05, v + VH, VH * h / w / 2))
 vd = nd.distance_transform_edt(np.pad(vent, 1))[1:-1, 1:-1]
-height -= nd.gaussian_filter(vent.astype(np.float32), 0.5 * SS) * 2.2
+height -= nd.gaussian_filter(vent.astype(np.float32), 0.5 * SS) * 1.1  # shallower (Roy 2026-10-23)
 # the label recess: deep, with big rounded corners
 label = rect(0.0818, 0.0504, 0.9152, 0.4891, 0.0342)  # the sticker's rect + 1.5px all round, radius r10 + 1.5: concentric (Roy)
 height -= label * 2.0
@@ -115,24 +115,25 @@ holes = disc(0.063, 0.929, 0.011) | disc(0.937, 0.929, 0.011)
 height -= wells * 1.6
 height += holes * 1.0
 height *= cart
-grey = 128 * crisp(height) + grain(1.2)
+# the flat face sits at the Game Boy carts' level, so the same colour reads the same (Roy)
+grey = 119 * crisp(height) + grain(1.2)
 # the recess and the wells catch less light than the open plastic
 grey *= 1 - 0.06 * nd.gaussian_filter(label.astype(np.float32), SS)
 grey *= 1 - 0.5 * nd.gaussian_filter((wells & ~holes).astype(np.float32), 0.6 * SS)
 grey *= 1 - 0.24 * nd.gaussian_filter(slot.astype(np.float32), 0.8 * SS) * (1 + 0.3 * mid)
 grey = np.where(holes, grey * 0.5, grey)
 # the side vents are cut deep: their floor sits in shadow
-grey *= 1 - 0.45 * nd.gaussian_filter(vent.astype(np.float32), 0.4 * SS)
+grey *= 1 - 0.20 * nd.gaussian_filter(vent.astype(np.float32), 0.4 * SS)
 # the rounded ends turn away from the light: a soft sheen where they start to curve, then the
 # plastic darkens as it turns toward the side
 turn = np.sqrt(np.clip(1 - t * t, 0, 1))
-roll = -0.20 * (1 - turn) + 0.07 * np.exp(-((t - 0.35) / 0.18) ** 2)
+roll = -0.12 * (1 - turn) + 0.03 * np.exp(-((t - 0.35) / 0.18) ** 2)
 grey *= 1 + np.where(cart & ~vent, roll, 0)
 # the outer edge stays light, as on the photo, instead of reading as a dark outline
 edge = (dist < 3 * SS) & (nd.gaussian_filter(vent.astype(np.float32), 1.5 * SS) < 0.05)
-grey = np.where(edge & (dx > R), np.maximum(grey, 128 * 0.86), grey)
+grey = np.where(edge & (dx > R), np.maximum(grey, 119 * 0.86), grey)
 # the notched side edges must not read as dark arcs around each vent
-grey = np.where((dist < 3 * SS) & (dx <= R), np.maximum(grey, 128 * 0.80), grey)
+grey = np.where((dist < 3 * SS) & (dx <= R), np.maximum(grey, 119 * 0.80), grey)
 # the left vents take the right ones' shading, mirrored, so both sides read the same (Roy)
 zone = np.clip((U(0.08) - xx) / U(0.02), 0, 1) * ((yy > V(VENTS[0] - 0.02)) & (yy < V(VENTS[-1] + VH + 0.02)))
 zone = nd.gaussian_filter(zone.astype(np.float32), SS)
