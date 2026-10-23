@@ -71,7 +71,7 @@ for v in (0.211, 0.367, 0.522, 0.681, 0.837):
     g = (rect(0.0, v - 0.006, 0.156, v + 0.006) | rect(0.844, v - 0.006, 1.0, v + 0.006)) & cart
     height -= g * 2.2
 label = rect(0.195, -0.05, 0.809, 0.469, 0.012)
-height -= label * 1.2
+height -= label * 2.0  # as deep as the PAL cart's (Roy)
 window = rect(0.194, 0.617, 0.809, 1.05, 0.03)
 height -= window * 4.5  # deep, and runs out through the bottom edge (Roy's photo)
 yy, xx = np.mgrid[0:h, 0:w]
@@ -84,6 +84,7 @@ gaps = gamebit(0.087, 0.917, height) | gamebit(0.913, 0.917, height)
 height *= cart
 hs = nd.gaussian_filter(height, SS * 0.55)
 grey = 119 * light(height) + grain(1.2)  # the Game Boy carts' level (Roy)
+grey *= 1 - 0.06 * nd.gaussian_filter(label.astype(np.float32), SS)
 grey *= 1 - 0.65 * nd.gaussian_filter(gaps.astype(np.float32), 0.5 * SS)
 # the tall wall of the centre throws a soft shadow onto the side pieces, the same on both sides
 near = nd.distance_transform_edt(~centre) / w
