@@ -19,6 +19,8 @@ const NAME_Y: f32 = 262.0;
 const SWATCH_Y: f32 = 304.0;
 const FINISH_Y: f32 = 338.0;
 const FINISH_GAP: f32 = 34.0;
+/// An SNES cart's NTSC and PAL shapes, under the finishes.
+const MODEL_Y: f32 = 372.0;
 /// With two tabs their names stand under the cart and the rows move down to make room.
 const TAB_Y: f32 = 262.0;
 const TAB_GAP: f32 = 34.0;
@@ -44,6 +46,8 @@ pub struct ShellPickerFaces {
     /// Original, Custom, then the palette's names.
     pub names: Vec<(TexId, u32)>,
     pub finishes: Vec<(TexId, u32)>,
+    /// NTSC, PAL: an SNES cart's two shapes.
+    pub models: [(TexId, u32); 2],
     /// The tabs' names: the colour's, then the marker's.
     pub tabs: [(TexId, u32); 2],
     /// The markers' names, in the order of their inks.
@@ -71,6 +75,8 @@ pub struct ShellPickerView<'a> {
     pub swatch: usize,
     pub finish: usize,
     pub finish_on: bool,
+    /// The SNES shape picked, for an SNES cart.
+    pub model: Option<usize>,
     pub row: PickerRow,
     /// The open tab, when there are two.
     pub tabs: Option<usize>,
@@ -85,6 +91,7 @@ pub enum PickerRow {
     Tabs,
     Colour,
     Finish,
+    Model,
     Marker,
 }
 
@@ -343,6 +350,17 @@ pub fn draw_shell_picker(canvas: Canvas, v: &ShellPickerView, out: &mut Vec<Draw
             stage(2.0),
             out,
         );
+        if let Some(model) = v.model {
+            boxed_row(
+                &v.faces.models,
+                Some(model),
+                v.row == PickerRow::Model,
+                MODEL_Y + drop,
+                FINISH_GAP,
+                stage(2.5),
+                out,
+            );
+        }
     }
 
     let mut legend = v.faces.legend.clone();

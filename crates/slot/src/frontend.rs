@@ -543,6 +543,7 @@ impl Frontend {
             .collect();
         let inks = words.split_off(words.len() - crate::shell_picker::MARKERS.len());
         let tabs = words.split_off(words.len() - 2);
+        let models = words.split_off(words.len() - 2);
         let finishes = words.split_off(words.len() - 3);
         let mut shell_legend: Vec<(TexId, u32)> = faces
             .shell_legend
@@ -559,6 +560,7 @@ impl Frontend {
             original,
             names: words,
             finishes,
+            models: [models[0], models[1]],
             tabs: [tabs[0], tabs[1]],
             inks,
             legend: shell_legend,
@@ -1232,10 +1234,10 @@ impl UiFaces {
                 hint_face("A", "Choose"),
             ],
             shell_shapes: slot_ui::shell_picker_shapes(),
-            // The swatches' names, the finishes, the tabs, then the markers' names.
+            // The swatches' names, the finishes, the SNES shapes, the tabs, then the markers' names.
             shell_words: crate::shell_picker::swatch_names()
                 .into_iter()
-                .chain(["Solid", "Clear", "Glitter", "Color", "Marker"])
+                .chain(["Solid", "Clear", "Glitter", "NTSC", "PAL", "Color", "Marker"])
                 .chain(crate::shell_picker::MARKERS.map(|(name, _)| name))
                 .map(slot_ui::shell_picker_word)
                 .collect(),

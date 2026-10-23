@@ -17,6 +17,9 @@ pub enum ShellFinish {
     Solid,
     Clear,
     Glitter,
+    /// The cart's own colour and finish: only its outline was picked (an SNES cart's NTSC or
+    /// PAL shape). The colour is not used.
+    Own,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -44,6 +47,7 @@ impl ShellChoice {
             "solid" => ShellFinish::Solid,
             "clear" => ShellFinish::Clear,
             "glitter" => ShellFinish::Glitter,
+            "own" => ShellFinish::Own,
             _ => return None,
         };
         words.next().is_none().then_some(ShellChoice {
@@ -63,6 +67,7 @@ impl ShellChoice {
             ShellFinish::Solid => "solid",
             ShellFinish::Clear => "clear",
             ShellFinish::Glitter => "glitter",
+            ShellFinish::Own => "own",
         };
         let [r, g, b] = self.colour;
         format!("{outline} {r:02x}{g:02x}{b:02x} {finish}")

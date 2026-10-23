@@ -4734,6 +4734,16 @@ impl App {
             cart.platform == Platform::Gba,
             self.now(),
         );
+        let picker = match cart.platform {
+            Platform::Snes => {
+                let auto = match slot_store::snes::cached_region(&cart.rom) {
+                    slot_store::snes::Region::Ntsc => 0,
+                    slot_store::snes::Region::Pal => 1,
+                };
+                picker.with_model(auto)
+            }
+            _ => picker,
+        };
         self.shell_picker = Some(picker);
         self.shelf_mut().release_hold();
         self.play_held = None;
@@ -4887,10 +4897,12 @@ impl App {
             swatch: picker.swatch(),
             finish: picker.finish(),
             finish_on: picker.finish_on(),
+            model: picker.model(),
             row: match picker.row() {
                 shell_picker::Row::Tabs => slot_ui::PickerRow::Tabs,
                 shell_picker::Row::Colour => slot_ui::PickerRow::Colour,
                 shell_picker::Row::Finish => slot_ui::PickerRow::Finish,
+                shell_picker::Row::Model => slot_ui::PickerRow::Model,
                 shell_picker::Row::Marker => slot_ui::PickerRow::Marker,
             },
             tabs: picker

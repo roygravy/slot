@@ -85,11 +85,14 @@ const KIRBY: Shell = shell([0xec, 0x94, 0xb4], Finish::Translucent);
 pub fn shell_for(cart: &Cart) -> Shell {
     if let Some(choice) = cart.shell {
         let finish = match choice.finish {
-            ShellFinish::Solid => Finish::Solid,
-            ShellFinish::Clear => Finish::Translucent,
-            ShellFinish::Glitter => Finish::Glitter,
+            ShellFinish::Solid => Some(Finish::Solid),
+            ShellFinish::Clear => Some(Finish::Translucent),
+            ShellFinish::Glitter => Some(Finish::Glitter),
+            ShellFinish::Own => None,
         };
-        return shell(choice.colour, finish);
+        if let Some(finish) = finish {
+            return shell(choice.colour, finish);
+        }
     }
     match cart.platform {
         Platform::Gba => gba_shell_for(&gba_code(cart)),

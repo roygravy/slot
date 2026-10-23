@@ -77,8 +77,13 @@ pub enum Row {
     Tabs,
     Colour,
     Finish,
+    /// An SNES cart's shape: the American cart or the European and Japanese one.
+    Model,
     Marker,
 }
+
+/// The SNES shapes the Model row offers, in its order.
+pub const MODELS: [Outline; 2] = [Outline::Notched, Outline::Rounded];
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum Tab {
@@ -136,6 +141,8 @@ pub struct ShellPicker {
     opened: Millis,
     /// When it began to close, and how far open it was then.
     closed: Option<(Millis, f32)>,
+    /// An SNES cart's shape picked, and the one its region gives it.
+    model: Option<(usize, usize)>,
 }
 
 impl ShellPicker {
@@ -150,17 +157,18 @@ impl ShellPicker {
         gba: bool,
         now: Millis,
     ) -> Self {
-        let custom = was
+        let was_colour = was.filter(|c| c.finish != ShellFinish::Own);
+        let custom = was_colour
             .map(|c| c.colour)
             .filter(|c| PALETTE.iter().all(|(_, p)| p != c));
         let swatches: Vec<Swatch> = std::iter::once(Swatch::Original)
             .chain(custom.map(Swatch::Custom))
             .chain((0..PALETTE.len()).map(Swatch::Palette))
             .collect();
-        let swatch = was
+        let swatch = was_colour
             .and_then(|c| swatches.iter().position(|s| s.colour() == Some(c.colour)))
             .unwrap_or(0);
-        let finish = was
+        let finish = was_colour
             .and_then(|c| FINISHES.iter().position(|f| *f == c.finish))
             .unwrap_or(0);
         let own_marker = usize::from(gba);
@@ -187,7 +195,22 @@ impl ShellPicker {
             marker,
             opened: now,
             closed: None,
+            model: None,
         }
+    }
+
+    /// An SNES cart also picks its shape; `auto` is the one its region gives it, in `MODELS`.
+    pub fn with_model(mut self, auto: usize) -> Self {
+        let picked = self
+            .was
+            .and_then(|c| MODELS.iter().position(|o| *o == c.outline))
+            .unwrap_or(auto);
+        self.model = Some((picked, auto));
+        self
+    }
+
+    pub fn model(&self) -> Option<usize> {
+        self.model.map(|(picked, _)| picked)
     }
 
     pub fn swatches(&self) -> &[Swatch] {
@@ -243,12 +266,25 @@ impl ShellPicker {
     }
 
     pub fn choice(&self) -> Option<ShellChoice> {
-        let colour = self.swatches[self.swatch].colour()?;
-        Some(ShellChoice {
-            outline: self.was.map_or(Outline::Auto, |c| c.outline),
-            colour,
-            finish: FINISHES[self.finish],
-        })
+        // The shape is only written down when it is not the one the region gives.
+        let outline = match self.model {
+            Some((picked, auto)) if picked != auto => MODELS[picked],
+            Some(_) => Outline::Auto,
+            None => self.was.map_or(Outline::Auto, |c| c.outline),
+        };
+        match self.swatches[self.swatch].colour() {
+            Some(colour) => Some(ShellChoice {
+                outline,
+                colour,
+                finish: FINISHES[self.finish],
+            }),
+            None if outline != Outline::Auto && self.model.is_some() => Some(ShellChoice {
+                outline,
+                colour: [0, 0, 0],
+                finish: ShellFinish::Own,
+            }),
+            None => None,
+        }
     }
 
     pub fn openness(&self, now: Millis) -> f32 {
@@ -291,6 +327,9 @@ impl ShellPicker {
                 if self.finish_on() {
                     rows.push(Row::Finish);
                 }
+                if self.model.is_some() {
+                    rows.push(Row::Model);
+                }
             }
             Tab::Marker => rows.push(Row::Marker),
         }
@@ -324,6 +363,16 @@ impl ShellPicker {
                             return Outcome::None;
                         }
                         self.finish = to;
+                    }
+                    Row::Model => {
+                        let Some((picked, auto)) = self.model else {
+                            return Outcome::None;
+                        };
+                        let to = step(picked, by, MODELS.len());
+                        if to == picked {
+                            return Outcome::None;
+                        }
+                        self.model = Some((to, auto));
                     }
                     Row::Marker => {
                         let to = step(self.marker, by, MARKERS.len());
@@ -389,6 +438,21 @@ mod tests {
         assert_eq!(p.swatches()[p.swatch()], Swatch::Original);
         assert_eq!(p.choice(), None);
         assert!(!p.finish_on());
+    }
+
+    #[test]
+    fn an_snes_cart_picks_its_shape_and_keeps_its_own_colour() {
+        let mut p = picker(None, true).with_model(0);
+        assert_eq!(p.choice(), None, "the region's own shape is not written down");
+        p.press(Press::Down, 0);
+        assert_eq!(p.row(), Row::Model);
+        p.press(Press::Right, 0);
+        let c = p.choice().unwrap();
+        assert_eq!((c.outline, c.finish), (Outline::Rounded, ShellFinish::Own));
+        let again = picker(Some(c), true).with_model(0);
+        assert_eq!(again.model(), Some(1));
+        assert_eq!(again.swatches()[again.swatch()], Swatch::Original);
+        assert_eq!(again.choice(), Some(c));
     }
 
     #[test]
