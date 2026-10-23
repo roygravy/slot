@@ -680,7 +680,26 @@ fn plastic_label_bed(s: &Spec, face: &mut CartFace) {
     if n == 0 {
         return;
     }
-    let mean = sum.map(|v| (v / n) as f32);
+    let mut mean = sum.map(|v| (v / n) as f32);
+    // A Game Boy pak's well is a little wider than its sticker: the bed takes the colour of the
+    // floor left showing round it, so the floor reads as one, inside one rim.
+    let mut floor = 0.95;
+    if s.mould == Mould::Notched {
+        let (mut ring, mut k) = ([0u64; 4], 0u64);
+        for y in ly + lh / 4..ly + lh * 3 / 4 {
+            for x in (lx - 2..lx).chain(lx + lw..lx + lw + 2) {
+                let i = ((y * s.w + x) * 4) as usize;
+                for c in 0..4 {
+                    ring[c] += face.rgba[i + c] as u64;
+                }
+                k += 1;
+            }
+        }
+        if k > 0 {
+            mean = ring.map(|v| (v / k) as f32);
+            floor = 1.0;
+        }
+    }
     // The round sink mark the moulding leaves in a cart's well, where it was screwed or
     // pinned shut, as a fraction of the well and of the cart's width. The Game Boy Color's is
     // a small real hole; the SNES carts show none.
@@ -706,9 +725,10 @@ fn plastic_label_bed(s: &Spec, face: &mut CartFace) {
             // shade darker with one line of shadow under its top and left wall, so no second rim
             // shows inside the first.
             let wall = match (x.min(y), (lw - 1 - x).min(lh - 1 - y)) {
+                _ if floor == 1.0 => 1.0,
                 (0, _) => 0.88,
                 (_, 0) => 1.02,
-                _ => 0.95,
+                _ => floor,
             };
             let (dx, dy) = (x as f32 - dimple_x, y as f32 - dimple_y);
             let dimple = match kind {
