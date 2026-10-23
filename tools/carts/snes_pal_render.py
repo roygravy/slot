@@ -98,16 +98,19 @@ for u in (0.161, 0.841):
     seam = (np.abs(xx - U(u)) < 0.0022 * w) & ~label
     height -= seam * 1.4
 
-# the grip: a long pill-shaped well with a soft raised rim, three ribbed segments, the middle one deeper
+# the grip: a long pill-shaped well inside a soft, slightly raised flat lip that rounds over
+# into it; four ribs run along its floor, the middle segment a step deeper (Roy's photo)
 slot = rect(0.209, 0.634, 0.814, 0.696, 0.024)
 rim = rect(0.199, 0.621, 0.824, 0.709, 0.033)
-# no raised lip: the plastic rolls smoothly down into the well (Roy 2026-10-23)
+rim_d = nd.distance_transform_edt(np.pad(rim, 1))[1:-1, 1:-1]
+height += np.sin(np.clip(rim_d / (2.0 * SS), 0, 1) * np.pi / 2) * 0.5
 slot_in = nd.distance_transform_edt(np.pad(slot, 1))[1:-1, 1:-1]
-height -= np.sin(np.clip(slot_in / (3.0 * SS), 0, 1) * np.pi / 2) * 3.4
+height -= np.sin(np.clip(slot_in / (2.2 * SS), 0, 1) * np.pi / 2) * 3.4
 mid = rect(0.397, 0.62, 0.596, 0.72) & slot
-height -= mid * 0.5
-ribs = 0.5 + 0.5 * np.cos((yy - V(0.634)) / (2.2 * SS) * 2 * np.pi)
-height += slot * ribs * 0.35
+height -= mid * 0.6
+period = V(0.696 - 0.634) / 4.5
+ribs = 0.5 + 0.5 * np.cos((yy - V(0.634)) / period * 2 * np.pi)
+height += slot * ribs * 0.9 * np.clip(slot_in / (1.5 * SS), 0, 1)
 # screws: a deep round well with the screw head, its hole off to the upper right
 # real carts: a small screw head sitting in a shallow countersink
 wells = disc(0.063, 0.929, 0.019) | disc(0.937, 0.929, 0.019)
@@ -123,7 +126,7 @@ grey = 119 * crisp(height) + grain(1.2)
 # the recess and the wells catch less light than the open plastic
 grey *= 1 - 0.06 * nd.gaussian_filter(label.astype(np.float32), SS)
 grey *= 1 - 0.5 * nd.gaussian_filter((wells & ~holes).astype(np.float32), 0.6 * SS)
-grey *= 1 - 0.24 * nd.gaussian_filter(slot.astype(np.float32), 0.8 * SS) * (1 + 0.3 * mid)
+grey *= 1 - 0.20 * nd.gaussian_filter(slot.astype(np.float32), 0.8 * SS) * (1 + 0.08 * mid)
 grey = np.where(holes, grey * 0.8, grey)
 # the side vents are cut deep: their floor sits in shadow
 grey *= 1 - 0.20 * nd.gaussian_filter(vent.astype(np.float32), 0.4 * SS)
