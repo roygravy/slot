@@ -206,6 +206,17 @@ impl Shelf {
         self.interiors.get_mut(i).and_then(Option::take)
     }
 
+    /// A cart drawn again in another shell: its mould and see-through plastic are worked out
+    /// afresh, so a cart turned clear shows its board on the shelf and in the slot.
+    pub fn restyled(&mut self, i: usize) {
+        if let Some(cell) = self.moulds.get_mut(i) {
+            *cell = OnceLock::new();
+        }
+        if let Some(cell) = self.clears.get_mut(i) {
+            *cell = OnceLock::new();
+        }
+    }
+
     pub fn take_face(&mut self, i: usize) -> Option<TexId> {
         self.faces.get_mut(i).and_then(Option::take)
     }

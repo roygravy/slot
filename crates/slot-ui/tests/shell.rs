@@ -2,7 +2,7 @@ use slot_store::scan;
 use slot_ui::{
     cart_face, gb_plastics, gb_shell_of, gba_plastics, gba_shell_for, label_colour, label_text,
     lookup_order_is_exact_then_family_then_default, shell_for, shell_presets, table_keys, Finish,
-    GbShell, DEFAULT_SHELL, DMG_SHELL, DUAL_MODE_SHELL, LABEL_WELL, LABEL_X, LABEL_Y,
+    GbShell, DEFAULT_SHELL, DMG_SHELL, GBC_CLEAR_SHELL, LABEL_WELL, LABEL_X, LABEL_Y,
 };
 use tempfile::TempDir;
 
@@ -157,68 +157,20 @@ fn gb_shell(title: &[u8], code: &[u8], cgb: u8, japan: bool) -> slot_ui::Shell {
 }
 
 #[test]
-fn red_and_blue_are_coloured_outside_japan_only() {
-    let red = gb_shell(b"POKEMON RED", b"", 0x00, false);
-    let blue = gb_shell(b"POKEMON BLUE", b"", 0x00, false);
-    assert!(red.colour[0] > red.colour[2] + 60, "Red is red");
-    assert!(blue.colour[2] > blue.colour[0] + 60, "Blue is blue");
-    assert_eq!(
-        gb_shell(b"POKEMON RED", b"", 0x00, true),
-        DMG_SHELL,
-        "Japan's Red is the grey pak"
-    );
-}
-
-#[test]
-fn gold_is_gold_except_in_japan() {
-    let gold = gb_shell(b"POKEMON_GLD", b"AAUE", 0x80, false);
-    assert_ne!(gold, DUAL_MODE_SHELL);
-    assert_eq!(gold, gb_shell(b"POKEMON_GLD", b"AAUD", 0x80, false));
-    assert_eq!(
-        gb_shell(b"POKEMON_GLD", b"AAUJ", 0x80, true),
-        DUAL_MODE_SHELL
-    );
-    assert_ne!(gb_shell(b"POKEMON_SLV", b"AAXE", 0x80, false), gold);
-}
-
-#[test]
-fn crystal_is_aqua_under_both_its_codes() {
-    let en = gb_shell(b"PM_CRYSTAL", b"BYTE", 0xc0, false);
-    let jp = gb_shell(b"PM_CRYSTAL", b"BXTJ", 0xc0, true);
-    assert_eq!(en, jp);
-    assert_eq!(
-        en.finish,
-        Finish::Glitter,
-        "Crystal's plastic has glitter in it"
-    );
-    assert!(en.colour[2] > en.colour[0], "Crystal is aqua");
-}
-
-#[test]
-fn metal_gear_solid_is_black_not_clear() {
-    assert_eq!(
-        gb_shell(b"METALGEARGB", b"BMGE", 0xc0, false),
-        DUAL_MODE_SHELL
-    );
-}
-
-#[test]
-fn pinball_is_yellow_in_japan_only() {
-    let jp = gb_shell(b"POKEPINBALL", b"VPHJ", 0x80, true);
-    assert!(
-        jp.colour[0] > 0xc0 && jp.colour[2] < 0x60,
-        "Japan's is yellow"
-    );
-    assert_eq!(
-        gb_shell(b"POKEPINBALL", b"VPHE", 0x80, false),
-        DUAL_MODE_SHELL
-    );
-}
-
-#[test]
-fn an_unlisted_pak_keeps_its_flags_plastic() {
+fn original_is_the_consoles_own_standard_cart_whatever_the_game() {
+    // Pokémon Red and Crystal, Metal Gear Solid and Tetris all come as their console's cart.
+    assert_eq!(gb_shell(b"POKEMON RED", b"", 0x00, false), DMG_SHELL);
     assert_eq!(gb_shell(b"TETRIS", b"", 0x00, false), DMG_SHELL);
-    assert_eq!(gb_shell(b"ZELDA", b"AZLE", 0x80, false), DUAL_MODE_SHELL);
+    assert_eq!(gb_shell(b"METALGEARGB", b"BMGE", 0xc0, false), DMG_SHELL);
+    let d = tempfile::tempdir().expect("tempdir");
+    let games = d.path().join("Games/GBC");
+    std::fs::create_dir_all(&games).expect("games dir");
+    let mut rom = vec![0u8; 0x150];
+    rom[0x134..0x13e].copy_from_slice(b"PM_CRYSTAL");
+    rom[0x143] = 0xc0;
+    std::fs::write(games.join("Crystal.gbc"), rom).expect("rom");
+    let crystal = shell_for(&scan(d.path()).expect("scan")[0]);
+    assert_eq!(crystal, GBC_CLEAR_SHELL, "the GBC's cart is clear, without a tint");
 }
 
 #[test]

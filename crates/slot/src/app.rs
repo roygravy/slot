@@ -4814,6 +4814,7 @@ impl App {
                 }
                 cart.shell = choice;
                 cart.marker = marker;
+                shelf.restyled(index);
                 self.orphaned.extend(shelf.take_face(index));
                 self.orphaned.extend(shelf.take_interior(index));
             }

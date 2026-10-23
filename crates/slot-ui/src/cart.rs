@@ -641,17 +641,15 @@ fn plastic_label_bed(s: &Spec, face: &mut CartFace) {
         return;
     }
     let mean = sum.map(|v| (v / n) as f32);
-    // Where the screw post on the back meets the front: on a Game Boy pak in the middle of the
-    // shell, on a GBA cart centred in the recess and a little above its middle.
+    // The round sink mark the moulding leaves in the middle of a Game Boy pak's well. The
+    // other moulds have none.
     let (dimple_x, dimple_y, dimple_r) = match s.mould {
-        Mould::Gba => (lw as f32 * 0.5, lh as f32 * 0.30, s.w as f32 * 8.5 / 360.0),
-        Mould::Notched | Mould::Rounded => (
+        Mould::Notched => (
             s.w as f32 * 0.5 - lx as f32,
             s.h as f32 * 0.522 - ly as f32,
             s.w as f32 * 8.0 / 312.0,
         ),
-        // No screw post shows through a TV cart's label well.
-        Mould::Nes | Mould::SnesNtsc | Mould::SnesPal => (-1e4, -1e4, 1.0),
+        _ => (-1e4, -1e4, 1.0),
     };
     let mut grain: u64 = 0x2545_f491_4f6c_dd1d;
     for y in 0..lh {
@@ -686,10 +684,10 @@ fn plastic_label_bed(s: &Spec, face: &mut CartFace) {
     }
 }
 
-/// A bare label recess shows a small round sink mark where the screw post on the
-/// back meets the front: a shallow dish with a soft rim and a tiny bump in its middle. Returns
-/// how much a pixel at (dx, dy) from its centre is lit, lit from above like the rest of the
-/// shell, averaged over 4x4 samples.
+/// A Game Boy pak's bare label recess shows a small round sink mark from the moulding: a
+/// shallow dish with a soft rim and a tiny bump in its middle. Returns how much a pixel at
+/// (dx, dy) from its centre is lit, lit from above like the rest of the shell, averaged over
+/// 4x4 samples.
 fn screw_dimple(dx: f32, dy: f32, radius: f32) -> f32 {
     if dx.abs() > radius * 1.5 || dy.abs() > radius * 1.5 {
         return 1.0;
@@ -718,7 +716,8 @@ fn screw_dimple(dx: f32, dy: f32, radius: f32) -> f32 {
             let slope = (profile(t + 0.02) - profile(t - 0.02)) / 0.04 * depth / radius;
             let (gx, gy) = (slope * px / r, slope * py / r);
             let lit = (-gx * lx - gy * ly + lz) / (gx * gx + gy * gy + 1.0).sqrt();
-            sum += 1.0 + (lit / lz - 1.0) * 1.1;
+            // Faint: it catches the light, it does not draw the eye.
+            sum += 1.0 + (lit / lz - 1.0) * 0.55;
         }
     }
     sum / 16.0
