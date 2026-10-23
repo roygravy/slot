@@ -951,9 +951,11 @@ impl App {
         if platform == Platform::Gba {
             hidden.push(QuickRow::BlackBorder);
         }
-        // A TV console has no LCD to dress up: none of the handhelds' screen rows apply.
+        // A TV console has no LCD to dress up: none of the handhelds' screen rows apply, so
+        // there is no Screen page to open either.
         if platform.tv() {
             hidden.extend([
+                QuickRow::PlayScreen,
                 QuickRow::Shader,
                 QuickRow::Bezel,
                 QuickRow::PixelTransparency,
@@ -2424,7 +2426,10 @@ impl App {
             QuickRow::GameScreenshots => self.open_shots(true),
             QuickRow::ExitGame => self.eject(),
             _ => {
-                if let Some(child) = row.child() {
+                // The page opens on its first row this game shows; a page it shows none of
+                // does not open.
+                let hidden = self.in_game_hidden();
+                if let Some(child) = row.child().and_then(|c| c.shown(&hidden).first().copied()) {
                     self.in_game_menu = Some(child);
                 }
             }

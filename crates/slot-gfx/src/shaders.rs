@@ -99,9 +99,9 @@ void main() {
     if (!inside) {
         c = u_black_edge > 0.5 ? vec3(0.0) : u_bg;
     } else if (u_mode > 5.5) {
-        // A flat Trinitron: each line a beam smeared along the row, thinner in the dark and
-        // blooming wider in the light, an aperture grille of red, green and blue stripes on
-        // the screen's own pixels, a faint glow and darker corners. Worked in linear light.
+        // A flat Trinitron without scanlines: the picture smoothed along each row, an aperture
+        // grille of red, green and blue stripes on the screen's own pixels, a faint glow and
+        // darker corners. Worked in linear light.
         vec2 at = uv * u_src;
         float row = (floor(at.y) + 0.5) / u_src.y;
         float x = at.x - 0.5;
@@ -109,13 +109,9 @@ void main() {
         vec3 a = texture2D(u_game, vec2((x0 + 0.5) / u_src.x, row)).rgb;
         vec3 b = texture2D(u_game, vec2((x0 + 1.5) / u_src.x, row)).rgb;
         vec3 lin = pow(mix(a, b, x - x0), vec3(2.2));
-        float width = 0.25 + 0.22 * sqrt(dot(lin, vec3(1.0 / 3.0)));
-        float dist = abs(f.y - 0.5) / width;
-        float beam = exp(-2.0 * dist * dist);
-        lin *= 0.18 + 0.82 * 1.35 * beam;
         float stripe = mod(floor(gl_FragCoord.x / u_fbo.x), 3.0);
         vec3 grille = vec3(stripe < 0.5 ? 1.0 : 0.0, stripe > 0.5 && stripe < 1.5 ? 1.0 : 0.0, stripe > 1.5 ? 1.0 : 0.0);
-        lin *= 0.72 + 0.28 * 1.6 * grille;
+        lin *= 0.85 + 0.45 * grille;
         vec3 glow = vec3(0.0);
         for (int j = -1; j <= 1; j++) {
             for (int i = -1; i <= 1; i++) {
