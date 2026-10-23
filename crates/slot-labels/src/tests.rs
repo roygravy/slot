@@ -180,6 +180,43 @@ fn crop_produces_exact_rgb_png_and_rejects_bad_input() {
     assert!(artwork::prepare(&image_bytes(796, 906), Platform::Gba).is_err());
 }
 
+/// A grey cart with a coloured sticker at (x, y, w, h), red on top and blue below.
+fn tv_scan(size: (u32, u32), sticker: (u32, u32, u32, u32)) -> Vec<u8> {
+    let (x0, y0, sw, sh) = sticker;
+    let im = RgbImage::from_fn(size.0, size.1, |x, y| {
+        if (x0..x0 + sw).contains(&x) && (y0..y0 + sh).contains(&y) {
+            if y < y0 + sh / 2 {
+                Rgb([220, 30, 30])
+            } else {
+                Rgb([30, 30, 220])
+            }
+        } else {
+            Rgb([128, 128, 132])
+        }
+    });
+    let mut out = Cursor::new(Vec::new());
+    im.write_to(&mut out, ImageFormat::Png).unwrap();
+    out.into_inner()
+}
+
+#[test]
+fn nes_and_snes_stickers_are_found_on_any_scan() {
+    for (platform, size, sticker, want) in [
+        (Platform::Nes, (800, 900), (320, 0, 370, 600), (141, 228)),
+        (Platform::Snes, (811, 518), (160, 10, 494, 220), (221, 109)),
+        (Platform::Snes, (811, 560), (83, 34, 640, 227), (277, 97)),
+    ] {
+        let png = artwork::prepare(&tv_scan(size, sticker), platform).unwrap();
+        let im = image::load_from_memory(&png).unwrap().to_rgb8();
+        assert_eq!(im.dimensions(), want);
+        assert_eq!(im.get_pixel(want.0 / 2, 1), &Rgb([220, 30, 30]));
+        assert_eq!(im.get_pixel(want.0 / 2, want.1 - 2), &Rgb([30, 30, 220]));
+    }
+    // A Famicom cart's wide sticker is no NES label, and a bare shell has none.
+    assert!(artwork::prepare(&tv_scan((800, 525), (55, 54, 694, 337)), Platform::Nes).is_err());
+    assert!(artwork::prepare(&tv_scan((811, 518), (0, 0, 0, 0)), Platform::Snes).is_err());
+}
+
 struct Fake {
     calls: Vec<String>,
     image: Vec<u8>,

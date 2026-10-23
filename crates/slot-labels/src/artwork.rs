@@ -56,6 +56,9 @@ pub fn cart_label_jpeg(bytes: &[u8], platform: Platform) -> Result<Vec<u8>, Erro
 
 fn cart_label(bytes: &[u8], platform: Platform) -> Result<RgbImage, Error> {
     let image = decode(bytes)?;
+    if matches!(platform, Platform::Nes | Platform::Snes) {
+        return tv_label(&image, platform);
+    }
     let (w, h) = (image.width(), image.height());
     let aspect = w as f64 / h as f64;
     // Only a straight-on scan of the whole cart. Reject box art, angled photos, and tiny
@@ -97,4 +100,94 @@ fn cart_label(bytes: &[u8], platform: Platform) -> Result<RgbImage, Error> {
         .resize_exact(lw, lh, FilterType::Lanczos3)
         .to_rgb8();
     Ok(label)
+}
+
+/// NES and SNES scans come in every size and framing, so the sticker is found rather than
+/// measured: it is the block of columns, then rows, in the top of the cart that is not the shell's
+/// own plastic, sampled low on the cart where no sticker sits.
+fn tv_label(image: &DynamicImage, platform: Platform) -> Result<RgbImage, Error> {
+    let nes = platform == Platform::Nes;
+    let rgba = image.to_rgba8();
+    let opaque = |x: u32, y: u32| rgba.get_pixel(x, y)[3] > 128;
+    let (mut x0, mut y0, mut x1, mut y1) = (u32::MAX, u32::MAX, 0, 0);
+    for (x, y, px) in rgba.enumerate_pixels() {
+        if px[3] > 128 {
+            (x0, y0, x1, y1) = (x0.min(x), y0.min(y), x1.max(x + 1), y1.max(y + 1));
+        }
+    }
+    let unsupported = || Error::Image("no sticker on this cartridge scan".into());
+    if x1 < x0 + 200 || y1 < y0 + 120 {
+        return Err(unsupported());
+    }
+    let (w, h) = (x1 - x0, y1 - y0);
+    let mut sample: [Vec<u8>; 3] = Default::default();
+    for y in y0 + h * 80 / 100..y0 + h * 92 / 100 {
+        for x in x0 + w * 30 / 100..x0 + w * 70 / 100 {
+            for (c, v) in sample.iter_mut().zip(rgba.get_pixel(x, y).0) {
+                c.push(v);
+            }
+        }
+    }
+    let shell = sample.map(|mut c| {
+        c.sort_unstable();
+        c[c.len() / 2] as i32
+    });
+    let sticker = |x: u32, y: u32| {
+        let px = rgba.get_pixel(x, y);
+        opaque(x, y) && (0..3).any(|c| (px[c] as i32 - shell[c]).abs() > 48)
+    };
+    let bottom = y0 + h * if nes { 75 } else { 55 } / 100;
+    let cols: Vec<f32> = (x0..x1)
+        .map(|x| (y0..bottom).filter(|&y| sticker(x, y)).count() as f32 / (bottom - y0) as f32)
+        .collect();
+    let (l, r) = longest_run(&cols, 0.45);
+    let (l, r) = (x0 + l, x0 + r);
+    let rows: Vec<f32> = (y0..bottom)
+        .map(|y| (l..r).filter(|&x| sticker(x, y)).count() as f32 / (r - l).max(1) as f32)
+        .collect();
+    let (t, b) = longest_run(&rows, 0.5);
+    let (t, b) = (y0 + t, y0 + b);
+    let (cw, ch) = (r - l, b - t);
+    if cw < 60 || ch < 40 {
+        return Err(unsupported());
+    }
+    // A Famicom cart, or a sticker that is not one, does not fit the mould.
+    let aspect = cw as f32 / ch as f32;
+    let fits = if nes {
+        (0.5..=0.75).contains(&aspect)
+    } else {
+        (1.8..=3.2).contains(&aspect)
+    };
+    if !fits {
+        return Err(Error::Image(format!("sticker {cw}x{ch} does not fit the cart")));
+    }
+    // Step just inside the sticker's edge, so no shell or outline rims the label well.
+    let (ix, iy) = (cw * 15 / 1000 + 1, ch * 15 / 1000 + 1);
+    // The SNES sticker keeps its own shape: a wide PAL/SFC one or a taller NTSC one. The shelf
+    // fits it to whichever mould the cart takes.
+    let (lw, lh) = match platform {
+        Platform::Snes if aspect > 2.45 => (277, 97),
+        _ => crate::label_size(platform),
+    };
+    Ok(image
+        .crop_imm(l + ix, t + iy, cw - 2 * ix, ch - 2 * iy)
+        .resize_exact(lw, lh, FilterType::Lanczos3)
+        .to_rgb8())
+}
+
+fn longest_run(fill: &[f32], threshold: f32) -> (u32, u32) {
+    let (mut best, mut start) = ((0, 0), None);
+    for (i, &v) in fill.iter().chain([&0.0]).enumerate() {
+        match (v > threshold, start) {
+            (true, None) => start = Some(i),
+            (false, Some(s)) => {
+                if i - s > best.1 - best.0 {
+                    best = (s, i);
+                }
+                start = None;
+            }
+            _ => {}
+        }
+    }
+    (best.0 as u32, best.1 as u32)
 }
