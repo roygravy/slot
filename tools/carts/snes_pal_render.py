@@ -101,9 +101,9 @@ for u in (0.161, 0.841):
 # the grip: a long pill-shaped well with a soft raised rim, three ribbed segments, the middle one deeper
 slot = rect(0.209, 0.634, 0.814, 0.696, 0.024)
 rim = rect(0.199, 0.621, 0.824, 0.709, 0.033)
-rim_h = np.sin(np.clip(nd.distance_transform_edt(np.pad(rim, 1))[1:-1, 1:-1] / (2.5 * SS), 0, 1) * np.pi / 2)
-height += rim_h * 0.6
-height -= slot * 3.4
+# no raised lip: the plastic rolls smoothly down into the well (Roy 2026-10-23)
+slot_in = nd.distance_transform_edt(np.pad(slot, 1))[1:-1, 1:-1]
+height -= np.sin(np.clip(slot_in / (3.0 * SS), 0, 1) * np.pi / 2) * 3.4
 mid = rect(0.397, 0.62, 0.596, 0.72) & slot
 height -= mid * 0.5
 ribs = 0.5 + 0.5 * np.cos((yy - V(0.634)) / (2.2 * SS) * 2 * np.pi)
@@ -112,8 +112,11 @@ height += slot * ribs * 0.35
 # real carts: a small screw head sitting in a shallow countersink
 wells = disc(0.063, 0.929, 0.019) | disc(0.937, 0.929, 0.019)
 holes = disc(0.063, 0.929, 0.011) | disc(0.937, 0.929, 0.011)
-height -= wells * 1.6
-height += holes * 1.0
+height -= wells * 2.6
+# the screw head is domed, so it catches the light on one side (Roy: it read faint)
+for u in (0.063, 0.937):
+    rr = np.sqrt((xx - U(u)) ** 2 + (yy - V(0.929)) ** 2) / (0.011 * w)
+    height += np.sqrt(np.clip(1 - rr * rr, 0, 1)) * 2.4
 height *= cart
 # the flat face sits at the Game Boy carts' level, so the same colour reads the same (Roy)
 grey = 119 * crisp(height) + grain(1.2)
@@ -121,7 +124,7 @@ grey = 119 * crisp(height) + grain(1.2)
 grey *= 1 - 0.06 * nd.gaussian_filter(label.astype(np.float32), SS)
 grey *= 1 - 0.5 * nd.gaussian_filter((wells & ~holes).astype(np.float32), 0.6 * SS)
 grey *= 1 - 0.24 * nd.gaussian_filter(slot.astype(np.float32), 0.8 * SS) * (1 + 0.3 * mid)
-grey = np.where(holes, grey * 0.5, grey)
+grey = np.where(holes, grey * 0.8, grey)
 # the side vents are cut deep: their floor sits in shadow
 grey *= 1 - 0.20 * nd.gaussian_filter(vent.astype(np.float32), 0.4 * SS)
 # the rounded ends turn away from the light: a soft sheen where they start to curve, then the
@@ -134,10 +137,6 @@ edge = (dist < 3 * SS) & (nd.gaussian_filter(vent.astype(np.float32), 1.5 * SS) 
 grey = np.where(edge & (dx > R), np.maximum(grey, 119 * 0.86), grey)
 # the notched side edges must not read as dark arcs around each vent
 grey = np.where((dist < 3 * SS) & (dx <= R), np.maximum(grey, 119 * 0.80), grey)
-# the left vents take the right ones' shading, mirrored, so both sides read the same (Roy)
-zone = np.clip((U(0.08) - xx) / U(0.02), 0, 1) * ((yy > V(VENTS[0] - 0.02)) & (yy < V(VENTS[-1] + VH + 0.02)))
-zone = nd.gaussian_filter(zone.astype(np.float32), SS)
-grey = grey * (1 - zone) + grey[:, ::-1] * zone
 A = save(grey3(grey), cart, 'snes_neutral.png')
 m = np.zeros((H, W, 4), np.uint8); m[..., :3] = 255; m[..., 3] = (A * 255).round().astype(np.uint8)
 Image.fromarray(m, 'RGBA').save(f'{out}/snes_cart.png')

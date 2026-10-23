@@ -681,13 +681,19 @@ fn plastic_label_bed(s: &Spec, face: &mut CartFace) {
         return;
     }
     let mut mean = sum.map(|v| (v / n) as f32);
-    // A Game Boy pak's well is a little wider than its sticker: the bed takes the colour of the
-    // floor left showing round it, so the floor reads as one, inside one rim.
+    // A Game Boy pak's well, and a PAL SNES cart's, is a little wider than its sticker: the
+    // bed takes the colour of the floor left showing round it, so the floor reads as one,
+    // inside one rim.
     let mut floor = 0.95;
-    if s.mould == Mould::Notched {
+    let ring_w = match s.mould {
+        Mould::Notched => 2,
+        Mould::SnesPal => 1,
+        _ => 0,
+    };
+    if ring_w > 0 {
         let (mut ring, mut k) = ([0u64; 4], 0u64);
         for y in ly + lh / 4..ly + lh * 3 / 4 {
-            for x in (lx - 2..lx).chain(lx + lw..lx + lw + 2) {
+            for x in (lx - ring_w..lx).chain(lx + lw..lx + lw + ring_w) {
                 let i = ((y * s.w + x) * 4) as usize;
                 for c in 0..4 {
                     ring[c] += face.rgba[i + c] as u64;
@@ -740,7 +746,7 @@ fn plastic_label_bed(s: &Spec, face: &mut CartFace) {
             let cover = match (s.mould.tv(), s.square_top) {
                 (false, _) => 255,
                 (true, true) => corner_cover(x, y + lh, lw, 2 * lh, s.radius),
-                (true, false) => corner_cover(x, y, lw, lh, s.radius),
+                (true, false) => corner_cover(x, y, lw, lh, s.radius - 2.5),
             } as f32
                 / 255.0;
             let d = (((y + ly) * s.w + x + lx) * 4) as usize;
