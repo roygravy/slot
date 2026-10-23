@@ -39,6 +39,8 @@ pub struct Frontend {
     labels: crate::labels::Labels,
     // Started once Home Wi-Fi is connected, not at boot: the network is not up yet then.
     cheat_fetch: Option<crate::cheat_fetch::CheatFetch>,
+    /// The label worker has run with Home Wi-Fi connected.
+    labels_online: bool,
     session: Session,
     start: Instant,
     last: Instant,
@@ -228,6 +230,7 @@ impl Frontend {
             stale_check,
             label_fetch: None,
             cheat_fetch: None,
+            labels_online: false,
             ui_faces: None,
             rebuild_faces: RebuildFaces::default(),
             link_art: LinkArtBuilder::spawn(),
@@ -1043,23 +1046,32 @@ impl Frontend {
         let dt = self.last.elapsed().as_secs_f32();
         self.last = Instant::now();
         self.session.update(dt);
-        self.fetch_cheats_once_online();
+        self.fetch_once_online();
     }
 
     /// Cheat files come only from online: their worker starts the first time Home Wi-Fi is
     /// connected, whether that is shortly after boot or after it is switched on in the menu.
-    fn fetch_cheats_once_online(&mut self) {
+    /// The label worker started at boot, mostly before Wi-Fi was up, so it has likely given
+    /// up on the network: a fresh one starts then for the carts still without a label.
+    fn fetch_once_online(&mut self) {
         let app = self.session.app();
-        if self.cheat_fetch.is_some() || !app.home_wifi_on() || !app.home_connected() {
+        if !app.home_wifi_on() || !app.home_connected() {
+            return;
+        }
+        if self.labels_online && self.cheat_fetch.is_some() {
             return;
         }
         let Some(root) = app.root().map(|r| r.to_path_buf()) else {
             return;
         };
-        self.cheat_fetch = Some(crate::cheat_fetch::CheatFetch::spawn(
-            root,
-            app.carts().cloned().collect(),
-        ));
+        let carts: Vec<_> = app.carts().cloned().collect();
+        if !self.labels_online {
+            self.labels_online = true;
+            self.labels = crate::labels::Labels::spawn(root.clone(), carts.clone());
+        }
+        if self.cheat_fetch.is_none() {
+            self.cheat_fetch = Some(crate::cheat_fetch::CheatFetch::spawn(root, carts));
+        }
     }
 
     pub fn app(&self) -> &crate::app::App {
@@ -1076,7 +1088,7 @@ impl Frontend {
             .set_menu_dpad_display(input.menu_dpad_display());
         self.session.feed(events, now);
         self.session.update(dt);
-        self.fetch_cheats_once_online();
+        self.fetch_once_online();
     }
 
     fn now(&self) -> Millis {
