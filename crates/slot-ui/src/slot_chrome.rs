@@ -442,10 +442,10 @@ pub fn click_at(mould: Mould) -> f32 {
     }
 }
 
-const NES_T: f32 = 3.70;
-const NES_CLICK: f32 = 2.94;
-const SNES_T: f32 = 2.20;
-const SNES_CLICK: f32 = 2.14;
+const NES_T: f32 = 1.60;
+const NES_CLICK: f32 = 1.15;
+const SNES_T: f32 = 1.15;
+const SNES_CLICK: f32 = 1.08;
 
 /// Where an NES or SNES cart is, `seat` into its insert: its seated-size box once it has left
 /// the shelf (`leave` runs 0 to 1 on the way), and the NES lid's opening in degrees.
@@ -465,22 +465,21 @@ fn tv_pose(mould: Mould, seat: f32, cx: f32, (sw, sh): (f32, f32)) -> Option<TvP
             let wait = BAND_Y - 6.0 - sh;
             let slid = BAND_Y - 14.0;
             let home = BAND_Y + 6.0;
+            // The lid swings open as the cart leaves the shelf, and the cart is already sliding
+            // in while the lid finishes its swing.
+            let open = 90.0 * smooth((t - 0.10) / 0.40);
             let (leave, y, lid) = match t {
-                t if t < 0.50 => (smooth(t / 0.50), wait, 0.0),
-                t if t < 0.60 => (1.0, wait, 0.0),
-                t if t < 1.10 => (1.0, wait, 90.0 * smooth((t - 0.60) / 0.50)),
-                t if t < 1.25 => (1.0, wait, 90.0),
-                t if t < 2.65 => (1.0, lerp(wait, slid, resist((t - 1.25) / 1.40)), 90.0),
-                t if t < 2.70 => (1.0, slid, 90.0),
-                t if t < 3.00 => (1.0, lerp(slid, home, seat_push((t - 2.70) / 0.30)), 90.0),
-                t if t < 3.25 => (1.0, home, 90.0),
-                t if t < 3.55 => {
-                    let u = (t - 3.25) / 0.30;
+                t if t < 0.40 => (smooth(t / 0.40), wait, open),
+                t if t < 0.95 => (1.0, lerp(wait, slid, resist((t - 0.40) / 0.55)), open),
+                t if t < 1.20 => (1.0, lerp(slid, home, seat_push((t - 0.95) / 0.25)), 90.0),
+                t if t < 1.28 => (1.0, home, 90.0),
+                t if t < 1.48 => {
+                    let u = (t - 1.28) / 0.20;
                     (1.0, home, 90.0 * (1.0 - u * u))
                 }
                 t => {
                     // The lid lands and bounces once.
-                    let u = ((t - 3.55) / 0.15).min(1.0);
+                    let u = ((t - 1.48) / 0.12).min(1.0);
                     (1.0, home, 7.0 * (u * std::f32::consts::PI).sin())
                 }
             };
@@ -496,11 +495,11 @@ fn tv_pose(mould: Mould, seat: f32, cx: f32, (sw, sh): (f32, f32)) -> Option<TvP
             let home = BAND_Y - sh * out - if pal { 5.0 } else { 0.0 };
             let slid = home - 14.0;
             let (leave, y) = match t {
-                t if t < 0.50 => (smooth(t / 0.50), wait),
-                t if t < 0.65 => (1.0, wait),
-                t if t < 1.85 => (1.0, lerp(wait, slid, resist((t - 0.65) / 1.20))),
-                t if t < 1.90 => (1.0, slid),
-                t => (1.0, lerp(slid, home, seat_push((t - 1.90) / 0.30))),
+                t if t < 0.40 => (smooth(t / 0.40), wait),
+                t if t < 0.45 => (1.0, wait),
+                t if t < 0.85 => (1.0, lerp(wait, slid, resist((t - 0.45) / 0.40))),
+                t if t < 0.88 => (1.0, slid),
+                t => (1.0, lerp(slid, home, seat_push((t - 0.88) / 0.25))),
             };
             Some(TvPose { x, y, leave, lid: None })
         }
