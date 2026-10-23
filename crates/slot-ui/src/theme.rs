@@ -44,7 +44,7 @@ pub const OVER_GAME: Ink = Ink {
     dim: grey(0xa6, 1.0),
     bar: grey(0xf4, 1.0),
     on_bar: grey(0x16, 1.0),
-    wash: [0.0, 0.0, 0.0, 0.80],
+    wash: [0.0, 0.0, 0.0, 0.87],
 };
 
 /// Light theme, monochrome: near-black text on the light ground, grey for the rows not
