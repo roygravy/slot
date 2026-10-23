@@ -59,6 +59,18 @@ fn cart_label(bytes: &[u8], platform: Platform) -> Result<RgbImage, Error> {
     if matches!(platform, Platform::Nes | Platform::Snes) {
         return tv_label(&image, platform);
     }
+    if matches!(platform, Platform::Gb | Platform::Gbc) {
+        if let Some((l, t, r, b)) = game_boy_sticker(&image) {
+            // Step just inside the sticker's edge, so no shell rims the label well.
+            let (cw, ch) = (r - l, b - t);
+            let (ix, iy) = (cw * 12 / 1000 + 1, ch * 12 / 1000 + 1);
+            let (lw, lh) = crate::label_size(platform);
+            return Ok(image
+                .crop_imm(l + ix, t + iy, cw - 2 * ix, ch - 2 * iy)
+                .resize_exact(lw, lh, FilterType::Lanczos3)
+                .to_rgb8());
+        }
+    }
     let (w, h) = (image.width(), image.height());
     let aspect = w as f64 / h as f64;
     // Only a straight-on scan of the whole cart. Reject box art, angled photos, and tiny
@@ -173,6 +185,59 @@ fn tv_label(image: &DynamicImage, platform: Platform) -> Result<RgbImage, Error>
         .crop_imm(l + ix, t + iy, cw - 2 * ix, ch - 2 * iy)
         .resize_exact(lw, lh, FilterType::Lanczos3)
         .to_rgb8())
+}
+
+/// A Game Boy pak photo's sticker, found rather than measured: carts are shot with different
+/// margins, and a Color pak's sticker sits lower than a Game Boy one's. The shell's plastic is
+/// sampled on the rims either side of the sticker; the sticker is the block of columns, then
+/// rows, that is not that plastic. Even a grey sticker edge on a grey pak differs enough.
+fn game_boy_sticker(image: &DynamicImage) -> Option<(u32, u32, u32, u32)> {
+    let rgba = image.to_rgba8();
+    let (mut x0, mut y0, mut x1, mut y1) = (u32::MAX, u32::MAX, 0, 0);
+    for (x, y, px) in rgba.enumerate_pixels() {
+        if px[3] > 128 {
+            (x0, y0, x1, y1) = (x0.min(x), y0.min(y), x1.max(x + 1), y1.max(y + 1));
+        }
+    }
+    if x1 < x0 + 200 || y1 < y0 + 200 {
+        return None;
+    }
+    let (w, h) = (x1 - x0, y1 - y0);
+    let mut sample: [Vec<u8>; 3] = Default::default();
+    for y in y0 + h * 45 / 100..y0 + h * 75 / 100 {
+        for x in (x0 + w * 3 / 100..x0 + w * 9 / 100).chain(x0 + w * 91 / 100..x0 + w * 97 / 100) {
+            for (c, v) in sample.iter_mut().zip(rgba.get_pixel(x, y).0) {
+                c.push(v);
+            }
+        }
+    }
+    let shell = sample.map(|mut c| {
+        c.sort_unstable();
+        c[c.len() / 2] as i32
+    });
+    let sticker = |x: u32, y: u32| {
+        let px = rgba.get_pixel(x, y);
+        px[3] > 128 && (0..3).any(|c| (px[c] as i32 - shell[c]).abs() > 22)
+    };
+    let (band_top, band_bottom) = (y0 + h * 40 / 100, y0 + h * 80 / 100);
+    let cols: Vec<f32> = (x0..x1)
+        .map(|x| {
+            (band_top..band_bottom).filter(|&y| sticker(x, y)).count() as f32
+                / (band_bottom - band_top) as f32
+        })
+        .collect();
+    let (l, r) = longest_run(&cols, 0.6);
+    let (l, r) = (x0 + l, x0 + r);
+    let (top, bottom) = (y0 + h * 20 / 100, y0 + h * 95 / 100);
+    let rows: Vec<f32> = (top..bottom)
+        .map(|y| (l..r).filter(|&x| sticker(x, y)).count() as f32 / (r - l).max(1) as f32)
+        .collect();
+    let (t, b) = longest_run(&rows, 0.6);
+    let (t, b) = (top + t, top + b);
+    let (cw, ch) = (r - l, b - t);
+    // Anything but a sticker-shaped block across most of the pak is left to the fixed crop.
+    let fits = cw * 100 >= w * 60 && (1.0..=1.3).contains(&(cw as f32 / ch.max(1) as f32));
+    fits.then_some((l, t, r, b))
 }
 
 fn longest_run(fill: &[f32], threshold: f32) -> (u32, u32) {
