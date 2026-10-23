@@ -329,9 +329,12 @@ unsafe extern "C" fn video_refresh(
         let (fw, fh) = (width as usize / xstep, height as usize / ystep);
         let cols = fw.min(cw);
         let rows = fh.min(ch);
-        let (ox, oy) = ((cw - cols) / 2, (ch - rows) / 2);
+        // A TV console's frame fills its canvas side to side: without the NTSC filter its 256
+        // columns are drawn as wide as the filter's 602.
+        let stretch = h.canvas != (GBA_W, GBA_H) && cols < cw;
+        let (ox, oy) = (if stretch { 0 } else { (cw - cols) / 2 }, (ch - rows) / 2);
         let (sx, sy) = ((fw - cols) / 2, (fh - rows) / 2);
-        if cols != cw || rows != ch {
+        if (cols != cw && !stretch) || rows != ch {
             h.video.fill(0);
         }
         let format = h.format;
@@ -369,7 +372,15 @@ unsafe extern "C" fn video_refresh(
                 }
             }
             let row = ((y + oy) * cw + ox) * 4;
-            h.video[row..row + cols * 4].copy_from_slice(&line);
+            if stretch {
+                let out = &mut h.video[row..row + cw * 4];
+                for (x, px) in out.chunks_exact_mut(4).enumerate() {
+                    let at = x * cols / cw;
+                    px.copy_from_slice(&line[at * 4..at * 4 + 4]);
+                }
+            } else {
+                h.video[row..row + cols * 4].copy_from_slice(&line);
+            }
         }
     });
 }

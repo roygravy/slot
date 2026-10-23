@@ -359,6 +359,7 @@ pub struct App {
     snapshot: Option<Box<dyn Snapshot>>,
     core: Core,
     lcd_ghosting_pending: Option<bool>,
+    tv_filter_pending: Option<bool>,
     palette_live: bool,
     /// A palette change for the playing game: Some(None) turns the palettes off.
     palette_pending: Option<Option<GbPalette>>,
@@ -557,6 +558,7 @@ impl App {
             snapshot: None,
             core: Core::default(),
             lcd_ghosting_pending: None,
+            tv_filter_pending: None,
             palette_live: false,
             palette_pending: None,
             palette_capable: false,
@@ -2022,6 +2024,15 @@ impl App {
         }
     }
 
+    /// The NTSC filter is the TV consoles' one screen effect; the Game Boys have none.
+    pub fn tv_filter_for(&self, platform: Platform) -> bool {
+        match platform {
+            Platform::Nes => self.state.tv_filter_nes,
+            Platform::Snes => self.state.tv_filter_snes,
+            Platform::Gb | Platform::Gbc | Platform::Gba => false,
+        }
+    }
+
     /// Whether this game shows in one of the Game Boy palettes, rather than in its own GBC
     /// colours (Color Palettes off), which take the GBC's screen.
     pub fn gb_palette_live(&self) -> bool {
@@ -2085,6 +2096,10 @@ impl App {
 
     pub fn take_lcd_ghosting(&mut self) -> Option<bool> {
         self.lcd_ghosting_pending.take()
+    }
+
+    pub fn take_tv_filter(&mut self) -> Option<bool> {
+        self.tv_filter_pending.take()
     }
 
     pub fn gb_palette(&self) -> Option<GbPalette> {
@@ -2867,11 +2882,9 @@ impl App {
         self.apply(action);
     }
 
-    /// SELECT + B or A: every screen effect of the playing system on or off together, its
-    /// filter, Pixel Transparency and Ghosting.
     /// SELECT + B: the screen effects chosen for this system off, or those same ones back on.
     /// With none chosen, on brings the standard look: Dot Matrix in the DMG palette for the GB,
-    /// the LCD filter for the GBC and GBA.
+    /// the LCD filter for the GBC and GBA. The NES and SNES switch their NTSC filter.
     fn toggle_effects(&mut self) {
         if !matches!(self.phase, Phase::Inserting { .. } | Phase::Playing { .. }) {
             return;
@@ -2882,6 +2895,22 @@ impl App {
         const BORDER: u8 = 8;
         let platform = self.playing_platform();
         if platform.tv() {
+            // A TV console's one screen effect is its NTSC filter.
+            let s = &mut self.state;
+            let filter = match platform {
+                Platform::Nes => &mut s.tv_filter_nes,
+                _ => &mut s.tv_filter_snes,
+            };
+            *filter = !*filter;
+            let on = *filter;
+            self.tv_filter_pending = Some(on);
+            self.persist();
+            let said = if on {
+                Toast::EffectsOn
+            } else {
+                Toast::EffectsOff
+            };
+            self.hud.toast(said, self.now());
             return;
         }
         let s = &mut self.state;

@@ -313,6 +313,9 @@ pub struct SlotState {
     pub effects_saved_gb: u8,
     pub effects_saved_gbc: u8,
     pub effects_saved_gba: u8,
+    /// The TV consoles' NTSC composite filter, for each on its own: NES, SNES.
+    pub tv_filter_nes: bool,
+    pub tv_filter_snes: bool,
 }
 
 impl SlotState {
@@ -469,6 +472,8 @@ impl Default for SlotState {
             effects_saved_gb: 0,
             effects_saved_gbc: 0,
             effects_saved_gba: 0,
+            tv_filter_nes: true,
+            tv_filter_snes: true,
         }
     }
 }
@@ -583,6 +588,8 @@ pub fn write_slot_state(root: &Path, s: &SlotState) -> std::io::Result<()> {
         ("lcd_ghosting_gb", s.lcd_ghosting_gb),
         ("lcd_ghosting_gbc", s.lcd_ghosting_gbc),
         ("lcd_ghosting_gba", s.lcd_ghosting_gba),
+        ("tv_filter_nes", s.tv_filter_nes),
+        ("tv_filter_snes", s.tv_filter_snes),
     ] {
         text.push_str(&format!("{key}={}\n", on as u8));
     }
@@ -680,6 +687,8 @@ fn parse(text: &str) -> Option<SlotState> {
     let mut effects_saved_gb = None;
     let mut effects_saved_gbc = None;
     let mut effects_saved_gba = None;
+    let mut tv_filter_nes = None;
+    let mut tv_filter_snes = None;
     for line in text.lines().filter(|l| !l.is_empty()) {
         let Some((key, value)) = line.split_once('=') else {
             continue;
@@ -733,6 +742,8 @@ fn parse(text: &str) -> Option<SlotState> {
             "lcd_ghosting_gb" => lcd_ghosting_gb = flag(value),
             "lcd_ghosting_gbc" => lcd_ghosting_gbc = flag(value),
             "lcd_ghosting_gba" => lcd_ghosting_gba = flag(value),
+            "tv_filter_nes" => tv_filter_nes = flag(value),
+            "tv_filter_snes" => tv_filter_snes = flag(value),
             "in_game_menu" => in_game_menu = flag(value),
             "remember_position" => remember_position = flag(value),
             "effects_saved_gb" => effects_saved_gb = value.parse().ok(),
@@ -810,6 +821,8 @@ fn parse(text: &str) -> Option<SlotState> {
         effects_saved_gb: effects_saved_gb.unwrap_or(fallback.effects_saved_gb),
         effects_saved_gbc: effects_saved_gbc.unwrap_or(fallback.effects_saved_gbc),
         effects_saved_gba: effects_saved_gba.unwrap_or(fallback.effects_saved_gba),
+        tv_filter_nes: tv_filter_nes.unwrap_or(fallback.tv_filter_nes),
+        tv_filter_snes: tv_filter_snes.unwrap_or(fallback.tv_filter_snes),
     })
 }
 

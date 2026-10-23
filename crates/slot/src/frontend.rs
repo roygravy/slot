@@ -800,7 +800,9 @@ impl Frontend {
         let tv = platform.tv();
         compositor.set_pixel_transparency(self.session.app().pixel_transparency() && !tv);
         compositor.set_screen_effect(match self.session.app().screen_shader() {
-            _ if tv => ScreenEffect::Crt,
+            // The TV consoles' CRT look is set aside for now: their picture is the core's
+            // NTSC filter alone.
+            _ if tv => ScreenEffect::None,
             slot_store::Shader::Off => ScreenEffect::None,
             slot_store::Shader::Grid if gbc => ScreenEffect::GbaLcd,
             slot_store::Shader::Lcd3x => ScreenEffect::Lcd3x,
