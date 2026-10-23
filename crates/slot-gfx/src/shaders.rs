@@ -79,6 +79,9 @@ uniform float u_grid_opacity;
 uniform float u_pixel_transparency;
 varying vec2 v_uv;
 const vec3 offsets = vec3(3.141592654) * vec3(1.0 / 2.0, 1.0 / 2.0 - 2.0 / 3.0, 1.0 / 2.0 - 4.0 / 3.0);
+const float TV_SCANLINE = 0.72;
+const float TV_MASK = 0.0;
+const float TV_GLOW = 0.08;
 const vec3 luma_coeff = vec3(0.2126, 0.7152, 0.0722);
 vec2 grid_band(vec2 x) {
     return floor(x) / 3.0 + min(fract(x), vec2(1.0 / 3.0));
@@ -99,19 +102,19 @@ void main() {
     if (!inside) {
         c = u_black_edge > 0.5 ? vec3(0.0) : u_bg;
     } else if (u_mode > 5.5) {
-        // A flat Trinitron without scanlines: the picture smoothed along each row, an aperture
-        // grille of red, green and blue stripes on the screen's own pixels, a faint glow and
-        // darker corners. Worked in linear light.
+        // A TV's picture: the console's pixels as they are, every other screen line a little
+        // darker, a faint slot mask over them, and a soft glow around the bright parts. Worked
+        // in linear light; the darker lines give way under bright colours, as a beam widens.
+        vec3 lin = pow(c, vec3(2.2));
+        vec2 screen_px = floor(gl_FragCoord.xy / u_fbo);
+        float luma = dot(lin, luma_coeff);
+        if (mod(screen_px.y, 2.0) > 0.5) {
+            lin *= mix(TV_SCANLINE, 1.0, luma * 0.5);
+        }
+        float cell = mod(screen_px.x + floor(screen_px.y / 2.0) * 1.5, 3.0);
+        vec3 mask = vec3(cell < 1.0 ? 1.0 : 0.0, cell >= 1.0 && cell < 2.0 ? 1.0 : 0.0, cell >= 2.0 ? 1.0 : 0.0);
+        lin *= (1.0 - TV_MASK) + TV_MASK * 3.0 * mask;
         vec2 at = uv * u_src;
-        float row = (floor(at.y) + 0.5) / u_src.y;
-        float x = at.x - 0.5;
-        float x0 = floor(x);
-        vec3 a = texture2D(u_game, vec2((x0 + 0.5) / u_src.x, row)).rgb;
-        vec3 b = texture2D(u_game, vec2((x0 + 1.5) / u_src.x, row)).rgb;
-        vec3 lin = pow(mix(a, b, x - x0), vec3(2.2));
-        float stripe = mod(floor(gl_FragCoord.x / u_fbo.x), 3.0);
-        vec3 grille = vec3(stripe < 0.5 ? 1.0 : 0.0, stripe > 0.5 && stripe < 1.5 ? 1.0 : 0.0, stripe > 1.5 ? 1.0 : 0.0);
-        lin *= 0.85 + 0.45 * grille;
         vec3 glow = vec3(0.0);
         for (int j = -1; j <= 1; j++) {
             for (int i = -1; i <= 1; i++) {
@@ -120,10 +123,7 @@ void main() {
                 glow += texture2D(u_game, (floor(at) + o + 0.5) / u_src).rgb * w;
             }
         }
-        lin += 0.15 * 0.62 * pow(glow, vec3(2.2));
-        vec2 cv = v_uv * 2.0 - 1.0;
-        float r2 = dot(cv, cv);
-        lin *= 1.0 - 0.05 * r2 * sqrt(r2);
+        lin += TV_GLOW * pow(glow, vec3(2.2));
         c = pow(clamp(lin, 0.0, 1.0), vec3(1.0 / 2.2));
     } else if (u_mode > 4.5) {
         vec2 screen_px = floor(gl_FragCoord.xy / u_fbo);

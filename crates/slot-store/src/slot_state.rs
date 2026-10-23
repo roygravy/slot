@@ -313,7 +313,8 @@ pub struct SlotState {
     pub effects_saved_gb: u8,
     pub effects_saved_gbc: u8,
     pub effects_saved_gba: u8,
-    /// The TV consoles' NTSC composite filter, for each on its own: NES, SNES.
+    /// The TV consoles' screen effects (NTSC filter, colours, scanlines, afterglow), all on
+    /// or off together, for each on its own: NES, SNES.
     pub tv_filter_nes: bool,
     pub tv_filter_snes: bool,
 }

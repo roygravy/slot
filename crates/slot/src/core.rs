@@ -221,14 +221,18 @@ pub fn lcd_ghosting_option(which: Core, on: bool) -> Option<(&'static str, &'sta
     }
 }
 
-/// A TV console's NTSC filter: the picture as a composite cable carried it to the TV, colour
-/// fringes and all, or the console's own sharp pixels.
-pub fn tv_filter_option(which: Core, on: bool) -> Option<(&'static str, &'static str)> {
-    let value = if on { "composite" } else { "disabled" };
+/// A TV console's look in its core: the picture as a composite cable carried it to the TV,
+/// colour fringes and all, and for the NES the colours an ordinary American TV's Sony decoder
+/// made of its signal; or the console's own sharp pixels in the core's own colours.
+pub fn tv_options(which: Core, on: bool) -> Vec<(&'static str, &'static str)> {
+    let filter = if on { "composite" } else { "disabled" };
     match which {
-        Core::Fceumm => Some(("fceumm_ntsc_filter", value)),
-        Core::Snes9x => Some(("snes9x_blargg", value)),
-        Core::Mgba | Core::Gpsp | Core::Gambatte => None,
+        Core::Fceumm => vec![
+            ("fceumm_ntsc_filter", filter),
+            ("fceumm_palette", if on { "sony-cxa2025as-us" } else { "default" }),
+        ],
+        Core::Snes9x => vec![("snes9x_blargg", filter)],
+        Core::Mgba | Core::Gpsp | Core::Gambatte => Vec::new(),
     }
 }
 

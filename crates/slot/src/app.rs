@@ -2024,7 +2024,7 @@ impl App {
         }
     }
 
-    /// The NTSC filter is the TV consoles' one screen effect; the Game Boys have none.
+    /// The TV consoles' screen effects, on or off together; the Game Boys have none of them.
     pub fn tv_filter_for(&self, platform: Platform) -> bool {
         match platform {
             Platform::Nes => self.state.tv_filter_nes,
@@ -2884,7 +2884,7 @@ impl App {
 
     /// SELECT + B: the screen effects chosen for this system off, or those same ones back on.
     /// With none chosen, on brings the standard look: Dot Matrix in the DMG palette for the GB,
-    /// the LCD filter for the GBC and GBA. The NES and SNES switch their NTSC filter.
+    /// the LCD filter for the GBC and GBA. The NES and SNES switch their TV look.
     fn toggle_effects(&mut self) {
         if !matches!(self.phase, Phase::Inserting { .. } | Phase::Playing { .. }) {
             return;
@@ -2895,7 +2895,7 @@ impl App {
         const BORDER: u8 = 8;
         let platform = self.playing_platform();
         if platform.tv() {
-            // A TV console's one screen effect is its NTSC filter.
+            // A TV console's screen effects go on and off together.
             let s = &mut self.state;
             let filter = match platform {
                 Platform::Nes => &mut s.tv_filter_nes,

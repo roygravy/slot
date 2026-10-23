@@ -65,6 +65,10 @@ pub struct GamePass {
     fills: bool,
     src: [f32; 4],
     background: [f32; 3],
+    /// A tube's phosphor still glowing from the frames before: how much of the last picture
+    /// stays (out of 256), and the picture as it glows. 0 for none.
+    afterglow: u32,
+    glow: Vec<u8>,
 }
 
 impl GamePass {
@@ -198,6 +202,8 @@ impl GamePass {
             fills: false,
             src: WHOLE_TEXTURE,
             background: [0.0, 0.0, 0.0],
+            afterglow: 0,
+            glow: Vec::new(),
         })
     }
 
@@ -283,6 +289,14 @@ impl GamePass {
         self.effect = effect;
     }
 
+    /// The share of the last picture a TV's phosphor keeps glowing with, out of 256; 0 for none.
+    pub fn set_afterglow(&mut self, keep: u32) {
+        if keep == 0 {
+            self.glow.clear();
+        }
+        self.afterglow = keep;
+    }
+
     pub fn set_paper(&mut self, size: u32, gray: &[u8]) {
         let tex = crate::gl::texture(
             size,
@@ -352,6 +366,19 @@ impl GamePass {
             // Every frame: a Game Boy picture is small, and the screen behind it must change
             // colour with the palette on the same frame, not some frames later.
             self.background = palette_lightest_color(xrgb8888, self.pic);
+        }
+        let mut xrgb8888 = xrgb8888;
+        if self.afterglow > 0 && self.tv() {
+            // Each channel fades from what it was, and the new picture lights over that.
+            let n = (cw * ch * 4) as usize;
+            if self.glow.len() != n {
+                self.glow = xrgb8888[..n].to_vec();
+            }
+            let keep = self.afterglow;
+            for (g, &c) in self.glow.iter_mut().zip(&xrgb8888[..n]) {
+                *g = c.max(((*g as u32 * keep) >> 8) as u8);
+            }
+            xrgb8888 = &self.glow;
         }
         unsafe {
             gl::BindTexture(gl::TEXTURE_2D, self.game);

@@ -322,10 +322,11 @@ impl Session {
             }
         }
         if let Some(on) = self.app.take_tv_filter() {
-            let option = crate::core::tv_filter_option(self.app.core(), on);
-            if let (Some((key, value)), Some(emu)) = (option, &self.emu) {
-                emu.set_option(key, value);
-                recoloured = true;
+            if let Some(emu) = &self.emu {
+                for (key, value) in crate::core::tv_options(self.app.core(), on) {
+                    emu.set_option(key, value);
+                    recoloured = true;
+                }
             }
         }
         if let Some(on) = self.app.take_lcd_ghosting() {
@@ -588,9 +589,7 @@ impl Session {
         {
             opened.core.set_option(key, value);
         }
-        if let Some((key, value)) =
-            crate::core::tv_filter_option(core, self.app.tv_filter_for(platform))
-        {
+        for (key, value) in crate::core::tv_options(core, self.app.tv_filter_for(platform)) {
             opened.core.set_option(key, value);
         }
         self.app.set_named_core(opened.named);

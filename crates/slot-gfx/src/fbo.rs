@@ -184,6 +184,10 @@ impl Compositor {
         self.game.set_effect(effect);
     }
 
+    pub fn set_afterglow(&mut self, keep: u32) {
+        self.game.set_afterglow(keep);
+    }
+
     pub fn set_picture(&mut self, rect: [f32; 4]) {
         self.game.set_picture(rect);
     }

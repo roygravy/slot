@@ -798,10 +798,13 @@ impl Frontend {
         });
         // A TV console's picture is a tube's, not an LCD's: no see-through pixels.
         let tv = platform.tv();
+        // A TV console's screen effects go on and off together: the filter and colours in
+        // its core, the scanlines and the phosphor's afterglow here.
+        let tv_look = self.session.app().tv_filter_for(platform);
+        compositor.set_afterglow(if tv && tv_look { TV_AFTERGLOW } else { 0 });
         compositor.set_pixel_transparency(self.session.app().pixel_transparency() && !tv);
         compositor.set_screen_effect(match self.session.app().screen_shader() {
-            // The TV consoles' CRT look is set aside for now: their picture is the core's
-            // NTSC filter alone.
+            _ if tv && tv_look => ScreenEffect::Crt,
             _ if tv => ScreenEffect::None,
             slot_store::Shader::Off => ScreenEffect::None,
             slot_store::Shader::Grid if gbc => ScreenEffect::GbaLcd,
@@ -1872,6 +1875,10 @@ fn build_shot_faces(app: &mut App, compositor: &mut Compositor, st: &mut ShotTex
 /// The Game Boy Color's unlit, reflective panel: what white becomes, and the tone light colours
 /// take on. A warm grey, like the glass of a GBC held in daylight.
 const GBC_PANEL: [f32; 3] = [0.79, 0.80, 0.74];
+/// How much of the last picture a TV's phosphor still glows with, out of 256: brief, a
+/// trace behind what moves fast.
+const TV_AFTERGLOW: u32 = 108;
+
 /// Grid lines a little darker than the panel, as the gaps between a GBC's pixels look.
 /// The GBC's LCD on its own pixels: a dark line under each row at 10%, and a red, green or blue
 /// line down each third of a pixel at 20%.
