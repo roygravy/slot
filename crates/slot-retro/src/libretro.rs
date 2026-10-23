@@ -331,10 +331,14 @@ unsafe extern "C" fn video_refresh(
         let rows = fh.min(ch);
         // A TV console's frame fills its canvas side to side: without the NTSC filter its 256
         // columns are drawn as wide as the filter's 602.
-        let stretch = h.canvas != (GBA_W, GBA_H) && cols < cw;
-        let (ox, oy) = (if stretch { 0 } else { (cw - cols) / 2 }, (ch - rows) / 2);
+        let tv = h.canvas != (GBA_W, GBA_H);
+        let stretch = tv && cols < cw;
+        // And top to bottom: a frame cut shorter for a TV's overscan fills it as the TV did.
+        let tall = tv && rows < ch;
+        let ox = if stretch { 0 } else { (cw - cols) / 2 };
+        let oy = if tall { 0 } else { (ch - rows) / 2 };
         let (sx, sy) = ((fw - cols) / 2, (fh - rows) / 2);
-        if (cols != cw && !stretch) || rows != ch {
+        if (cols != cw && !stretch) || (rows != ch && !tall) {
             h.video.fill(0);
         }
         let format = h.format;
@@ -371,15 +375,22 @@ unsafe extern "C" fn video_refresh(
                     line[x * 4..x * 4 + 4].copy_from_slice(&px);
                 }
             }
-            let row = ((y + oy) * cw + ox) * 4;
-            if stretch {
-                let out = &mut h.video[row..row + cw * 4];
-                for (x, px) in out.chunks_exact_mut(4).enumerate() {
-                    let at = x * cols / cw;
-                    px.copy_from_slice(&line[at * 4..at * 4 + 4]);
-                }
+            let (first, last) = if tall {
+                (y * ch / rows, (y + 1) * ch / rows)
             } else {
-                h.video[row..row + cols * 4].copy_from_slice(&line);
+                (y + oy, y + oy + 1)
+            };
+            for out_y in first..last {
+                let row = (out_y * cw + ox) * 4;
+                if stretch {
+                    let out = &mut h.video[row..row + cw * 4];
+                    for (x, px) in out.chunks_exact_mut(4).enumerate() {
+                        let at = x * cols / cw;
+                        px.copy_from_slice(&line[at * 4..at * 4 + 4]);
+                    }
+                } else {
+                    h.video[row..row + cols * 4].copy_from_slice(&line);
+                }
             }
         }
     });

@@ -440,11 +440,13 @@ pub fn apply_core_options(
         }
     }
     if which == Core::Fceumm {
-        // A TV hid the top and bottom eight lines; games leave rubbish there.
-        core.set_option("fceumm_overscan_v_top", "8");
-        core.set_option("fceumm_overscan_v_bottom", "8");
-        core.set_option("fceumm_overscan_h_left", "0");
-        core.set_option("fceumm_overscan_h_right", "0");
+        // A TV's tube hid the picture's edges, where games leave rubbish (Super Mario Bros.
+        // 3's scroll seams). Cut as much off the sides as off the top and bottom, so the
+        // NES's own pixel shape holds when the rest fills the 4:3 screen.
+        core.set_option("fceumm_overscan_v_top", "16");
+        core.set_option("fceumm_overscan_v_bottom", "16");
+        core.set_option("fceumm_overscan_h_left", "8");
+        core.set_option("fceumm_overscan_h_right", "8");
     }
     if which == Core::Snes9x {
         core.set_option("snes9x_overscan", "disabled");
