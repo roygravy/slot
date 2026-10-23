@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use slot_retro::{LibretroCore, MockCore, RetroCore};
-use slot_store::{Core, GbPalette, Platform};
+use slot_store::{Core, GbPalette, NesColors, Platform, TvCable};
 
 use crate::root;
 
@@ -221,17 +221,44 @@ pub fn lcd_ghosting_option(which: Core, on: bool) -> Option<(&'static str, &'sta
     }
 }
 
-/// A TV console's look in its core: the picture as a composite cable carried it to the TV,
-/// colour fringes and all, and for the NES the colours an ordinary American TV's Sony decoder
-/// made of its signal; or the console's own sharp pixels in the core's own colours.
-pub fn tv_options(which: Core, on: bool) -> Vec<(&'static str, &'static str)> {
-    let filter = if on { "composite" } else { "disabled" };
+/// A TV console's look in its core: the picture as its cable carried it to the TV, colour
+/// fringes and all, and for the NES the colours a TV's decoder made of its signal; with the
+/// effects off, the console's own sharp pixels in the core's own colours.
+pub fn tv_options(which: Core, look: Option<crate::app::TvLook>) -> Vec<(&'static str, &'static str)> {
+    let cable = look.map_or(TvCable::Off, |l| l.cable);
+    let colors = look.map_or(NesColors::Standard, |l| l.colors);
     match which {
         Core::Fceumm => vec![
-            ("fceumm_ntsc_filter", filter),
-            ("fceumm_palette", if on { "sony-cxa2025as-us" } else { "default" }),
+            (
+                "fceumm_ntsc_filter",
+                match cable {
+                    TvCable::Off => "disabled",
+                    // The NES's core draws no aerial: its RF is the nearest, composite.
+                    TvCable::Rf | TvCable::Composite => "composite",
+                    TvCable::SVideo => "svideo",
+                    TvCable::Rgb => "rgb",
+                },
+            ),
+            (
+                "fceumm_palette",
+                match colors {
+                    NesColors::Standard => "default",
+                    NesColors::Sony => "sony-cxa2025as-us",
+                    NesColors::Nescap => "nescap",
+                    NesColors::Pvm => "pvm-style-d93-fbx",
+                },
+            ),
         ],
-        Core::Snes9x => vec![("snes9x_blargg", filter)],
+        Core::Snes9x => vec![(
+            "snes9x_blargg",
+            match cable {
+                TvCable::Off => "disabled",
+                TvCable::Rf => "rf",
+                TvCable::Composite => "composite",
+                TvCable::SVideo => "s-video",
+                TvCable::Rgb => "rgb",
+            },
+        )],
         Core::Mgba | Core::Gpsp | Core::Gambatte => Vec::new(),
     }
 }

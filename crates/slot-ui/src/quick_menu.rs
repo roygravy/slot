@@ -74,10 +74,26 @@ pub enum QuickRow {
     AutoTime,
     TimeZone,
     Clock24,
+    ScreenNes,
+    ScreenSnes,
+    NesCable,
+    NesColors,
+    NesScanlines,
+    NesMask,
+    NesAfterglow,
+    SnesCable,
+    SnesScanlines,
+    SnesMask,
+    SnesAfterglow,
+    Cable,
+    Colors,
+    Scanlines,
+    Mask,
+    Afterglow,
 }
 
 impl QuickRow {
-    pub const ALL: [QuickRow; 66] = [
+    pub const ALL: [QuickRow; 82] = [
         QuickRow::FastForward,
         QuickRow::FastForwardSound,
         QuickRow::Screen,
@@ -144,6 +160,22 @@ impl QuickRow {
         QuickRow::AutoTime,
         QuickRow::TimeZone,
         QuickRow::Clock24,
+        QuickRow::ScreenNes,
+        QuickRow::ScreenSnes,
+        QuickRow::NesCable,
+        QuickRow::NesColors,
+        QuickRow::NesScanlines,
+        QuickRow::NesMask,
+        QuickRow::NesAfterglow,
+        QuickRow::SnesCable,
+        QuickRow::SnesScanlines,
+        QuickRow::SnesMask,
+        QuickRow::SnesAfterglow,
+        QuickRow::Cable,
+        QuickRow::Colors,
+        QuickRow::Scanlines,
+        QuickRow::Mask,
+        QuickRow::Afterglow,
     ];
 
     /// The power menu, held POWER.
@@ -178,7 +210,28 @@ impl QuickRow {
     pub const NETWORK: [QuickRow; 2] = [QuickRow::HomeWifi, QuickRow::ConnectedTo];
 
     /// Every screen setting belongs to one system: nothing here reaches across all three.
-    pub const SCREEN: [QuickRow; 3] = [QuickRow::ScreenGb, QuickRow::ScreenGbc, QuickRow::ScreenGba];
+    pub const SCREEN: [QuickRow; 5] = [
+        QuickRow::ScreenGb,
+        QuickRow::ScreenGbc,
+        QuickRow::ScreenGba,
+        QuickRow::ScreenNes,
+        QuickRow::ScreenSnes,
+    ];
+
+    pub const SCREEN_NES: [QuickRow; 5] = [
+        QuickRow::NesCable,
+        QuickRow::NesColors,
+        QuickRow::NesScanlines,
+        QuickRow::NesMask,
+        QuickRow::NesAfterglow,
+    ];
+
+    pub const SCREEN_SNES: [QuickRow; 4] = [
+        QuickRow::SnesCable,
+        QuickRow::SnesScanlines,
+        QuickRow::SnesMask,
+        QuickRow::SnesAfterglow,
+    ];
 
     pub const SCREEN_GBA: [QuickRow; 3] = [
         QuickRow::GbaShader,
@@ -225,12 +278,18 @@ impl QuickRow {
 
     /// The in-game Screen page: the playing system's own settings, through rows that stand
     /// for whichever system is in the slot.
-    pub const PLAY_SCREEN: [QuickRow; 5] = [
+    /// The TV consoles' rows come after the handhelds' and only one set is shown.
+    pub const PLAY_SCREEN: [QuickRow; 10] = [
         QuickRow::Shader,
         QuickRow::Palette,
         QuickRow::PixelTransparency,
         QuickRow::LcdGhosting,
         QuickRow::BlackBorder,
+        QuickRow::Cable,
+        QuickRow::Colors,
+        QuickRow::Scanlines,
+        QuickRow::Mask,
+        QuickRow::Afterglow,
     ];
 
     pub fn index(self) -> usize {
@@ -241,7 +300,18 @@ impl QuickRow {
         match self {
             QuickRow::ScreenGba
             | QuickRow::ScreenGbc
-            | QuickRow::ScreenGb => &QuickRow::SCREEN,
+            | QuickRow::ScreenGb
+            | QuickRow::ScreenNes
+            | QuickRow::ScreenSnes => &QuickRow::SCREEN,
+            QuickRow::NesCable
+            | QuickRow::NesColors
+            | QuickRow::NesScanlines
+            | QuickRow::NesMask
+            | QuickRow::NesAfterglow => &QuickRow::SCREEN_NES,
+            QuickRow::SnesCable
+            | QuickRow::SnesScanlines
+            | QuickRow::SnesMask
+            | QuickRow::SnesAfterglow => &QuickRow::SCREEN_SNES,
             QuickRow::GbaShader
             | QuickRow::GbaTransparency
             | QuickRow::GbaGhosting
@@ -297,9 +367,12 @@ impl QuickRow {
             | QuickRow::LcdGhosting
             | QuickRow::Palette
             | QuickRow::BlackBorder
-            | QuickRow::Bezel => {
-                &QuickRow::PLAY_SCREEN
-            }
+            | QuickRow::Bezel
+            | QuickRow::Cable
+            | QuickRow::Colors
+            | QuickRow::Scanlines
+            | QuickRow::Mask
+            | QuickRow::Afterglow => &QuickRow::PLAY_SCREEN,
             _ => &QuickRow::MAIN,
         }
     }
@@ -310,6 +383,8 @@ impl QuickRow {
             QuickRow::GbaShader => Some(QuickRow::ScreenGba),
             QuickRow::GbcShader => Some(QuickRow::ScreenGbc),
             QuickRow::GbShader => Some(QuickRow::ScreenGb),
+            QuickRow::NesCable => Some(QuickRow::ScreenNes),
+            QuickRow::SnesCable => Some(QuickRow::ScreenSnes),
             QuickRow::FastForward => Some(QuickRow::Game),
             QuickRow::Wallpaper => Some(QuickRow::General),
             QuickRow::HomeWifi => Some(QuickRow::Network),
@@ -350,6 +425,8 @@ impl QuickRow {
             QuickRow::ScreenGba => Some(QuickRow::SCREEN_GBA[0]),
             QuickRow::ScreenGbc => Some(QuickRow::SCREEN_GBC[0]),
             QuickRow::ScreenGb => Some(QuickRow::SCREEN_GB[0]),
+            QuickRow::ScreenNes => Some(QuickRow::SCREEN_NES[0]),
+            QuickRow::ScreenSnes => Some(QuickRow::SCREEN_SNES[0]),
             _ => None,
         }
     }
@@ -432,6 +509,13 @@ impl QuickRow {
             QuickRow::HomeWifi => "Home Wi-Fi",
             QuickRow::Network => "Network",
             QuickRow::ConnectedTo => "Connected To",
+            QuickRow::ScreenNes => "NES",
+            QuickRow::ScreenSnes => "Super Nintendo",
+            QuickRow::NesCable | QuickRow::SnesCable | QuickRow::Cable => "Cable",
+            QuickRow::NesColors | QuickRow::Colors => "Colors",
+            QuickRow::NesScanlines | QuickRow::SnesScanlines | QuickRow::Scanlines => "Scanlines",
+            QuickRow::NesMask | QuickRow::SnesMask | QuickRow::Mask => "Mask",
+            QuickRow::NesAfterglow | QuickRow::SnesAfterglow | QuickRow::Afterglow => "Afterglow",
         }
     }
 
@@ -445,7 +529,24 @@ impl QuickRow {
             QuickRow::About => "Who made this, and what it runs on.",
             QuickRow::Screenshots => "Every screenshot, newest first. VOL+ and POWER takes one.",
             QuickRow::GameScreenshots => "This game's screenshots. VOL+ and POWER takes one.",
-            QuickRow::ScreenGb | QuickRow::ScreenGbc | QuickRow::ScreenGba => {
+            QuickRow::NesCable | QuickRow::SnesCable | QuickRow::Cable => {
+                "How the console reached the TV. SELECT + B turns every effect off."
+            }
+            QuickRow::NesColors | QuickRow::Colors => "The colors a TV made of the NES's picture.",
+            QuickRow::NesScanlines | QuickRow::SnesScanlines | QuickRow::Scanlines => {
+                "A faint dark line between the picture's lines."
+            }
+            QuickRow::NesMask | QuickRow::SnesMask | QuickRow::Mask => {
+                "The tube's red, green and blue, faintly over the picture."
+            }
+            QuickRow::NesAfterglow | QuickRow::SnesAfterglow | QuickRow::Afterglow => {
+                "Moving things leave a brief glow, as on a tube."
+            }
+            QuickRow::ScreenGb
+            | QuickRow::ScreenGbc
+            | QuickRow::ScreenGba
+            | QuickRow::ScreenNes
+            | QuickRow::ScreenSnes => {
                 "Settings for this console only."
             }
             QuickRow::GbShader => "The Game Boy's dot grid. SELECT + B turns every effect off.",
@@ -530,6 +631,8 @@ impl QuickRow {
                 | QuickRow::ScreenGba
                 | QuickRow::ScreenGbc
                 | QuickRow::ScreenGb
+                | QuickRow::ScreenNes
+                | QuickRow::ScreenSnes
                 | QuickRow::Buttons
                 | QuickRow::Sleep
                 | QuickRow::Restart
@@ -578,10 +681,18 @@ pub enum QuickValue {
     Authentic,
     Clean,
     Custom,
+    Rf,
+    Composite,
+    SVideo,
+    Rgb,
+    Standard,
+    Sony,
+    Nescap,
+    Pvm,
 }
 
 impl QuickValue {
-    pub const ALL: [QuickValue; 28] = [
+    pub const ALL: [QuickValue; 36] = [
         QuickValue::Speed2,
         QuickValue::Speed3,
         QuickValue::Speed4,
@@ -610,6 +721,14 @@ impl QuickValue {
         QuickValue::Authentic,
         QuickValue::Clean,
         QuickValue::Custom,
+        QuickValue::Rf,
+        QuickValue::Composite,
+        QuickValue::SVideo,
+        QuickValue::Rgb,
+        QuickValue::Standard,
+        QuickValue::Sony,
+        QuickValue::Nescap,
+        QuickValue::Pvm,
     ];
 
     pub fn index(self) -> usize {
@@ -646,6 +765,14 @@ impl QuickValue {
             QuickValue::Authentic => "Authentic",
             QuickValue::Clean => "Clean",
             QuickValue::Custom => "Custom",
+            QuickValue::Rf => "RF",
+            QuickValue::Composite => "Composite",
+            QuickValue::SVideo => "S-Video",
+            QuickValue::Rgb => "RGB",
+            QuickValue::Standard => "Standard",
+            QuickValue::Sony => "Sony",
+            QuickValue::Nescap => "NESCAP",
+            QuickValue::Pvm => "PVM",
         }
     }
 

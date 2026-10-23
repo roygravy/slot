@@ -313,10 +313,19 @@ pub struct SlotState {
     pub effects_saved_gb: u8,
     pub effects_saved_gbc: u8,
     pub effects_saved_gba: u8,
-    /// The TV consoles' screen effects (NTSC filter, colours, scanlines, afterglow), all on
-    /// or off together, for each on its own: NES, SNES.
+    /// The TV consoles' screen effects as chosen below, all on or off together (SELECT + B),
+    /// for each on its own: NES, SNES.
     pub tv_filter_nes: bool,
     pub tv_filter_snes: bool,
+    pub tv_cable_nes: TvCable,
+    pub tv_cable_snes: TvCable,
+    pub nes_colors: NesColors,
+    pub tv_scanlines_nes: bool,
+    pub tv_scanlines_snes: bool,
+    pub tv_mask_nes: bool,
+    pub tv_mask_snes: bool,
+    pub tv_afterglow_nes: bool,
+    pub tv_afterglow_snes: bool,
 }
 
 impl SlotState {
@@ -350,6 +359,68 @@ impl SlotState {
             stem: stem.to_string(),
         });
         true
+    }
+}
+
+/// The cable a TV console's picture travels to the TV by, as its core's NTSC filter draws it;
+/// Off for the console's own sharp pixels.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum TvCable {
+    Off,
+    Rf,
+    Composite,
+    SVideo,
+    Rgb,
+}
+
+impl TvCable {
+    pub const ALL: [TvCable; 5] = [
+        TvCable::Off,
+        TvCable::Rf,
+        TvCable::Composite,
+        TvCable::SVideo,
+        TvCable::Rgb,
+    ];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            TvCable::Off => "off",
+            TvCable::Rf => "rf",
+            TvCable::Composite => "composite",
+            TvCable::SVideo => "svideo",
+            TvCable::Rgb => "rgb",
+        }
+    }
+
+    pub fn parse(name: &str) -> Option<TvCable> {
+        TvCable::ALL.into_iter().find(|c| c.name() == name)
+    }
+}
+
+/// The colours an NES's picture came out in: as a TV's decoder made them, or the core's own.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum NesColors {
+    Standard,
+    Sony,
+    Nescap,
+    Pvm,
+}
+
+impl NesColors {
+    pub const ALL: [NesColors; 4] =
+        [NesColors::Standard, NesColors::Sony, NesColors::Nescap, NesColors::Pvm];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            NesColors::Standard => "standard",
+            NesColors::Sony => "sony",
+            NesColors::Nescap => "nescap",
+            NesColors::Pvm => "pvm",
+        }
+    }
+
+    pub fn parse(name: &str) -> Option<NesColors> {
+        NesColors::ALL.into_iter().find(|c| c.name() == name)
     }
 }
 
@@ -475,6 +546,15 @@ impl Default for SlotState {
             effects_saved_gba: 0,
             tv_filter_nes: true,
             tv_filter_snes: true,
+            tv_cable_nes: TvCable::Composite,
+            tv_cable_snes: TvCable::Composite,
+            nes_colors: NesColors::Sony,
+            tv_scanlines_nes: true,
+            tv_scanlines_snes: true,
+            tv_mask_nes: true,
+            tv_mask_snes: true,
+            tv_afterglow_nes: true,
+            tv_afterglow_snes: true,
         }
     }
 }
@@ -591,9 +671,18 @@ pub fn write_slot_state(root: &Path, s: &SlotState) -> std::io::Result<()> {
         ("lcd_ghosting_gba", s.lcd_ghosting_gba),
         ("tv_filter_nes", s.tv_filter_nes),
         ("tv_filter_snes", s.tv_filter_snes),
+        ("tv_scanlines_nes", s.tv_scanlines_nes),
+        ("tv_scanlines_snes", s.tv_scanlines_snes),
+        ("tv_mask_nes", s.tv_mask_nes),
+        ("tv_mask_snes", s.tv_mask_snes),
+        ("tv_afterglow_nes", s.tv_afterglow_nes),
+        ("tv_afterglow_snes", s.tv_afterglow_snes),
     ] {
         text.push_str(&format!("{key}={}\n", on as u8));
     }
+    text.push_str(&format!("tv_cable_nes={}\n", s.tv_cable_nes.name()));
+    text.push_str(&format!("tv_cable_snes={}\n", s.tv_cable_snes.name()));
+    text.push_str(&format!("nes_colors={}\n", s.nes_colors.name()));
     text.push_str(&format!("cheat_icon={}\n", s.cheat_icon as u8));
     text.push_str(&format!("gbc_black_border={}\n", s.gbc_black_border as u8));
     text.push_str(&format!("gb_black_border={}\n", s.gb_black_border as u8));
@@ -690,6 +779,15 @@ fn parse(text: &str) -> Option<SlotState> {
     let mut effects_saved_gba = None;
     let mut tv_filter_nes = None;
     let mut tv_filter_snes = None;
+    let mut tv_cable_nes = None;
+    let mut tv_cable_snes = None;
+    let mut nes_colors = None;
+    let mut tv_scanlines_nes = None;
+    let mut tv_scanlines_snes = None;
+    let mut tv_mask_nes = None;
+    let mut tv_mask_snes = None;
+    let mut tv_afterglow_nes = None;
+    let mut tv_afterglow_snes = None;
     for line in text.lines().filter(|l| !l.is_empty()) {
         let Some((key, value)) = line.split_once('=') else {
             continue;
@@ -745,6 +843,15 @@ fn parse(text: &str) -> Option<SlotState> {
             "lcd_ghosting_gba" => lcd_ghosting_gba = flag(value),
             "tv_filter_nes" => tv_filter_nes = flag(value),
             "tv_filter_snes" => tv_filter_snes = flag(value),
+            "tv_cable_nes" => tv_cable_nes = TvCable::parse(value),
+            "tv_cable_snes" => tv_cable_snes = TvCable::parse(value),
+            "nes_colors" => nes_colors = NesColors::parse(value),
+            "tv_scanlines_nes" => tv_scanlines_nes = flag(value),
+            "tv_scanlines_snes" => tv_scanlines_snes = flag(value),
+            "tv_mask_nes" => tv_mask_nes = flag(value),
+            "tv_mask_snes" => tv_mask_snes = flag(value),
+            "tv_afterglow_nes" => tv_afterglow_nes = flag(value),
+            "tv_afterglow_snes" => tv_afterglow_snes = flag(value),
             "in_game_menu" => in_game_menu = flag(value),
             "remember_position" => remember_position = flag(value),
             "effects_saved_gb" => effects_saved_gb = value.parse().ok(),
@@ -824,6 +931,15 @@ fn parse(text: &str) -> Option<SlotState> {
         effects_saved_gba: effects_saved_gba.unwrap_or(fallback.effects_saved_gba),
         tv_filter_nes: tv_filter_nes.unwrap_or(fallback.tv_filter_nes),
         tv_filter_snes: tv_filter_snes.unwrap_or(fallback.tv_filter_snes),
+        tv_cable_nes: tv_cable_nes.unwrap_or(fallback.tv_cable_nes),
+        tv_cable_snes: tv_cable_snes.unwrap_or(fallback.tv_cable_snes),
+        nes_colors: nes_colors.unwrap_or(fallback.nes_colors),
+        tv_scanlines_nes: tv_scanlines_nes.unwrap_or(fallback.tv_scanlines_nes),
+        tv_scanlines_snes: tv_scanlines_snes.unwrap_or(fallback.tv_scanlines_snes),
+        tv_mask_nes: tv_mask_nes.unwrap_or(fallback.tv_mask_nes),
+        tv_mask_snes: tv_mask_snes.unwrap_or(fallback.tv_mask_snes),
+        tv_afterglow_nes: tv_afterglow_nes.unwrap_or(fallback.tv_afterglow_nes),
+        tv_afterglow_snes: tv_afterglow_snes.unwrap_or(fallback.tv_afterglow_snes),
     })
 }
 

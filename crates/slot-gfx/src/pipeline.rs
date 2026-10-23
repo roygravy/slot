@@ -36,6 +36,7 @@ pub struct GamePass {
     u_lcd_mix: gl::types::GLint,
     u_grid_opacity: gl::types::GLint,
     u_pixel_transparency: gl::types::GLint,
+    u_tv: gl::types::GLint,
     u_lcd_overlay_size: gl::types::GLint,
     fbo_scale: [f32; 2],
     u_origin: gl::types::GLint,
@@ -69,6 +70,8 @@ pub struct GamePass {
     /// stays (out of 256), and the picture as it glows. 0 for none.
     afterglow: u32,
     glow: Vec<u8>,
+    /// A TV picture's scanlines and mask, each on or off.
+    tv_lines: (bool, bool),
 }
 
 impl GamePass {
@@ -110,6 +113,7 @@ impl GamePass {
             u_lcd_mix,
             u_grid_opacity,
             u_pixel_transparency,
+            u_tv,
             u_lcd_overlay,
             u_lcd_overlay_size,
             u_origin,
@@ -150,6 +154,7 @@ impl GamePass {
             u_lcd_mix = crate::gl::uniform_location(prog, "u_lcd_mix");
             u_grid_opacity = crate::gl::uniform_location(prog, "u_grid_opacity");
             u_pixel_transparency = crate::gl::uniform_location(prog, "u_pixel_transparency");
+            u_tv = crate::gl::uniform_location(prog, "u_tv");
             u_lcd_overlay = crate::gl::uniform_location(prog, "u_lcd_overlay");
             u_lcd_overlay_size = crate::gl::uniform_location(prog, "u_lcd_overlay_size");
             gl::Uniform1i(u_lcd_overlay, 2);
@@ -174,6 +179,7 @@ impl GamePass {
             u_lcd_mix,
             u_grid_opacity,
             u_pixel_transparency,
+            u_tv,
             u_lcd_overlay_size,
             fbo_scale: [1.0, 1.0],
             u_origin,
@@ -204,6 +210,7 @@ impl GamePass {
             background: [0.0, 0.0, 0.0],
             afterglow: 0,
             glow: Vec::new(),
+            tv_lines: (false, false),
         })
     }
 
@@ -287,6 +294,10 @@ impl GamePass {
 
     pub fn set_effect(&mut self, effect: ScreenEffect) {
         self.effect = effect;
+    }
+
+    pub fn set_tv_lines(&mut self, scanlines: bool, mask: bool) {
+        self.tv_lines = (scanlines, mask);
     }
 
     /// The share of the last picture a TV's phosphor keeps glowing with, out of 256; 0 for none.
@@ -460,6 +471,11 @@ impl GamePass {
             gl::Uniform1f(
                 self.u_pixel_transparency,
                 if self.pixel_transparency { 1.0 } else { 0.0 },
+            );
+            gl::Uniform2f(
+                self.u_tv,
+                self.tv_lines.0 as u8 as f32,
+                self.tv_lines.1 as u8 as f32,
             );
             gl::Uniform2f(
                 self.u_lcd_overlay_size,

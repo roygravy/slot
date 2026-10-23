@@ -77,6 +77,7 @@ uniform float u_black_edge;
 uniform vec3 u_lcd_mix;
 uniform float u_grid_opacity;
 uniform float u_pixel_transparency;
+uniform vec2 u_tv;
 varying vec2 v_uv;
 const vec3 offsets = vec3(3.141592654) * vec3(1.0 / 2.0, 1.0 / 2.0 - 2.0 / 3.0, 1.0 / 2.0 - 4.0 / 3.0);
 const float TV_SCANLINE = 0.72;
@@ -108,12 +109,13 @@ void main() {
         vec3 lin = pow(c, vec3(2.2));
         vec2 screen_px = floor(gl_FragCoord.xy / u_fbo);
         float luma = dot(lin, luma_coeff);
-        if (mod(screen_px.y, 2.0) > 0.5) {
+        if (u_tv.x > 0.5 && mod(screen_px.y, 2.0) > 0.5) {
             lin *= mix(TV_SCANLINE, 1.0, luma * 0.5);
         }
         float cell = mod(screen_px.x + floor(screen_px.y / 2.0) * 1.5, 3.0);
         vec3 mask = vec3(cell < 1.0 ? 1.0 : 0.0, cell >= 1.0 && cell < 2.0 ? 1.0 : 0.0, cell >= 2.0 ? 1.0 : 0.0);
-        lin *= (1.0 - TV_MASK) + TV_MASK * 3.0 * mask;
+        float m = TV_MASK * u_tv.y;
+        lin *= (1.0 - m) + m * 3.0 * mask;
         vec2 at = uv * u_src;
         vec3 glow = vec3(0.0);
         for (int j = -1; j <= 1; j++) {

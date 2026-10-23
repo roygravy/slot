@@ -321,9 +321,10 @@ impl Session {
                 }
             }
         }
-        if let Some(on) = self.app.take_tv_filter() {
+        if self.app.take_tv_changed() {
             if let Some(emu) = &self.emu {
-                for (key, value) in crate::core::tv_options(self.app.core(), on) {
+                let look = self.app.tv_look(self.app.playing_platform());
+                for (key, value) in crate::core::tv_options(self.app.core(), look) {
                     emu.set_option(key, value);
                     recoloured = true;
                 }
@@ -589,7 +590,7 @@ impl Session {
         {
             opened.core.set_option(key, value);
         }
-        for (key, value) in crate::core::tv_options(core, self.app.tv_filter_for(platform)) {
+        for (key, value) in crate::core::tv_options(core, self.app.tv_look(platform)) {
             opened.core.set_option(key, value);
         }
         self.app.set_named_core(opened.named);

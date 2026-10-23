@@ -184,6 +184,10 @@ impl Compositor {
         self.game.set_effect(effect);
     }
 
+    pub fn set_tv_lines(&mut self, scanlines: bool, mask: bool) {
+        self.game.set_tv_lines(scanlines, mask);
+    }
+
     pub fn set_afterglow(&mut self, keep: u32) {
         self.game.set_afterglow(keep);
     }

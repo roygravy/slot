@@ -800,11 +800,14 @@ impl Frontend {
         let tv = platform.tv();
         // A TV console's screen effects go on and off together: the filter and colours in
         // its core, the scanlines and the phosphor's afterglow here.
-        let tv_look = self.session.app().tv_filter_for(platform);
-        compositor.set_afterglow(if tv && tv_look { TV_AFTERGLOW } else { 0 });
+        let tv_look = self.session.app().tv_look(platform);
+        let afterglow = tv_look.is_some_and(|l| l.afterglow);
+        compositor.set_afterglow(if afterglow { TV_AFTERGLOW } else { 0 });
+        let lines = tv_look.map_or((false, false), |l| (l.scanlines, l.mask));
+        compositor.set_tv_lines(lines.0, lines.1);
         compositor.set_pixel_transparency(self.session.app().pixel_transparency() && !tv);
         compositor.set_screen_effect(match self.session.app().screen_shader() {
-            _ if tv && tv_look => ScreenEffect::Crt,
+            _ if tv && (lines.0 || lines.1) => ScreenEffect::Crt,
             _ if tv => ScreenEffect::None,
             slot_store::Shader::Off => ScreenEffect::None,
             slot_store::Shader::Grid if gbc => ScreenEffect::GbaLcd,

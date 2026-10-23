@@ -9,7 +9,7 @@ use slot_retro::LinkChannel;
 use slot_store::{
     FavoriteMark,
     format_stamp, read_slot_state, scan, write_slot_state, BezelPick, Cart, Core, GbPalette,
-    Platform, Recent, Shader, SlotState, StateEntry, StateRing, WallpaperPick, WallpaperTint,
+    NesColors, Platform, Recent, Shader, SlotState, StateEntry, StateRing, TvCable, WallpaperPick, WallpaperTint,
     AUTO_SLEEP_OPTIONS_SECS, BLUE_LIGHT_MAX, BRIGHTNESS_MAX, FF_SPEEDS,
     VOLUME_MAX,
 };
@@ -359,7 +359,8 @@ pub struct App {
     snapshot: Option<Box<dyn Snapshot>>,
     core: Core,
     lcd_ghosting_pending: Option<bool>,
-    tv_filter_pending: Option<bool>,
+    /// A TV console's look changed: its core is told again.
+    tv_changed: bool,
     palette_live: bool,
     /// A palette change for the playing game: Some(None) turns the palettes off.
     palette_pending: Option<Option<GbPalette>>,
@@ -558,7 +559,7 @@ impl App {
             snapshot: None,
             core: Core::default(),
             lcd_ghosting_pending: None,
-            tv_filter_pending: None,
+            tv_changed: false,
             palette_live: false,
             palette_pending: None,
             palette_capable: false,
@@ -957,13 +958,20 @@ impl App {
         // there is no Screen page to open either.
         if platform.tv() {
             hidden.extend([
-                QuickRow::PlayScreen,
                 QuickRow::Shader,
+                QuickRow::Palette,
                 QuickRow::Bezel,
                 QuickRow::PixelTransparency,
                 QuickRow::LcdGhosting,
                 QuickRow::BlackBorder,
             ]);
+        }
+        if !platform.tv() {
+            hidden.extend(TV_ROWS);
+        }
+        // Only the NES's picture has colours a TV made up.
+        if platform != Platform::Nes {
+            hidden.push(QuickRow::Colors);
         }
         if self.single_cart() {
             hidden.push(QuickRow::ExitGame);
@@ -998,6 +1006,15 @@ impl App {
             (QuickRow::LcdGhosting, Platform::Gba) => QuickRow::GbaGhosting,
             (QuickRow::BlackBorder, Platform::Gb) => QuickRow::GbBlackBorder,
             (QuickRow::BlackBorder, Platform::Gbc) => QuickRow::GbcBlackBorder,
+            (QuickRow::Cable, Platform::Nes) => QuickRow::NesCable,
+            (QuickRow::Cable, Platform::Snes) => QuickRow::SnesCable,
+            (QuickRow::Colors, Platform::Nes) => QuickRow::NesColors,
+            (QuickRow::Scanlines, Platform::Nes) => QuickRow::NesScanlines,
+            (QuickRow::Scanlines, Platform::Snes) => QuickRow::SnesScanlines,
+            (QuickRow::Mask, Platform::Nes) => QuickRow::NesMask,
+            (QuickRow::Mask, Platform::Snes) => QuickRow::SnesMask,
+            (QuickRow::Afterglow, Platform::Nes) => QuickRow::NesAfterglow,
+            (QuickRow::Afterglow, Platform::Snes) => QuickRow::SnesAfterglow,
             (row, _) => row,
         }
     }
@@ -1007,10 +1024,30 @@ impl App {
             QuickRow::Shader
             | QuickRow::PixelTransparency
             | QuickRow::LcdGhosting
-            | QuickRow::BlackBorder => match self.playing_row(row) {
+            | QuickRow::BlackBorder
+            | QuickRow::Cable
+            | QuickRow::Colors
+            | QuickRow::Scanlines
+            | QuickRow::Mask
+            | QuickRow::Afterglow => match self.playing_row(row) {
                 stood_in if stood_in != row => self.quick_value(stood_in),
                 _ => None,
             },
+            QuickRow::NesCable => Some(cable_value(self.state.tv_cable_nes)),
+            QuickRow::SnesCable => Some(cable_value(self.state.tv_cable_snes)),
+            QuickRow::NesColors => Some(match self.state.nes_colors {
+                NesColors::Standard => QuickValue::Standard,
+                NesColors::Sony => QuickValue::Sony,
+                NesColors::Nescap => QuickValue::Nescap,
+                NesColors::Pvm => QuickValue::Pvm,
+            }),
+            QuickRow::NesScanlines => Some(QuickValue::flag(self.state.tv_scanlines_nes)),
+            QuickRow::SnesScanlines => Some(QuickValue::flag(self.state.tv_scanlines_snes)),
+            QuickRow::NesMask => Some(QuickValue::flag(self.state.tv_mask_nes)),
+            QuickRow::SnesMask => Some(QuickValue::flag(self.state.tv_mask_snes)),
+            QuickRow::NesAfterglow => Some(QuickValue::flag(self.state.tv_afterglow_nes)),
+            QuickRow::SnesAfterglow => Some(QuickValue::flag(self.state.tv_afterglow_snes)),
+            QuickRow::ScreenNes | QuickRow::ScreenSnes => None,
             QuickRow::FastForward => QuickValue::speed(self.state.ff_speed),
             QuickRow::FastForwardSound => Some(QuickValue::flag(self.state.ff_sound)),
             QuickRow::GbTransparency => Some(QuickValue::flag(self.state.pixel_transparency_gb)),
@@ -2024,13 +2061,60 @@ impl App {
         }
     }
 
-    /// The TV consoles' screen effects, on or off together; the Game Boys have none of them.
-    pub fn tv_filter_for(&self, platform: Platform) -> bool {
-        match platform {
-            Platform::Nes => self.state.tv_filter_nes,
-            Platform::Snes => self.state.tv_filter_snes,
-            Platform::Gb | Platform::Gbc | Platform::Gba => false,
+    /// A TV console's screen effects as chosen, or none while SELECT + B has them off; the
+    /// Game Boys have none of them.
+    pub fn tv_look(&self, platform: Platform) -> Option<TvLook> {
+        let s = &self.state;
+        let look = match platform {
+            Platform::Nes if s.tv_filter_nes => TvLook {
+                cable: s.tv_cable_nes,
+                colors: s.nes_colors,
+                scanlines: s.tv_scanlines_nes,
+                mask: s.tv_mask_nes,
+                afterglow: s.tv_afterglow_nes,
+            },
+            Platform::Snes if s.tv_filter_snes => TvLook {
+                cable: s.tv_cable_snes,
+                colors: NesColors::Standard,
+                scanlines: s.tv_scanlines_snes,
+                mask: s.tv_mask_snes,
+                afterglow: s.tv_afterglow_snes,
+            },
+            _ => return None,
+        };
+        Some(look)
+    }
+
+    /// Left / Right on one of a TV console's screen rows; false for any other row.
+    fn change_tv_setting(&mut self, row: QuickRow, right: bool) -> bool {
+        let s = &mut self.state;
+        match row {
+            QuickRow::NesCable => s.tv_cable_nes = step_cable(s.tv_cable_nes, right, false),
+            QuickRow::SnesCable => s.tv_cable_snes = step_cable(s.tv_cable_snes, right, true),
+            QuickRow::NesColors => {
+                let all = NesColors::ALL;
+                let at = all.iter().position(|c| *c == s.nes_colors).unwrap_or(0);
+                let n = all.len();
+                s.nes_colors = all[if right { (at + 1) % n } else { (at + n - 1) % n }];
+            }
+            QuickRow::NesScanlines => s.tv_scanlines_nes = !s.tv_scanlines_nes,
+            QuickRow::SnesScanlines => s.tv_scanlines_snes = !s.tv_scanlines_snes,
+            QuickRow::NesMask => s.tv_mask_nes = !s.tv_mask_nes,
+            QuickRow::SnesMask => s.tv_mask_snes = !s.tv_mask_snes,
+            QuickRow::NesAfterglow => s.tv_afterglow_nes = !s.tv_afterglow_nes,
+            QuickRow::SnesAfterglow => s.tv_afterglow_snes = !s.tv_afterglow_snes,
+            _ => return false,
         }
+        // A choice made in the menu shows: the effects come back on with it.
+        match row {
+            QuickRow::NesCable
+            | QuickRow::NesColors
+            | QuickRow::NesScanlines
+            | QuickRow::NesMask
+            | QuickRow::NesAfterglow => s.tv_filter_nes = true,
+            _ => s.tv_filter_snes = true,
+        }
+        true
     }
 
     /// Whether this game shows in one of the Game Boy palettes, rather than in its own GBC
@@ -2098,8 +2182,8 @@ impl App {
         self.lcd_ghosting_pending.take()
     }
 
-    pub fn take_tv_filter(&mut self) -> Option<bool> {
-        self.tv_filter_pending.take()
+    pub fn take_tv_changed(&mut self) -> bool {
+        std::mem::take(&mut self.tv_changed)
     }
 
     pub fn gb_palette(&self) -> Option<GbPalette> {
@@ -2627,7 +2711,9 @@ impl App {
             | QuickRow::Network
             | QuickRow::ScreenGba
             | QuickRow::ScreenGbc
-            | QuickRow::ScreenGb => {
+            | QuickRow::ScreenGb
+            | QuickRow::ScreenNes
+            | QuickRow::ScreenSnes => {
                 if let Some(row) = row.child() {
                     let row = row.shown(self.hidden_rows())[0];
                     self.phase = Phase::QuickMenu { row };
@@ -2687,7 +2773,21 @@ impl App {
             | QuickRow::BootPicture
             | QuickRow::Sleep
             | QuickRow::Restart
-            | QuickRow::PowerOff => {
+            | QuickRow::PowerOff
+            | QuickRow::NesCable
+            | QuickRow::SnesCable
+            | QuickRow::NesColors
+            | QuickRow::NesScanlines
+            | QuickRow::SnesScanlines
+            | QuickRow::NesMask
+            | QuickRow::SnesMask
+            | QuickRow::NesAfterglow
+            | QuickRow::SnesAfterglow
+            | QuickRow::Cable
+            | QuickRow::Colors
+            | QuickRow::Scanlines
+            | QuickRow::Mask
+            | QuickRow::Afterglow => {
                 // A on a switch flips it, as Left / Right do.
                 if self.quick_value(row).and_then(QuickValue::switch).is_some() {
                     self.change_setting(row, true);
@@ -2698,6 +2798,11 @@ impl App {
 
     fn change_setting(&mut self, row: QuickRow, right: bool) {
         let row = self.playing_row(row);
+        if self.change_tv_setting(row, right) {
+            self.tv_changed = true;
+            self.persist();
+            return;
+        }
         if let QuickRow::Palette | QuickRow::GbPalettes = row {
             // Off, then each palette in turn, and round again.
             let s = &mut self.state;
@@ -2840,7 +2945,23 @@ impl App {
             // Mapped to this system's own row above; on the GBA there is no border.
             | QuickRow::PixelTransparency
             | QuickRow::LcdGhosting
-            | QuickRow::BlackBorder => return,
+            | QuickRow::BlackBorder
+            | QuickRow::ScreenNes
+            | QuickRow::ScreenSnes
+            | QuickRow::NesCable
+            | QuickRow::SnesCable
+            | QuickRow::NesColors
+            | QuickRow::NesScanlines
+            | QuickRow::SnesScanlines
+            | QuickRow::NesMask
+            | QuickRow::SnesMask
+            | QuickRow::NesAfterglow
+            | QuickRow::SnesAfterglow
+            | QuickRow::Cable
+            | QuickRow::Colors
+            | QuickRow::Scanlines
+            | QuickRow::Mask
+            | QuickRow::Afterglow => return,
 
             QuickRow::GbTransparency => s.pixel_transparency_gb = !s.pixel_transparency_gb,
             QuickRow::GbcTransparency => s.pixel_transparency_gbc = !s.pixel_transparency_gbc,
@@ -2895,15 +3016,56 @@ impl App {
         const BORDER: u8 = 8;
         let platform = self.playing_platform();
         if platform.tv() {
-            // A TV console's screen effects go on and off together.
+            // A TV console's chosen screen effects go off and back on together; with none
+            // chosen, on brings the standard TV look.
             let s = &mut self.state;
-            let filter = match platform {
-                Platform::Nes => &mut s.tv_filter_nes,
-                _ => &mut s.tv_filter_snes,
+            let nes = platform == Platform::Nes;
+            let on = match nes {
+                true => &mut s.tv_filter_nes,
+                false => &mut s.tv_filter_snes,
             };
-            *filter = !*filter;
-            let on = *filter;
-            self.tv_filter_pending = Some(on);
+            *on = !*on;
+            let on = *on;
+            let chosen = match nes {
+                true => {
+                    s.tv_cable_nes != TvCable::Off
+                        || s.nes_colors != NesColors::Standard
+                        || s.tv_scanlines_nes
+                        || s.tv_mask_nes
+                        || s.tv_afterglow_nes
+                }
+                false => {
+                    s.tv_cable_snes != TvCable::Off
+                        || s.tv_scanlines_snes
+                        || s.tv_mask_snes
+                        || s.tv_afterglow_snes
+                }
+            };
+            let on = if !on && !chosen {
+                // Nothing was chosen to switch off: switch the standard look on instead.
+                let d = SlotState::default();
+                match nes {
+                    true => {
+                        s.tv_filter_nes = true;
+                        s.tv_cable_nes = d.tv_cable_nes;
+                        s.nes_colors = d.nes_colors;
+                        s.tv_scanlines_nes = d.tv_scanlines_nes;
+                        s.tv_mask_nes = d.tv_mask_nes;
+                        s.tv_afterglow_nes = d.tv_afterglow_nes;
+                    }
+                    false => {
+                        s.tv_filter_snes = true;
+                        s.tv_cable_snes = d.tv_cable_snes;
+                        s.tv_scanlines_snes = d.tv_scanlines_snes;
+                        s.tv_mask_snes = d.tv_mask_snes;
+                        s.tv_afterglow_snes = d.tv_afterglow_snes;
+                    }
+                }
+                true
+            } else {
+                on
+            };
+            self.tv_changed = true;
             self.persist();
             let said = if on {
                 Toast::EffectsOn
@@ -6170,4 +6332,44 @@ fn tab_face(tab: shell_picker::Tab) -> usize {
         shell_picker::Tab::Label => 1,
         shell_picker::Tab::Marker => 2,
     }
+}
+
+/// The in-game Screen rows only a TV console has.
+const TV_ROWS: [QuickRow; 5] = [
+    QuickRow::Cable,
+    QuickRow::Colors,
+    QuickRow::Scanlines,
+    QuickRow::Mask,
+    QuickRow::Afterglow,
+];
+
+/// A TV console's screen effects, as they are drawn.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub struct TvLook {
+    pub cable: TvCable,
+    pub colors: NesColors,
+    pub scanlines: bool,
+    pub mask: bool,
+    pub afterglow: bool,
+}
+
+fn cable_value(cable: TvCable) -> QuickValue {
+    match cable {
+        TvCable::Off => QuickValue::Off,
+        TvCable::Rf => QuickValue::Rf,
+        TvCable::Composite => QuickValue::Composite,
+        TvCable::SVideo => QuickValue::SVideo,
+        TvCable::Rgb => QuickValue::Rgb,
+    }
+}
+
+/// The next cable along: the SNES's core also draws an aerial's RF signal, the NES's does not.
+fn step_cable(cable: TvCable, right: bool, rf: bool) -> TvCable {
+    let all: Vec<TvCable> = TvCable::ALL
+        .into_iter()
+        .filter(|c| rf || *c != TvCable::Rf)
+        .collect();
+    let at = all.iter().position(|c| *c == cable).unwrap_or(0);
+    let n = all.len();
+    all[if right { (at + 1) % n } else { (at + n - 1) % n }]
 }

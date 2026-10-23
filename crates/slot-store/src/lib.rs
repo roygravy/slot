@@ -40,7 +40,7 @@ pub use platform::{Platform, TV_CANVAS};
 pub use ring::{StateEntry, StateRing, RING_MAX};
 pub use scan::{initial, is_hidden, listing, scan, sort_key, Cart, StoreError};
 pub use slot_state::{
-    read_slot_state, write_slot_state, Appearance, BezelPick, FavoriteMark, Recent, Shader, SlotState,
+    read_slot_state, write_slot_state, Appearance, BezelPick, FavoriteMark, NesColors, Recent, Shader, SlotState, TvCable,
     WallpaperPick, WallpaperTint, AUTO_SLEEP_DEFAULT_SECS, AUTO_SLEEP_OPTIONS_SECS, BLUE_LIGHT_MAX,
     BRIGHTNESS_MAX, FF_SPEEDS, FF_SPEED_DEFAULT, RECENTS_MAX, UTC_OFFSET_MAX,
     UTC_OFFSET_MIN, VOLUME_MAX,
