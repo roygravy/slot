@@ -687,7 +687,7 @@ fn plastic_label_bed(s: &Spec, face: &mut CartFace) {
     let mark = match s.mould {
         Mould::Notched => Some((0.5, 0.522 * s.h as f32 / lh as f32 - ly as f32 / lh as f32, 8.0 / 312.0, Mark::Sink(0.30))),
         Mould::Gba => Some((0.48, 0.44, 0.026, Mark::Sink(0.40))),
-        Mould::Nes => Some((0.80, 0.70, 0.021, Mark::Sink(0.40))),
+        Mould::Nes => Some((0.20, 0.70, 0.021, Mark::Sink(0.40))),
         Mould::Rounded => Some((0.5, 0.65, 0.012, Mark::Hole)),
         Mould::SnesNtsc | Mould::SnesPal => None,
     };
