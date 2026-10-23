@@ -238,9 +238,10 @@ impl ShellPicker {
         self.tab
     }
 
-    /// Y fetches the label while the cart has none and it is not known to have none.
+    /// Y fetches the label while the cart has none, again and again: a label not found
+    /// once may be there later.
     pub fn offers_fetch(&self) -> bool {
-        self.fetch != Fetch::Labelled && !self.no_label
+        self.fetch != Fetch::Labelled
     }
 
     pub fn marker(&self) -> usize {
@@ -508,7 +509,7 @@ mod tests {
         assert!(!p.offers_marker());
         p.press(Press::Fetch, 0);
         p.fetched(Some(false));
-        assert!(!p.offers_fetch());
+        assert!(p.offers_fetch(), "Y can look again");
         assert_eq!(p.tab(), Tab::Marker, "the marker's tab opens");
         assert_eq!(p.row(), Row::Marker);
         assert_eq!(p.marker_choice(), None, "opens on the shell's own marker");

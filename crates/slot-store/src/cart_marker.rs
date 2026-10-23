@@ -57,6 +57,24 @@ pub fn has_no_label(root: &Path, platform: Platform, stem: &str) -> bool {
         .is_ok_and(|text| text.lines().any(|l| l == line))
 }
 
+/// A label turned up after all: the cart is no longer noted as having none.
+pub fn forget_no_label(root: &Path, platform: Platform, stem: &str) {
+    if !has_no_label(root, platform, stem) {
+        return;
+    }
+    let path = root.join(NO_LABEL_FILE);
+    let line = no_label_line(platform, stem);
+    let text: String = std::fs::read_to_string(&path)
+        .unwrap_or_default()
+        .lines()
+        .filter(|l| *l != line)
+        .map(|l| format!("{l}\n"))
+        .collect();
+    if let Err(e) = crate::atomic::atomic_write(&path, text.as_bytes()) {
+        eprintln!("slot: labels: {}: {e}", path.display());
+    }
+}
+
 pub fn note_no_label(root: &Path, platform: Platform, stem: &str) {
     if has_no_label(root, platform, stem) {
         return;

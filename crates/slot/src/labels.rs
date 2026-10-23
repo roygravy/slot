@@ -30,8 +30,12 @@ impl Labels {
                 run(carts, stopped, out, |cart| {
                     let got = downloader.prepare(&root, cart);
                     // Looked for and not there: the shell picker offers a marker instead.
-                    if matches!(got, Err(slot_labels::Error::Unavailable(_))) {
-                        slot_store::note_no_label(&root, cart.platform, &cart.stem);
+                    match &got {
+                        Err(slot_labels::Error::Unavailable(_)) => {
+                            slot_store::note_no_label(&root, cart.platform, &cart.stem)
+                        }
+                        Ok(_) => slot_store::forget_no_label(&root, cart.platform, &cart.stem),
+                        Err(_) => {}
                     }
                     got
                 });

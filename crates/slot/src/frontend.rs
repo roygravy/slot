@@ -941,7 +941,10 @@ impl Frontend {
             .name("slot-label-ask".into())
             .spawn(move || {
                 let got = match slot_labels::Downloader::default().prepare(&root, &cart) {
-                    Ok(path) => LabelFetched::Found(path),
+                    Ok(path) => {
+                        slot_store::forget_no_label(&root, cart.platform, &cart.stem);
+                        LabelFetched::Found(path)
+                    }
                     Err(slot_labels::Error::Unavailable(_) | slot_labels::Error::Image(_)) => {
                         slot_store::note_no_label(&root, cart.platform, &cart.stem);
                         LabelFetched::Missing
