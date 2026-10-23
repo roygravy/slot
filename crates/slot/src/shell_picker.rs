@@ -82,7 +82,7 @@ pub enum Row {
     Marker,
 }
 
-/// The SNES shapes the Model row offers, in its order.
+/// The shapes the Model row offers, in its order: SNES NTSC and PAL, or Game Boy and Color.
 pub const MODELS: [Outline; 2] = [Outline::Notched, Outline::Rounded];
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -199,7 +199,8 @@ impl ShellPicker {
         }
     }
 
-    /// An SNES cart also picks its shape; `auto` is the one its region gives it, in `MODELS`.
+    /// An SNES or Game Boy cart also picks its shape; `auto` is the one its region or folder
+    /// gives it, in `MODELS`.
     pub fn with_model(mut self, auto: usize) -> Self {
         let picked = self
             .was

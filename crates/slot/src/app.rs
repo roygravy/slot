@@ -4748,6 +4748,8 @@ impl App {
                 };
                 picker.with_model(auto)
             }
+            Platform::Gb => picker.with_model(0),
+            Platform::Gbc => picker.with_model(1),
             _ => picker,
         };
         self.shell_picker = Some(picker);
@@ -4904,7 +4906,9 @@ impl App {
             swatch: picker.swatch(),
             finish: picker.finish(),
             finish_on: picker.finish_on(),
-            model: picker.model(),
+            model: picker
+                .model()
+                .map(|m| (if cart.platform == Platform::Snes { 0 } else { 2 }, m)),
             row: match picker.row() {
                 shell_picker::Row::Tabs => slot_ui::PickerRow::Tabs,
                 shell_picker::Row::Colour => slot_ui::PickerRow::Colour,

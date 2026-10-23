@@ -1,4 +1,3 @@
-use slot_store::gb::Class;
 use slot_store::{Cart, Outline, Platform};
 
 use crate::art;
@@ -104,13 +103,13 @@ pub fn mould_of(cart: &Cart) -> Mould {
                 slot_store::snes::Region::Pal => Mould::SnesPal,
             },
         },
+        // The folder a cart sits in makes it a Game Boy or a Game Boy Color cart; the studio's
+        // Model row can give either the other's shape, which changes only how it looks.
         Platform::Gb | Platform::Gbc => match outline {
             Some(Outline::Notched) => Mould::Notched,
             Some(Outline::Rounded) => Mould::Rounded,
-            _ => match slot_store::gb::cached_class(&cart.rom) {
-                Class::ColourOnly => Mould::Rounded,
-                Class::Original | Class::DualMode => Mould::Notched,
-            },
+            _ if cart.platform == Platform::Gbc => Mould::Rounded,
+            _ => Mould::Notched,
         },
     }
 }
