@@ -17,6 +17,8 @@ pub enum ScreenEffect {
     Dot,
     Simpletex,
     GbaLcd,
+    /// A TV console's picture on a flat Trinitron.
+    Crt,
 }
 
 impl ScreenEffect {

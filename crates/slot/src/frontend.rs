@@ -771,8 +771,11 @@ impl Frontend {
         } else {
             0.30
         });
-        compositor.set_pixel_transparency(self.session.app().pixel_transparency());
+        // A TV console's picture is a tube's, not an LCD's: no see-through pixels.
+        let tv = platform.tv();
+        compositor.set_pixel_transparency(self.session.app().pixel_transparency() && !tv);
         compositor.set_screen_effect(match self.session.app().screen_shader() {
+            _ if tv => ScreenEffect::Crt,
             slot_store::Shader::Off => ScreenEffect::None,
             slot_store::Shader::Grid if gbc => ScreenEffect::GbaLcd,
             slot_store::Shader::Lcd3x => ScreenEffect::Lcd3x,
