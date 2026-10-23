@@ -1,6 +1,6 @@
-//! SELECT on a shelf cart: its shell's colour and finish on one tab, and when it has no label
-//! and there is none to fetch, the marker its title is written in on a second. Y fetches the
-//! label of a cart that has none.
+//! SELECT on a shelf cart: its shell's colour and finish on one tab, the versions of its label
+//! LaunchBox holds on a second, and when it has no label and there is none to fetch, the marker
+//! its title is written in on a third. Y fetches the label of a cart that has none.
 use std::path::PathBuf;
 
 use slot_input::Millis;
@@ -79,6 +79,8 @@ pub enum Row {
     Finish,
     /// An SNES cart's shape: the American cart or the European and Japanese one.
     Model,
+    /// The versions of the label, side by side.
+    Label,
     Marker,
 }
 
@@ -88,7 +90,18 @@ pub const MODELS: [Outline; 2] = [Outline::Notched, Outline::Rounded];
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum Tab {
     Colour,
+    Label,
     Marker,
+}
+
+/// The label tab's versions: asked for the first time the tab opens.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum Versions {
+    Unasked,
+    Looking,
+    /// None were found, or they could not be looked for.
+    Missing,
+    Found(usize),
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -109,6 +122,10 @@ pub enum Outcome {
     /// Closed without saving: the cart goes back to what it was.
     Revert(Option<ShellChoice>, Option<[u8; 3]>),
     Fetch,
+    /// The label tab opened for the first time: look up the label's versions.
+    Versions,
+    /// Show the cart in this version of its label.
+    Version(usize),
 }
 
 pub enum Press {
@@ -143,6 +160,9 @@ pub struct ShellPicker {
     closed: Option<(Millis, f32)>,
     /// An SNES cart's shape picked, and the one its region gives it.
     model: Option<(usize, usize)>,
+    versions: Versions,
+    /// The version of the label shown, once one is.
+    version: Option<usize>,
 }
 
 impl ShellPicker {
@@ -196,6 +216,8 @@ impl ShellPicker {
             opened: now,
             closed: None,
             model: None,
+            versions: Versions::Unasked,
+            version: None,
         }
     }
 
@@ -236,6 +258,37 @@ impl ShellPicker {
 
     pub fn tab(&self) -> Tab {
         self.tab
+    }
+
+    /// The tabs along the top: colour and label, and the marker for a cart with no label.
+    pub fn tabs(&self) -> Vec<Tab> {
+        let mut tabs = vec![Tab::Colour, Tab::Label];
+        if self.offers_marker() {
+            tabs.push(Tab::Marker);
+        }
+        tabs
+    }
+
+    pub fn versions(&self) -> Versions {
+        self.versions
+    }
+
+    /// The version of the label shown in place of the cart's own, if one is.
+    pub fn version(&self) -> Option<usize> {
+        self.version
+    }
+
+    /// The versions came back: how many, or None when they could not be looked for. The
+    /// first is shown at once, as the tab is there to pick one.
+    pub fn found(&mut self, count: Option<usize>) -> Option<usize> {
+        self.versions = match count {
+            Some(n) if n > 0 => Versions::Found(n),
+            _ => Versions::Missing,
+        };
+        if matches!(self.versions, Versions::Found(_)) && self.tab == Tab::Label {
+            self.version = Some(0);
+        }
+        self.version
     }
 
     /// Y fetches the label while the cart has none, again and again: a label not found
@@ -319,10 +372,7 @@ impl ShellPicker {
     }
 
     fn rows(&self) -> Vec<Row> {
-        let mut rows = Vec::new();
-        if self.offers_marker() {
-            rows.push(Row::Tabs);
-        }
+        let mut rows = vec![Row::Tabs];
         match self.tab {
             Tab::Colour => {
                 rows.push(Row::Colour);
@@ -333,9 +383,14 @@ impl ShellPicker {
                     rows.push(Row::Model);
                 }
             }
+            Tab::Label => rows.push(Row::Label),
             Tab::Marker => rows.push(Row::Marker),
         }
         rows
+    }
+
+    fn changed(&self) -> bool {
+        self.choice() != self.was || self.marker_choice() != self.was_marker || self.version.is_some()
     }
 
     pub fn press(&mut self, press: Press, now: Millis) -> Outcome {
@@ -349,8 +404,32 @@ impl ShellPicker {
                 let by = if matches!(press, Press::Left) { -1 } else { 1 };
                 match self.row {
                     Row::Tabs => {
-                        self.tab = if by < 0 { Tab::Colour } else { Tab::Marker };
+                        let tabs = self.tabs();
+                        let at = tabs.iter().position(|t| *t == self.tab).unwrap_or(0);
+                        self.tab = tabs[step(at, by, tabs.len())];
+                        if self.tab == Tab::Label && self.versions == Versions::Unasked {
+                            self.versions = Versions::Looking;
+                            return Outcome::Versions;
+                        }
+                        if self.tab == Tab::Label && self.version.is_none() {
+                            if let Versions::Found(_) = self.versions {
+                                self.version = Some(0);
+                                return Outcome::Version(0);
+                            }
+                        }
                         return Outcome::None;
+                    }
+                    Row::Label => {
+                        let Versions::Found(n) = self.versions else {
+                            return Outcome::None;
+                        };
+                        let at = self.version.unwrap_or(0);
+                        let to = step(at, by, n);
+                        if Some(to) == self.version {
+                            return Outcome::None;
+                        }
+                        self.version = Some(to);
+                        return Outcome::Version(to);
                     }
                     Row::Colour => {
                         let to = step(self.swatch, by, self.swatches.len());
@@ -395,7 +474,7 @@ impl ShellPicker {
                 Outcome::None
             }
             Press::Fetch => {
-                if !self.offers_fetch() || self.fetch != Fetch::Idle {
+                if !self.offers_fetch() || self.fetch != Fetch::Idle || self.tab == Tab::Label {
                     return Outcome::None;
                 }
                 self.fetch = Fetch::Working;
@@ -407,7 +486,7 @@ impl ShellPicker {
             }
             Press::Back => {
                 self.closed = Some((now, self.openness(now)));
-                if self.choice() == self.was && self.marker_choice() == self.was_marker {
+                if !self.changed() {
                     Outcome::None
                 } else {
                     Outcome::Revert(self.was, self.was_marker)
@@ -500,7 +579,8 @@ mod tests {
         assert!(!p.offers_fetch());
         assert!(matches!(p.press(Press::Fetch, 0), Outcome::None));
         p.press(Press::Up, 0);
-        assert_eq!(p.row(), Row::Colour, "one tab: no tab row");
+        assert_eq!(p.row(), Row::Tabs, "the label's tab is always there");
+        assert_eq!(p.tabs(), [Tab::Colour, Tab::Label], "no marker on a labelled cart");
     }
 
     #[test]
@@ -535,13 +615,32 @@ mod tests {
         p.press(Press::Up, 0);
         assert_eq!(p.row(), Row::Tabs);
         p.press(Press::Right, 0);
+        p.press(Press::Right, 0);
         assert_eq!(p.tab(), Tab::Marker);
         p.press(Press::Down, 0);
         assert_eq!(p.row(), Row::Marker);
         p.press(Press::Up, 0);
         p.press(Press::Left, 0);
+        p.press(Press::Left, 0);
         p.press(Press::Down, 0);
         assert_eq!((p.tab(), p.row()), (Tab::Colour, Row::Colour));
+    }
+
+    #[test]
+    fn the_label_tab_looks_up_versions_once_and_shows_the_first() {
+        let mut p = picker(None, true);
+        p.press(Press::Up, 0);
+        assert!(matches!(p.press(Press::Right, 0), Outcome::Versions));
+        assert_eq!((p.tab(), p.versions()), (Tab::Label, Versions::Looking));
+        assert_eq!(p.found(Some(3)), Some(0), "the first is shown at once");
+        p.press(Press::Down, 0);
+        assert_eq!(p.row(), Row::Label);
+        assert!(matches!(p.press(Press::Right, 0), Outcome::Version(1)));
+        p.press(Press::Up, 0);
+        p.press(Press::Left, 0);
+        assert!(matches!(p.press(Press::Right, 0), Outcome::None), "asked once, still shown");
+        assert_eq!(p.version(), Some(1));
+        assert!(matches!(p.press(Press::Back, 0), Outcome::Revert(None, None)), "a version shown is undone");
     }
 
     #[test]

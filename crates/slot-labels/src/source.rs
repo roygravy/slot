@@ -174,6 +174,15 @@ pub const RENDER: &str = "Fanart - Cart - Front";
 /// render of that cart, then the same from any other region. A render is a scan of the real label
 /// on a stock shell, and for Game Boy and Game Boy Color it is most of what LaunchBox has.
 pub fn rank<T: Clone>(stem: &str, code: &str, images: &[(&str, &str, T)]) -> Vec<T> {
+    rank_all(stem, code, images)
+        .into_iter()
+        .take(3)
+        .map(|(_, _, image)| image)
+        .collect()
+}
+
+/// Every cart front in the same order, each with whether it is a render and its region.
+fn rank_all<T: Clone>(stem: &str, code: &str, images: &[(&str, &str, T)]) -> Vec<(bool, String, T)> {
     let own = regions(stem, code);
     let mut ranked: Vec<_> = images
         .iter()
@@ -184,15 +193,27 @@ pub fn rank<T: Clone>(stem: &str, code: &str, images: &[(&str, &str, T)]) -> Vec
                 _ => return None,
             };
             let away = !own.contains(region);
-            Some((u8::from(away) * 2 + u8::from(render), image.clone()))
+            Some((
+                u8::from(away) * 2 + u8::from(render),
+                (render, region.to_string(), image.clone()),
+            ))
         })
         .collect();
     ranked.sort_by_key(|(tier, _)| *tier);
-    ranked.into_iter().take(3).map(|(_, image)| image).collect()
+    ranked.into_iter().map(|(_, front)| front).collect()
 }
 
 /// A gallery's cart fronts. Titles read "<game> - <type> Image (<region>)", the region optional.
 pub(crate) fn image_urls(page: &str, cart: &Cart) -> Result<Vec<String>, Error> {
+    match fronts(page, cart) {
+        fronts if fronts.is_empty() => Err(unavailable("no cartridge artwork")),
+        fronts => Ok(fronts.into_iter().take(3).map(|(_, _, url)| url).collect()),
+    }
+}
+
+/// A gallery's cart fronts, all of them, best first: whether each is a render, its region and
+/// its address.
+fn fronts(page: &str, cart: &Cart) -> Vec<(bool, String, String)> {
     let doc = Html::parse_document(page);
     let mut images = Vec::new();
     for link in doc.select(&selector("a[data-title][href]")) {
@@ -213,10 +234,7 @@ pub(crate) fn image_urls(page: &str, cart: &Cart) -> Result<Vec<String>, Error> 
             images.push((kind, region, url.to_owned()));
         }
     }
-    match rank(&cart.stem, &cart.code, &images) {
-        urls if urls.is_empty() => Err(unavailable("no cartridge artwork")),
-        urls => Ok(urls),
-    }
+    rank_all(&cart.stem, &cart.code, &images)
 }
 
 pub(crate) fn resolve(
@@ -224,6 +242,29 @@ pub(crate) fn resolve(
     cart: &Cart,
     canonical_title: Option<&str>,
 ) -> Result<Vec<String>, Error> {
+    let page = gallery(http, cart, canonical_title)?;
+    image_urls(&page, cart)
+}
+
+/// Every cart front of the game's gallery, best first: whether each is a render, its region
+/// and its address.
+pub(crate) fn all_fronts(
+    http: &mut impl Transport,
+    cart: &Cart,
+) -> Result<Vec<(bool, String, String)>, Error> {
+    let page = gallery(http, cart, None)?;
+    match fronts(&page, cart) {
+        fronts if fronts.is_empty() => Err(unavailable("no cartridge artwork")),
+        fronts => Ok(fronts),
+    }
+}
+
+/// The game's image gallery, found by its title.
+fn gallery(
+    http: &mut impl Transport,
+    cart: &Cart,
+    canonical_title: Option<&str>,
+) -> Result<String, Error> {
     let title = canonical_title
         .map(normalize)
         .unwrap_or_else(|| title(&cart.stem));
@@ -241,5 +282,5 @@ pub(crate) fn resolve(
         }
     };
     let page = http.get(&format!("{BASE}/games/images/{id}"))?;
-    image_urls(&String::from_utf8_lossy(&page), cart)
+    Ok(String::from_utf8_lossy(&page).into_owned())
 }

@@ -107,8 +107,8 @@ pub use shell::{
     Shell, DEFAULT_SHELL, DMG_SHELL, DUAL_MODE_SHELL, GBC_CLEAR_SHELL, GB_CLEAR_SHELL,
 };
 pub use shell_picker::{
-    draw_shell_picker, shell_picker_hop, shell_picker_shapes, shell_picker_word, PickerRow, ShellPickerFaces,
-    ShellPickerView,
+    draw_shell_picker, shell_picker_hop, shell_picker_shapes, shell_picker_word, LabelTab, PickerRow,
+    ShellPickerFaces, ShellPickerView,
 };
 pub use silhouette::{gb_silhouette, silhouette, GbShell};
 pub use slot_chrome::{

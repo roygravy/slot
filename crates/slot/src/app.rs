@@ -317,6 +317,15 @@ pub struct App {
     shell_picker_faces: Option<slot_ui::ShellPickerFaces>,
     /// A cart whose label the shell picker asked for, for the frontend to fetch.
     label_ask: Option<Cart>,
+    /// The studio's label tab asked for this cart's versions of its label.
+    versions_ask: Option<Cart>,
+    /// The versions found: where each is kept while it is looked at, its thumbnail and its
+    /// caption.
+    version_paths: Vec<std::path::PathBuf>,
+    version_thumbs: Vec<(TexId, u32, u32)>,
+    version_captions: Vec<(TexId, u32)>,
+    /// The label the studio's cart wore when it opened, put back if a version is not kept.
+    label_was: Option<std::path::PathBuf>,
     core_board_face: Option<TexId>,
     core_interior_face: Option<TexId>,
     core_lid_face: Option<TexId>,
@@ -510,6 +519,11 @@ impl App {
             shell_picker: None,
             shell_picker_faces: None,
             label_ask: None,
+            versions_ask: None,
+            version_paths: Vec::new(),
+            version_thumbs: Vec::new(),
+            version_captions: Vec::new(),
+            label_was: None,
             core_board_face: None,
             core_interior_face: None,
             core_lid_face: None,
@@ -4740,6 +4754,7 @@ impl App {
             cart.platform == Platform::Gba,
             self.now(),
         );
+        let label_was = cart.label.clone();
         let picker = match cart.platform {
             Platform::Snes => {
                 let auto = match slot_store::snes::cached_region(&cart.rom) {
@@ -4752,6 +4767,10 @@ impl App {
             Platform::Gbc => picker.with_model(1),
             _ => picker,
         };
+        self.label_was = label_was;
+        self.version_paths.clear();
+        self.version_thumbs.clear();
+        self.version_captions.clear();
         self.shell_picker = Some(picker);
         self.shelf_mut().release_hold();
         self.play_held = None;
@@ -4776,16 +4795,26 @@ impl App {
         let (rom, stem) = (picker.rom.clone(), picker.stem.clone());
         let was_marker = picker.was_marker();
         let marker = picker.marker_choice();
-        match picker.press(press, now) {
+        let outcome = picker.press(press, now);
+        let version = picker.version();
+        match outcome {
             Outcome::None => {}
             Outcome::Preview(choice) => self.restyle(&rom, choice, marker),
             Outcome::Marker(ink) => {
                 let choice = self.shell_picker.as_ref().and_then(|p| p.choice());
                 self.restyle(&rom, choice, ink);
             }
-            Outcome::Revert(choice, ink) => self.restyle(&rom, choice, ink),
+            Outcome::Revert(choice, ink) => {
+                self.restyle(&rom, choice, ink);
+                if version.is_some() {
+                    self.relabel(&rom, self.label_was.clone());
+                }
+            }
             Outcome::Save(choice, ink) => {
                 self.restyle(&rom, choice, ink);
+                if let Some(i) = version {
+                    self.keep_version(&rom, i);
+                }
                 if let Some(root) = &self.root {
                     if let Err(e) = slot_store::write_shell_choice(root, &stem, choice) {
                         eprintln!("slot: shell: could not write {}: {e}", slot_store::LABELS_SHELL_FILE);
@@ -4798,6 +4827,99 @@ impl App {
                 }
             }
             Outcome::Fetch => self.ask_label(&rom),
+            Outcome::Versions => self.ask_versions(&rom),
+            Outcome::Version(i) => {
+                if let Some(path) = self.version_paths.get(i).cloned() {
+                    self.relabel(&rom, Some(path));
+                }
+            }
+        }
+    }
+
+    /// Show every shelf's copy of a cart in another label, or none.
+    fn relabel(&mut self, rom: &Path, label: Option<std::path::PathBuf>) {
+        for (_, shelf) in &mut self.shelves {
+            for index in 0..shelf.carts.len() {
+                if shelf.carts[index].rom != rom || shelf.carts[index].label == label {
+                    continue;
+                }
+                shelf.carts[index].label = label.clone();
+                self.orphaned.extend(shelf.take_face(index));
+                self.orphaned.extend(shelf.take_interior(index));
+            }
+        }
+    }
+
+    /// The version picked becomes the cart's label, in the file the old one was kept in.
+    fn keep_version(&mut self, rom: &Path, i: usize) {
+        let (Some(root), Some(path)) = (self.root.clone(), self.version_paths.get(i).cloned())
+        else {
+            return;
+        };
+        let Some(mut cart) = self.shelf().carts.iter().find(|c| c.rom == rom).cloned() else {
+            return;
+        };
+        cart.label = self.label_was.clone();
+        let saved = std::fs::read(&path)
+            .map_err(slot_labels::Error::from)
+            .and_then(|png| slot_labels::save_label(&root, &cart, &png));
+        match saved {
+            Ok(saved) => {
+                slot_store::forget_no_label(&root, cart.platform, &cart.stem);
+                self.relabel(rom, Some(saved));
+            }
+            Err(e) => {
+                eprintln!("slot: labels: {}: {e}", cart.stem);
+                self.relabel(rom, self.label_was.clone());
+            }
+        }
+    }
+
+    /// The label tab's versions are looked up online, off the frame loop.
+    fn ask_versions(&mut self, rom: &Path) {
+        let cart = self.shelf().carts.iter().find(|c| c.rom == rom).cloned();
+        match cart {
+            Some(mut cart) if self.home_wifi_on() => {
+                cart.label = self.label_was.clone();
+                self.versions_ask = Some(cart);
+            }
+            _ => {
+                self.hud.toast(Toast::TurnOnWifi, self.now());
+                if let Some(picker) = &mut self.shell_picker {
+                    picker.found(None);
+                }
+            }
+        }
+    }
+
+    pub fn take_versions_ask(&mut self) -> Option<Cart> {
+        self.versions_ask.take()
+    }
+
+    /// The versions the label tab asked for came back, each with its thumbnail and caption
+    /// uploaded; None when they could not be looked for. The first is shown at once.
+    #[allow(clippy::type_complexity)]
+    pub fn versions_found(
+        &mut self,
+        rom: &Path,
+        found: Option<Vec<(std::path::PathBuf, (TexId, u32, u32), (TexId, u32))>>,
+    ) {
+        let Some(picker) = self.shell_picker.as_mut().filter(|p| p.rom == rom) else {
+            return;
+        };
+        let count = found.as_ref().map(Vec::len);
+        let shown = picker.found(count);
+        match count {
+            Some(0) => self.hud.toast(Toast::NoLabelFound, self.now()),
+            None => self.hud.toast(Toast::LabelFailed, self.now()),
+            _ => {}
+        }
+        let found = found.unwrap_or_default();
+        self.version_paths = found.iter().map(|v| v.0.clone()).collect();
+        self.version_thumbs = found.iter().map(|v| v.1).collect();
+        self.version_captions = found.iter().map(|v| v.2).collect();
+        if let Some(path) = shown.and_then(|i| self.version_paths.get(i).cloned()) {
+            self.relabel(rom, Some(path));
         }
     }
 
@@ -4914,15 +5036,26 @@ impl App {
                 shell_picker::Row::Colour => slot_ui::PickerRow::Colour,
                 shell_picker::Row::Finish => slot_ui::PickerRow::Finish,
                 shell_picker::Row::Model => slot_ui::PickerRow::Model,
+                shell_picker::Row::Label => slot_ui::PickerRow::Label,
                 shell_picker::Row::Marker => slot_ui::PickerRow::Marker,
             },
-            tabs: picker
-                .offers_marker()
-                .then(|| usize::from(picker.tab() == shell_picker::Tab::Marker)),
+            tabs: picker.tabs().into_iter().map(tab_face).collect(),
+            tab: tab_face(picker.tab()),
+            label: match picker.versions() {
+                shell_picker::Versions::Unasked | shell_picker::Versions::Looking => {
+                    slot_ui::LabelTab::Looking
+                }
+                shell_picker::Versions::Missing => slot_ui::LabelTab::Missing,
+                shell_picker::Versions::Found(_) => slot_ui::LabelTab::Found {
+                    thumbs: &self.version_thumbs,
+                    captions: &self.version_captions,
+                    at: picker.version(),
+                },
+            },
             marker: picker.marker(),
             inks: shell_picker::MARKERS.map(|(_, ink)| ink),
-            fetch: picker
-                .offers_fetch()
+            // The label's tab picks among versions; Y fetches only from the others.
+            fetch: (picker.offers_fetch() && picker.tab() != shell_picker::Tab::Label)
                 .then(|| picker.fetch() == Fetch::Working),
         };
         slot_ui::draw_shell_picker(self.canvas(), &view, out);
@@ -5991,5 +6124,14 @@ mod network_time_tests {
         assert_eq!(ring.list().unwrap()[0].stamp, stamp);
         assert_eq!(ring.read(&stamp).unwrap().0, b"latest");
         assert_eq!(ring.list().unwrap().len(), slot_store::RING_MAX);
+    }
+}
+
+/// A studio tab's name's place among the faces: colour, label, marker.
+fn tab_face(tab: shell_picker::Tab) -> usize {
+    match tab {
+        shell_picker::Tab::Colour => 0,
+        shell_picker::Tab::Label => 1,
+        shell_picker::Tab::Marker => 2,
     }
 }

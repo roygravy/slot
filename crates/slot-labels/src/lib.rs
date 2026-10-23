@@ -150,7 +150,25 @@ impl Default for Downloader {
     }
 }
 
+/// One version of a cart's label: a cart front LaunchBox holds, cut to the label.
+pub struct Version {
+    /// A fanart render of the cart rather than a photo of one.
+    pub render: bool,
+    /// LaunchBox's name for the region, empty when it gives none.
+    pub region: String,
+    pub png: Vec<u8>,
+}
+
+/// At most this many versions are fetched for one cart.
+const VERSIONS: usize = 8;
+
 impl Downloader {
+    /// Every version of the cart's label LaunchBox holds, best first. Blocking; call only on a
+    /// background worker.
+    pub fn versions(&mut self, cart: &Cart) -> Result<Vec<Version>, Error> {
+        versions(&mut self.http, cart)
+    }
+
     /// Blocking; call only on a background worker. Existing files are never replaced.
     pub fn prepare(&mut self, root: &Path, cart: &Cart) -> Result<PathBuf, Error> {
         self.prepare_identified(root, cart, None)
@@ -226,6 +244,59 @@ fn prepare(
         }
     }
     Err(last)
+}
+
+fn versions(http: &mut impl Transport, cart: &Cart) -> Result<Vec<Version>, Error> {
+    let fronts = match source::all_fronts(http, cart) {
+        Ok(fronts) => fronts,
+        // A title LaunchBox does not know may still have its checksum in slot's index.
+        Err(Error::Unavailable(e)) => {
+            let crc = catalog::crc32(&cart.rom).ok();
+            let urls = crc.map(|crc| catalog::lookup(catalog::INDEX, crc));
+            match urls.filter(|u| !u.is_empty()) {
+                Some(urls) => urls.into_iter().map(|u| (false, String::new(), u)).collect(),
+                None => return Err(Error::Unavailable(e)),
+            }
+        }
+        Err(e) => return Err(e),
+    };
+    let mut found = Vec::new();
+    let mut last = Error::Unavailable("no cartridge artwork".into());
+    for (render, region, url) in fronts.into_iter().take(VERSIONS) {
+        match http
+            .get(&url)
+            .and_then(|bytes| artwork::prepare(&bytes, cart.platform))
+        {
+            Ok(png) => found.push(Version { render, region, png }),
+            Err(e @ Error::Network(_)) if found.is_empty() => return Err(e),
+            Err(e) => last = e,
+        }
+    }
+    if found.is_empty() {
+        Err(last)
+    } else {
+        Ok(found)
+    }
+}
+
+/// Where a cart's label is kept: the file it already wears, else one named after its ROM.
+pub fn label_path(root: &Path, cart: &Cart) -> PathBuf {
+    cart.label.clone().unwrap_or_else(|| {
+        let file = cart.rom.file_name().map(Path::new).unwrap_or(Path::new(&cart.stem));
+        root.join("Labels")
+            .join(cart.platform.dir_name())
+            .join(file.with_extension("png"))
+    })
+}
+
+/// A label picked by hand: it replaces the one the cart wears.
+pub fn save_label(root: &Path, cart: &Cart, png: &[u8]) -> Result<PathBuf, Error> {
+    let target = label_path(root, cart);
+    if let Some(dir) = target.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    slot_store::atomic_write(&target, png)?;
+    Ok(target)
 }
 
 /// The pack's label for a ROM. A damaged pack or image is reported and passed over, so the cart

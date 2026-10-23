@@ -52,6 +52,9 @@ pub struct Frontend {
     rebuild: Option<Rebuild>,
     stale_check: Option<std::sync::mpsc::Receiver<Vec<slot_store::Cart>>>,
     label_fetch: Option<std::sync::mpsc::Receiver<(slot_store::Cart, LabelFetched)>>,
+    versions_fetch: Option<std::sync::mpsc::Receiver<(std::path::PathBuf, Option<Vec<VersionFile>>)>>,
+    /// Each version's thumbnail and caption, reused from one cart to the next.
+    version_tex: Vec<(Option<TexId>, Option<TexId>)>,
     ui_faces: Option<std::sync::mpsc::Receiver<UiFaces>>,
     rebuild_faces: RebuildFaces,
     link_art: LinkArtBuilder,
@@ -78,6 +81,20 @@ pub struct Frontend {
     link_shot_size: (u32, u32),
     link_shot_shown: bool,
 }
+
+/// A version of a cart's label, kept on the card while the studio shows it.
+struct VersionFile {
+    path: std::path::PathBuf,
+    caption: String,
+    thumb: Vec<u8>,
+    w: u32,
+    h: u32,
+}
+
+/// Where the label tab keeps the versions it shows.
+const VERSIONS_DIR: &str = "System/Cache/Labels/Versions";
+/// A version's thumbnail is drawn this tall; it is made at twice that.
+const THUMB_H: u32 = 84;
 
 enum LabelFetched {
     Found(std::path::PathBuf),
@@ -229,6 +246,8 @@ impl Frontend {
             rebuild: None,
             stale_check,
             label_fetch: None,
+            versions_fetch: None,
+            version_tex: Vec::new(),
             cheat_fetch: None,
             labels_online: false,
             ui_faces: None,
@@ -545,7 +564,8 @@ impl Frontend {
             })
             .collect();
         let inks = words.split_off(words.len() - crate::shell_picker::MARKERS.len());
-        let tabs = words.split_off(words.len() - 2);
+        let found = words.split_off(words.len() - 2);
+        let tabs = words.split_off(words.len() - 3);
         let models = words.split_off(words.len() - 4);
         let finishes = words.split_off(words.len() - 3);
         let mut shell_legend: Vec<(TexId, u32)> = faces
@@ -564,7 +584,9 @@ impl Frontend {
             names: words,
             finishes,
             models: [models[0], models[1], models[2], models[3]],
-            tabs: [tabs[0], tabs[1]],
+            tabs: [tabs[0], tabs[1], tabs[2]],
+            looking: found[0],
+            none_found: found[1],
             inks,
             legend: shell_legend,
             fetch: fetch_hint,
@@ -805,6 +827,7 @@ impl Frontend {
         }
         self.sync_labels();
         self.fetch_asked_label();
+        self.fetch_versions(compositor);
         self.cart_faces.sync(self.session.app_mut(), compositor);
         sync_clock(self.session.app_mut(), compositor, &mut self.clocks);
         sync_about(self.session.app_mut(), compositor, &mut self.about);
@@ -902,6 +925,66 @@ impl Frontend {
         {
             self.core_asked = None;
             self.core_built = None;
+        }
+    }
+
+    /// The studio's label tab asked for the versions of a cart's label: fetched and cut on a
+    /// thread of its own, then each one's thumbnail and caption uploaded.
+    fn fetch_versions(&mut self, compositor: &mut Compositor) {
+        if let Some(rx) = &self.versions_fetch {
+            let (rom, got) = match rx.try_recv() {
+                Ok(got) => got,
+                Err(std::sync::mpsc::TryRecvError::Empty) => return,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    self.versions_fetch = None;
+                    return;
+                }
+            };
+            self.versions_fetch = None;
+            let found = got.map(|versions| {
+                versions
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, v)| {
+                        if self.version_tex.len() <= i {
+                            self.version_tex.resize(i + 1, (None, None));
+                        }
+                        let thumb = upload_rgba(compositor, &mut self.version_tex[i].0, v.w, v.h, &v.thumb);
+                        let word = slot_ui::shell_picker_word(&v.caption);
+                        let caption =
+                            upload_rgba(compositor, &mut self.version_tex[i].1, word.w, word.h, &word.rgba);
+                        (v.path, (thumb, v.w, v.h), (caption, word.w))
+                    })
+                    .collect()
+            });
+            self.session.app_mut().versions_found(&rom, found);
+            return;
+        }
+        let Some(cart) = self.session.app_mut().take_versions_ask() else {
+            return;
+        };
+        let Some(root) = self.session.app().root().map(|r| r.to_path_buf()) else {
+            return;
+        };
+        let (tx, rx) = std::sync::mpsc::channel();
+        let spawned = std::thread::Builder::new()
+            .name("slot-label-versions".into())
+            .spawn(move || {
+                let got = match slot_labels::Downloader::default().versions(&cart) {
+                    Ok(versions) => Some(version_files(&root, &cart, versions)),
+                    Err(slot_labels::Error::Unavailable(_) | slot_labels::Error::Image(_)) => {
+                        Some(Vec::new())
+                    }
+                    Err(e) => {
+                        eprintln!("slot: labels: {}: {e}", cart.stem);
+                        None
+                    }
+                };
+                let _ = tx.send((cart.rom, got));
+            });
+        match spawned {
+            Ok(_) => self.versions_fetch = Some(rx),
+            Err(e) => eprintln!("slot: labels: versions thread failed to start: {e}"),
         }
     }
 
@@ -1252,10 +1335,11 @@ impl UiFaces {
                 hint_face("A", "Choose"),
             ],
             shell_shapes: slot_ui::shell_picker_shapes(),
-            // The swatches' names, the finishes, the SNES shapes, the tabs, then the markers' names.
+            // The swatches' names, the finishes, the shapes, the tabs, the label tab's states, then
+            // the markers' names.
             shell_words: crate::shell_picker::swatch_names()
                 .into_iter()
-                .chain(["Solid", "Clear", "Glitter", "NTSC", "PAL", "GB", "GBC", "Color", "Marker"])
+                .chain(["Solid", "Clear", "Glitter", "NTSC", "PAL", "GB", "GBC", "Color", "Label", "Marker", "Looking", "None Found"])
                 .chain(crate::shell_picker::MARKERS.map(|(name, _)| name))
                 .map(slot_ui::shell_picker_word)
                 .collect(),
@@ -1953,6 +2037,45 @@ fn sync_core_picker(
 
 fn upload(compositor: &mut Compositor, slot: &mut Option<TexId>, face: slot_ui::UndoFace) -> TexId {
     upload_rgba(compositor, slot, face.w, face.h, &face.rgba)
+}
+
+/// The versions written where the label tab keeps them, each with a thumbnail and a caption:
+/// where it comes from, and which of how many it is.
+fn version_files(
+    root: &std::path::Path,
+    cart: &slot_store::Cart,
+    versions: Vec<slot_labels::Version>,
+) -> Vec<VersionFile> {
+    let dir = root.join(VERSIONS_DIR);
+    let _ = std::fs::create_dir_all(&dir);
+    let (lw, lh) = slot_ui::label_size(cart);
+    let (w, h) = (lw * THUMB_H / lh.max(1), THUMB_H);
+    let n = versions.len();
+    versions
+        .into_iter()
+        .enumerate()
+        .filter_map(|(i, v)| {
+            let path = dir.join(format!("{i}.png"));
+            if let Err(e) = slot_store::atomic_write(&path, &v.png) {
+                eprintln!("slot: labels: {}: {e}", path.display());
+                return None;
+            }
+            let thumb = slot_ui::cover(&path, w, h)?;
+            let region = match v.region.as_str() {
+                "" => "Version",
+                "North America" | "United States" => "USA",
+                region => region,
+            };
+            let kind = if v.render { "Render" } else { "Photo" };
+            Some(VersionFile {
+                path,
+                caption: format!("{region} · {kind} · {} of {n}", i + 1),
+                thumb,
+                w,
+                h,
+            })
+        })
+        .collect()
 }
 
 fn upload_rgba(

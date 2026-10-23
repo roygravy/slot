@@ -470,3 +470,22 @@ fn a_pack_without_the_rom_or_a_damaged_pack_leaves_it_to_the_network() {
         assert_eq!(http.calls, ["https://images.launchbox-app.com/cart.png"]);
     }
 }
+
+#[test]
+fn versions_are_every_cart_front_cut_to_a_label_and_a_picked_one_replaces_the_label() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut cart = cart("Advance Wars (USA)");
+    let mut http = Fake {
+        calls: vec![],
+        image: image_bytes(600, 355),
+    };
+    let found = versions(&mut http, &cart).unwrap();
+    assert_eq!(found.len(), 1);
+    assert_eq!((found[0].render, found[0].region.as_str()), (false, "North America"));
+    let path = save_label(dir.path(), &cart, &found[0].png).unwrap();
+    assert_eq!(path, dir.path().join("Labels/GBA/Advance Wars (USA).png"));
+    cart.label = Some(path.clone());
+    std::fs::write(&path, b"old").unwrap();
+    save_label(dir.path(), &cart, &found[0].png).unwrap();
+    assert_ne!(std::fs::read(&path).unwrap(), b"old", "a picked label replaces the one worn");
+}

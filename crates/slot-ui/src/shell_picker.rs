@@ -12,21 +12,21 @@ const RING: u32 = 36;
 const STROKE: f32 = 2.0;
 const SWATCH_PITCH: f32 = 34.0;
 
-const CART_TOP: f32 = 36.0;
+const CART_TOP: f32 = 30.0;
 const CART_MAX_W: f32 = 250.0;
-const CART_MAX_H: f32 = 206.0;
-const NAME_Y: f32 = 262.0;
-const SWATCH_Y: f32 = 304.0;
-const FINISH_Y: f32 = 338.0;
+const CART_MAX_H: f32 = 200.0;
+const NAME_Y: f32 = 248.0;
+const SWATCH_Y: f32 = 290.0;
+const FINISH_Y: f32 = 324.0;
 const FINISH_GAP: f32 = 34.0;
 /// A cart's two shapes (SNES NTSC and PAL, Game Boy and Color), under the finishes.
-const MODEL_Y: f32 = 372.0;
-/// With two tabs their names stand under the cart and the rows move down to make room.
-const TAB_Y: f32 = 262.0;
+const MODEL_Y: f32 = 358.0;
+/// The tabs' names stand under the cart and the rows move down to make room.
+const TAB_Y: f32 = 246.0;
 const TAB_GAP: f32 = 34.0;
 const TABBED_DROP: f32 = 34.0;
 const MARKER_PITCH: f32 = 40.0;
-const LEGEND_Y: f32 = 430.0;
+const LEGEND_Y: f32 = 438.0;
 /// How far the cart rises off the shelf while its neighbours part, before it lifts into place.
 const HOP: f32 = 22.0;
 /// The rows rise this far into place as the cart arrives, one after the other.
@@ -48,8 +48,11 @@ pub struct ShellPickerFaces {
     pub finishes: Vec<(TexId, u32)>,
     /// NTSC, PAL: an SNES cart's two shapes; then GB, GBC: a Game Boy cart's two.
     pub models: [(TexId, u32); 4],
-    /// The tabs' names: the colour's, then the marker's.
-    pub tabs: [(TexId, u32); 2],
+    /// The tabs' names: the colour's, the label's, then the marker's.
+    pub tabs: [(TexId, u32); 3],
+    /// The label tab while its versions are looked for, and when there are none.
+    pub looking: (TexId, u32),
+    pub none_found: (TexId, u32),
     /// The markers' names, in the order of their inks.
     pub inks: Vec<(TexId, u32)>,
     pub legend: Vec<(TexId, u32)>,
@@ -80,7 +83,10 @@ pub struct ShellPickerView<'a> {
     pub model: Option<(usize, usize)>,
     pub row: PickerRow,
     /// The open tab, when there are two.
-    pub tabs: Option<usize>,
+    pub tabs: Vec<usize>,
+    /// The open tab, by its name's place in the faces: colour, label, marker.
+    pub tab: usize,
+    pub label: LabelTab<'a>,
     pub marker: usize,
     pub inks: [[u8; 3]; 3],
     /// Some(at work) while Y can fetch the cart's label.
@@ -93,8 +99,28 @@ pub enum PickerRow {
     Colour,
     Finish,
     Model,
+    Label,
     Marker,
 }
+
+/// The label tab's versions of the label.
+#[derive(Copy, Clone)]
+pub enum LabelTab<'a> {
+    Looking,
+    Missing,
+    /// Each version's thumbnail (texture, width, height) and caption, and the one shown.
+    Found {
+        thumbs: &'a [(TexId, u32, u32)],
+        captions: &'a [(TexId, u32)],
+        at: Option<usize>,
+    },
+}
+
+/// A version's thumbnail is this tall, its top this far under the swatches' middle; the row of
+/// them is spaced by `THUMB_GAP`.
+const THUMB_H: f32 = 42.0;
+const THUMB_DROP: f32 = -6.0;
+const THUMB_GAP: f32 = 12.0;
 
 /// A white disc, a white ring for the chosen swatch and the cart's-own swatch (a ring with a
 /// slash), all drawn with `Draw::Tint`.
@@ -279,20 +305,74 @@ pub fn draw_shell_picker(canvas: Canvas, v: &ShellPickerView, out: &mut Vec<Draw
         }
     };
 
-    let drop = if v.tabs.is_some() { TABBED_DROP } else { 0.0 };
-    if let Some(tab) = v.tabs {
-        boxed_row(
-            &v.faces.tabs,
-            Some(tab),
-            v.row == PickerRow::Tabs,
-            TAB_Y,
-            TAB_GAP,
-            stage(0.0),
-            out,
-        );
-    }
+    let drop = TABBED_DROP;
+    let tab_faces: Vec<(TexId, u32)> = v.tabs.iter().map(|&t| v.faces.tabs[t]).collect();
+    boxed_row(
+        &tab_faces,
+        v.tabs.iter().position(|&t| t == v.tab),
+        v.row == PickerRow::Tabs,
+        TAB_Y,
+        TAB_GAP,
+        stage(0.0),
+        out,
+    );
 
-    if v.tabs == Some(1) {
+    if v.tab == 1 {
+        // The label's tab: where the version shown comes from, over a row of them all.
+        let caption = match v.label {
+            LabelTab::Looking => Some(v.faces.looking),
+            LabelTab::Missing => Some(v.faces.none_found),
+            LabelTab::Found { captions, at, .. } => at.and_then(|i| captions.get(i).copied()),
+        };
+        if let Some(face) = caption {
+            out.push(word(
+                face,
+                canvas.centred(seen(face.1)),
+                rise(NAME_Y + drop, stage(0.0)),
+                ink(focus(PickerRow::Label), stage(0.0)),
+            ));
+        }
+        if let LabelTab::Found { thumbs, at, .. } = v.label {
+            let k = stage(1.0);
+            let sizes: Vec<(f32, f32)> = thumbs
+                .iter()
+                .map(|&(_, w, h)| (THUMB_H * w as f32 / h.max(1) as f32, THUMB_H))
+                .collect();
+            let total = sizes.iter().map(|s| s.0).sum::<f32>()
+                + THUMB_GAP * sizes.len().saturating_sub(1) as f32;
+            let mut x = canvas.centred(total).round();
+            let y = rise(SWATCH_Y + drop + THUMB_DROP, k).round();
+            for (i, (&(tex, _, _), &(w, h))) in thumbs.iter().zip(&sizes).enumerate() {
+                if at == Some(i) {
+                    let c = ink(focus(PickerRow::Label), k);
+                    let (fx, fy, fw, fh, t) = (x - 4.0, y - 4.0, w + 8.0, h + 8.0, 2.0);
+                    for (rx, ry, rw, rh) in [
+                        (fx, fy, fw, t),
+                        (fx, fy + fh - t, fw, t),
+                        (fx, fy, t, fh),
+                        (fx + fw - t, fy, t, fh),
+                    ] {
+                        out.push(Draw::Rect {
+                            x: rx,
+                            y: ry,
+                            w: rw,
+                            h: rh,
+                            colour: c,
+                        });
+                    }
+                }
+                out.push(Draw::Tex {
+                    x,
+                    y,
+                    w: w.round(),
+                    h,
+                    tex,
+                    alpha: k,
+                });
+                x += (w + THUMB_GAP).round();
+            }
+        }
+    } else if v.tab == 2 {
         // The marker's tab: the ink's name over a row of inks.
         if let Some(&face) = v.faces.inks.get(v.marker) {
             out.push(word(
