@@ -66,7 +66,7 @@ def gamebit(u, v, height):
 # ---- front ----
 height = edge * 10
 sides = cart & ~centre
-height -= sides * 1.6
+height -= sides * 3.0  # the raised centre stands well proud of the side pieces (Roy)
 for v in (0.211, 0.367, 0.522, 0.681, 0.837):
     g = (rect(0.0, v - 0.006, 0.156, v + 0.006) | rect(0.844, v - 0.006, 1.0, v + 0.006)) & cart
     height -= g * 2.2
@@ -85,6 +85,9 @@ height *= cart
 hs = nd.gaussian_filter(height, SS * 0.55)
 grey = 119 * light(height) + grain(1.2)  # the Game Boy carts' level (Roy)
 grey *= 1 - 0.65 * nd.gaussian_filter(gaps.astype(np.float32), 0.5 * SS)
+# the tall wall of the centre throws a soft shadow onto the side pieces, the same on both sides
+near = nd.distance_transform_edt(~centre) / w
+grey *= 1 - sides * 0.42 * np.exp(-near / 0.014)
 A = save(grey3(grey), cart, 'snes_neutral.png')
 m = np.zeros((H, W, 4), np.uint8); m[..., :3] = 255; m[..., 3] = (A * 255).round().astype(np.uint8)
 Image.fromarray(m, 'RGBA').save(f'{out}/snes_cart.png')
