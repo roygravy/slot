@@ -11,6 +11,9 @@ const DISC: u32 = 24;
 const RING: u32 = 36;
 const STROKE: f32 = 2.0;
 const SWATCH_PITCH: f32 = 34.0;
+/// The most swatches the row shows at once, and how faint an end one is with more past it.
+const SWATCHES_SHOWN: usize = 15;
+const SWATCH_MORE: f32 = 0.35;
 
 const CART_TOP: f32 = 30.0;
 const CART_MAX_W: f32 = 250.0;
@@ -410,17 +413,23 @@ pub fn draw_shell_picker(canvas: Canvas, v: &ShellPickerView, out: &mut Vec<Draw
                 ));
             }
         }
-        let n = v.swatches.len() as f32;
-        let first = canvas.w / 2.0 - SWATCH_PITCH * (n - 1.0) / 2.0;
-        for (i, &(colour, _)) in v.swatches.iter().enumerate() {
+        // More colours than fit slide along under a window kept around the cursor; the end
+        // swatches fade where the row goes on past them.
+        let all = v.swatches.len();
+        let shown = all.min(SWATCHES_SHOWN);
+        let from = v.swatch.saturating_sub(shown / 2).min(all - shown);
+        let first = canvas.w / 2.0 - SWATCH_PITCH * (shown as f32 - 1.0) / 2.0;
+        for (at, i) in (from..from + shown).enumerate() {
+            let more = (at == 0 && from > 0) || (at == shown - 1 && from + shown < all);
+            let k = stage(1.0) * if more { SWATCH_MORE } else { 1.0 };
             swatch(
                 v,
-                first + SWATCH_PITCH * i as f32,
+                first + SWATCH_PITCH * at as f32,
                 rise(SWATCH_Y + drop, stage(1.0)),
-                colour,
+                v.swatches[i].0,
                 i == v.swatch,
                 focus(PickerRow::Colour),
-                &|c| ink(c, stage(1.0)),
+                &|c| ink(c, k),
                 out,
             );
         }
