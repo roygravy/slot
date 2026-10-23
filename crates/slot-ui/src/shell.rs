@@ -60,8 +60,8 @@ pub const DMG_SHELL: Shell = shell([0x9a, 0x97, 0x8f], Finish::Solid);
 
 pub const DUAL_MODE_SHELL: Shell = shell([0x26, 0x26, 0x2a], Finish::Solid);
 
-/// The Game Boy Color's standard cart: clear, without a tint.
-pub const GBC_CLEAR_SHELL: Shell = shell([0xd9, 0xdb, 0xd8], Finish::Translucent);
+/// The Game Boy Color's standard cart: clear smoke-grey plastic.
+pub const GBC_CLEAR_SHELL: Shell = shell([0x7c, 0x7a, 0x8a], Finish::Translucent);
 
 pub const GB_CLEAR_SHELL: Shell = shell([0x7c, 0x7a, 0x8a], Finish::Translucent);
 
