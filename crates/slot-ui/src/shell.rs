@@ -6,6 +6,8 @@ pub enum Finish {
     Solid,
     Translucent,
     Glitter,
+    /// Opaque, with the glitter's flecks.
+    SolidGlitter,
     Metallic,
 }
 
@@ -95,6 +97,7 @@ pub fn shell_for(cart: &Cart) -> Shell {
             ShellFinish::Solid => Some(Finish::Solid),
             ShellFinish::Clear => Some(Finish::Translucent),
             ShellFinish::Glitter => Some(Finish::Glitter),
+            ShellFinish::SolidGlitter => Some(Finish::SolidGlitter),
             ShellFinish::Metallic => Some(Finish::Metallic),
             ShellFinish::Own => None,
         };

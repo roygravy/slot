@@ -17,6 +17,8 @@ pub enum ShellFinish {
     Solid,
     Clear,
     Glitter,
+    /// Opaque plastic with flecks in it, as Pokémon Gold and Silver are.
+    SolidGlitter,
     /// Gold paint, as Nintendo's gold NES carts wear.
     Metallic,
     /// The cart's own colour and finish: only its outline was picked (an SNES cart's NTSC or
@@ -49,6 +51,7 @@ impl ShellChoice {
             "solid" => ShellFinish::Solid,
             "clear" => ShellFinish::Clear,
             "glitter" => ShellFinish::Glitter,
+            "solid-glitter" => ShellFinish::SolidGlitter,
             "metallic" => ShellFinish::Metallic,
             "own" => ShellFinish::Own,
             _ => return None,
@@ -70,6 +73,7 @@ impl ShellChoice {
             ShellFinish::Solid => "solid",
             ShellFinish::Clear => "clear",
             ShellFinish::Glitter => "glitter",
+            ShellFinish::SolidGlitter => "solid-glitter",
             ShellFinish::Metallic => "metallic",
             ShellFinish::Own => "own",
         };

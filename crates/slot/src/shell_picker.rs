@@ -45,17 +45,22 @@ pub const MARKERS: [(&str, [u8; 3]); 3] = [
     ("Gold", [0xc9, 0xa2, 0x27]),
 ];
 
-pub const FINISHES: [ShellFinish; 3] =
-    [ShellFinish::Solid, ShellFinish::Clear, ShellFinish::Glitter];
+pub const FINISHES: &[ShellFinish] = &[
+    ShellFinish::Solid,
+    ShellFinish::SolidGlitter,
+    ShellFinish::Clear,
+    ShellFinish::Glitter,
+];
 /// An NES cart is painted metallic, as the gold ones were, instead of glittering.
-pub const NES_FINISHES: [ShellFinish; 3] =
-    [ShellFinish::Solid, ShellFinish::Clear, ShellFinish::Metallic];
+pub const NES_FINISHES: &[ShellFinish] =
+    &[ShellFinish::Solid, ShellFinish::Clear, ShellFinish::Metallic];
 
 /// Every finish's name, in the order of its face: the ones a cart is offered index into it.
-pub const FINISH_NAMES: [(ShellFinish, &str); 4] = [
+pub const FINISH_NAMES: [(ShellFinish, &str); 5] = [
     (ShellFinish::Solid, "Solid"),
+    (ShellFinish::SolidGlitter, "Glitter"),
     (ShellFinish::Clear, "Clear"),
-    (ShellFinish::Glitter, "Glitter"),
+    (ShellFinish::Glitter, "Clear Glitter"),
     (ShellFinish::Metallic, "Metallic"),
 ];
 
@@ -172,7 +177,7 @@ pub struct ShellPicker {
     swatch: usize,
     finish: usize,
     /// The finishes the row offers: an NES cart's has metallic in glitter's place.
-    finishes: [ShellFinish; 3],
+    finishes: &'static [ShellFinish],
     tab: Tab,
     row: Row,
     fetch: Fetch,
@@ -289,9 +294,11 @@ impl ShellPicker {
     }
 
     /// The offered finishes' names, as places in `FINISH_NAMES`.
-    pub fn finish_faces(&self) -> [usize; 3] {
+    pub fn finish_faces(&self) -> Vec<usize> {
         self.finishes
-            .map(|f| FINISH_NAMES.iter().position(|(n, _)| *n == f).unwrap_or(0))
+            .iter()
+            .map(|f| FINISH_NAMES.iter().position(|(n, _)| n == f).unwrap_or(0))
+            .collect()
     }
 
     pub fn row(&self) -> Row {
@@ -616,7 +623,7 @@ mod tests {
         let Outcome::Preview(Some(c)) = p.press(Press::Right, 0) else {
             panic!("no preview");
         };
-        assert_eq!(c.finish, ShellFinish::Clear);
+        assert_eq!(c.finish, ShellFinish::SolidGlitter);
     }
 
     #[test]

@@ -285,7 +285,8 @@ pub fn cart_face_with(cart: &Cart, art: Option<Vec<u8>>) -> CartFace {
     let shell = shell_for(cart);
     let mut face = shell_face(&s, &shell);
     // The sticker's rounded corners show the recess under it, in the shell's own plastic.
-    plastic_label_bed(&s, &mut face);
+    plastic_label_bed(&s, &shell, &mut face);
+    sparkle(&s, shell.finish, &mut face);
     let label = art.unwrap_or_else(|| generated_label(&s, &shell, &label_text(cart), cart.marker));
     paste_label(&s, &mut face, &label);
     clip_to_silhouette(&s, &mut face);
@@ -582,22 +583,6 @@ fn shell_face(s: &Spec, shell: &Shell) -> CartFace {
     if shell.finish == Finish::Metallic {
         metal(&mut rgba, src, s, shell.colour);
     }
-    if shell.finish == Finish::Glitter {
-        for y in 0..s.h {
-            for x in 0..s.w {
-                if !fleck(x, y) {
-                    continue;
-                }
-                let i = ((y * s.w + x) * 4) as usize;
-                if rgba[i + 3] == 0 {
-                    continue;
-                }
-                let body = [rgba[i], rgba[i + 1], rgba[i + 2]];
-                rgba[i..i + 3].copy_from_slice(&lerp(body, [0xff; 3], 100, 255));
-                rgba[i + 3] = 255;
-            }
-        }
-    }
     CartFace {
         rgba,
         w: s.w,
@@ -637,6 +622,37 @@ fn metal(rgba: &mut [u8], neutral: &[u8], s: &Spec, colour: [u8; 3]) {
     }
 }
 
+/// Glitter's flecks, over the shell and its bare well alike. In clear plastic they are sparse
+/// white specks; in solid glitter plastic (Pokémon Gold and Silver) they are dense and fine,
+/// most a lighter shade of the plastic catching the light, some a darker one.
+fn sparkle(s: &Spec, finish: Finish, face: &mut CartFace) {
+    for y in 0..s.h {
+        for x in 0..s.w {
+            let i = ((y * s.w + x) * 4) as usize;
+            if face.rgba[i + 3] == 0 {
+                continue;
+            }
+            let body = [face.rgba[i], face.rgba[i + 1], face.rgba[i + 2]];
+            match finish {
+                Finish::Glitter if fleck(x, y) => {
+                    face.rgba[i..i + 3].copy_from_slice(&lerp(body, [0xff; 3], 100, 255));
+                    face.rgba[i + 3] = 255;
+                }
+                Finish::SolidGlitter => {
+                    let h = fleck_noise(x, y) % 1000;
+                    let to = match h {
+                        0..=59 => lerp(body, [0xff; 3], 40 + (h % 5) * 25, 255),
+                        60..=89 => lerp(body, [0; 3], 50, 255),
+                        _ => continue,
+                    };
+                    face.rgba[i..i + 3].copy_from_slice(&to);
+                }
+                _ => {}
+            }
+        }
+    }
+}
+
 fn fleck_noise(x: u32, y: u32) -> u32 {
     let mut h = x.wrapping_mul(0x9e37_79b9) ^ y.wrapping_mul(0x85eb_ca6b);
     h ^= h >> 15;
@@ -659,103 +675,54 @@ fn lerp(a: [u8; 3], b: [u8; 3], num: u32, den: u32) -> [u8; 3] {
     out
 }
 
-/// With no sticker, the label recess is bare plastic: the shell's own colour, grain and
-/// see-through-ness, a shade darker, with a shadow along its top and left walls.
-fn plastic_label_bed(s: &Spec, face: &mut CartFace) {
+/// With no sticker, the label recess is bare plastic: the shell's art under the label, its
+/// well's walls and floor and round corners, in the shell's own colour, with the mark the
+/// moulding leaves there. A clear shell's well is as see-through as the rest of it.
+fn plastic_label_bed(s: &Spec, shell: &Shell, face: &mut CartFace) {
     let (lx, ly, lw, lh) = s.label;
     let on_label = |x: u32, y: u32| (lx..lx + lw).contains(&x) && (ly..ly + lh).contains(&y);
-    let (mut sum, mut n) = ([0u64; 4], 0u64);
+    let (mut alpha, mut n) = (0u64, 0u64);
     for y in 0..s.h {
         for x in 0..s.w {
             let i = (y * s.w + x) as usize;
             if on_label(x, y) || s.mask[i] < 250 {
                 continue;
             }
-            for c in 0..4 {
-                sum[c] += face.rgba[i * 4 + c] as u64;
-            }
+            alpha += face.rgba[i * 4 + 3] as u64;
             n += 1;
         }
     }
     if n == 0 {
         return;
     }
-    let mut mean = sum.map(|v| (v / n) as f32);
-    // A Game Boy pak's well, and a PAL SNES cart's, is a little wider than its sticker: the
-    // bed takes the colour of the floor left showing round it, so the floor reads as one,
-    // inside one rim.
-    let mut floor = 0.95;
-    let ring_w = match s.mould {
-        Mould::Notched => 2,
-        Mould::SnesPal => 1,
-        _ => 0,
-    };
-    if ring_w > 0 {
-        let (mut ring, mut k) = ([0u64; 4], 0u64);
-        for y in ly + lh / 4..ly + lh * 3 / 4 {
-            for x in (lx - ring_w..lx).chain(lx + lw..lx + lw + ring_w) {
-                let i = ((y * s.w + x) * 4) as usize;
-                for c in 0..4 {
-                    ring[c] += face.rgba[i + c] as u64;
-                }
-                k += 1;
-            }
-        }
-        if k > 0 {
-            mean = ring.map(|v| (v / k) as f32);
-            floor = 1.0;
-        }
-    }
+    let alpha = (alpha / n) as u8;
     // The round sink mark the moulding leaves in a cart's well, where it was screwed or
     // pinned shut, as a fraction of the well and of the cart's width. The Game Boy Color's is
     // a small real hole; the SNES carts show none.
     let mark = match s.mould {
         Mould::Notched => Some((0.5, 0.522 * s.h as f32 / lh as f32 - ly as f32 / lh as f32, 8.0 / 312.0, Mark::Sink(0.30))),
         Mould::Gba => Some((0.48, 0.44, 0.026, Mark::Sink(0.40))),
-        Mould::Nes => Some((0.20, 0.70, 0.021, Mark::Sink(0.40))),
         Mould::Rounded => Some((0.5, 0.65, 0.012, Mark::Hole)),
-        Mould::SnesNtsc | Mould::SnesPal => None,
+        // The NES cart's art has its own, from the photo it was drawn from.
+        Mould::Nes | Mould::SnesNtsc | Mould::SnesPal => None,
     };
     let (dimple_x, dimple_y, dimple_r, kind) = match mark {
         Some((fx, fy, fr, kind)) => (lw as f32 * fx, lh as f32 * fy, s.w as f32 * fr, kind),
         None => (-1e4, -1e4, 1.0, Mark::Sink(0.0)),
     };
-    let mut grain: u64 = 0x2545_f491_4f6c_dd1d;
     for y in 0..lh {
         for x in 0..lw {
-            grain ^= grain << 13;
-            grain ^= grain >> 7;
-            grain ^= grain << 17;
-            let noise = (grain % 11) as f32 - 5.0;
-            // The well's walls are in the shell's art already: the bed is only its floor, a
-            // shade darker with one line of shadow under its top and left wall, so no second rim
-            // shows inside the first.
-            let wall = match (x.min(y), (lw - 1 - x).min(lh - 1 - y)) {
-                _ if floor == 1.0 => 1.0,
-                (0, _) => 0.88,
-                (_, 0) => 1.02,
-                _ => floor,
-            };
             let (dx, dy) = (x as f32 - dimple_x, y as f32 - dimple_y);
             let dimple = match kind {
                 Mark::Sink(strength) => screw_dimple(dx, dy, dimple_r, strength),
                 Mark::Hole => screw_hole(dx, dy, dimple_r),
             };
-            // A TV cart's rendered well already has round corners: the bed follows them, so no
-            // square corner shows past the sticker's.
-            let cover = match (s.mould.tv(), s.square_top) {
-                (false, _) => 255,
-                (true, true) => corner_cover(x, y + lh, lw, 2 * lh, s.radius),
-                (true, false) => corner_cover(x, y, lw, lh, s.radius - 2.5),
-            } as f32
-                / 255.0;
             let d = (((y + ly) * s.w + x + lx) * 4) as usize;
             for c in 0..3 {
-                let bed = (mean[c] * wall * dimple + noise).clamp(0.0, 255.0);
-                face.rgba[d + c] = (bed * cover + face.rgba[d + c] as f32 * (1.0 - cover)) as u8;
+                let px = overlay(face.rgba[d + c], shell.colour[c]) as f32 * dimple;
+                face.rgba[d + c] = px.clamp(0.0, 255.0) as u8;
             }
-            let alpha = mean[3] * cover + face.rgba[d + 3] as f32 * (1.0 - cover);
-            face.rgba[d + 3] = alpha as u8;
+            face.rgba[d + 3] = alpha;
         }
     }
 }

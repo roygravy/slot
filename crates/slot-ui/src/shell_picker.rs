@@ -84,7 +84,7 @@ pub struct ShellPickerView<'a> {
     pub finish: usize,
     pub finish_on: bool,
     /// The finishes offered, as places in the faces' finishes.
-    pub finishes: [usize; 3],
+    pub finishes: Vec<usize>,
     /// For a cart with two shapes: where its pair starts in the faces' models, and the one
     /// picked.
     pub model: Option<(usize, usize)>,
