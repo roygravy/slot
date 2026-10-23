@@ -1,12 +1,11 @@
 //! Missing cartridge labels, prepared on a caller's worker thread. A ROM's checksum finds its
-//! label in the artwork pack, when the card has one, then in the slot Cart Studio's own set of
-//! sticker scans, then in an index of LaunchBox cart fronts built into slot; only carts none of
-//! them knows are searched for on LaunchBox by a cleaned filename. No ROM data leaves the device.
+//! label in the artwork pack, when the card has one, then in an index of LaunchBox cart fronts
+//! built into slot; only carts neither knows are searched for on LaunchBox by a cleaned
+//! filename. No ROM data leaves the device.
 mod artwork;
 mod catalog;
 pub mod cheats;
 mod pack;
-mod slot_art;
 mod source;
 
 /// What the examples need to build the LaunchBox index and the artwork pack the way the device
@@ -129,8 +128,6 @@ pub struct Downloader {
     // Cache resolved source URLs, not decoded images. A failed image transfer or SD write
     // should retry that image without repeating title searches and gallery downloads.
     sources: HashMap<String, Vec<String>>,
-    /// The Cart Studio set's index, read once per downloader.
-    art: Option<slot_art::Index>,
 }
 
 impl Default for Downloader {
@@ -149,7 +146,6 @@ impl Default for Downloader {
                     .into(),
             ),
             sources: HashMap::new(),
-            art: None,
         }
     }
 }
@@ -169,7 +165,6 @@ impl Downloader {
         prepare(
             &mut self.http,
             &mut self.sources,
-            &mut self.art,
             catalog::INDEX,
             root,
             cart,
@@ -181,7 +176,6 @@ impl Downloader {
 fn prepare(
     http: &mut impl Transport,
     sources: &mut HashMap<String, Vec<String>>,
-    art: &mut Option<slot_art::Index>,
     index: &str,
     root: &Path,
     cart: &Cart,
@@ -205,14 +199,6 @@ fn prepare(
         None => {
             let crc = catalog::crc32(&cart.rom).ok();
             if let Some(png) = crc.and_then(|crc| from_pack(root, crc, cart.platform)) {
-                publish(&target, &png)?;
-                return Ok(target);
-            }
-            if let Some(png) = crc
-                .map(|crc| from_slot_art(http, art, root, crc, cart.platform))
-                .transpose()?
-                .flatten()
-            {
                 publish(&target, &png)?;
                 return Ok(target);
             }
@@ -240,45 +226,6 @@ fn prepare(
         }
     }
     Err(last)
-}
-
-/// The Cart Studio set's sticker for a ROM, for the Game Boys it covers. A set that cannot be
-/// read, or a sticker that is gone or will not decode, gives way to LaunchBox; only a dropped
-/// connection is an error, so the cart is tried again later.
-fn from_slot_art(
-    http: &mut impl Transport,
-    art: &mut Option<slot_art::Index>,
-    root: &Path,
-    crc: u32,
-    platform: Platform,
-) -> Result<Option<Vec<u8>>, Error> {
-    if !matches!(platform, Platform::Gb | Platform::Gbc | Platform::Gba) {
-        return Ok(None);
-    }
-    if art.is_none() {
-        match slot_art::index(http, root) {
-            Ok(index) => *art = Some(index),
-            Err(e @ Error::Network(_)) => return Err(e),
-            Err(e) => {
-                eprintln!("slot: labels: Cart Studio set: {e}");
-                *art = Some(slot_art::Index::new());
-            }
-        }
-    }
-    let Some(path) = art.as_ref().and_then(|a| a.get(&crc)) else {
-        return Ok(None);
-    };
-    match http
-        .get(&format!("{}{path}", slot_art::BASE))
-        .and_then(|bytes| artwork::fit(&bytes, platform))
-    {
-        Ok(png) => Ok(Some(png)),
-        Err(e @ Error::Network(_)) => Err(e),
-        Err(e) => {
-            eprintln!("slot: labels: {path}: {e}");
-            Ok(None)
-        }
-    }
 }
 
 /// The pack's label for a ROM. A damaged pack or image is reported and passed over, so the cart
