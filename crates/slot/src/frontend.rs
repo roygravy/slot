@@ -576,7 +576,8 @@ impl Frontend {
                 (tex, w)
             })
             .collect();
-        let fetch_hint = shell_legend.pop().expect("the fetch hint");
+        let remove_hint = shell_legend.pop().expect("the remove hint");
+        let confirm = shell_legend.split_off(shell_legend.len() - 2);
         let shell_faces = slot_ui::ShellPickerFaces {
             disc,
             ring,
@@ -589,7 +590,8 @@ impl Frontend {
             none_found: found[1],
             inks,
             legend: shell_legend,
-            fetch: fetch_hint,
+            remove: remove_hint,
+            confirm,
         };
         let roles = faces.link_roles.into_iter().map(&mut up).collect();
         let linked = up(faces.linked);
@@ -1356,8 +1358,11 @@ impl UiFaces {
                 slot_ui::tint_mask(hint_face("B", "Cancel")),
                 slot_ui::tint_mask(arrows_hint_face("Change")),
                 slot_ui::tint_mask(hint_face("A", "Save")),
-                // Last, taken off as the fetch hint, shown only for a cart with no label.
-                slot_ui::tint_mask(hint_face("Y", "Get Label")),
+                // Taken off as the confirm legend, then the remove hint, shown only for a cart
+                // wearing a label.
+                slot_ui::tint_mask(hint_face("B", "Keep Label")),
+                slot_ui::tint_mask(hint_face("A", "Remove Label")),
+                slot_ui::tint_mask(hint_face("Y", "Remove Label")),
             ],
             link_roles: LinkRow::ALL.iter().map(|r| menu_face(r.text())).collect(),
             linked: menu_face("Linked"),

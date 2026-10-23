@@ -144,7 +144,8 @@ pub enum Outcome {
     Save(Option<ShellChoice>, Option<[u8; 3]>),
     /// Closed without saving: the cart goes back to what it was.
     Revert(Option<ShellChoice>, Option<[u8; 3]>),
-    Fetch,
+    /// Y, then A: the cart's label comes off, and its title is written in marker.
+    RemoveLabel,
     /// The label tab opened for the first time: look up the label's versions.
     Versions,
     /// Show the cart in this version of its label.
@@ -157,7 +158,8 @@ pub enum Press {
     Up,
     Down,
     Keep,
-    Fetch,
+    /// Y: ask to take the cart's label off.
+    Remove,
     Back,
 }
 
@@ -188,6 +190,8 @@ pub struct ShellPicker {
     versions: Versions,
     /// The version of the label shown, once one is.
     version: Option<usize>,
+    /// Y asked to take the label off: A does, B does not.
+    confirm: bool,
 }
 
 impl ShellPicker {
@@ -244,6 +248,7 @@ impl ShellPicker {
             model: None,
             versions: Versions::Unasked,
             version: None,
+            confirm: false,
         }
     }
 
@@ -332,10 +337,14 @@ impl ShellPicker {
         self.version
     }
 
-    /// Y fetches the label while the cart has none, again and again: a label not found
-    /// once may be there later.
-    pub fn offers_fetch(&self) -> bool {
-        self.fetch != Fetch::Labelled
+    /// Y takes off the label the cart wears; a label shown from the label's tab is not on yet.
+    pub fn offers_remove(&self) -> bool {
+        self.fetch == Fetch::Labelled && self.version.is_none()
+    }
+
+    /// Asking whether to take the label off.
+    pub fn confirming(&self) -> bool {
+        self.confirm
     }
 
     pub fn marker(&self) -> usize {
@@ -346,9 +355,9 @@ impl ShellPicker {
         self.was_marker
     }
 
-    /// The marker's tab, for a blank cart whose label was looked for and is not there.
+    /// The marker's tab, for any cart without a label, looked for yet or not.
     pub fn offers_marker(&self) -> bool {
-        self.fetch != Fetch::Labelled && self.no_label
+        self.fetch != Fetch::Labelled
     }
 
     /// The marker picked; None for the one the cart's shell is written in anyway.
@@ -438,6 +447,19 @@ impl ShellPicker {
         if self.closed.is_some() {
             return Outcome::None;
         }
+        if self.confirm {
+            match press {
+                Press::Keep => {
+                    self.confirm = false;
+                    self.fetch = Fetch::Idle;
+                    self.no_label = true;
+                    return Outcome::RemoveLabel;
+                }
+                Press::Back => self.confirm = false,
+                _ => {}
+            }
+            return Outcome::None;
+        }
         let step =
             |at: usize, by: isize, n: usize| (at as isize + by).clamp(0, n as isize - 1) as usize;
         match press {
@@ -514,12 +536,9 @@ impl ShellPicker {
                 self.row = rows[step(at, by, rows.len())];
                 Outcome::None
             }
-            Press::Fetch => {
-                if !self.offers_fetch() || self.fetch != Fetch::Idle || self.tab == Tab::Label {
-                    return Outcome::None;
-                }
-                self.fetch = Fetch::Working;
-                Outcome::Fetch
+            Press::Remove => {
+                self.confirm = self.offers_remove();
+                Outcome::None
             }
             Press::Keep => {
                 self.closed = Some((now, self.openness(now)));
@@ -598,11 +617,6 @@ mod tests {
             panic!("no preview");
         };
         assert_eq!(c.finish, ShellFinish::Clear);
-        assert!(matches!(p.press(Press::Fetch, 0), Outcome::Fetch));
-        assert!(
-            matches!(p.press(Press::Fetch, 0), Outcome::None),
-            "one fetch at a time"
-        );
     }
 
     #[test]
@@ -615,24 +629,23 @@ mod tests {
     }
 
     #[test]
-    fn a_labelled_cart_offers_no_download() {
+    fn a_labelled_cart_offers_no_marker() {
         let mut p = picker(ShellChoice::parse("auto f2c230 solid"), true);
-        assert!(!p.offers_fetch());
-        assert!(matches!(p.press(Press::Fetch, 0), Outcome::None));
         p.press(Press::Up, 0);
         assert_eq!(p.row(), Row::Tabs, "the label's tab is always there");
         assert_eq!(p.tabs(), [Tab::Colour, Tab::Label], "no marker on a labelled cart");
     }
 
     #[test]
-    fn a_cart_with_no_label_to_fetch_offers_a_marker_instead() {
+    fn a_cart_with_no_label_offers_a_marker_before_any_is_looked_for() {
         let mut p = picker(None, false);
-        assert!(!p.offers_marker());
-        p.press(Press::Fetch, 0);
-        p.fetched(Some(false));
-        assert!(p.offers_fetch(), "Y can look again");
-        assert_eq!(p.tab(), Tab::Marker, "the marker's tab opens");
-        assert_eq!(p.row(), Row::Marker);
+        assert!(p.offers_marker());
+        assert_eq!(p.tabs(), [Tab::Colour, Tab::Label, Tab::Marker]);
+        p.press(Press::Up, 0);
+        p.press(Press::Right, 0);
+        p.press(Press::Right, 0);
+        p.press(Press::Down, 0);
+        assert_eq!((p.tab(), p.row()), (Tab::Marker, Row::Marker));
         assert_eq!(p.marker_choice(), None, "opens on the shell's own marker");
         let Outcome::Marker(Some(ink)) = p.press(Press::Right, 0) else {
             panic!("no marker preview");
@@ -642,12 +655,27 @@ mod tests {
     }
 
     #[test]
-    fn a_failed_fetch_can_be_tried_again() {
+    fn y_asks_before_the_label_comes_off_and_b_keeps_it() {
+        let mut p = picker(None, true);
+        assert!(p.offers_remove());
+        assert!(matches!(p.press(Press::Remove, 0), Outcome::None));
+        assert!(p.confirming());
+        assert!(matches!(p.press(Press::Right, 0), Outcome::None), "nothing else moves");
+        assert!(matches!(p.press(Press::Back, 0), Outcome::None));
+        assert!(!p.confirming() && !p.closing(), "B only keeps the label");
+        p.press(Press::Remove, 0);
+        assert!(matches!(p.press(Press::Keep, 0), Outcome::RemoveLabel));
+        assert!(!p.closing(), "the studio stays open");
+        assert!(!p.offers_remove());
+        assert_eq!(p.tabs(), [Tab::Colour, Tab::Label, Tab::Marker], "the marker is offered");
+    }
+
+    #[test]
+    fn a_cart_with_no_label_has_nothing_to_remove() {
         let mut p = picker(None, false);
-        p.press(Press::Fetch, 0);
-        p.fetched(None);
-        assert!(p.offers_fetch());
-        assert!(matches!(p.press(Press::Fetch, 0), Outcome::Fetch));
+        assert!(!p.offers_remove());
+        p.press(Press::Remove, 0);
+        assert!(!p.confirming());
     }
 
     #[test]

@@ -8,6 +8,9 @@ use crate::Platform;
 
 pub const CART_MARKER_FILE: &str = "Config/cart_marker.txt";
 pub const NO_LABEL_FILE: &str = "System/Cache/Labels/none.txt";
+/// The carts whose label the player took off, kept with the labels rather than the cache so
+/// clearing the cache does not bring them back.
+pub const REMOVED_LABEL_FILE: &str = "Labels/removed.txt";
 
 pub fn parse_marker(value: &str) -> Option<[u8; 3]> {
     let hex = value.trim();
@@ -50,19 +53,16 @@ fn no_label_line(platform: Platform, stem: &str) -> String {
     format!("{}/{}", platform.dir_name(), key(stem))
 }
 
-/// Whether a label was looked for and none exists for this cart.
-pub fn has_no_label(root: &Path, platform: Platform, stem: &str) -> bool {
+fn listed(root: &Path, file: &str, platform: Platform, stem: &str) -> bool {
     let line = no_label_line(platform, stem);
-    std::fs::read_to_string(root.join(NO_LABEL_FILE))
-        .is_ok_and(|text| text.lines().any(|l| l == line))
+    std::fs::read_to_string(root.join(file)).is_ok_and(|text| text.lines().any(|l| l == line))
 }
 
-/// A label turned up after all: the cart is no longer noted as having none.
-pub fn forget_no_label(root: &Path, platform: Platform, stem: &str) {
-    if !has_no_label(root, platform, stem) {
+fn unlist(root: &Path, file: &str, platform: Platform, stem: &str) {
+    if !listed(root, file, platform, stem) {
         return;
     }
-    let path = root.join(NO_LABEL_FILE);
+    let path = root.join(file);
     let line = no_label_line(platform, stem);
     let text: String = std::fs::read_to_string(&path)
         .unwrap_or_default()
@@ -75,11 +75,11 @@ pub fn forget_no_label(root: &Path, platform: Platform, stem: &str) {
     }
 }
 
-pub fn note_no_label(root: &Path, platform: Platform, stem: &str) {
-    if has_no_label(root, platform, stem) {
+fn list(root: &Path, file: &str, platform: Platform, stem: &str) {
+    if listed(root, file, platform, stem) {
         return;
     }
-    let path = root.join(NO_LABEL_FILE);
+    let path = root.join(file);
     let mut text = std::fs::read_to_string(&path).unwrap_or_default();
     text.push_str(&no_label_line(platform, stem));
     text.push('\n');
@@ -89,6 +89,34 @@ pub fn note_no_label(root: &Path, platform: Platform, stem: &str) {
     if let Err(e) = crate::atomic::atomic_write(&path, text.as_bytes()) {
         eprintln!("slot: labels: {}: {e}", path.display());
     }
+}
+
+/// Whether a label was looked for and none exists for this cart.
+pub fn has_no_label(root: &Path, platform: Platform, stem: &str) -> bool {
+    listed(root, NO_LABEL_FILE, platform, stem)
+}
+
+/// A label turned up after all: the cart is no longer noted as having none.
+pub fn forget_no_label(root: &Path, platform: Platform, stem: &str) {
+    unlist(root, NO_LABEL_FILE, platform, stem)
+}
+
+pub fn note_no_label(root: &Path, platform: Platform, stem: &str) {
+    list(root, NO_LABEL_FILE, platform, stem)
+}
+
+/// Whether the player took this cart's label off: none is fetched for it again.
+pub fn label_removed(root: &Path, platform: Platform, stem: &str) -> bool {
+    listed(root, REMOVED_LABEL_FILE, platform, stem)
+}
+
+pub fn note_label_removed(root: &Path, platform: Platform, stem: &str) {
+    list(root, REMOVED_LABEL_FILE, platform, stem)
+}
+
+/// A label was picked for the cart again.
+pub fn forget_label_removed(root: &Path, platform: Platform, stem: &str) {
+    unlist(root, REMOVED_LABEL_FILE, platform, stem)
 }
 
 #[cfg(test)]
@@ -120,5 +148,16 @@ mod tests {
         assert!(!has_no_label(root, Platform::Gbc, "Homebrew"));
         let text = std::fs::read_to_string(root.join(NO_LABEL_FILE)).unwrap();
         assert_eq!(text.lines().count(), 1);
+    }
+
+    #[test]
+    fn a_removed_label_is_remembered_until_one_is_picked_again() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        note_label_removed(root, Platform::Snes, "Game");
+        assert!(label_removed(root, Platform::Snes, "Game"));
+        assert!(!has_no_label(root, Platform::Snes, "Game"));
+        forget_label_removed(root, Platform::Snes, "Game");
+        assert!(!label_removed(root, Platform::Snes, "Game"));
     }
 }

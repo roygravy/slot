@@ -24,7 +24,8 @@ mod zone;
 
 pub use atomic::{atomic_write, sweep_temps};
 pub use cart_marker::{
-    forget_no_label, has_no_label, markers, note_no_label, write_marker, CART_MARKER_FILE, NO_LABEL_FILE,
+    forget_label_removed, forget_no_label, has_no_label, label_removed, markers, note_label_removed,
+    note_no_label, write_marker, CART_MARKER_FILE, NO_LABEL_FILE, REMOVED_LABEL_FILE,
 };
 pub use cart_shell::{
     write_choice as write_shell_choice, Outline, ShellChoice, ShellFinish, CART_SHELL_FILE,

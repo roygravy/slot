@@ -25,7 +25,7 @@ use slot_ui::{
 
 use crate::audio::Sfx;
 use crate::core_picker::{Chip, CorePicker, Outcome, Press};
-use crate::shell_picker::{self, Fetch, ShellPicker};
+use crate::shell_picker::{self, ShellPicker};
 use crate::link_kind::{link_carried, link_kind, serial_option, LinkKind};
 use crate::link_radio::{radio_jobs, LinkRole, RadioJob, RadioJobs};
 use crate::link_screen::LinkSprites;
@@ -4981,7 +4981,7 @@ impl App {
             Action::GbaDown(Btn::Up) => Press::Up,
             Action::GbaDown(Btn::Down) => Press::Down,
             Action::GbaDown(Btn::A) => Press::Keep,
-            Action::GbaDown(Btn::Y) => Press::Fetch,
+            Action::GbaDown(Btn::Y) => Press::Remove,
             Action::GbaDown(Btn::B) | Action::GbaDown(Btn::Select) => Press::Back,
             _ => return,
         };
@@ -5023,7 +5023,7 @@ impl App {
                     }
                 }
             }
-            Outcome::Fetch => self.ask_label(&rom),
+            Outcome::RemoveLabel => self.remove_label(&rom),
             Outcome::Versions => self.ask_versions(&rom),
             Outcome::Version(i) => {
                 if let Some(path) = self.version_paths.get(i).cloned() {
@@ -5063,6 +5063,7 @@ impl App {
         match saved {
             Ok(saved) => {
                 slot_store::forget_no_label(&root, cart.platform, &cart.stem);
+                slot_store::forget_label_removed(&root, cart.platform, &cart.stem);
                 self.relabel(rom, Some(saved));
             }
             Err(e) => {
@@ -5142,22 +5143,22 @@ impl App {
         }
     }
 
-    /// The label is fetched off the frame loop: from the artwork pack, or online with Home
-    /// Wi-Fi on. With neither there is nowhere to fetch it from.
-    fn ask_label(&mut self, rom: &Path) {
-        let pack = self.root.as_ref().is_some_and(|root| {
-            root.join("Labels").join(slot_labels::build::PACK).is_file()
-        });
-        let cart = self.shelf().carts.iter().find(|c| c.rom == rom).cloned();
-        match cart {
-            Some(cart) if pack || self.home_wifi_on() => self.label_ask = Some(cart),
-            _ => {
-                self.hud.toast(Toast::TurnOnWifi, self.now());
-                if let Some(picker) = &mut self.shell_picker {
-                    picker.fetched(None);
-                }
-            }
+    /// Y, then A, in the studio: the cart's label file goes, its title is written in marker,
+    /// and no label is fetched for it again until one is picked from the label's tab.
+    fn remove_label(&mut self, rom: &Path) {
+        let (Some(root), Some(path)) = (self.root.clone(), self.label_was.clone()) else {
+            return;
+        };
+        let Some(cart) = self.shelf().carts.iter().find(|c| c.rom == rom).cloned() else {
+            return;
+        };
+        if let Err(e) = std::fs::remove_file(&path) {
+            eprintln!("slot: labels: could not remove {}: {e}", path.display());
+            return;
         }
+        slot_store::note_label_removed(&root, cart.platform, &cart.stem);
+        self.label_was = None;
+        self.relabel(rom, None);
     }
 
     pub fn take_label_ask(&mut self) -> Option<Cart> {
@@ -5252,9 +5253,8 @@ impl App {
             },
             marker: picker.marker(),
             inks: shell_picker::MARKERS.map(|(_, ink)| ink),
-            // The label's tab picks among versions; Y fetches only from the others.
-            fetch: (picker.offers_fetch() && picker.tab() != shell_picker::Tab::Label)
-                .then(|| picker.fetch() == Fetch::Working),
+            remove: picker.offers_remove(),
+            confirming: picker.confirming(),
         };
         slot_ui::draw_shell_picker(self.canvas(), &view, out);
     }

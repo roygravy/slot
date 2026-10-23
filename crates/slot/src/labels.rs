@@ -21,6 +21,11 @@ pub(crate) struct Labels {
 
 impl Labels {
     pub fn spawn(root: PathBuf, carts: Vec<Cart>) -> Self {
+        // A label the player took off stays off.
+        let carts: Vec<Cart> = carts
+            .into_iter()
+            .filter(|c| !slot_store::label_removed(&root, c.platform, &c.stem))
+            .collect();
         let (out, ready) = mpsc::sync_channel(1);
         let (stop, stopped) = mpsc::channel();
         if let Err(e) = thread::Builder::new()

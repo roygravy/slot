@@ -59,8 +59,10 @@ pub struct ShellPickerFaces {
     /// The markers' names, in the order of their inks.
     pub inks: Vec<(TexId, u32)>,
     pub legend: Vec<(TexId, u32)>,
-    /// Y fetching the label, shown while the cart has none.
-    pub fetch: (TexId, u32),
+    /// Y taking the label off, shown while the cart wears one.
+    pub remove: (TexId, u32),
+    /// The legend while Y asks whether to take the label off.
+    pub confirm: Vec<(TexId, u32)>,
 }
 
 pub struct ShellPickerView<'a> {
@@ -94,8 +96,10 @@ pub struct ShellPickerView<'a> {
     pub label: LabelTab<'a>,
     pub marker: usize,
     pub inks: [[u8; 3]; 3],
-    /// Some(at work) while Y can fetch the cart's label.
-    pub fetch: Option<bool>,
+    /// Y can take the cart's label off.
+    pub remove: bool,
+    /// Y asked: A takes the label off, B keeps it.
+    pub confirming: bool,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -456,21 +460,25 @@ pub fn draw_shell_picker(canvas: Canvas, v: &ShellPickerView, out: &mut Vec<Draw
         }
     }
 
-    let mut legend = v.faces.legend.clone();
-    if v.fetch.is_some() {
-        // Before Save, as A stays last on every legend.
-        let at = legend.len().saturating_sub(1);
-        legend.insert(at, v.faces.fetch);
-    }
+    let legend = if v.confirming {
+        v.faces.confirm.clone()
+    } else {
+        let mut legend = v.faces.legend.clone();
+        if v.remove {
+            // Before Save, as A stays last on every legend.
+            let at = legend.len().saturating_sub(1);
+            legend.insert(at, v.faces.remove);
+        }
+        legend
+    };
     for (tex, w, x) in centred_hints(canvas, &legend, LEGEND_GAP) {
-        let busy = tex == v.faces.fetch.0 && v.fetch == Some(true);
         out.push(tint(
             tex,
             x,
             rise(LEGEND_Y, stage(3.0)),
             w as f32,
             HINT_H as f32,
-            ink(faded(v.ink.text, if busy { 0.35 } else { 1.0 }), stage(3.0)),
+            ink(v.ink.text, stage(3.0)),
         ));
     }
     // The cart goes over the rows, so they slip out from under it as it moves.
