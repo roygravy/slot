@@ -1963,6 +1963,12 @@ impl App {
             .map_or(1.0, |s| s / SEATED_AT)
     }
 
+    /// How far the carts beside the one going in have faded off the shelf: as quickly as they
+    /// do for a Game Boy pak, however long an NES or SNES cart takes, so they stay put.
+    fn recede(&self, stem: &str) -> f32 {
+        (self.seat() * self.insert_pace(stem)).min(1.0)
+    }
+
     fn click_at(&self, stem: &str) -> f32 {
         self.shelf()
             .find(stem)
@@ -3812,7 +3818,7 @@ impl App {
                 if !resumed {
                     self.draw_background(out);
                     self.shelf()
-                        .draw_row(self.canvas(), Some(cart), 0.0, self.seat(), 1.0, out);
+                        .draw_row(self.canvas(), Some(cart), 0.0, self.recede(cart), 1.0, out);
                 }
                 self.chrome(cart, 0.0, out);
             }
@@ -3828,7 +3834,7 @@ impl App {
             Phase::Ejecting { cart, .. } => {
                 self.draw_background(out);
                 self.shelf()
-                    .draw_row(self.canvas(), Some(cart), 0.0, self.seat(), 1.0, out);
+                    .draw_row(self.canvas(), Some(cart), 0.0, self.recede(cart), 1.0, out);
                 self.chrome(cart, 0.0, out);
             }
             Phase::Playing { cart } if self.screen < 1.0 => {
