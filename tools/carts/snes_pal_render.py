@@ -90,7 +90,7 @@ for v in VENTS:
 vd = nd.distance_transform_edt(np.pad(vent, 1))[1:-1, 1:-1]
 height -= nd.gaussian_filter(vent.astype(np.float32), 0.5 * SS) * 3.0
 # the label recess: deep, with big rounded corners
-label = rect(0.081, 0.054, 0.923, 0.486, 0.036)  # concentric with the sticker's r10 (Roy's photo)
+label = rect(0.081, 0.054, 0.923, 0.486, 0.004)  # square corners; the sticker on it is round (Roy)
 height -= label * 2.0
 # the middle plate below the label and the side pieces either side; a fine seam marks the plate's
 # edges all the way up to the top rim (no step across the side pieces: Roy)
@@ -133,6 +133,10 @@ edge = (dist < 3 * SS) & (nd.gaussian_filter(vent.astype(np.float32), 1.5 * SS) 
 grey = np.where(edge & (dx > R), np.maximum(grey, 128 * 0.86), grey)
 # the notched side edges must not read as dark arcs around each vent
 grey = np.where((dist < 3 * SS) & (dx <= R), np.maximum(grey, 128 * 0.80), grey)
+# the left vents take the right ones' shading, mirrored, so both sides read the same (Roy)
+zone = np.clip((U(0.08) - xx) / U(0.02), 0, 1) * ((yy > V(VENTS[0] - 0.02)) & (yy < V(VENTS[-1] + VH + 0.02)))
+zone = nd.gaussian_filter(zone.astype(np.float32), SS)
+grey = grey * (1 - zone) + grey[:, ::-1] * zone
 A = save(grey3(grey), cart, 'snes_neutral.png')
 m = np.zeros((H, W, 4), np.uint8); m[..., :3] = 255; m[..., 3] = (A * 255).round().astype(np.uint8)
 Image.fromarray(m, 'RGBA').save(f'{out}/snes_cart.png')
