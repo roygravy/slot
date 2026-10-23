@@ -48,6 +48,8 @@ const YOSHI: Shell = shell([0x2f, 0x8f, 0x4e], Finish::Solid);
 
 const FAMILY: &[(u8, Shell)] = &[(b'M', shell([0xc6, 0xc6, 0xc9], Finish::Solid))];
 
+/// The NES's and the American SNES's mid grey.
+pub const TV_GREY_SHELL: Shell = shell([0x86, 0x86, 0x8a], Finish::Solid);
 pub const DMG_SHELL: Shell = shell([0x9a, 0x97, 0x8f], Finish::Solid);
 
 pub const DUAL_MODE_SHELL: Shell = shell([0x26, 0x26, 0x2a], Finish::Solid);
@@ -90,6 +92,7 @@ pub fn shell_for(cart: &Cart) -> Shell {
     match cart.platform {
         Platform::Gba => gba_shell_for(&gba_code(cart)),
         Platform::Gb | Platform::Gbc => gb_shell_for(&cart.rom),
+        Platform::Nes | Platform::Snes => TV_GREY_SHELL,
     }
 }
 

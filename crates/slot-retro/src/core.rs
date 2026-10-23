@@ -88,6 +88,9 @@ pub trait RetroCore: Send {
     fn reset(&mut self) {}
     fn set_frame_skip(&mut self, _skip: bool) {}
     fn video_xrgb8888(&self) -> &[u8];
+    /// The size of the frame `video_xrgb8888` holds, for a system whose picture is not the
+    /// GBA's 240x160.
+    fn set_canvas(&mut self, _w: u32, _h: u32) {}
     fn take_audio(&mut self) -> Vec<i16>;
     fn serialize(&mut self) -> Result<Vec<u8>, CoreError>;
     fn unserialize(&mut self, data: &[u8]) -> Result<(), CoreError>;

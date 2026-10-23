@@ -98,6 +98,8 @@ fn shelves(platform: Platform) -> &'static [Platform] {
         Platform::Gb => &[Platform::Gb, Platform::Gbc],
         Platform::Gbc => &[Platform::Gbc, Platform::Gb],
         Platform::Gba => &[Platform::Gba],
+        Platform::Nes => &[Platform::Nes],
+        Platform::Snes => &[Platform::Snes],
     }
 }
 

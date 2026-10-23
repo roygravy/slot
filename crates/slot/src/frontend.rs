@@ -717,6 +717,8 @@ impl Frontend {
     pub fn compose(&mut self, compositor: &mut Compositor) {
         compositor.set_blue_light(self.session.app().blue_light());
         compositor.set_picture(self.session.app().picture_rect());
+        let (cw, ch) = self.session.app().platform().canvas();
+        compositor.set_game_canvas(cw, ch);
         let platform = self.session.app().playing_platform();
         // A Game Boy game in its own Game Boy Color colors (Color Palettes off) is drawn as
         // the GBC draws it: the GBC's panel, LCD lines and saturation.

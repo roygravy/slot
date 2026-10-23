@@ -42,6 +42,9 @@ pub struct GamePass {
     origin: [f32; 2],
     u_pic: gl::types::GLint,
     pic: [f32; 4],
+    u_src: gl::types::GLint,
+    /// The game's frame size: the GBA's 240x160, or a TV console's own.
+    canvas: (u32, u32),
     sample_background: bool,
     picture_dim: f32,
     shadow: [f32; 3],
@@ -106,15 +109,13 @@ impl GamePass {
             u_lcd_overlay,
             u_lcd_overlay_size,
             u_origin,
+            u_src,
         );
         unsafe {
             gl::UseProgram(prog);
             gl::Uniform1i(crate::gl::uniform_location(prog, "u_game"), 0);
-            gl::Uniform2f(
-                crate::gl::uniform_location(prog, "u_src"),
-                SRC_W as f32,
-                SRC_H as f32,
-            );
+            u_src = crate::gl::uniform_location(prog, "u_src");
+            gl::Uniform2f(u_src, SRC_W as f32, SRC_H as f32);
             gl::Uniform2f(
                 crate::gl::uniform_location(prog, "u_target"),
                 OUT_W as f32,
@@ -175,6 +176,8 @@ impl GamePass {
             origin: [0.0, 0.0],
             u_pic,
             pic: WHOLE_TEXTURE,
+            u_src,
+            canvas: (SRC_W, SRC_H),
             sample_background: false,
             picture_dim: 0.0,
             shadow: PIXEL_SHADOW,
@@ -316,15 +319,36 @@ impl GamePass {
         self.lcd_overlay_size = [w as f32, h as f32];
     }
 
+    /// The size of the frames `upload` takes. A canvas other than the GBA's is a TV
+    /// console's: its picture fills the screen.
+    pub fn set_canvas(&mut self, w: u32, h: u32) {
+        if self.canvas == (w, h) || w == 0 || h == 0 {
+            return;
+        }
+        let game = crate::gl::texture(w, h, gl::NEAREST, gl::CLAMP_TO_EDGE, gl::BGRA, None);
+        unsafe {
+            gl::DeleteTextures(1, &self.game);
+            gl::UseProgram(self.prog);
+            gl::Uniform2f(self.u_src, w as f32, h as f32);
+        }
+        self.game = game;
+        self.canvas = (w, h);
+    }
+
+    fn tv(&self) -> bool {
+        self.canvas != (SRC_W, SRC_H)
+    }
+
     pub fn set_source_rect(&mut self, rect: [f32; 4]) {
         self.src = rect;
     }
 
     pub fn upload(&mut self, xrgb8888: &[u8]) {
-        if xrgb8888.len() < (SRC_W * SRC_H * 4) as usize {
+        let (cw, ch) = self.canvas;
+        if xrgb8888.len() < (cw * ch * 4) as usize {
             return;
         }
-        if self.sample_background && self.pic != WHOLE_TEXTURE {
+        if self.sample_background && self.pic != WHOLE_TEXTURE && !self.tv() {
             // Every frame: a Game Boy picture is small, and the screen behind it must change
             // colour with the palette on the same frame, not some frames later.
             self.background = palette_lightest_color(xrgb8888, self.pic);
@@ -337,8 +361,8 @@ impl GamePass {
                 0,
                 0,
                 0,
-                SRC_W as i32,
-                SRC_H as i32,
+                cw as i32,
+                ch as i32,
                 gl::BGRA,
                 gl::UNSIGNED_BYTE,
                 xrgb8888.as_ptr() as *const std::ffi::c_void,
@@ -348,7 +372,7 @@ impl GamePass {
 
     pub fn draw(&self, quad: &Quad) {
         let src = match self.effect {
-            ScreenEffect::Grid => whole_scale_source(self.src, self.fbo_scale),
+            ScreenEffect::Grid if !self.tv() => whole_scale_source(self.src, self.fbo_scale),
             _ => self.src,
         };
         self.draw_source(self.game, quad, src);
@@ -361,6 +385,9 @@ impl GamePass {
     fn draw_source(&self, tex: gl::types::GLuint, quad: &Quad, src: [f32; 4]) {
         let (x, y, w, h, bright) = if self.fills {
             (0.0, 0.0, OUT_W as f32, OUT_H as f32, 1.0)
+        } else if self.tv() {
+            let (x, y, w, h) = fullscreen_game_rect(self.power);
+            (x, y, w, h, screen_brightness(self.power))
         } else if src == WHOLE_TEXTURE && self.pic == WHOLE_TEXTURE {
             let (x, y, w, h) = gba_custom_game_rect(self.power);
             (x, y, w, h, screen_brightness(self.power))

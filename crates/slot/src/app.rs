@@ -935,6 +935,16 @@ impl App {
         if platform == Platform::Gba {
             hidden.push(QuickRow::BlackBorder);
         }
+        // A TV console has no LCD to dress up: none of the handhelds' screen rows apply.
+        if platform.tv() {
+            hidden.extend([
+                QuickRow::Shader,
+                QuickRow::Bezel,
+                QuickRow::PixelTransparency,
+                QuickRow::LcdGhosting,
+                QuickRow::BlackBorder,
+            ]);
+        }
         if self.single_cart() {
             hidden.push(QuickRow::ExitGame);
         }
@@ -1146,7 +1156,7 @@ impl App {
 
     fn bezel_pick(&mut self, platform: Platform) -> &mut BezelPick {
         match platform {
-            Platform::Gba => &mut self.state.bezel_gba,
+            Platform::Gba | Platform::Nes | Platform::Snes => &mut self.state.bezel_gba,
             Platform::Gb => &mut self.state.bezel_gb,
             Platform::Gbc => &mut self.state.bezel_gbc,
         }
@@ -1154,7 +1164,7 @@ impl App {
 
     pub fn resolved_bezel(&self, platform: Platform) -> BezelPick {
         let pick = match platform {
-            Platform::Gba => &self.state.bezel_gba,
+            Platform::Gba | Platform::Nes | Platform::Snes => &self.state.bezel_gba,
             Platform::Gb => &self.state.bezel_gb,
             Platform::Gbc => &self.state.bezel_gbc,
         };
@@ -1666,7 +1676,8 @@ impl App {
     }
 
     fn slot_owns_the_shoulders(&self) -> bool {
-        matches!(self.phase, Phase::Playing { .. }) && self.platform != Platform::Gba
+        matches!(self.phase, Phase::Playing { .. })
+            && matches!(self.platform, Platform::Gb | Platform::Gbc)
     }
 
     pub fn taken_buttons(&self) -> &'static [Btn] {
@@ -1741,7 +1752,8 @@ impl App {
 
     pub fn picture_rect(&self) -> [f32; 4] {
         let (w, h) = self.platform.picture();
-        let (sw, sh) = (slot_gfx::SRC_W as f32, slot_gfx::SRC_H as f32);
+        let (sw, sh) = self.platform.canvas();
+        let (sw, sh) = (sw as f32, sh as f32);
         let (x, y) = ((sw - w as f32) / 2.0, (sh - h as f32) / 2.0);
         [x / sw, y / sh, (x + w as f32) / sw, (y + h as f32) / sh]
     }
@@ -1899,6 +1911,7 @@ impl App {
             Platform::Gba => self.state.shader_gba,
             Platform::Gb => self.state.shader_gb,
             Platform::Gbc => self.state.shader_gbc,
+            Platform::Nes | Platform::Snes => Shader::Off,
         }
     }
 
@@ -1911,7 +1924,7 @@ impl App {
         match self.playing_platform() {
             Platform::Gb => self.state.gb_black_border,
             Platform::Gbc => self.state.gbc_black_border,
-            Platform::Gba => false,
+            Platform::Gba | Platform::Nes | Platform::Snes => false,
         }
     }
 
@@ -1935,7 +1948,8 @@ impl App {
     /// carts, in the theme's housing.
     fn slot_faces(&self) -> Option<(TexId, TexId)> {
         let sets = self.slot_sets?;
-        let gb = self.slot_platform() != Platform::Gba;
+        // Until the NES and SNES have slots of their own, they borrow the Game Boy's and GBA's.
+        let gb = !matches!(self.slot_platform(), Platform::Gba | Platform::Snes);
         Some(sets[usize::from(gb) * 2 + usize::from(self.light())])
     }
 
@@ -1952,6 +1966,7 @@ impl App {
             Platform::Gb => self.state.pixel_transparency_gb,
             Platform::Gbc => self.state.pixel_transparency_gbc,
             Platform::Gba => self.state.pixel_transparency_gba,
+            Platform::Nes | Platform::Snes => false,
         }
     }
 
@@ -1965,6 +1980,7 @@ impl App {
             Platform::Gb => self.state.lcd_ghosting_gb,
             Platform::Gbc => self.state.lcd_ghosting_gbc,
             Platform::Gba => self.state.lcd_ghosting_gba,
+            Platform::Nes | Platform::Snes => false,
         }
     }
 
@@ -2824,6 +2840,9 @@ impl App {
         const GHOSTING: u8 = 4;
         const BORDER: u8 = 8;
         let platform = self.playing_platform();
+        if platform.tv() {
+            return;
+        }
         let s = &mut self.state;
         let mut no_border = false;
         let (shader, transparency, ghosting, border, saved, filter) = match platform {
@@ -2843,7 +2862,7 @@ impl App {
                 &mut s.effects_saved_gbc,
                 Shader::GbcLcd,
             ),
-            Platform::Gba => (
+            Platform::Gba | Platform::Nes | Platform::Snes => (
                 &mut s.shader_gba,
                 &mut s.pixel_transparency_gba,
                 &mut s.lcd_ghosting_gba,
@@ -5896,7 +5915,7 @@ fn free_stamp(ring: &StateRing, now: i64) -> String {
 
 fn bezel_slot(platform: Platform) -> usize {
     match platform {
-        Platform::Gba => 0,
+        Platform::Gba | Platform::Nes | Platform::Snes => 0,
         Platform::Gb => 1,
         Platform::Gbc => 2,
     }

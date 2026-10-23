@@ -118,6 +118,8 @@ fn open_named(
         };
         match opened {
             Ok(mut opened) => {
+                let (w, h) = platform.canvas();
+                opened.set_canvas(w, h);
                 apply_core_options(
                     &mut opened,
                     core,
@@ -151,7 +153,7 @@ pub fn palette_for(
     let fits = match platform {
         Platform::Gb => true,
         Platform::Gbc => dmg_only(rom),
-        Platform::Gba => false,
+        Platform::Gba | Platform::Nes | Platform::Snes => false,
     };
     chosen.filter(|_| link.is_none() && fits)
 }
@@ -200,20 +202,22 @@ pub fn colour_option(
             "gambatte_gbc_color_correction",
             if on { "GBC only" } else { "disabled" },
         )),
+        Core::Fceumm | Core::Snes9x => None,
     }
 }
 
-pub fn lcd_ghosting_option(which: Core, on: bool) -> (&'static str, &'static str) {
+pub fn lcd_ghosting_option(which: Core, on: bool) -> Option<(&'static str, &'static str)> {
     match which {
-        Core::Mgba => (
+        Core::Mgba => Some((
             "mgba_interframe_blending",
             if on { "lcd_ghosting" } else { "OFF" },
-        ),
-        Core::Gpsp => ("gpsp_frame_mixing", if on { "enabled" } else { "disabled" }),
-        Core::Gambatte => (
+        )),
+        Core::Gpsp => Some(("gpsp_frame_mixing", if on { "enabled" } else { "disabled" })),
+        Core::Gambatte => Some((
             "gambatte_mix_frames",
             if on { "lcd_ghosting" } else { "disabled" },
-        ),
+        )),
+        Core::Fceumm | Core::Snes9x => None,
     }
 }
 
@@ -293,7 +297,7 @@ pub fn gb_palette_options(which: Core, palette: GbPalette) -> Vec<(&'static str,
                 gambatte_palette_name(palette),
             ),
         ],
-        Core::Gpsp => Vec::new(),
+        Core::Gpsp | Core::Fceumm | Core::Snes9x => Vec::new(),
     }
 }
 
@@ -308,7 +312,7 @@ pub fn gb_palette_off_options(which: Core) -> Vec<(&'static str, String)> {
             ("gambatte_gb_colorization", "auto".to_string()),
             ("gambatte_gb_internal_palette", "GBC - Dark Green".to_string()),
         ],
-        Core::Gpsp => Vec::new(),
+        Core::Gpsp | Core::Fceumm | Core::Snes9x => Vec::new(),
     }
 }
 
@@ -332,8 +336,9 @@ pub fn apply_core_options(
 ) {
     core.set_option(&format!("{}_frameskip", which.as_str()), "auto");
     if which == Core::Mgba {
-        let (key, value) = lcd_ghosting_option(which, true);
-        core.set_option(key, value);
+        if let Some((key, value)) = lcd_ghosting_option(which, true) {
+            core.set_option(key, value);
+        }
         core.set_option("mgba_sgb_borders", "OFF");
         core.set_option("mgba_force_gbp", "ON");
         match palette {
@@ -353,8 +358,9 @@ pub fn apply_core_options(
         }
     }
     if which == Core::Gpsp {
-        let (key, value) = lcd_ghosting_option(which, true);
-        core.set_option(key, value);
+        if let Some((key, value)) = lcd_ghosting_option(which, true) {
+            core.set_option(key, value);
+        }
         core.set_option("gpsp_serial", serial);
         core.set_option("gpsp_rtc_time_source", "system");
         if bios {
@@ -365,8 +371,9 @@ pub fn apply_core_options(
         }
     }
     if which == Core::Gambatte {
-        let (key, value) = lcd_ghosting_option(which, true);
-        core.set_option(key, value);
+        if let Some((key, value)) = lcd_ghosting_option(which, true) {
+            core.set_option(key, value);
+        }
         // A palette means a Game Boy: run the cart as one, so the palette always takes.
         let model = match (palette, platform) {
             (Some(_), Platform::Gb) => "GB",
@@ -389,6 +396,19 @@ pub fn apply_core_options(
         if let Some((key, value)) = colour_option(which, platform, colour) {
             core.set_option(key, value);
         }
+    }
+    if which == Core::Fceumm {
+        // A TV hid the top and bottom eight lines; games leave rubbish there.
+        core.set_option("fceumm_overscan_v_top", "8");
+        core.set_option("fceumm_overscan_v_bottom", "8");
+        core.set_option("fceumm_overscan_h_left", "0");
+        core.set_option("fceumm_overscan_h_right", "0");
+    }
+    if which == Core::Snes9x {
+        core.set_option("snes9x_overscan", "disabled");
+        // High-resolution screens blend to 256 wide, as a TV's blur showed them.
+        core.set_option("snes9x_hires_blend", "merge");
+        core.set_option("snes9x_audio_interpolation", "gaussian");
     }
 }
 

@@ -24,6 +24,8 @@ enum PixelFormat {
 
 struct Host {
     video: Vec<u8>,
+    /// The frame the picture is drawn into, centred: the GBA's 240x160 unless told otherwise.
+    canvas: (u32, u32),
     format: PixelFormat,
     audio: Vec<i16>,
     inputs: [u16; 2],
@@ -318,34 +320,56 @@ unsafe extern "C" fn video_refresh(
         return;
     }
     with_host(|h| {
-        let cols = width.min(GBA_W) as usize;
-        let rows = height.min(GBA_H) as usize;
-        let ox = (GBA_W as usize - cols) / 2;
-        let oy = (GBA_H as usize - rows) / 2;
-        if cols != GBA_W as usize || rows != GBA_H as usize {
+        let (cw, ch) = (h.canvas.0 as usize, h.canvas.1 as usize);
+        // A picture twice the canvas (the SNES's high-resolution and interlaced screens)
+        // halves: pairs of columns blend, as a TV's blur blended them, and every other line
+        // is drawn.
+        let xstep = if width as usize >= cw * 2 { 2 } else { 1 };
+        let ystep = if height as usize >= ch * 2 { 2 } else { 1 };
+        let (fw, fh) = (width as usize / xstep, height as usize / ystep);
+        let cols = fw.min(cw);
+        let rows = fh.min(ch);
+        let (ox, oy) = ((cw - cols) / 2, (ch - rows) / 2);
+        let (sx, sy) = ((fw - cols) / 2, (fh - rows) / 2);
+        if cols != cw || rows != ch {
             h.video.fill(0);
         }
-        for y in 0..rows {
-            let src = (data as *const u8).add(y * pitch);
-            let row = ((y + oy) * GBA_W as usize + ox) * 4;
-            match h.format {
+        let format = h.format;
+        let read = |src: *const u8, x: usize| -> [u8; 4] {
+            match format {
                 PixelFormat::Xrgb8888 => {
-                    ptr::copy_nonoverlapping(src, h.video.as_mut_ptr().add(row), cols * 4);
+                    let p = ptr::read_unaligned((src as *const u32).add(x));
+                    [p as u8, (p >> 8) as u8, (p >> 16) as u8, 0]
                 }
                 PixelFormat::Rgb565 => {
-                    for x in 0..cols {
-                        let p = ptr::read_unaligned((src as *const u16).add(x));
-                        let r = ((p >> 11) & 0x1f) as u8;
-                        let g = ((p >> 5) & 0x3f) as u8;
-                        let b = (p & 0x1f) as u8;
-                        let o = row + x * 4;
-                        h.video[o] = (b << 3) | (b >> 2);
-                        h.video[o + 1] = (g << 2) | (g >> 4);
-                        h.video[o + 2] = (r << 3) | (r >> 2);
-                        h.video[o + 3] = 0;
-                    }
+                    let p = ptr::read_unaligned((src as *const u16).add(x));
+                    let r = ((p >> 11) & 0x1f) as u8;
+                    let g = ((p >> 5) & 0x3f) as u8;
+                    let b = (p & 0x1f) as u8;
+                    [(b << 3) | (b >> 2), (g << 2) | (g >> 4), (r << 3) | (r >> 2), 0]
                 }
             }
+        };
+        let mut line = vec![0u8; cols * 4];
+        for y in 0..rows {
+            let src = (data as *const u8).add((y + sy) * ystep * pitch);
+            if xstep == 1 && format == PixelFormat::Xrgb8888 {
+                ptr::copy_nonoverlapping(src.add(sx * 4), line.as_mut_ptr(), cols * 4);
+            } else {
+                for x in 0..cols {
+                    let at = (x + sx) * xstep;
+                    let px = match xstep {
+                        1 => read(src, at),
+                        _ => {
+                            let (a, b) = (read(src, at), read(src, at + 1));
+                            [0, 1, 2, 3].map(|i| ((a[i] as u16 + b[i] as u16) / 2) as u8)
+                        }
+                    };
+                    line[x * 4..x * 4 + 4].copy_from_slice(&px);
+                }
+            }
+            let row = ((y + oy) * cw + ox) * 4;
+            h.video[row..row + cols * 4].copy_from_slice(&line);
         }
     });
 }
@@ -491,6 +515,7 @@ impl LibretroCore {
         }
         let mut host = Box::new(Host {
             video: vec![0; VIDEO_BYTES],
+            canvas: (GBA_W, GBA_H),
             format: PixelFormat::Xrgb8888,
             audio: Vec::new(),
             inputs: [0; 2],
@@ -656,6 +681,11 @@ impl RetroCore for LibretroCore {
         &self.host.video
     }
 
+    fn set_canvas(&mut self, w: u32, h: u32) {
+        self.host.canvas = (w, h);
+        self.host.video = vec![0; (w * h * 4) as usize];
+    }
+
     fn take_audio(&mut self) -> Vec<i16> {
         std::mem::take(&mut self.host.audio)
     }
@@ -750,6 +780,7 @@ mod tests {
     fn host_with(options: HashMap<String, CString>, options_dirty: bool) -> Box<Host> {
         Box::new(Host {
             video: vec![0; VIDEO_BYTES],
+            canvas: (GBA_W, GBA_H),
             format: PixelFormat::Xrgb8888,
             audio: Vec::new(),
             inputs: [0; 2],

@@ -311,6 +311,10 @@ impl Compositor {
         self.game.set_fills_frame(on);
     }
 
+    pub fn set_game_canvas(&mut self, w: u32, h: u32) {
+        self.game.set_canvas(w, h);
+    }
+
     pub fn set_game_source_rect(&mut self, rect: [f32; 4]) {
         self.game.set_source_rect(rect);
     }

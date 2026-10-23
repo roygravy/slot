@@ -13,7 +13,7 @@ fn gambatte_boot_rom_status(root: &std::path::Path, platform: Platform) -> Optio
     let (name, expected_size, expected_crc) = match platform {
         Platform::Gb => ("gb_bios.bin", 0x100usize, 0x59C8_598E),
         Platform::Gbc => ("gbc_bios.bin", 0x900usize, 0x4188_4E46),
-        Platform::Gba => return None,
+        Platform::Gba | Platform::Nes | Platform::Snes => return None,
     };
     let path = root.join("BIOS").join(name);
     let bytes = match std::fs::read(&path) {
@@ -322,8 +322,8 @@ impl Session {
             }
         }
         if let Some(on) = self.app.take_lcd_ghosting() {
-            let (key, value) = crate::core::lcd_ghosting_option(self.app.core(), on);
-            if let Some(emu) = &self.emu {
+            let option = crate::core::lcd_ghosting_option(self.app.core(), on);
+            if let (Some((key, value)), Some(emu)) = (option, &self.emu) {
                 emu.set_option(key, value);
                 recoloured = true;
             }
@@ -480,6 +480,7 @@ impl Session {
             );
             emu.set_rewinding(self.actually_rewinding());
             emu.set_turbo(self.app.turbo());
+            emu.set_native_xy(self.app.playing_platform() == Platform::Snes);
             emu.set_rewind_recording(self.app.records_rewind());
         }
     }
@@ -575,9 +576,11 @@ impl Session {
             palette,
             player,
         );
-        let (ghosting_key, ghosting_value) =
-            crate::core::lcd_ghosting_option(core, self.app.lcd_ghosting_for(platform));
-        opened.core.set_option(ghosting_key, ghosting_value);
+        if let Some((key, value)) =
+            crate::core::lcd_ghosting_option(core, self.app.lcd_ghosting_for(platform))
+        {
+            opened.core.set_option(key, value);
+        }
         self.app.set_named_core(opened.named);
         launch("core opened");
         let sav = self.app.card_read("save", persist::read_sav(&self.root, platform, stem));

@@ -51,8 +51,9 @@ impl From<std::io::Error> for Error {
 /// The size a label is prepared at: the label well slot draws on that platform's cart.
 pub fn label_size(platform: Platform) -> (u32, u32) {
     match platform {
-        Platform::Gba => (264, 136),
-        Platform::Gb => (220, 195),
+        // Until the NES and SNES have moulds of their own, they borrow the GB's and GBA's.
+        Platform::Gba | Platform::Snes => (264, 136),
+        Platform::Gb | Platform::Nes => (220, 195),
         Platform::Gbc => (223, 199),
     }
 }

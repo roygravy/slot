@@ -16,6 +16,8 @@ pub fn folder(platform: Platform) -> &'static str {
         Platform::Gb => "Nintendo - Game Boy",
         Platform::Gbc => "Nintendo - Game Boy Color",
         Platform::Gba => "Nintendo - Game Boy Advance",
+        Platform::Nes => "Nintendo - Nintendo Entertainment System",
+        Platform::Snes => "Nintendo - Super Nintendo Entertainment System",
     }
 }
 
