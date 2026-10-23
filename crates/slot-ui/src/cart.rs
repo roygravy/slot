@@ -788,6 +788,9 @@ fn paste_label(s: &Spec, face: &mut CartFace, label: &[u8]) {
                     ((label[src + c] as u32 * a + face.rgba[d + c] as u32 * (255 - a) + 127) / 255)
                         as u8;
             }
+            // Paper is opaque: on a clear shell the recess under it is see-through plastic,
+            // and the sticker must not take that over.
+            face.rgba[d + 3] = (a + (face.rgba[d + 3] as u32 * (255 - a) + 127) / 255) as u8;
         }
     }
 }
