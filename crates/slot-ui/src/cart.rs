@@ -681,15 +681,19 @@ fn plastic_label_bed(s: &Spec, face: &mut CartFace) {
         return;
     }
     let mean = sum.map(|v| (v / n) as f32);
-    // The round sink mark the moulding leaves in the middle of a Game Boy pak's well. The
-    // other moulds have none.
-    let (dimple_x, dimple_y, dimple_r) = match s.mould {
-        Mould::Notched => (
-            s.w as f32 * 0.5 - lx as f32,
-            s.h as f32 * 0.522 - ly as f32,
-            s.w as f32 * 8.0 / 312.0,
-        ),
-        _ => (-1e4, -1e4, 1.0),
+    // The round sink mark the moulding leaves in a cart's well, where it was screwed or
+    // pinned shut, as a fraction of the well and of the cart's width. The Game Boy Color's is
+    // a small real hole; the SNES carts show none.
+    let mark = match s.mould {
+        Mould::Notched => Some((0.5, 0.522 * s.h as f32 / lh as f32 - ly as f32 / lh as f32, 8.0 / 312.0, Mark::Sink(0.30))),
+        Mould::Gba => Some((0.48, 0.44, 0.026, Mark::Sink(0.40))),
+        Mould::Nes => Some((0.80, 0.70, 0.021, Mark::Sink(0.40))),
+        Mould::Rounded => Some((0.5, 0.65, 0.012, Mark::Hole)),
+        Mould::SnesNtsc | Mould::SnesPal => None,
+    };
+    let (dimple_x, dimple_y, dimple_r, kind) = match mark {
+        Some((fx, fy, fr, kind)) => (lw as f32 * fx, lh as f32 * fy, s.w as f32 * fr, kind),
+        None => (-1e4, -1e4, 1.0, Mark::Sink(0.0)),
     };
     let mut grain: u64 = 0x2545_f491_4f6c_dd1d;
     for y in 0..lh {
@@ -704,7 +708,11 @@ fn plastic_label_bed(s: &Spec, face: &mut CartFace) {
                 (_, 0) => 1.05,
                 _ => 0.95,
             };
-            let dimple = screw_dimple(x as f32 - dimple_x, y as f32 - dimple_y, dimple_r);
+            let (dx, dy) = (x as f32 - dimple_x, y as f32 - dimple_y);
+            let dimple = match kind {
+                Mark::Sink(strength) => screw_dimple(dx, dy, dimple_r, strength),
+                Mark::Hole => screw_hole(dx, dy, dimple_r),
+            };
             // A TV cart's rendered well already has round corners: the bed follows them, so no
             // square corner shows past the sticker's.
             let cover = match (s.mould.tv(), s.square_top) {
@@ -728,7 +736,7 @@ fn plastic_label_bed(s: &Spec, face: &mut CartFace) {
 /// shallow dish with a soft rim and a tiny bump in its middle. Returns how much a pixel at
 /// (dx, dy) from its centre is lit, lit from above like the rest of the shell, averaged over
 /// 4x4 samples.
-fn screw_dimple(dx: f32, dy: f32, radius: f32) -> f32 {
+fn screw_dimple(dx: f32, dy: f32, radius: f32, strength: f32) -> f32 {
     if dx.abs() > radius * 1.5 || dy.abs() > radius * 1.5 {
         return 1.0;
     }
@@ -757,10 +765,42 @@ fn screw_dimple(dx: f32, dy: f32, radius: f32) -> f32 {
             let (gx, gy) = (slope * px / r, slope * py / r);
             let lit = (-gx * lx - gy * ly + lz) / (gx * gx + gy * gy + 1.0).sqrt();
             // Faint: it catches the light, it does not draw the eye.
-            sum += 1.0 + (lit / lz - 1.0) * 0.55;
+            sum += 1.0 + (lit / lz - 1.0) * strength;
         }
     }
     sum / 16.0
+}
+
+/// A Game Boy Color pak's well has a small hole right through: dark inside, its lower rim
+/// catching the light. Returns how much a pixel at (dx, dy) from its centre is lit, averaged
+/// over 4x4 samples.
+fn screw_hole(dx: f32, dy: f32, radius: f32) -> f32 {
+    if dx.abs() > radius * 2.0 || dy.abs() > radius * 2.0 {
+        return 1.0;
+    }
+    let mut sum = 0.0;
+    for sy in 0..4 {
+        for sx in 0..4 {
+            let px = dx + (sx as f32 + 0.5) / 4.0 - 0.5;
+            let py = dy + (sy as f32 + 0.5) / 4.0 - 0.5;
+            let t = (px * px + py * py).sqrt() / radius;
+            sum += if t < 1.0 {
+                0.18
+            } else if t < 1.35 && py > 0.0 {
+                1.0 + 0.10 * (py / (t * radius))
+            } else {
+                1.0
+            };
+        }
+    }
+    sum / 16.0
+}
+
+#[derive(Clone, Copy)]
+enum Mark {
+    /// A shallow dish, this lit.
+    Sink(f32),
+    Hole,
 }
 
 /// A cart with no label art has no sticker at all: its title is written straight onto the
