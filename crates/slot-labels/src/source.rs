@@ -86,36 +86,51 @@ pub fn platforms(platform: Platform) -> &'static [&'static str] {
 pub(crate) fn game_id(page: &str, wanted: &str, platform: Platform) -> Result<u64, Error> {
     let doc = Html::parse_document(page);
     for name in platforms(platform) {
-        match ids(&doc, wanted, name).as_slice() {
+        let found = ids(&doc, wanted, name);
+        match found.as_slice() {
             [] => continue,
-            [id] => return Ok(*id),
-            _ => break,
+            [(id, _)] => return Ok(*id),
+            // Hacks and remakes share a title with the game ("Super Mario Bros. 3 +"): the game
+            // is the one far more people voted on, when one is.
+            _ => {
+                let most = found.iter().map(|(_, v)| *v).max().unwrap_or(0);
+                let leaders: Vec<u64> = found.iter().filter(|(_, v)| *v == most).map(|(id, _)| *id).collect();
+                match leaders.as_slice() {
+                    [id] if most > 0 => return Ok(*id),
+                    _ => break,
+                }
+            }
         }
     }
     Err(unavailable("no unique title match"))
 }
 
-fn ids(doc: &Html, wanted: &str, platform: &str) -> Vec<u64> {
-    let mut found = Vec::new();
+/// The games listed under this title and platform, each with its count of votes.
+fn ids(doc: &Html, wanted: &str, platform: &str) -> Vec<(u64, u32)> {
+    let mut found: Vec<(u64, u32)> = Vec::new();
     for link in doc.select(&selector("a[href^='/games/details/']")) {
         let Some(heading) = link.select(&selector("h3")).next() else {
             continue;
         };
         let name = heading.text().collect::<String>();
-        let listed = link
-            .select(&selector("p"))
-            .any(|p| p.text().collect::<String>().trim() == platform);
+        let texts: Vec<String> = link.select(&selector("p")).map(|p| p.text().collect()).collect();
+        let listed = texts.iter().any(|t| t.trim() == platform);
         if !listed || normalize(&name) != wanted {
             continue;
         }
+        let votes = texts
+            .iter()
+            .find_map(|t| t.split("Total Votes:").nth(1))
+            .and_then(|v| v.trim().split_whitespace().next()?.replace(',', "").parse().ok())
+            .unwrap_or(0);
         let href = link.value().attr("href").unwrap_or_default();
         if let Some(id) = href
             .strip_prefix("/games/details/")
             .and_then(|s| s.split('-').next())
             .and_then(|s| s.parse::<u64>().ok())
         {
-            if !found.contains(&id) {
-                found.push(id);
+            if !found.iter().any(|(f, _)| *f == id) {
+                found.push((id, votes));
             }
         }
     }

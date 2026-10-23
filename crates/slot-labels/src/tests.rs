@@ -489,3 +489,19 @@ fn versions_are_every_cart_front_cut_to_a_label_and_a_picked_one_replaces_the_la
     save_label(dir.path(), &cart, &found[0].png).unwrap();
     assert_ne!(std::fs::read(&path).unwrap(), b"old", "a picked label replaces the one worn");
 }
+
+#[test]
+fn a_hack_sharing_the_title_loses_to_the_game_people_voted_on() {
+    let item = |id, name, votes| {
+        format!(
+            "<a href='/games/details/{id}-game'><h3>{name}</h3><p>Nintendo Entertainment System</p><p>Community Rating: 4.7 Total Votes: {votes}</p></a>"
+        )
+    };
+    let page = item(109, "Super Mario Bros. 3", 1102) + &item(367956, "Super Mario Bros. 3 +", 15);
+    assert_eq!(
+        source::game_id(&page, "super mario bros 3", Platform::Nes).unwrap(),
+        109
+    );
+    let tie = item(1, "Super Mario Bros. 3", 0) + &item(2, "Super Mario Bros. 3 +", 0);
+    assert!(source::game_id(&tie, "super mario bros 3", Platform::Nes).is_err());
+}
