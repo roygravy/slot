@@ -73,13 +73,13 @@ for v in (0.211, 0.367, 0.522, 0.681, 0.837):
 label = rect(0.195, -0.05, 0.809, 0.469, 0.012)
 height -= label * 1.2
 window = rect(0.194, 0.617, 0.809, 1.05, 0.03)
-height -= window * 2.6
+height -= window * 4.5  # deep, and runs out through the bottom edge (Roy's photo)
 yy, xx = np.mgrid[0:h, 0:w]
-for u in (0.405, 0.594):
-    t = np.clip((V(0.854) - yy) / (V(0.854) - V(0.627)), 0, 1)
-    t *= np.clip((yy - V(0.627)) / (V(0.66) - V(0.627)), 0, 1)  # eases in, no bright speck at the top
-    ridge = (np.abs(xx - U(u)) < 0.004 * w) & (yy > V(0.627)) & (yy < V(0.854)) & window
-    height += ridge * t * 1.6
+# a deeper notch in the middle of the window, entered by a short ramp with slanted shoulders
+notch = mask(lambda d: d.polygon([(U(0.405), V(0.69)), (U(0.42), V(0.672)), (U(0.58), V(0.672)),
+                                  (U(0.595), V(0.69)), (U(0.595), V(1.05)), (U(0.405), V(1.05))], fill=255))
+ramp = np.clip((yy - V(0.672)) / (V(0.715) - V(0.672)), 0, 1)
+height -= notch * window * ramp * 3.0
 gaps = gamebit(0.087, 0.917, height) | gamebit(0.913, 0.917, height)
 height *= cart
 hs = nd.gaussian_filter(height, SS * 0.55)
@@ -88,6 +88,10 @@ grey *= 1 - 0.65 * nd.gaussian_filter(gaps.astype(np.float32), 0.5 * SS)
 # the tall wall of the centre throws a soft shadow onto the side pieces, the same on both sides
 near = nd.distance_transform_edt(~centre) / w
 grey *= 1 - sides * 0.42 * np.exp(-near / 0.014)
+# and the walls of the deep window and its notch shade the floor next to them
+for well, k in ((window, 0.30), (notch & window, 0.30)):
+    wall = nd.distance_transform_edt(np.pad(well, ((1, 0), (1, 1)), constant_values=False))[1:, 1:-1] / w
+    grey *= 1 - well * k * np.exp(-wall / 0.010)
 A = save(grey3(grey), cart, 'snes_neutral.png')
 m = np.zeros((H, W, 4), np.uint8); m[..., :3] = 255; m[..., 3] = (A * 255).round().astype(np.uint8)
 Image.fromarray(m, 'RGBA').save(f'{out}/snes_cart.png')
