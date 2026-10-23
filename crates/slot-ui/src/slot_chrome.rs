@@ -128,12 +128,13 @@ impl SlotChrome<'_> {
 
         draw_slot_back(canvas, self.slot, slot_alpha, out);
 
-        let (cw, ch) = cart_box(self.cart.platform);
+        let mould = crate::cart::mould_of(self.cart);
+        let (cw, ch) = cart_box(mould);
         let (cw, ch) = (cw as f32, ch as f32);
 
         let scale = self.scale.clamp(0.0, 1.0);
         let (w0, h0) = (cw * scale, ch * scale);
-        let (sw, sh) = seated_box(self.cart.platform);
+        let (sw, sh) = seated_box(mould);
         let (sw, sh) = (sw as f32, sh as f32);
         let (foot0, seated_foot) = (foot_y(ch), SEATED_Y + sh - self.lift);
         let catch = catch_at(foot0, seated_foot);

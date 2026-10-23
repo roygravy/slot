@@ -27,7 +27,14 @@ impl Cart {
                     self.code = code;
                 }
             }
-            _ => {
+            Platform::Snes => {
+                if let Some(title) = crate::snes::title(&self.rom) {
+                    self.title = title;
+                }
+            }
+            // An iNES file names nothing; the file name is the title.
+            Platform::Nes => {}
+            Platform::Gb | Platform::Gbc => {
                 if let Some(title) = crate::gb::title(&self.rom) {
                     self.title = title;
                 }

@@ -18,6 +18,7 @@ mod platform;
 mod ring;
 mod scan;
 mod slot_state;
+pub mod snes;
 mod stamp;
 mod zone;
 

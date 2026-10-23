@@ -12,11 +12,11 @@ use slot_store::{format_stamp, BezelPick, Platform as Console};
 use slot_ui::{
     arrows_hint_coloured, arrows_hint_face, badge_face, bezel_face, cart_shadow, chip_face,
     chip_shadow_face, clock_text, date_time_text_in, default_game_bezel_face, footer_ink, game_bezel_face,
-    gb_cart_shadow, hint_coloured, hint_face, icon_face, menu_face, photo_face,
+    hint_coloured, hint_face, icon_face, menu_face, photo_face,
     quick_caret_face, quick_label_face, quick_legend_faces, quick_pointer_face, quick_value_face,
     rebuild_banner_face, set_clock_hint_face, slot_back, slot_back_light,
     slot_front, slot_front_light, socket_face, title_face, toast_face,
-    wallpaper_face, word_ink, CartFace, GbShell, Icon, LinkBadge, QuickMenuFaces,
+    wallpaper_face, word_ink, CartFace, Mould, Icon, LinkBadge, QuickMenuFaces,
     QuickRow, QuickValue, RebuildBanner, Toast, UndoFace, ALERT_PX, BOLT_PX,
     HUD_ICON_PX, HUD_INK, LEGEND,
 };
@@ -326,15 +326,15 @@ impl Frontend {
         self.session.app_mut().set_legend_faces(legend);
         let hint = set_clock_hint_face();
         self.clocks.hint = Some(compositor.create_texture(hint.w, hint.h, &hint.rgba));
-        let drops = [Console::Gba, Console::Gb, Console::Gbc].map(|p| {
-            let (cw, ch) = slot_ui::cart_box(p);
+        let drops = Mould::ALL.map(|m| {
+            let (cw, ch) = slot_ui::cart_box(m);
             let f = slot_ui::drop_shadow_face(cw, ch, slot_ui::DROP_MARGIN);
             compositor.create_texture(f.w, f.h, &f.rgba)
         });
         self.session.app_mut().set_drop_shadows(drops);
         let mut halos = |colour: [u8; 3], peak: f32| {
-            [Console::Gba, Console::Gb, Console::Gbc].map(|p| {
-                let (cw, ch) = slot_ui::cart_box(p);
+            Mould::ALL.map(|m| {
+                let (cw, ch) = slot_ui::cart_box(m);
                 let halo = slot_ui::glow_face(cw, ch, slot_ui::GLOW_MARGIN, colour, peak);
                 compositor.create_texture(halo.w, halo.h, &halo.rgba)
             })
@@ -346,24 +346,16 @@ impl Frontend {
         self.session
             .app_mut()
             .set_mark_faces(gold, white, (star_id, star.w, star.h));
-        let shadow = cart_shadow();
-        let id = compositor.create_texture(shadow.w, shadow.h, &shadow.rgba);
-        self.session.app_mut().set_cart_shadow(id);
-        let notched = gb_cart_shadow(GbShell::Notched);
-        let notched = compositor.create_texture(notched.w, notched.h, &notched.rgba);
-        let rounded = gb_cart_shadow(GbShell::Rounded);
-        let rounded = compositor.create_texture(rounded.w, rounded.h, &rounded.rgba);
-        self.session.app_mut().set_gb_cart_shadows(notched, rounded);
-        let board = slot_ui::cart_backing(None);
-        let board = compositor.create_texture(board.w, board.h, &board.rgba);
-        self.session.app_mut().set_cart_backing(board);
-        let notched = slot_ui::cart_backing(Some(GbShell::Notched));
-        let notched = compositor.create_texture(notched.w, notched.h, &notched.rgba);
-        let rounded = slot_ui::cart_backing(Some(GbShell::Rounded));
-        let rounded = compositor.create_texture(rounded.w, rounded.h, &rounded.rgba);
-        self.session
-            .app_mut()
-            .set_gb_cart_backings(notched, rounded);
+        let shadows = Mould::ALL.map(|m| {
+            let shadow = cart_shadow(m);
+            compositor.create_texture(shadow.w, shadow.h, &shadow.rgba)
+        });
+        self.session.app_mut().set_cart_shadows(shadows);
+        let boards = Mould::ALL.map(|m| {
+            let board = slot_ui::cart_backing(m);
+            compositor.create_texture(board.w, board.h, &board.rgba)
+        });
+        self.session.app_mut().set_cart_backings(boards);
         let slot = {
             let mut upload =
                 |bytes: &[u8]| compositor.create_texture(slot_ui::SLOT_W, slot_ui::SLOT_H, bytes);

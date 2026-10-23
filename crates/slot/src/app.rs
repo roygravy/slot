@@ -16,7 +16,7 @@ use slot_store::{
 use slot_ui::{
     board_from, board_x, board_zoom, cart_box, draw_empty_slot, draw_footer, draw_ground,
     draw_slot_name, ease, foot_y, footer_ink, grown, lid_at, lid_from, lift_of,
-    on_board, repeat_gap, shelf_cart_at, ClockPicker, Draw, TimeZone, FfState, GbShell, Hud, HudKind, Icon,
+    on_board, repeat_gap, shelf_cart_at, ClockPicker, Draw, TimeZone, FfState, Mould, Hud, HudKind, Icon,
     LinkBadge, Millis, Placed, Polaroids, QuickMenu, QuickMenuFaces, QuickRow,
     QuickValue, Refusal, Shelf, SlotChrome, TexId, Toast, BOARD_W, CART_W, CHIP_H, CHIP_U, CHIP_V,
     CHIP_W, FOOTER_Y, HINT_EDGE, HINT_H, HOP_LIFT, REPEAT_DELAY_MS, SHADOW_H, SHADOW_W, SOCKET_H,
@@ -1366,17 +1366,18 @@ impl App {
         self.clock_faces = Some((line, hint));
     }
 
+    /// Per mould, in `Mould::ALL` order.
     pub fn set_mark_faces(
         &mut self,
-        gold: [TexId; 3],
-        white: [TexId; 3],
+        gold: [TexId; Mould::ALL.len()],
+        white: [TexId; Mould::ALL.len()],
         star: (TexId, u32, u32),
     ) {
         for (_, shelf) in &mut self.shelves {
             for (style, faces) in [(FavoriteMark::GoldGlow, gold), (FavoriteMark::WhiteGlow, white)] {
-                shelf.set_glow(style, None, faces[0]);
-                shelf.set_glow(style, Some(GbShell::Notched), faces[1]);
-                shelf.set_glow(style, Some(GbShell::Rounded), faces[2]);
+                for (mould, face) in Mould::ALL.into_iter().zip(faces) {
+                    shelf.set_glow(style, mould, face);
+                }
             }
             shelf.set_star(star.0, star.1, star.2);
         }
@@ -1396,37 +1397,30 @@ impl App {
         }
     }
 
-    pub fn set_drop_shadows(&mut self, faces: [TexId; 3]) {
+    /// Per mould, in `Mould::ALL` order.
+    pub fn set_drop_shadows(&mut self, faces: [TexId; Mould::ALL.len()]) {
         for (_, shelf) in &mut self.shelves {
-            shelf.set_drop(None, faces[0]);
-            shelf.set_drop(Some(GbShell::Notched), faces[1]);
-            shelf.set_drop(Some(GbShell::Rounded), faces[2]);
+            for (mould, face) in Mould::ALL.into_iter().zip(faces) {
+                shelf.set_drop(mould, face);
+            }
         }
     }
 
-    pub fn set_cart_shadow(&mut self, face: TexId) {
+    /// Per mould, in `Mould::ALL` order.
+    pub fn set_cart_shadows(&mut self, faces: [TexId; Mould::ALL.len()]) {
         for (_, shelf) in &mut self.shelves {
-            shelf.set_shadow(face);
+            for (mould, face) in Mould::ALL.into_iter().zip(faces) {
+                shelf.set_shadow(mould, face);
+            }
         }
     }
 
-    pub fn set_gb_cart_shadows(&mut self, notched: TexId, rounded: TexId) {
+    /// The board behind a clear cart, per mould, in `Mould::ALL` order.
+    pub fn set_cart_backings(&mut self, faces: [TexId; Mould::ALL.len()]) {
         for (_, shelf) in &mut self.shelves {
-            shelf.set_gb_shadow(GbShell::Notched, notched);
-            shelf.set_gb_shadow(GbShell::Rounded, rounded);
-        }
-    }
-
-    pub fn set_cart_backing(&mut self, face: TexId) {
-        for (_, shelf) in &mut self.shelves {
-            shelf.set_backing(face);
-        }
-    }
-
-    pub fn set_gb_cart_backings(&mut self, notched: TexId, rounded: TexId) {
-        for (_, shelf) in &mut self.shelves {
-            shelf.set_gb_backing(GbShell::Notched, notched);
-            shelf.set_gb_backing(GbShell::Rounded, rounded);
+            for (mould, face) in Mould::ALL.into_iter().zip(faces) {
+                shelf.set_backing(mould, face);
+            }
         }
     }
 
@@ -4087,7 +4081,7 @@ impl App {
         if let Some(stem) = self.selected_stem() {
             if let Some((cart, face)) = self.shelf().find(stem) {
                 if matches!(cart.platform, Platform::Gb | Platform::Gbc) {
-                    self.draw_handheld_core_picker(picker, cart.platform, face, now, out);
+                    self.draw_handheld_core_picker(picker, slot_ui::mould_of(cart), face, now, out);
                     return;
                 }
             }
@@ -4244,7 +4238,7 @@ impl App {
     fn draw_handheld_core_picker(
         &self,
         picker: &CorePicker,
-        platform: Platform,
+        mould: Mould,
         face: Option<TexId>,
         now: Millis,
         out: &mut Vec<Draw>,
@@ -4253,7 +4247,7 @@ impl App {
         let movement = ease(progress);
         let reveal = lift_of(progress);
         let (rest_x, rest_scale) = self.shelf().selected_at(self.canvas());
-        let (cart_w, cart_h) = cart_box(platform);
+        let (cart_w, cart_h) = cart_box(mould);
         let source = Placed {
             x: rest_x,
             y: foot_y(cart_h as f32) - cart_h as f32 * rest_scale,
@@ -4820,7 +4814,7 @@ impl App {
         let Some((cart, face)) = self.shelf().find(&picker.stem) else {
             return;
         };
-        let (w, h) = slot_ui::cart_box(cart.platform);
+        let (w, h) = slot_ui::cart_box(slot_ui::mould_of(cart));
         let (rest, scale) = self.shelf().selected_at(self.canvas());
         let from = slot_ui::Placed {
             x: rest,

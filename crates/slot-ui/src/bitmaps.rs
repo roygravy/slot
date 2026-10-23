@@ -9,12 +9,54 @@ pub enum Mould {
     Gba,
     Notched,
     Rounded,
+    /// The NES's grey toaster cart.
+    Nes,
+    /// The American SNES cart, ridged sides and a raised middle.
+    SnesNtsc,
+    /// The European SNES and Super Famicom cart: smaller, rounded ends, an inset label.
+    SnesPal,
+}
+
+impl Mould {
+    pub const ALL: [Mould; 6] = [
+        Mould::Gba,
+        Mould::Notched,
+        Mould::Rounded,
+        Mould::Nes,
+        Mould::SnesNtsc,
+        Mould::SnesPal,
+    ];
+
+    pub fn index(self) -> usize {
+        self as usize
+    }
+
+    /// The cart's box on the shelf, in pixels. Not to scale between consoles: an SNES cart
+    /// stands a little wider than a Game Boy pak rather than twice as wide.
+    pub fn size(self) -> (u32, u32) {
+        match self {
+            Mould::Gba => (GBA_CART_W, GBA_CART_H),
+            Mould::Notched | Mould::Rounded | Mould::Nes => (GB_CART_W, GB_CART_H),
+            Mould::SnesNtsc => (SNES_CART_W, SNES_CART_H),
+            Mould::SnesPal => (SNES_PAL_CART_W, SNES_PAL_CART_H),
+        }
+    }
+
+    /// A TV console's cart: its art comes as a full set of cart, neutral, clear, interior
+    /// and board, all the cart's own size.
+    pub fn tv(self) -> bool {
+        matches!(self, Mould::Nes | Mould::SnesNtsc | Mould::SnesPal)
+    }
 }
 
 pub const GBA_CART_W: u32 = 360;
 pub const GBA_CART_H: u32 = 212;
 pub const GB_CART_W: u32 = 312;
 pub const GB_CART_H: u32 = 337;
+pub const SNES_CART_W: u32 = 360;
+pub const SNES_CART_H: u32 = 231;
+pub const SNES_PAL_CART_W: u32 = 336;
+pub const SNES_PAL_CART_H: u32 = 228;
 pub const BOARD_W: u32 = GBA_CART_W;
 pub const BOARD_H: u32 = GBA_CART_H;
 pub const SOCKET_W: u32 = 64;
@@ -260,6 +302,9 @@ const GBC_CLEAR_PNG: &[u8] = include_bytes!("../../../assets/gbc_clear.png");
 /// The neutral shell asset for a mould, opaque or the separate clear one. The game's colour is
 /// blended onto it by the caller.
 pub fn shell_asset(mould: Mould, clear: bool) -> &'static [u8] {
+    if mould.tv() {
+        return tv_art(mould, if clear { TvPart::Clear } else { TvPart::Neutral });
+    }
     static GBA: OnceLock<Vec<u8>> = OnceLock::new();
     static GB: OnceLock<Vec<u8>> = OnceLock::new();
     static GBC: OnceLock<Vec<u8>> = OnceLock::new();
@@ -273,6 +318,52 @@ pub fn shell_asset(mould: Mould, clear: bool) -> &'static [u8] {
         (Mould::Gba, true) => (GBA_CLEAR_PNG, GBA_CART_W, GBA_CART_H, &GBA_CLEAR),
         (Mould::Notched, true) => (GB_CLEAR_PNG, GB_CART_W, GB_CART_H, &GB_CLEAR),
         (Mould::Rounded, true) => (GBC_CLEAR_PNG, GB_CART_W, GB_CART_H, &GBC_CLEAR),
+        _ => unreachable!("a TV cart's shell is its own art"),
     };
     load(bytes, w, h, slot)
+}
+
+/// The layers of a TV console's cart, rendered from photos by `tools/carts`.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum TvPart {
+    /// White where the cart is: its silhouette.
+    Cart,
+    Neutral,
+    Clear,
+    Interior,
+    Board,
+}
+
+const NES_PNGS: [&[u8]; 5] = [
+    include_bytes!("../../../assets/nes_cart.png"),
+    include_bytes!("../../../assets/nes_neutral.png"),
+    include_bytes!("../../../assets/nes_clear.png"),
+    include_bytes!("../../../assets/nes_interior.png"),
+    include_bytes!("../../../assets/nes_board.png"),
+];
+const SNES_PNGS: [&[u8]; 5] = [
+    include_bytes!("../../../assets/snes_cart.png"),
+    include_bytes!("../../../assets/snes_neutral.png"),
+    include_bytes!("../../../assets/snes_clear.png"),
+    include_bytes!("../../../assets/snes_interior.png"),
+    include_bytes!("../../../assets/snes_board.png"),
+];
+const SNES_PAL_PNGS: [&[u8]; 5] = [
+    include_bytes!("../../../assets/snes_pal_cart.png"),
+    include_bytes!("../../../assets/snes_pal_neutral.png"),
+    include_bytes!("../../../assets/snes_pal_clear.png"),
+    include_bytes!("../../../assets/snes_pal_interior.png"),
+    include_bytes!("../../../assets/snes_pal_board.png"),
+];
+
+pub fn tv_art(mould: Mould, part: TvPart) -> &'static [u8] {
+    static SLOTS: [[OnceLock<Vec<u8>>; 5]; 3] = [const { [const { OnceLock::new() }; 5] }; 3];
+    let (row, pngs) = match mould {
+        Mould::Nes => (0, NES_PNGS),
+        Mould::SnesNtsc => (1, SNES_PNGS),
+        Mould::SnesPal => (2, SNES_PAL_PNGS),
+        _ => unreachable!("only a TV cart has TV art"),
+    };
+    let (w, h) = mould.size();
+    load(pngs[part as usize], w, h, &SLOTS[row][part as usize])
 }
