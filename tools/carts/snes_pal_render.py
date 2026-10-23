@@ -24,7 +24,7 @@ def light(height, gain=1.5, blur=0.9):
     return (1 + (lam / lz - 1) * gain) * (1 - occ)
 rng = np.random.default_rng(5)
 def grain(s):
-    g = nd.gaussian_filter(rng.normal(0, 1, (h, w)).astype(np.float32), 0.6 * SS)
+    g = nd.gaussian_filter(rng.normal(0, 1, (h, w)).astype(np.float32), 1.0 * SS)  # coarse enough to survive the shelf's scale (Roy)
     return g / g.std() * s
 def down(a):
     return np.asarray(Image.fromarray(a.astype(np.float32), 'F').resize((W, H), Image.Resampling.BOX))
@@ -108,8 +108,8 @@ height -= label * 2.0
 # the middle plate below the label and the side pieces either side; a fine seam marks the plate's
 # edges all the way up to the top rim (no step across the side pieces: Roy)
 for u in (0.161, 0.841):
-    seam = (np.abs(xx - U(u)) < 0.0022 * w) & ~label
-    height -= seam * 1.4
+    seam = (np.abs(xx - U(u)) < 0.003 * w) & ~label
+    height -= seam * 2.4  # clearer (Roy)
 
 # the grip: a long pill-shaped well inside a soft, slightly raised flat lip that rounds over
 # into it; four ribs run along its floor, the middle segment a step deeper (Roy's photo)
@@ -129,7 +129,7 @@ height += slot * ribs * 0.9 * np.clip(slot_in / (1.5 * SS), 0, 1)
 gaps = gamebit(0.063, 0.929, height) | gamebit(0.937, 0.929, height)
 height *= cart
 # the flat face sits at the Game Boy carts' level, so the same colour reads the same (Roy)
-grey = 119 * crisp(height) + grain(1.2)
+grey = 119 * crisp(height) + grain(2.8)
 # the recess and the wells catch less light than the open plastic
 grey *= 1 - 0.06 * nd.gaussian_filter(label.astype(np.float32), SS)
 grey *= 1 - 0.65 * nd.gaussian_filter(gaps.astype(np.float32), 0.5 * SS)
@@ -168,13 +168,13 @@ for v in (0.3, 0.55):
     height += (rect(0.02, v - 0.008, 0.08, v + 0.008) | rect(0.92, v - 0.008, 0.98, v + 0.008)) * 5
 height += (rect(0.88, 0.62, 0.97, 0.64) | rect(0.88, 0.62, 0.895, 0.86)) * 5
 height += (rect(0.03, 0.62, 0.12, 0.64) | rect(0.105, 0.62, 0.12, 0.86)) * 5
-for u in (0.06, 0.94):
-    height += disc(u, 0.9, 0.032) * 6 - disc(u, 0.9, 0.013) * 9
+for u in (0.063, 0.937):  # right under the front's screws
+    height += disc(u, 0.929, 0.032) * 6 - disc(u, 0.929, 0.013) * 9
 for u, v in ((0.62, 0.33), (0.62, 0.66)):
     height -= disc(u, v, 0.025) * 0.6
 height *= shell
 grey = 128 * light(height) + grain(1.2)
-holes = disc(0.06, 0.9, 0.013) | disc(0.94, 0.9, 0.013)
+holes = disc(0.063, 0.929, 0.013) | disc(0.937, 0.929, 0.013)
 grey = np.where(holes, grey * 0.55, grey)
 save(grey3(grey), shell, 'snes_interior.png')
 

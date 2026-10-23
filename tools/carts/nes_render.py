@@ -66,8 +66,8 @@ grip_soft = nd.gaussian_filter((grip & ~(hs > hs[grip].mean() + 2)).astype(np.fl
 grey *= 1 - 0.22 * grip_soft
 grey *= 1 - 0.07 * nd.gaussian_filter(tri.astype(np.float32), SS / 2)
 rng = np.random.default_rng(7)
-grain = nd.gaussian_filter(rng.normal(0, 1, (h, w)).astype(np.float32), 0.6 * SS)
-grey += grain / grain.std() * 1.2
+grain = nd.gaussian_filter(rng.normal(0, 1, (h, w)).astype(np.float32), 1.0 * SS)
+grey += grain / grain.std() * 2.8  # coarse enough to survive the shelf's scale (Roy)
 
 def down(a):
     return np.asarray(Image.fromarray(a.astype(np.float32), 'F').resize((CW, H), Image.Resampling.BOX))

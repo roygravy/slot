@@ -24,7 +24,7 @@ def light(height, gain=1.5, blur=0.55):
     return (1 + (lam / lz - 1) * gain) * (1 - occ)
 rng = np.random.default_rng(5)
 def grain(s):
-    g = nd.gaussian_filter(rng.normal(0, 1, (h, w)).astype(np.float32), 0.6 * SS)
+    g = nd.gaussian_filter(rng.normal(0, 1, (h, w)).astype(np.float32), 1.0 * SS)  # coarse enough to survive the shelf's scale (Roy)
     return g / g.std() * s
 def down(a):
     return np.asarray(Image.fromarray(a.astype(np.float32), 'F').resize((W, H), Image.Resampling.BOX))
@@ -84,7 +84,7 @@ height -= pipe * window * fade * 4.0
 gaps = gamebit(0.087, 0.917, height) | gamebit(0.913, 0.917, height)
 height *= cart
 hs = nd.gaussian_filter(height, SS * 0.55)
-grey = 119 * light(height) + grain(1.2)  # the Game Boy carts' level (Roy)
+grey = 119 * light(height) + grain(2.8)  # the Game Boy carts' level (Roy)
 grey *= 1 - 0.06 * nd.gaussian_filter(label.astype(np.float32), SS)
 grey *= 1 - 0.65 * nd.gaussian_filter(gaps.astype(np.float32), 0.5 * SS)
 # the tall wall of the centre throws a soft shadow onto the side pieces, the same on both sides
@@ -119,13 +119,13 @@ for u0 in (0.035, 0.94):
     height += (rect(u0, 0.25, u0 + 0.025, 0.58) | rect(u0, 0.63, u0 + 0.025, 0.86)) * 5
     hu = (0.035, 0.15) if u0 < 0.5 else (0.85, 0.965)
     height += rect(hu[0], 0.60, hu[1], 0.615) * 4
-for u in (0.092, 0.908):
-    height += disc(u, 0.92, 0.03) * 6 - disc(u, 0.92, 0.012) * 9
+for u in (0.087, 0.913):  # right under the front's screws
+    height += disc(u, 0.917, 0.03) * 6 - disc(u, 0.917, 0.012) * 9
 for u in (0.226, 0.41, 0.595, 0.78):
     height -= rect(u - 0.01, 0.0, u + 0.01, 0.03) * 5
 height *= shell
 grey = 128 * light(height) + grain(1.2)
-holes = disc(0.092, 0.92, 0.012) | disc(0.908, 0.92, 0.012)
+holes = disc(0.087, 0.917, 0.012) | disc(0.913, 0.917, 0.012)
 grey = np.where(holes, grey * 0.55, grey)
 save(grey3(grey), shell, 'snes_interior.png')
 
