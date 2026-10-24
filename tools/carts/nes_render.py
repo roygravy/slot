@@ -39,6 +39,7 @@ for k in range(3):
 for k in range(20):
     v0 = 0.151 + k * 0.0375
     height += rect(0.164, v0, 0.366, v0 + 0.0175, 0.003) * 2.6
+panel |= rect(0.163, 0.95, 0.367, 0.990)  # square at the foot (Roy)
 height += panel * 2.6
 height -= label * 1.2
 tri = poly(lambda d: d.polygon([(U(0.458), V(0.741)), (U(0.547), V(0.741)), (U(0.502), V(0.810))], fill=255))
