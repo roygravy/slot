@@ -335,6 +335,8 @@ impl Session {
             );
             if let Some(emu) = &self.emu {
                 emu.set_option(key, &value);
+                // Behind the menu too: the new border shows at once.
+                recoloured = true;
             }
         }
         if self.app.take_tv_changed() {

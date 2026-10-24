@@ -439,6 +439,26 @@ pub fn set_sgb_border(root: &Path, choice: u8, two: bool, turn: u32) -> (&'stati
             eprintln!("slot: sgb: could not write {}: {e}", at.display());
         }
     }
+    // And every border slot. could have put in before, which a saved state may bring back:
+    // mGBA swaps one of those for this one, and keeps a game's own.
+    let dir = root::bios_dir(root).join("sgb_borders");
+    let mut ours = [SGB_BORDER_GRAVY, SGB2_BORDER_GRAVY].concat();
+    ours.extend(vec![0; SGB_BORDER_GRAVY.len()]);
+    for which in 1..=2 {
+        for n in 1..=9 {
+            if let Ok(b) = std::fs::read(dir.join(format!("sgb{which}_{n}.bin"))) {
+                if b.len() == SGB_BORDER_GRAVY.len() {
+                    ours.extend(b);
+                }
+            }
+        }
+    }
+    let at = root::bios_dir(root).join("slot_sgb_ours.bin");
+    if std::fs::read(&at).ok().as_deref() != Some(&ours[..]) {
+        if let Err(e) = std::fs::write(&at, &ours) {
+            eprintln!("slot: sgb: could not write {}: {e}", at.display());
+        }
+    }
     let mode = if lock { "lock" } else { "auto" };
     ("mgba_slot_sgb_border", format!("{mode}:{turn}"))
 }
