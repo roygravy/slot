@@ -41,8 +41,11 @@ for k in range(3):
     v0 = 0.010 + k * 0.044
     ridges |= rect(0.160, -0.01 if k == 0 else v0, 0.370, v0 + 0.022)
 height += ridges * 3.5
+# 20 ribs under the grip with equal deep strips between, and one as deep above the first and
+# under the last, before the foot pad (Roy)
+gap = (0.895 - 0.142 - 20 * 0.0175) / 21
 for k in range(20):
-    v0 = 0.156 + k * 0.0374
+    v0 = 0.142 + gap + k * (0.0175 + gap)
     height += rect(0.164, v0, 0.366, v0 + 0.0175, 0.003) * 2.6
 panel |= rect(0.163, 0.94, 0.367, 0.979)  # square at the foot (Roy)
 height += panel * 2.6
