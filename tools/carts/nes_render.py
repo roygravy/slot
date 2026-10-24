@@ -27,12 +27,12 @@ height = np.zeros((h, w), np.float32)
 dist = nd.distance_transform_edt(inside)
 height += np.where(inside, np.clip(dist / (3.0 * SS), 0, 1) ** 0.5, 0) * 10
 
-# Measured on Roy's photo of a real cart. The channel and its foot pad stop just above a thin
-# flat rim along the bottom edge.
-channel = rect(0.156, -0.01, 0.374, 0.990) & inside
+# Measured on Roy's photo of a real cart. The channel and its foot pad stop above a flat rim
+# along the bottom edge, kept deeper than the photo's (Roy).
+channel = rect(0.156, -0.01, 0.374, 0.985) & inside
 grip = rect(0.160, -0.01, 0.370, 0.133, 0.004) & inside
 label = rect(0.400, -0.01, 0.866, 0.678, 0.010) & inside
-panel = rect(0.163, 0.902, 0.367, 0.985, 0.014)
+panel = rect(0.163, 0.902, 0.367, 0.979, 0.014)
 height -= channel * 3.0
 height -= grip * 9.0
 # ridges from the top edge down: high, low, high, low, high, low, then a ledge at the grip's
@@ -50,7 +50,7 @@ gap = (0.902 - 0.133 - 20 * rib) / 21
 for k in range(20):
     v0 = 0.133 + gap + k * (rib + gap)
     height += rect(0.164, v0, 0.366, v0 + rib, 0.003) * 2.6
-panel |= rect(0.163, 0.94, 0.367, 0.985)  # square at the foot (Roy)
+panel |= rect(0.163, 0.94, 0.367, 0.979)  # square at the foot (Roy)
 height += panel * 2.6
 height -= label * 1.2
 tri = poly(lambda d: d.polygon([(U(0.458), V(0.741)), (U(0.547), V(0.741)), (U(0.502), V(0.810))], fill=255))
@@ -61,7 +61,7 @@ r = np.hypot(xx - U(0.502), yy - V(0.576)) / (0.017 * w)
 height += (np.where(r < 1, -np.clip(1 - r * r, 0, 1) ** 0.6, 0) + 0.18 * np.exp(-((r - 1.02) / 0.10) ** 2)
            + 0.25 * np.exp(-(r / 0.28) ** 2) * (r < 1)) * 1.8
 # a fine seam where the channel's ridge meets the right half
-height -= rect(0.372, -0.01, 0.376, 0.990) * 0.8
+height -= rect(0.372, -0.01, 0.376, 0.985) * 0.8
 
 hs = nd.gaussian_filter(height, 1.1 * SS / 2)
 gy, gx = np.gradient(hs)
@@ -73,7 +73,7 @@ flat = lz
 shade = lam / flat
 # soft occlusion: recesses read a touch darker
 occ = np.clip((nd.gaussian_filter(hs, 6 * SS) - hs) * 0.05, 0, 0.22)
-grey = 119 * (1 + (shade - 1) * 1.5) * (1 - occ)
+grey = 119 * (1 + (shade - 1) * 1.25) * (1 - occ)  # a touch softer (Roy)
 grip_soft = nd.gaussian_filter((grip & ~ridges).astype(np.float32), SS)
 grey *= 1 - 0.22 * grip_soft
 grey *= 1 - 0.07 * nd.gaussian_filter(tri.astype(np.float32), SS / 2)
