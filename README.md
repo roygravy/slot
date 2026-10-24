@@ -147,7 +147,7 @@ The full list is on the **Buttons** pages in the menu. The essentials:
 
 ## Building
 
-slot. x GRAVY builds the same way slot. does; see [the slot. README](SLOT_README.md) and `taskfile.yml`. The cartridge slots are drawn by `tools/slot_art.py`. Screenshots in this page were rendered headless with `cargo run --release -p slot --no-default-features --example shoot`.
+slot. x GRAVY builds the same way slot. does; see `taskfile.yml`. The cartridge slots are drawn by `tools/slot_art.py`. Screenshots in this page were rendered headless with `cargo run --release -p slot --no-default-features --example shoot`.
 
 ---
 
