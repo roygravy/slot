@@ -105,6 +105,76 @@ pub(crate) fn game_id(page: &str, wanted: &str, platform: Platform) -> Result<u6
     Err(unavailable("no unique title match"))
 }
 
+/// A game a search found: its id, its name, and the name of its platform as people say it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Game {
+    pub id: u64,
+    pub name: String,
+    pub platform: String,
+}
+
+/// The most games a search lists.
+const GAMES: usize = 8;
+
+/// A shelf's platform as people say it, for a source's name of it.
+fn spoken(platform: &str) -> &str {
+    match platform {
+        "Nintendo Game Boy" => "Game Boy",
+        "Nintendo Game Boy Color" => "Game Boy Color",
+        "Nintendo Game Boy Advance" => "Game Boy Advance",
+        "Nintendo Entertainment System" => "NES",
+        "Super Nintendo Entertainment System" => "Super Nintendo",
+        other => other,
+    }
+}
+
+/// The games a results page lists for the shelf's platforms, the shelf's own first and each
+/// in the page's order.
+pub(crate) fn games(page: &str, platform: Platform) -> Vec<Game> {
+    let doc = Html::parse_document(page);
+    let mut found: Vec<(usize, Game)> = Vec::new();
+    for link in doc.select(&selector("a[href^='/games/details/']")) {
+        let Some(heading) = link.select(&selector("h3")).next() else {
+            continue;
+        };
+        let name = heading.text().collect::<String>().trim().to_owned();
+        let texts: Vec<String> = link.select(&selector("p")).map(|p| p.text().collect()).collect();
+        let Some((rank, listed)) = platforms(platform)
+            .iter()
+            .enumerate()
+            .find(|(_, p)| texts.iter().any(|t| t.trim() == **p))
+        else {
+            continue;
+        };
+        let id = link
+            .value()
+            .attr("href")
+            .and_then(|h| h.strip_prefix("/games/details/"))
+            .and_then(|s| s.split('-').next())
+            .and_then(|s| s.parse::<u64>().ok());
+        if let Some(id) = id.filter(|id| !found.iter().any(|(_, g)| g.id == *id)) {
+            let platform = spoken(listed).to_owned();
+            found.push((rank, Game { id, name, platform }));
+        }
+    }
+    found.sort_by_key(|(rank, _)| *rank);
+    found.into_iter().take(GAMES).map(|(_, g)| g).collect()
+}
+
+/// The games a search for the words typed finds on the shelf's platforms.
+pub(crate) fn search(
+    http: &mut impl Transport,
+    query: &str,
+    platform: Platform,
+) -> Result<Vec<Game>, Error> {
+    let query = query.split_whitespace().collect::<Vec<_>>().join(" ");
+    if query.is_empty() {
+        return Err(unavailable("nothing to search for"));
+    }
+    let page = http.get(&format!("{BASE}/games/results?id={}", encode(&query)))?;
+    Ok(games(&String::from_utf8_lossy(&page), platform))
+}
+
 /// The games listed under this title and platform, each with its count of votes.
 fn ids(doc: &Html, wanted: &str, platform: &str) -> Vec<(u64, u32)> {
     let mut found: Vec<(u64, u32)> = Vec::new();
@@ -269,6 +339,19 @@ pub(crate) fn all_fronts(
 ) -> Result<Vec<(bool, String, String)>, Error> {
     let page = gallery(http, cart, None)?;
     match fronts(&page, cart) {
+        fronts if fronts.is_empty() => Err(unavailable("no cartridge artwork")),
+        fronts => Ok(fronts),
+    }
+}
+
+/// Every cart front of a game picked from a search, best first.
+pub(crate) fn fronts_of(
+    http: &mut impl Transport,
+    cart: &Cart,
+    id: u64,
+) -> Result<Vec<(bool, String, String)>, Error> {
+    let page = http.get(&format!("{BASE}/games/images/{id}"))?;
+    match fronts(&String::from_utf8_lossy(&page), cart) {
         fronts if fronts.is_empty() => Err(unavailable("no cartridge artwork")),
         fronts => Ok(fronts),
     }

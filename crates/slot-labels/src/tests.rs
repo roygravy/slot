@@ -505,3 +505,35 @@ fn a_hack_sharing_the_title_loses_to_the_game_people_voted_on() {
     let tie = item(1, "Super Mario Bros. 3", 0) + &item(2, "Super Mario Bros. 3 +", 0);
     assert!(source::game_id(&tie, "super mario bros 3", Platform::Nes).is_err());
 }
+
+#[test]
+fn a_search_lists_the_shelfs_games_its_own_platform_first() {
+    let item = |id, name, platform| {
+        format!("<a href='/games/details/{id}-game'><h3> {name} </h3><p>{platform}</p></a>")
+    };
+    let page = item(5, "Tetris DX", "Nintendo Game Boy Color")
+        + &item(6, "Tetris", "Nintendo Entertainment System")
+        + &item(7, "Tetris", "Nintendo Game Boy")
+        + &item(7, "Tetris", "Nintendo Game Boy");
+    let found = source::games(&page, Platform::Gb);
+    let names: Vec<_> = found.iter().map(|g| (g.id, g.name.as_str(), g.platform.as_str())).collect();
+    assert_eq!(names, [(7, "Tetris", "Game Boy"), (5, "Tetris DX", "Game Boy Color")]);
+}
+
+#[test]
+fn a_game_picked_from_a_search_gives_its_versions_and_an_empty_search_asks_nothing() {
+    let mut http = Fake {
+        calls: vec![],
+        image: image_bytes(600, 355),
+    };
+    assert!(source::search(&mut http, "   ", Platform::Gba).is_err());
+    assert!(http.calls.is_empty());
+    source::search(&mut http, " advance  wars", Platform::Gba).unwrap();
+    assert_eq!(
+        http.calls,
+        ["https://gamesdb.launchbox-app.com/games/results?id=advance%20wars"]
+    );
+    let fronts = source::fronts_of(&mut http, &cart("Typo (USA)"), 2367).unwrap();
+    assert_eq!(fronts.len(), 1);
+    assert_eq!(http.calls[1], "https://gamesdb.launchbox-app.com/games/images/2367");
+}

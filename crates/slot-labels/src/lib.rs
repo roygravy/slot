@@ -8,6 +8,8 @@ pub mod cheats;
 mod pack;
 mod source;
 
+pub use source::Game;
+
 /// What the examples need to build the LaunchBox index and the artwork pack the way the device
 /// reads them.
 #[doc(hidden)]
@@ -169,6 +171,17 @@ impl Downloader {
         versions(&mut self.http, cart)
     }
 
+    /// The games a search for the words typed finds for the cart's shelf. Blocking.
+    pub fn search(&mut self, query: &str, platform: Platform) -> Result<Vec<Game>, Error> {
+        source::search(&mut self.http, query, platform)
+    }
+
+    /// Every version of the label of a game picked from a search, best first. Blocking.
+    pub fn versions_of(&mut self, cart: &Cart, game: u64) -> Result<Vec<Version>, Error> {
+        let fronts = source::fronts_of(&mut self.http, cart, game)?;
+        cut(&mut self.http, cart, fronts)
+    }
+
     /// Blocking; call only on a background worker. Existing files are never replaced.
     pub fn prepare(&mut self, root: &Path, cart: &Cart) -> Result<PathBuf, Error> {
         self.prepare_identified(root, cart, None)
@@ -260,6 +273,15 @@ fn versions(http: &mut impl Transport, cart: &Cart) -> Result<Vec<Version>, Erro
         }
         Err(e) => return Err(e),
     };
+    cut(http, cart, fronts)
+}
+
+/// The cart fronts fetched and cut to labels, at most `VERSIONS` of them.
+fn cut(
+    http: &mut impl Transport,
+    cart: &Cart,
+    fronts: Vec<(bool, String, String)>,
+) -> Result<Vec<Version>, Error> {
     let mut found = Vec::new();
     let mut last = Error::Unavailable("no cartridge artwork".into());
     for (render, region, url) in fronts.into_iter().take(VERSIONS) {

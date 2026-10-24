@@ -17,6 +17,7 @@ mod clock;
 mod draw;
 mod footer;
 mod hud;
+mod keyboard;
 mod icon;
 mod link_art;
 mod plate;
@@ -121,3 +122,7 @@ pub use sticker::{
     CREDITS, DC, HOME, ORIGIN, STICKER_H, STICKER_W,
 };
 pub use toast::{toast_box, toast_face, toast_rect, Toast};
+pub use keyboard::{
+    draw_label_search, key_rows, search_heading_face, search_row_faces, search_status_face,
+    search_typed_face, Cap, Key, KeyboardFaces, SearchScreen, SearchTexts, SearchView, Shape, Up,
+};
