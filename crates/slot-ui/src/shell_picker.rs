@@ -49,8 +49,9 @@ pub struct ShellPickerFaces {
     /// Original, Custom, then the palette's names.
     pub names: Vec<(TexId, u32)>,
     pub finishes: Vec<(TexId, u32)>,
-    /// NTSC, PAL: an SNES cart's two shapes; then GB, GBC: a Game Boy cart's two.
-    pub models: [(TexId, u32); 4],
+    /// NTSC, PAL: an SNES cart's two shapes; then GB, GBC: a Game Boy cart's two; then the
+    /// four Super Game Boys.
+    pub models: Vec<(TexId, u32)>,
     /// The tabs' names: the colour's, the label's, then the marker's.
     pub tabs: [(TexId, u32); 3],
     /// The label tab while its versions are looked for, and when there are none.
@@ -87,9 +88,9 @@ pub struct ShellPickerView<'a> {
     pub finish_on: bool,
     /// The finishes offered, as places in the faces' finishes.
     pub finishes: Vec<usize>,
-    /// For a cart with two shapes: where its pair starts in the faces' models, and the one
-    /// picked.
-    pub model: Option<(usize, usize)>,
+    /// For a cart with a choice of shapes: where they start in the faces' models, how many,
+    /// and the one picked.
+    pub model: Option<(usize, usize, usize)>,
     pub row: PickerRow,
     /// The open tab, when there are two.
     pub tabs: Vec<usize>,
@@ -451,9 +452,9 @@ pub fn draw_shell_picker(canvas: Canvas, v: &ShellPickerView, out: &mut Vec<Draw
             stage(2.0),
             out,
         );
-        if let Some((first, model)) = v.model {
+        if let Some((first, count, model)) = v.model {
             boxed_row(
-                &v.faces.models[first..first + 2],
+                &v.faces.models[first..first + count],
                 Some(model),
                 v.row == PickerRow::Model,
                 MODEL_Y + drop,

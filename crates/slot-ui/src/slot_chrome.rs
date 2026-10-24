@@ -71,8 +71,8 @@ const LIP_Y: f32 = BAND_Y;
 
 const SEATED_Y: f32 = BAY_Y + 4.0;
 
-fn catch_at(foot: f32, seated_foot: f32) -> f32 {
-    (LIP_Y - foot) / (seated_foot - foot)
+fn catch_at(lip: f32, foot: f32, seated_foot: f32) -> f32 {
+    (lip - foot) / (seated_foot - foot)
 }
 
 const CATCH_IN: f32 = 0.42;
@@ -152,8 +152,13 @@ impl SlotChrome<'_> {
                 (x, y, lerp(w0, sw), lerp(h0, sh), pose.lid)
             }
             None => {
-                let seated_foot = SEATED_Y + sh - self.lift;
-                let catch = catch_at(foot0, seated_foot);
+                // Into the Super Game Boy, the pak goes in at its top edge and stands in its bay,
+                // its foot down past the screen's edge.
+                let (lip, seated_foot) = match rise() > 0.0 {
+                    true => (BAND_Y - rise() + SGB_TOP, OUT_H as f32 + 16.0),
+                    false => (LIP_Y, SEATED_Y + sh - self.lift),
+                };
+                let catch = catch_at(lip, foot0, seated_foot);
                 let travel = travel(seat, catch);
                 let k = (travel / catch).min(1.0);
                 let (cw, ch) = (w0 + (sw - w0) * k, h0 + (sh - h0) * k);
@@ -248,8 +253,38 @@ fn band(x: f32, y: f32, w: f32, h: f32, c: [f32; 4], alpha: f32) -> Draw {
 }
 
 /// How far the Super Game Boy's top stands above the band while the Game Boy carts go into
-/// it: twice the band's height shows, and the Game Boy shelf moves up out of its way (Roy).
-pub const SGB_RISE: f32 = 60.0;
+/// it: its top edge shows, and the Game Boy shelf moves up out of its way (Roy).
+pub const SGB_RISE: f32 = crate::bitmaps::SGB_BAND_H as f32 - MOUTH_H;
+/// Where the Super Game Boy's top edge is in its band, as `tools/sgb/sgb_band.py` draws it.
+const SGB_TOP: f32 = 6.0;
+
+/// The Super Game Boy in its band, as `tools/sgb/sgb_band.py` draws it in the 720-wide strip:
+/// its left edge and size.
+fn sgb_in_band(model: crate::SgbModel) -> (f32, f32, f32) {
+    match model {
+        crate::SgbModel::Ntsc => (90.0, 540.0, 472.0),
+        _ => (122.0, 473.0, 449.0),
+    }
+}
+
+/// Where the Super Game Boy's whole face is while it is the band: (x, y, w, h).
+pub fn sgb_band_rect(model: crate::SgbModel, canvas: Canvas) -> (f32, f32, f32, f32) {
+    let (x, w, h) = sgb_in_band(model);
+    let strip = crate::bitmaps::SLOT_W as f32;
+    let cut = ((strip - canvas.w) / 2.0).max(0.0);
+    let top = OUT_H as f32 - crate::bitmaps::SGB_BAND_H as f32;
+    (x - cut, top + SGB_TOP, w, h)
+}
+
+/// Where the Super Game Boy stands once it is in the SNES: (x, y, w, h).
+pub fn sgb_seated_rect(mould: Mould, canvas: Canvas) -> (f32, f32, f32, f32) {
+    let (sw, sh) = seated_box(mould);
+    let (sw, sh) = (sw as f32, sh as f32);
+    match tv_pose(mould, 1.0, canvas.w / 2.0, (sw, sh)) {
+        Some(pose) => (pose.x, pose.y, sw, sh),
+        None => (canvas.w / 2.0 - sw / 2.0, BAND_Y - sh, sw, sh),
+    }
+}
 
 static SGB_TALL: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 

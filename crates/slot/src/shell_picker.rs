@@ -115,6 +115,32 @@ pub enum Row {
 /// The shapes the Model row offers, in its order: SNES NTSC and PAL, or Game Boy and Color.
 pub const MODELS: [Outline; 2] = [Outline::Notched, Outline::Rounded];
 
+/// The Super Game Boys the studio offers for the SGB cart, in its order; the European one is
+/// the original.
+pub const SGB_MODELS: [slot_ui::SgbModel; 4] = [
+    slot_ui::SgbModel::Ntsc,
+    slot_ui::SgbModel::Pal,
+    slot_ui::SgbModel::Sfc,
+    slot_ui::SgbModel::Sgb2,
+];
+const SGB_ORIGINAL: usize = 1;
+
+/// How a Super Game Boy is written down: in its cart's shell choice (see
+/// `slot_ui::sgb_model_of`). None for the original.
+pub fn sgb_choice(model: slot_ui::SgbModel) -> Option<ShellChoice> {
+    let (outline, finish) = match model {
+        slot_ui::SgbModel::Pal => return None,
+        slot_ui::SgbModel::Ntsc => (Outline::Notched, ShellFinish::Own),
+        slot_ui::SgbModel::Sfc => (Outline::Rounded, ShellFinish::Solid),
+        slot_ui::SgbModel::Sgb2 => (Outline::Rounded, ShellFinish::Clear),
+    };
+    Some(ShellChoice {
+        outline,
+        colour: [0x80, 0x80, 0x80],
+        finish,
+    })
+}
+
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum Tab {
     Colour,
@@ -199,6 +225,8 @@ pub struct ShellPicker {
     version: Option<usize>,
     /// Y asked to take the label off: A does, B does not.
     confirm: bool,
+    /// The Super Game Boy: only its model to pick, from `SGB_MODELS`.
+    sgb: bool,
 }
 
 impl ShellPicker {
@@ -256,6 +284,28 @@ impl ShellPicker {
             versions: Versions::Unasked,
             version: None,
             confirm: false,
+            sgb: false,
+        }
+    }
+
+    /// The Super Game Boy cart: its model is all there is to pick.
+    pub fn with_sgb(mut self, now: slot_ui::SgbModel) -> Self {
+        let picked = SGB_MODELS.iter().position(|m| *m == now).unwrap_or(SGB_ORIGINAL);
+        self.model = Some((picked, SGB_ORIGINAL));
+        self.sgb = true;
+        self.row = Row::Model;
+        self
+    }
+
+    pub fn sgb(&self) -> bool {
+        self.sgb
+    }
+
+    fn model_count(&self) -> usize {
+        if self.sgb {
+            SGB_MODELS.len()
+        } else {
+            MODELS.len()
         }
     }
 
@@ -297,6 +347,9 @@ impl ShellPicker {
 
     /// The offered finishes' names, as places in `FINISH_NAMES`.
     pub fn finish_faces(&self) -> Vec<usize> {
+        if self.sgb {
+            return Vec::new();
+        }
         self.finishes
             .iter()
             .map(|f| FINISH_NAMES.iter().position(|(n, _)| n == f).unwrap_or(0))
@@ -317,6 +370,10 @@ impl ShellPicker {
 
     /// The tabs along the top: colour and label, and the marker for a cart with no label.
     pub fn tabs(&self) -> Vec<Tab> {
+        // The Super Game Boy has its sticker: no colour or label to pick.
+        if self.sgb {
+            return Vec::new();
+        }
         let mut tabs = vec![Tab::Colour, Tab::Label];
         if self.offers_marker() {
             tabs.push(Tab::Marker);
@@ -395,6 +452,9 @@ impl ShellPicker {
     }
 
     pub fn choice(&self) -> Option<ShellChoice> {
+        if let (true, Some((picked, _))) = (self.sgb, self.model) {
+            return sgb_choice(SGB_MODELS[picked]);
+        }
         // The shape is only written down when it is not the one the region gives.
         let outline = match self.model {
             Some((picked, auto)) if picked != auto => MODELS[picked],
@@ -446,6 +506,9 @@ impl ShellPicker {
     }
 
     fn rows(&self) -> Vec<Row> {
+        if self.sgb {
+            return vec![Row::Model];
+        }
         let mut rows = vec![Row::Tabs];
         match self.tab {
             Tab::Colour => {
@@ -536,7 +599,7 @@ impl ShellPicker {
                         let Some((picked, auto)) = self.model else {
                             return Outcome::None;
                         };
-                        let to = step(picked, by, MODELS.len());
+                        let to = step(picked, by, self.model_count());
                         if to == picked {
                             return Outcome::None;
                         }
