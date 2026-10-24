@@ -5321,10 +5321,10 @@ impl App {
             Platform::Snes if cart.is_sgb() => picker.with_sgb(slot_ui::sgb_model_of(cart)),
             Platform::Snes => {
                 let auto = match slot_store::snes::cached_region(&cart.rom) {
-                    slot_store::snes::Region::Ntsc => 0,
-                    slot_store::snes::Region::Pal => 1,
+                    slot_store::snes::Region::Pal => 0,
+                    slot_store::snes::Region::Ntsc => 1,
                 };
-                picker.with_model(auto)
+                picker.with_snes_model(auto)
             }
             Platform::Gb => picker.with_model(0),
             Platform::Gbc => picker.with_model(1),

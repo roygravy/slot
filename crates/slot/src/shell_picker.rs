@@ -112,18 +112,19 @@ pub enum Row {
     Marker,
 }
 
-/// The shapes the Model row offers, in its order: SNES NTSC and PAL, or Game Boy and Color.
+/// The shapes the Model row offers, in its order: Game Boy and Color.
 pub const MODELS: [Outline; 2] = [Outline::Notched, Outline::Rounded];
+/// An SNES cart's, Europe first (Roy): PAL, then NTSC.
+pub const SNES_MODELS: [Outline; 2] = [Outline::Rounded, Outline::Notched];
 
 /// The Super Game Boys the studio offers for the SGB cart, in its order; the European one is
 /// the original.
-pub const SGB_MODELS: [slot_ui::SgbModel; 4] = [
-    slot_ui::SgbModel::Ntsc,
+pub const SGB_MODELS: [slot_ui::SgbModel; 3] = [
     slot_ui::SgbModel::Pal,
-    slot_ui::SgbModel::Sfc,
+    slot_ui::SgbModel::Ntsc,
     slot_ui::SgbModel::Sgb2,
 ];
-const SGB_ORIGINAL: usize = 1;
+const SGB_ORIGINAL: usize = 0;
 
 /// How a Super Game Boy is written down: in its cart's shell choice (see
 /// `slot_ui::sgb_model_of`). None for the original.
@@ -203,6 +204,8 @@ pub struct ShellPicker {
     was: Option<ShellChoice>,
     swatches: Vec<Swatch>,
     swatch: usize,
+    /// The shapes the Model row offers, in its order.
+    shapes: [Outline; 2],
     finish: usize,
     /// The finishes the row offers: an NES cart's has metallic in glitter's place.
     finishes: &'static [ShellFinish],
@@ -285,6 +288,7 @@ impl ShellPicker {
             version: None,
             confirm: false,
             sgb: false,
+            shapes: MODELS,
         }
     }
 
@@ -305,7 +309,7 @@ impl ShellPicker {
         if self.sgb {
             SGB_MODELS.len()
         } else {
-            MODELS.len()
+            self.shapes.len()
         }
     }
 
@@ -314,10 +318,16 @@ impl ShellPicker {
     pub fn with_model(mut self, auto: usize) -> Self {
         let picked = self
             .was
-            .and_then(|c| MODELS.iter().position(|o| *o == c.outline))
+            .and_then(|c| self.shapes.iter().position(|o| *o == c.outline))
             .unwrap_or(auto);
         self.model = Some((picked, auto));
         self
+    }
+
+    /// An SNES cart: its shapes in `SNES_MODELS`, `auto` among them.
+    pub fn with_snes_model(mut self, auto: usize) -> Self {
+        self.shapes = SNES_MODELS;
+        self.with_model(auto)
     }
 
     pub fn model(&self) -> Option<usize> {
@@ -457,7 +467,7 @@ impl ShellPicker {
         }
         // The shape is only written down when it is not the one the region gives.
         let outline = match self.model {
-            Some((picked, auto)) if picked != auto => MODELS[picked],
+            Some((picked, auto)) if picked != auto => self.shapes[picked],
             Some(_) => Outline::Auto,
             None => self.was.map_or(Outline::Auto, |c| c.outline),
         };

@@ -1408,7 +1408,7 @@ impl UiFaces {
             shell_words: crate::shell_picker::swatch_names()
                 .into_iter()
                 .chain(crate::shell_picker::FINISH_NAMES.map(|(_, name)| name))
-                .chain(["NTSC", "PAL", "GB", "GBC", "USA", "Europe", "Japan", "SGB 2"])
+                .chain(["PAL", "NTSC", "GB", "GBC", "Europe", "USA", "SGB 2"])
                 .chain(["Color", "Label", "Marker", "Looking", "None Found"])
                 .chain(crate::shell_picker::MARKERS.map(|(name, _)| name))
                 .map(slot_ui::shell_picker_word)
