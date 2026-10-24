@@ -73,6 +73,7 @@ pub struct Session {
     prefetch: Prefetch,
     reloading: bool,
     driven: bool,
+    sgb_turn: u32,
 }
 
 impl Session {
@@ -96,6 +97,7 @@ impl Session {
             prefetch: Prefetch::default(),
             reloading: false,
             driven: false,
+            sgb_turn: 0,
         };
         // A game left running comes straight back. Its core loads on its own thread, so start it
         // now and let the card read overlap the rest of the boot. Waiting for the first update
@@ -319,6 +321,14 @@ impl Session {
                     emu.set_option(key, &value);
                     recoloured = true;
                 }
+            }
+        }
+        if self.app.take_sgb_border_changed() && self.app.sgb_playing() {
+            self.sgb_turn += 1;
+            let (key, value) =
+                crate::core::set_sgb_border(&self.root, self.app.sgb_border(), self.sgb_turn);
+            if let Some(emu) = &self.emu {
+                emu.set_option(key, &value);
             }
         }
         if self.app.take_tv_changed() {
@@ -604,7 +614,7 @@ impl Session {
             opened.core.set_option(key, value);
         }
         if sgb {
-            crate::core::sgb_options(&self.root, opened.core.as_mut());
+            crate::core::sgb_options(&self.root, opened.core.as_mut(), self.app.sgb_border());
         }
         self.app.set_named_core(opened.named);
         launch("core opened");

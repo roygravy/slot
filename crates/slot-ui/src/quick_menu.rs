@@ -90,10 +90,11 @@ pub enum QuickRow {
     Scanlines,
     Mask,
     Afterglow,
+    SgbBorder,
 }
 
 impl QuickRow {
-    pub const ALL: [QuickRow; 82] = [
+    pub const ALL: [QuickRow; 83] = [
         QuickRow::FastForward,
         QuickRow::FastForwardSound,
         QuickRow::Screen,
@@ -176,6 +177,7 @@ impl QuickRow {
         QuickRow::Scanlines,
         QuickRow::Mask,
         QuickRow::Afterglow,
+        QuickRow::SgbBorder,
     ];
 
     /// The power menu, held POWER.
@@ -279,7 +281,8 @@ impl QuickRow {
     /// The in-game Screen page: the playing system's own settings, through rows that stand
     /// for whichever system is in the slot.
     /// The TV consoles' rows come after the handhelds' and only one set is shown.
-    pub const PLAY_SCREEN: [QuickRow; 10] = [
+    pub const PLAY_SCREEN: [QuickRow; 11] = [
+        QuickRow::SgbBorder,
         QuickRow::Shader,
         QuickRow::Palette,
         QuickRow::PixelTransparency,
@@ -372,7 +375,8 @@ impl QuickRow {
             | QuickRow::Colors
             | QuickRow::Scanlines
             | QuickRow::Mask
-            | QuickRow::Afterglow => &QuickRow::PLAY_SCREEN,
+            | QuickRow::Afterglow
+            | QuickRow::SgbBorder => &QuickRow::PLAY_SCREEN,
             _ => &QuickRow::MAIN,
         }
     }
@@ -516,6 +520,7 @@ impl QuickRow {
             QuickRow::NesScanlines | QuickRow::SnesScanlines | QuickRow::Scanlines => "Scanlines",
             QuickRow::NesMask | QuickRow::SnesMask | QuickRow::Mask => "Mask",
             QuickRow::NesAfterglow | QuickRow::SnesAfterglow | QuickRow::Afterglow => "Afterglow",
+            QuickRow::SgbBorder => "Border",
         }
     }
 
@@ -533,6 +538,9 @@ impl QuickRow {
                 "How the console reached the TV. SELECT + B turns every effect off."
             }
             QuickRow::NesColors | QuickRow::Colors => "The colors a TV made of the NES's picture.",
+            QuickRow::SgbBorder => {
+                "The Super Game Boy's frame. Auto: the game's own, if it has one."
+            }
             QuickRow::NesScanlines | QuickRow::SnesScanlines | QuickRow::Scanlines => {
                 "A faint dark line between the picture's lines."
             }
@@ -689,10 +697,21 @@ pub enum QuickValue {
     Sony,
     Nescap,
     Pvm,
+    BorderAuto,
+    BorderGravy,
+    Border1,
+    Border2,
+    Border3,
+    Border4,
+    Border5,
+    Border6,
+    Border7,
+    Border8,
+    Border9,
 }
 
 impl QuickValue {
-    pub const ALL: [QuickValue; 36] = [
+    pub const ALL: [QuickValue; 47] = [
         QuickValue::Speed2,
         QuickValue::Speed3,
         QuickValue::Speed4,
@@ -729,6 +748,17 @@ impl QuickValue {
         QuickValue::Sony,
         QuickValue::Nescap,
         QuickValue::Pvm,
+        QuickValue::BorderAuto,
+        QuickValue::BorderGravy,
+        QuickValue::Border1,
+        QuickValue::Border2,
+        QuickValue::Border3,
+        QuickValue::Border4,
+        QuickValue::Border5,
+        QuickValue::Border6,
+        QuickValue::Border7,
+        QuickValue::Border8,
+        QuickValue::Border9,
     ];
 
     pub fn index(self) -> usize {
@@ -773,6 +803,17 @@ impl QuickValue {
             QuickValue::Sony => "Sony",
             QuickValue::Nescap => "NESCAP",
             QuickValue::Pvm => "PVM",
+            QuickValue::BorderAuto => "Auto",
+            QuickValue::BorderGravy => "GRAVY",
+            QuickValue::Border1 => "1",
+            QuickValue::Border2 => "2",
+            QuickValue::Border3 => "3",
+            QuickValue::Border4 => "4",
+            QuickValue::Border5 => "5",
+            QuickValue::Border6 => "6",
+            QuickValue::Border7 => "7",
+            QuickValue::Border8 => "8",
+            QuickValue::Border9 => "9",
         }
     }
 

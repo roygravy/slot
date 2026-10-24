@@ -370,6 +370,7 @@ pub struct App {
     lcd_ghosting_pending: Option<bool>,
     /// A TV console's look changed: its core is told again.
     tv_changed: bool,
+    sgb_border_changed: bool,
     palette_live: bool,
     /// A palette change for the playing game: Some(None) turns the palettes off.
     palette_pending: Option<Option<GbPalette>>,
@@ -575,6 +576,7 @@ impl App {
             core: Core::default(),
             lcd_ghosting_pending: None,
             tv_changed: false,
+            sgb_border_changed: false,
             palette_live: false,
             palette_pending: None,
             palette_capable: false,
@@ -993,6 +995,9 @@ impl App {
         if !platform.tv() {
             hidden.extend(TV_ROWS);
         }
+        if !self.sgb_playing() {
+            hidden.push(QuickRow::SgbBorder);
+        }
         // Only the NES's picture has colours a TV made up.
         if platform != Platform::Nes {
             hidden.push(QuickRow::Colors);
@@ -1057,6 +1062,12 @@ impl App {
                 stood_in if stood_in != row => self.quick_value(stood_in),
                 _ => None,
             },
+            QuickRow::SgbBorder => Some(match self.state.sgb_border {
+                1 => QuickValue::BorderGravy,
+                2 => QuickValue::Off,
+                n @ 11..=19 => QuickValue::ALL[QuickValue::Border1.index() + usize::from(n - 11)],
+                _ => QuickValue::BorderAuto,
+            }),
             QuickRow::NesCable => Some(cable_value(self.state.tv_cable_nes)),
             QuickRow::SnesCable => Some(cable_value(self.state.tv_cable_snes)),
             QuickRow::NesColors => Some(match self.state.nes_colors {
@@ -2276,6 +2287,14 @@ impl App {
         self.lcd_ghosting_pending.take()
     }
 
+    pub fn take_sgb_border_changed(&mut self) -> bool {
+        std::mem::take(&mut self.sgb_border_changed)
+    }
+
+    pub fn sgb_border(&self) -> u8 {
+        self.state.sgb_border
+    }
+
     pub fn take_tv_changed(&mut self) -> bool {
         std::mem::take(&mut self.tv_changed)
     }
@@ -2819,6 +2838,7 @@ impl App {
                 }
             }
             QuickRow::EjectSave
+            | QuickRow::SgbBorder
             | QuickRow::Turbo
             | QuickRow::Rewind
             | QuickRow::FastForward
@@ -2897,6 +2917,31 @@ impl App {
 
     fn change_setting(&mut self, row: QuickRow, right: bool) {
         let row = self.playing_row(row);
+        if row == QuickRow::SgbBorder {
+            // Auto, slot.'s, the SGB's own that are in BIOS, none, and round again.
+            let mut all = vec![0u8, 1];
+            if let Some(root) = &self.root {
+                all.extend(
+                    crate::core::sgb_borders_on_card(root)
+                        .into_iter()
+                        .map(|n| 10 + n),
+                );
+            }
+            all.push(2);
+            let at = all
+                .iter()
+                .position(|b| *b == self.state.sgb_border)
+                .unwrap_or(0);
+            let n = all.len();
+            self.state.sgb_border = all[if right {
+                (at + 1) % n
+            } else {
+                (at + n - 1) % n
+            }];
+            self.sgb_border_changed = true;
+            self.persist();
+            return;
+        }
         if self.change_tv_setting(row, right) {
             self.tv_changed = true;
             self.persist();
@@ -3013,6 +3058,7 @@ impl App {
             | QuickRow::DateTime
             | QuickRow::TimeZone
             | QuickRow::About
+            | QuickRow::SgbBorder
             | QuickRow::Screenshots
             | QuickRow::Screen
             | QuickRow::Game
