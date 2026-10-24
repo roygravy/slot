@@ -1,188 +1,161 @@
-"""Redraw the NES and SNES boards in the Game Boy / GBA boards' style (gb_board.png, board.png):
-mottled solder mask with a lighter rim, dark traces, gold-ringed vias, a via above every gold
-finger, black-blue chips on silver gull-wing pins inside a white silkscreen box, a few small parts
-and the big '2026 Slot.' mark. The outlines are the boards' current ones (the assets' alpha), so
-they still fit their shells. Usage: tv_boards.py FONT_REGULAR FONT_BOLD (run from the repo root)."""
-import sys, numpy as np
-from PIL import Image, ImageDraw, ImageFont
+"""Build the NES and SNES boards out of the GBA and Game Boy boards (board.png, gb_board.png), so
+they are the same make: the GBA board's mottled green is copied straight over (its own features
+patched out), its edge (a lighter cut rim) and drop shadow are copied by profile, its gold fingers
+and the via over each one are copied cell by cell, and the chips are the Game Boy board's own,
+turned on their side. Only the traces are drawn. One SNES board serves the NTSC and the PAL cart
+(as the real carts share one), at the same size in both.
+Usage: tv_boards.py (from the repo root). The NES outline is read from tools/carts/nes_board_mask.png."""
+import numpy as np
+from PIL import Image, ImageDraw
 from scipy import ndimage as nd
 
-REG, BOLD = sys.argv[1], sys.argv[2]
-S = 4  # drawn at 4x, boxed down
-GREEN = np.array([1, 72, 36.])
-POUR = np.array([0, 52, 24.])
-TRACE = np.array([0, 42, 18.])
-RIM = np.array([20, 104, 62.])
-RING = np.array([176, 166, 18.])
-HOLE = np.array([6, 30, 16.])
-NAVY = np.array([1, 24, 36.])
-PIN, PIN_DARK = np.array([214, 214, 214.]), np.array([150, 150, 152.])
-SILK = np.array([214, 220, 214.])
-GOLD, GOLD_DARK = np.array([196, 128, 40.]), np.array([150, 92, 30.])
+gba = np.asarray(Image.open('assets/board.png').convert('RGBA')).astype(np.float32)
+gb = np.asarray(Image.open('assets/gb_board.png').convert('RGBA')).astype(np.float32)
+R, G, B = gba[..., 0], gba[..., 1], gba[..., 2]
+opaque = gba[..., 3] > 250
+inner = nd.distance_transform_edt(opaque)
+TRACE = np.array([0, 30, 18.])
 
-def board(name, layout):
-    src = Image.open(f'assets/{name}.png').convert('RGBA')
-    W, H = src.size
-    w, h = W * S, H * S
-    alpha = np.asarray(src)[..., 3]
-    m = np.asarray(Image.fromarray(alpha).resize((w, h), Image.Resampling.BILINEAR)) > 127
-    rng = np.random.default_rng(len(name))
-    yy, xx = np.mgrid[0:h, 0:w]
+# ---- the GBA board's green, with its parts patched out of it ----
+clean = opaque & (inner > 6) & (G > R + 30) & (G > B + 15) & (G > 52) & (G < 125)
+clean = nd.binary_erosion(clean, iterations=1)
+tex, ok = gba[..., :3].copy(), clean.copy()
+rng = np.random.default_rng(3)
+for _ in range(400):
+    if ok[16:150, 24:334].all():
+        break
+    dy, dx = rng.integers(-60, 61, 2)
+    src, sok = np.roll(tex, (dy, dx), (0, 1)), np.roll(ok, (dy, dx), (0, 1))
+    fill = ~ok & sok
+    tex[fill] = src[fill]
+    ok |= fill
+TILE = tex[16:150, 24:334]
 
-    def layer():
-        im = Image.new('L', (w, h), 0)
-        return im, ImageDraw.Draw(im)
-    def on(im): return np.asarray(im) > 127
+def green(h, w):
+    t = np.concatenate([TILE, TILE[:, ::-1]], 1)
+    t = np.concatenate([t, t[::-1]], 0)
+    reps = (h // t.shape[0] + 1, w // t.shape[1] + 1)
+    return np.tile(t, (*reps, 1))[:h, :w].copy()
 
-    # mottled mask: soft blotches and a few dark specks, as the GBA board has
-    blot = nd.gaussian_filter(rng.normal(0, 1, (h, w)), 6 * S)
-    blot /= blot.std()
-    rgb = GREEN[None, None, :] * (1 + 0.035 * blot[..., None])
-    speck = nd.gaussian_filter(rng.normal(0, 1, (h, w)), 0.6 * S)
-    rgb *= 1 - 0.18 * np.clip(speck / speck.std() - 2.2, 0, 1)[..., None]
+# the cut edge, by distance from it (measured down the GBA board's left side)
+RIM = {1: np.array([17, 108, 66.]), 2: np.array([9, 96, 56.]), 3: np.array([1, 77, 39.])}
+FLAT = np.array([1, 68, 32.])
+# the drop shadow below (rows 1..4 under the edge) and the faint one on the right
+SHADOW_DOWN, SHADOW_RIGHT = (84, 84, 63, 21), 20
 
-    L = layout
-    # copper pours under the mask
-    pim, pd = layer()
-    for box in L.get('pours', []):
-        pd.rounded_rectangle([c * S for c in box], radius=3 * S, fill=255)
-    rgb[on(pim)] = rgb[on(pim)] * 0.25 + POUR * 0.75
+def feature(px):
+    """The non-green pixels of a copied part: gold, silver, silkscreen, chip, drill."""
+    r, g, b = px[..., 0], px[..., 1], px[..., 2]
+    return (px[..., 3] > 128) & ~((g > r + 25) & (g > b + 8) & (r < 40))
 
-    # traces: from each finger's via straight up, then a 45 degree jog towards the chips
-    tim, td = layer()
-    fx0, fx1, fy0, fy1 = L['fingers']
-    n = L['count']
-    pitch = (fx1 - fx0) / n
-    vias = []
+# ---- parts to copy ----
+st = 55  # a middle finger of the GBA board: gold from x 55, 7 wide, pitch 9
+FINGER = gba[156:201, st - 1:st + 8]          # the via over it, the finger, the green under it
+FINGER_BOTTOM = 200 - 156                       # the cell's last board row
+VIA = gba[146:155, 300:309]                     # a lone via, drill and ring
+CHIP_BIG = np.rot90(gb[168:270, 66:134])        # the Game Boy board's 32-pin chip, on its side
+CHIP_SMALL = np.rot90(gb[45:92, 113:150])       # its 8-pin chip
+PART = gba[63:93, 186:206]                      # R5: a two-pad part and its name
+
+def paste(rgb, part, x, y, holes=None):
+    """Copy a part's own pixels over the green; its drill holes (see-through on the source
+    boards) are marked in `holes` so they stay see-through here too."""
+    h, w = part.shape[:2]
+    f = feature(part)
+    region = rgb[y:y + h, x:x + w]
+    region[f] = part[..., :3][f]
+    if holes is not None:
+        solid = part[..., 3] > 128
+        holes[y:y + h, x:x + w] |= nd.binary_fill_holes(solid) & ~solid
+
+def build(mask, fingers, chips, parts, vias, traces):
+    """mask: the board's outline (bool, full canvas). fingers: (x0, count, bottom row)."""
+    h, w = mask.shape
+    rgb = green(h, w)
+    d = nd.distance_transform_edt(np.pad(mask, 1))[1:-1, 1:-1]
+    for k, c in RIM.items():
+        band = mask & (np.abs(d - k) < 0.5)
+        rgb[band] = c + (rgb[band] - FLAT) * 0.5
+    # traces, drawn at 4x for soft edges, in the GBA board's trace green
+    S = 4
+    im = Image.new('L', (w * S, h * S), 0); dr = ImageDraw.Draw(im)
+    for path in traces:
+        dr.line([(x * S + S / 2, y * S + S / 2) for x, y in path], fill=255, width=int(1.6 * S), joint='curve')
+    cov = np.asarray(im.resize((w, h), Image.Resampling.BOX)).astype(np.float32)[..., None] / 255 * mask[..., None]
+    rgb = rgb * (1 - cov) + TRACE * cov
+    holes = np.zeros_like(mask)
+    for part, x, y in chips + parts:
+        paste(rgb, part, x, y, holes)
+    for x, y in vias:
+        paste(rgb, VIA, x - 4, y - 4, holes)
+    x0, n, bottom = fingers
     for k in range(n):
-        x = fx0 + (k + 0.5) * pitch
-        vy = fy0 - 3.2
-        vias.append((x, vy))
-        if k % 2 == 0 or k % 7 == 3:
-            top = L['fan_top'] + (k * 37 % 11) * 1.3
-            jog = (x - (fx0 + fx1) / 2) * -0.18
-            td.line([(x * S, vy * S), (x * S, (top + 8) * S), ((x + jog) * S, top * S),
-                     ((x + jog) * S, (top - 6) * S)], fill=255, width=int(1.1 * S))
-            vias.append((x + jog, top - 6))
-    for path in L.get('traces', []):
-        td.line([(px * S, py * S) for px, py in path], fill=255, width=int(1.1 * S), joint='curve')
-    rgb[on(tim)] = TRACE
+        paste(rgb, FINGER, x0 + k * 9, bottom - FINGER_BOTTOM, holes)
+    alpha = mask * 255.0
+    def shift(m, dy, dx):
+        out = np.zeros_like(m)
+        out[dy:, dx:] = m[:m.shape[0] - dy, :m.shape[1] - dx]
+        return out
+    for k, a in enumerate(SHADOW_DOWN, 1):
+        sh = shift(mask, k, 0) & ~mask
+        alpha = np.where(sh & (alpha < a), a, alpha)
+    sh = shift(mask, 0, 1) & ~mask
+    alpha = np.where(sh & (alpha < SHADOW_RIGHT), SHADOW_RIGHT, alpha)
+    alpha[holes & mask] = 0
+    rgb = np.where(mask[..., None], rgb, 0)
+    out = np.dstack([np.clip(rgb, 0, 255), alpha]).round().astype(np.uint8)
+    return out
 
-    # gold fingers, lighter at the top where the plating is fresh
-    gim, gd = layer()
+def rr(h, w, box, r):
+    m = Image.new('L', (w, h), 0)
+    ImageDraw.Draw(m).rounded_rectangle(box, radius=r, fill=255)
+    return np.asarray(m) > 127
+
+# ---- SNES: one board, 247 wide, for both carts ----
+BW, BH = 247, 147  # the last 4 rows hold the drop shadow
+FOOT = BH - 5       # the board's last row
+def snes_board():
+    m = rr(BH, BW, (0, 0, BW - 1, 116), 3)
+    m |= rr(BH, BW, (44, 100, 202, FOOT), 2)
+    for cx in (0, BW - 1):  # the half-round notches the shell's posts sit in
+        m &= ~rr(BH, BW, (cx - 5, 53, cx + 5, 63), 5)
+    x0, n = 48, 17
+    traces = []
     for k in range(n):
-        x = fx0 + k * pitch
-        gd.rectangle([(x + 0.12 * pitch) * S, fy0 * S, (x + 0.88 * pitch) * S, fy1 * S], fill=255)
-    g = on(gim)
-    t = np.clip((yy - fy0 * S) / max((fy1 - fy0) * S, 1), 0, 1)
-    gold = GOLD[None, None, :] * (1 - 0.25 * t[..., None]) * (1 + 0.06 * blot[..., None])
-    rgb[g] = gold[g]
+        x = x0 + k * 9 + 4
+        # into the big chip's pins on the left, the small chips' on the right, at 45 degrees
+        tx = 14 + k * 9.2 if k < 10 else 146 + (k - 10) * 6.5
+        up = abs(tx - x)
+        traces.append([(x, FOOT - 46), (x, 98), (tx, 98 - up), (tx, 70)])
+    traces += [[(110, 40), (132, 40), (140, 26)], [(196, 30), (214, 30), (222, 44), (222, 92)],
+               [(10, 82), (10, 100), (40, 100)]]
+    vias = [(140, 23), (222, 95), (10, 79), (234, 12), (12, 12), (234, 104), (130, 92), (124, 98)]
+    chips = [(CHIP_BIG, 8, 10), (CHIP_SMALL, 142, 8), (CHIP_SMALL, 142, 52)]
+    parts = [(PART, 200, 44)]
+    return build(m, (x0, n, FOOT), chips, parts, vias, traces)
 
-    # chips: their pins' traces first, so the pins sit on top
-    t2im, td2 = layer()
-    pin_vias = []
-    for (x0, y0, x1, y1, pins, side) in L['chips']:
-        if side == 'tb':
-            for k in range(0, pins, 2):
-                u = x0 + (k + 0.5) / pins * (x1 - x0)
-                run = 6 + (k * 5 % 4) * 2.5
-                td2.line([(u * S, (y1 + 3) * S), (u * S, (y1 + 3 + run) * S)], fill=255, width=int(1.1 * S))
-                pin_vias.append((u, y1 + 3 + run + 1.2))
-    rgb[on(t2im)] = TRACE
-    # chips: body, gull-wing pins top and bottom (or left and right), silkscreen box, pin-1 dot
-    for (x0, y0, x1, y1, pins, side) in L['chips']:
-        sim, sd = layer()
-        pad = 4.4
-        sd.rounded_rectangle([(x0 - pad) * S, (y0 - pad) * S, (x1 + pad) * S, (y1 + pad) * S],
-                             radius=1.5 * S, outline=255, width=int(0.8 * S))
-        rgb[on(sim)] = SILK
-        for k in range(pins):
-            if side == 'tb':
-                u = x0 + (k + 0.5) / pins * (x1 - x0)
-                for a, b in ((y0 - 3.4, y0), (y1, y1 + 3.4)):
-                    rgb[(np.abs(xx - u * S) < 0.9 * S) & (yy >= a * S) & (yy < b * S)] = PIN
-                    rgb[(np.abs(xx - u * S - 0.7 * S) < 0.25 * S) & (yy >= a * S) & (yy < b * S)] = PIN_DARK
-            else:
-                v = y0 + (k + 0.5) / pins * (y1 - y0)
-                for a, b in ((x0 - 3.4, x0), (x1, x1 + 3.4)):
-                    rgb[(np.abs(yy - v * S) < 0.9 * S) & (xx >= a * S) & (xx < b * S)] = PIN
-                    rgb[(np.abs(yy - v * S - 0.7 * S) < 0.25 * S) & (xx >= a * S) & (xx < b * S)] = PIN_DARK
-        body = (xx >= x0 * S) & (xx < x1 * S) & (yy >= y0 * S) & (yy < y1 * S)
-        sheen = 1 + 0.35 * np.clip(1 - (yy - y0 * S) / ((y1 - y0) * S), 0, 1) * np.clip(1 - (xx - x0 * S) / ((x1 - x0) * S), 0, 1)
-        rgb[body] = (NAVY[None, :] * sheen[body][:, None]) * (1 + 0.05 * blot[body][:, None])
-        dot = (xx - (x0 + 2.2) * S) ** 2 + (yy - (y1 - 2.2) * S) ** 2 < (0.9 * S) ** 2
-        rgb[dot] = NAVY * 0.55
+board = snes_board()
+for name, (W, H) in (('snes_board', (360, 231)), ('snes_pal_board', (336, 228))):
+    c = np.zeros((H, W, 4), np.uint8)
+    x, y = (W - BW) // 2, H - BH
+    c[y:y + BH, x:x + BW] = board
+    Image.fromarray(c, 'RGBA').save(f'assets/{name}.png', optimize=True)
 
-    # small parts: a two-pad part with a silver end each side and its name above
-    fim, fd = layer()
-    f_small = ImageFont.truetype(REG, int(5.2 * S))
-    for (x, y, label) in L.get('parts', []):
-        fd.rectangle([(x - 3.6) * S, (y - 2.6) * S, (x + 3.6) * S, (y + 2.6) * S], outline=255, width=int(0.6 * S))
-        fd.text((x * S, (y - 4.2) * S), label, font=f_small, fill=255, anchor='md')
-        rgb[(np.abs(xx - x * S) < 2.6 * S) & (np.abs(yy - y * S) < 1.3 * S)] = [10, 70, 40]
-        for e in (-1, 1):
-            rgb[(np.abs(xx - (x + e * 2.2) * S) < 0.7 * S) & (np.abs(yy - y * S) < 1.3 * S)] = PIN
-    rgb[on(fim)] = SILK
+# ---- NES: its own outline (a wide body, a narrower piece on top), fingers across the bottom ----
+def nes_board():
+    m = np.asarray(Image.open('tools/carts/nes_board_mask.png').convert('L')) > 127
+    h, w = m.shape
+    vias, traces = [], []
+    x0, n = 22, 29
+    for k in range(n):
+        x = x0 + k * 9 + 3
+        if k % 3 == 0:
+            traces.append([(x, 300), (x, 294)])
+    traces += [[(180, 199), (180, 214), (190, 222)], [(258, 200), (270, 212), (270, 280)], [(26, 223), (24, 290)]]
+    vias += [(270, 283), (180, 196), (26, 220), (278, 220)]
+    chips = [(CHIP_BIG, 26, 222), (CHIP_BIG, 134, 222), (CHIP_SMALL, 204, 184)]
+    parts = [(PART, 248, 236)]
+    return build(m, (x0, n, 334), chips, parts, vias, traces)
 
-    # vias: a dark drill in a gold ring
-    for (x, y) in vias + pin_vias + [tuple(v) for v in L.get('vias', [])]:
-        r = np.hypot(xx - x * S, yy - y * S) / S
-        rgb[(r < 1.9) & m] = RING
-        rgb[(r < 1.0) & m] = HOLE
-
-    # silkscreen: the board's code, and '2026 Slot.' as on the GBA board
-    xim, xd = layer()
-    cx, cy, size = L['mark']
-    f_reg = ImageFont.truetype(REG, int(size * 0.62 * S))
-    f_bold = ImageFont.truetype(BOLD, int(size * S))
-    xd.text((cx * S, cy * S), '2026 ', font=f_reg, fill=255, anchor='ls')
-    adv = xd.textlength('2026 ', font=f_reg)
-    xd.text((cx * S + adv, cy * S), 'Slot.', font=f_bold, fill=255, anchor='ls')
-    code_x, code_y, code = L['code']
-    xd.text((code_x * S, code_y * S), code, font=ImageFont.truetype(REG, int(5.6 * S)), fill=255, anchor='ls')
-    rgb[on(xim)] = SILK
-
-    # the mask's lighter rim along the board edge
-    d = nd.distance_transform_edt(np.pad(m, 1))[1:-1, 1:-1] / S
-    rim = (d < 1.6) & ~g
-    rgb[rim] = rgb[rim] * 0.4 + RIM * 0.6
-
-    rgb = np.clip(rgb, 0, 255)
-    out = np.zeros((h, w, 4), np.float32)
-    out[..., :3] = rgb * m[..., None]
-    out[..., 3] = m * 255.
-    small = Image.fromarray(out.astype(np.uint8), 'RGBA').convert('RGBa').resize((W, H), Image.Resampling.BOX).convert('RGBA')
-    a = np.asarray(small).copy()
-    a[..., 3] = alpha  # keep the outline exactly as it was
-    Image.fromarray(a, 'RGBA').save(f'assets/{name}.png', optimize=True)
-
-# NES: wide body 20..284 x 214..302, a narrower top piece 158..275 from y 182; 36 fingers
-board('nes_board', dict(
-    fingers=(24, 280, 307, 335), count=36, fan_top=288,
-    chips=[(32, 234, 118, 258, 12, 'tb'), (132, 234, 218, 258, 12, 'tb'), (236, 236, 270, 254, 6, 'tb')],
-    parts=[(262, 198, 'C1'), (228, 274, 'C2')],
-    traces=[[(118, 244), (132, 244)], [(118, 249), (132, 249)], [(218, 245), (236, 245)],
-            [(253, 236), (253, 222), (240, 212), (240, 200)], [(26, 230), (26, 290)]],
-    vias=[(240, 198), (276, 222), (276, 290), (26, 226)],
-    mark=(166, 206, 14), code=(32, 226, 'NES-SLOT-01')))
-
-# SNES (NTSC): body 49..312 x 65..197, tab 106..260 down to 227; 31 fingers
-board('snes_board', dict(
-    fingers=(110, 256, 203, 226), count=31, fan_top=176,
-    chips=[(64, 92, 180, 124, 16, 'tb'), (206, 90, 268, 108, 8, 'tb'), (206, 136, 252, 152, 6, 'tb')],
-    parts=[(290, 98, 'C1'), (278, 150, 'R1')],
-    traces=[[(180, 100), (206, 99)], [(180, 116), (206, 144)], [(268, 99), (290, 120), (290, 170)],
-            [(56, 100), (56, 170), (70, 182)]],
-    vias=[(60, 76), (300, 76), (300, 186), (290, 172), (190, 80)],
-    mark=(64, 168, 15), code=(206, 82, 'SHVC-SLOT-01')))
-
-# SNES (PAL / Super Famicom): body 45..291 x 82..198, tab 91..244 down to 224; 31 fingers
-board('snes_pal_board', dict(
-    fingers=(95, 240, 201, 223), count=31, fan_top=180,
-    chips=[(58, 108, 168, 138, 16, 'tb'), (190, 104, 250, 122, 8, 'tb'), (190, 140, 234, 154, 6, 'tb')],
-    parts=[(272, 112, 'C1'), (264, 156, 'R1')],
-    traces=[[(168, 114), (190, 113)], [(168, 130), (190, 147)], [(250, 113), (272, 132), (272, 176)],
-            [(52, 116), (52, 176), (64, 186)]],
-    vias=[(55, 92), (281, 92), (281, 188), (272, 178), (176, 96)],
-    mark=(60, 171, 14), code=(190, 98, 'SNSP-SLOT-01')))
+Image.fromarray(nes_board(), 'RGBA').save('assets/nes_board.png', optimize=True)
 print('ok')
