@@ -18,8 +18,9 @@ pub fn rest_y(h: f32) -> f32 {
     // A tall pak (Game Boy, NES) centres in the gap; a wide cart (GBA, SNES) stands on the
     // GBA's ground, so every wide cart sits at the same height.
     let y = if h > TALL_H {
-        // Above a Super Game Boy the gap ends at its top.
-        (OUT_H as f32 - MOUTH_H - crate::slot_chrome::rise() - h) / 2.0
+        // Above a Super Game Boy the whole shelf stands as much higher as its top does, the
+        // shelf's name still just above it (Roy).
+        (OUT_H as f32 - MOUTH_H - h) / 2.0 - crate::slot_chrome::rise()
     } else {
         (OUT_H + CART_H) as f32 / 2.0 - h
     };

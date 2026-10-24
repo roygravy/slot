@@ -1625,6 +1625,13 @@ impl App {
     }
 
     pub fn shelf_platform_name(&self) -> Option<&'static str> {
+        // In the Super Game Boy the shelf is its, whichever Game Boy shelf it shows (Roy).
+        if self.sgb_band() {
+            return Some(match self.sgb_two() {
+                true => "Super Game Boy 2",
+                false => "Super Game Boy",
+            });
+        }
         self.next_shelf(1)?;
         Some(self.shelves[self.shelf_at].0.name())
     }
