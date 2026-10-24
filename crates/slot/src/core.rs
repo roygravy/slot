@@ -259,7 +259,9 @@ pub fn tv_options(which: Core, look: Option<crate::app::TvLook>) -> Vec<(&'stati
                 TvCable::Rgb => "rgb",
             },
         )],
-        Core::Mgba | Core::Gpsp | Core::Gambatte => Vec::new(),
+        // mGBA has no filter of its own: slot. runs Snes9x's on the Super Game Boy's picture.
+        Core::Mgba => vec![(slot_retro::SLOT_NTSC, cable.name())],
+        Core::Gpsp | Core::Gambatte => Vec::new(),
     }
 }
 

@@ -615,7 +615,8 @@ impl Session {
         {
             opened.core.set_option(key, value);
         }
-        for (key, value) in crate::core::tv_options(core, self.app.tv_look(platform)) {
+        // The Super Game Boy's picture takes the SNES's look.
+        for (key, value) in crate::core::tv_options(core, self.app.tv_look(self.app.playing_platform())) {
             opened.core.set_option(key, value);
         }
         if sgb {

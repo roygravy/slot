@@ -14,6 +14,10 @@ use crate::rumble::Rumble;
 
 const VIDEO_BYTES: usize = (GBA_W * GBA_H * 4) as usize;
 
+/// The frontend's own option: the NTSC filter slot. runs on the picture, off / rf / composite /
+/// svideo / rgb.
+pub const SLOT_NTSC: &str = "slot_ntsc";
+
 static LIVE: AtomicBool = AtomicBool::new(false);
 
 #[derive(Copy, Clone, PartialEq, Eq)]
@@ -40,6 +44,8 @@ struct Host {
     options: std::collections::HashMap<String, std::ffi::CString>,
     options_dirty: bool,
     declared: std::collections::HashMap<String, Vec<String>>,
+    /// The NTSC filter slot. runs on the picture itself (`slot_ntsc`), for a core without one.
+    ntsc: Option<crate::ntsc::Ntsc>,
 }
 
 thread_local! {
@@ -320,6 +326,44 @@ unsafe extern "C" fn video_refresh(
         return;
     }
     with_host(|h| {
+        // A picture slot. filters itself goes down its cable first, then on as the cores'.
+        match h.ntsc.take() {
+            Some(mut ntsc) if (width as usize) <= 3 * 256 / 2 => {
+                let format = h.format;
+                ntsc.run(width as usize, height as usize, |y, line| {
+                    let src = (data as *const u8).add(y * pitch);
+                    for (x, px) in line.iter_mut().enumerate() {
+                        *px = match format {
+                            PixelFormat::Rgb565 => ptr::read_unaligned((src as *const u16).add(x)),
+                            PixelFormat::Xrgb8888 => {
+                                let p = ptr::read_unaligned((src as *const u32).add(x));
+                                (((p >> 8) & 0xf800) | ((p >> 5) & 0x07e0) | ((p >> 3) & 0x001f)) as u16
+                            }
+                        };
+                    }
+                });
+                let ow = crate::ntsc::out_width(width as usize);
+                draw_frame(h, ntsc.output.as_ptr() as *const c_void, ow as c_uint, height, ow * 4, PixelFormat::Xrgb8888);
+                h.ntsc = Some(ntsc);
+            }
+            ntsc => {
+                h.ntsc = ntsc;
+                let format = h.format;
+                draw_frame(h, data, width, height, pitch, format);
+            }
+        }
+    });
+}
+
+unsafe fn draw_frame(
+    h: &mut Host,
+    data: *const c_void,
+    width: c_uint,
+    height: c_uint,
+    pitch: usize,
+    format: PixelFormat,
+) {
+    {
         let (cw, ch) = (h.canvas.0 as usize, h.canvas.1 as usize);
         // A picture twice the canvas (the SNES's high-resolution and interlaced screens)
         // halves: pairs of columns blend, as a TV's blur blended them, and every other line
@@ -341,7 +385,6 @@ unsafe extern "C" fn video_refresh(
         if (cols != cw && !stretch) || (rows != ch && !tall) {
             h.video.fill(0);
         }
-        let format = h.format;
         let read = |src: *const u8, x: usize| -> [u8; 4] {
             match format {
                 PixelFormat::Xrgb8888 => {
@@ -393,7 +436,7 @@ unsafe extern "C" fn video_refresh(
                 }
             }
         }
-    });
+    }
 }
 
 unsafe extern "C" fn audio_sample(left: i16, right: i16) {
@@ -481,6 +524,15 @@ impl LibretroCore {
     }
 
     pub fn set_option(&mut self, key: &str, value: &str) {
+        // slot.'s own: the NTSC filter it runs on the core's picture, for the TV look of a
+        // core that has none (the Super Game Boy's mGBA).
+        if key == SLOT_NTSC {
+            let cable = crate::ntsc::Cable::parse(value);
+            if self.host.ntsc.as_ref().map(|n| n.cable) != cable {
+                self.host.ntsc = cable.and_then(crate::ntsc::Ntsc::new);
+            }
+            return;
+        }
         if !self.host.declared.is_empty() {
             match self.host.declared.get(key) {
                 None => eprintln!("slot-retro: core declares no option {key:?}, setting it anyway"),
@@ -552,6 +604,7 @@ impl LibretroCore {
             options,
             options_dirty: false,
             declared: std::collections::HashMap::new(),
+            ntsc: None,
         });
         unsafe {
             let _a = Active::bind(&mut host);
@@ -817,6 +870,7 @@ mod tests {
             options,
             options_dirty,
             declared: HashMap::new(),
+            ntsc: None,
         })
     }
 
