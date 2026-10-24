@@ -508,15 +508,19 @@ pub fn insert_seconds(mould: Mould) -> Option<f32> {
 /// How far into the insert, 0 to 1, the board snaps into the connector: the click.
 pub fn click_at(mould: Mould) -> f32 {
     match mould {
-        Mould::Nes => NES_CLICK / NES_T,
-        Mould::SnesNtsc | Mould::SnesPal | Mould::SgbNtsc | Mould::SgbPal => SNES_CLICK / SNES_T,
+        Mould::Nes => NES_CLICK / NES_STORY,
+        Mould::SnesNtsc | Mould::SnesPal | Mould::SgbNtsc | Mould::SgbPal => SNES_CLICK / SNES_STORY,
         _ => 1.0,
     }
 }
 
-const NES_T: f32 = 1.60;
+/// How long an insert takes. The poses below are timed on a slower story (`*_STORY`, in its own
+/// seconds) that plays out in this time, so every step speeds up alike (Roy).
+const NES_T: f32 = 0.90;
+const NES_STORY: f32 = 1.60;
 const NES_CLICK: f32 = 1.15;
-const SNES_T: f32 = 1.15;
+const SNES_T: f32 = 0.70;
+const SNES_STORY: f32 = 1.15;
 /// The European SNES game cart's seated height, for the Super Game Boys that go in as deep.
 const SNES_PAL_SEATED_H: f32 = 152.0;
 const SNES_CLICK: f32 = 1.08;
@@ -535,7 +539,7 @@ fn tv_pose(mould: Mould, seat: f32, cx: f32, (sw, sh): (f32, f32)) -> Option<TvP
     let lerp = |a: f32, b: f32, u: f32| a + (b - a) * u;
     match mould {
         Mould::Nes => {
-            let t = seat * NES_T;
+            let t = seat * NES_STORY;
             let wait = BAND_Y - 6.0 - sh;
             let slid = BAND_Y - 14.0;
             let home = BAND_Y + 6.0;
@@ -560,7 +564,7 @@ fn tv_pose(mould: Mould, seat: f32, cx: f32, (sw, sh): (f32, f32)) -> Option<TvP
             Some(TvPose { x, y, leave, lid: Some(lid) })
         }
         Mould::SnesNtsc | Mould::SnesPal | Mould::SgbNtsc | Mould::SgbPal => {
-            let t = seat * SNES_T;
+            let t = seat * SNES_STORY;
             let pal = matches!(mould, Mould::SnesPal | Mould::SgbPal);
             let wait = BAND_Y - sh - 8.0;
             // NTSC: the slot's edge meets the third line on the cart's side grips. A PAL cart goes

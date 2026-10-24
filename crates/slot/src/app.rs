@@ -3691,8 +3691,9 @@ impl App {
             Phase::Ejecting { t, .. } => {
                 if self.screen <= 0.0 {
                     let was = *t;
-                    // An NES or SNES cart comes out the way it went in, twice as fast.
-                    *t += if was < 0.0 { dt } else { dt * 2.0 / pace };
+                    // Every cart comes out as quickly as a Game Boy pak, an NES or SNES one the
+                    // way it went in (Roy).
+                    *t += dt;
                     touched = was < 0.0 && *t >= 0.0;
                 }
                 (*t >= EJECT_S).then_some(Phase::Shelf)
