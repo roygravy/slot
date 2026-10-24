@@ -65,6 +65,10 @@ const BATTERY_CRITICAL: u8 = 5;
 
 const BATTERY_POLL_MS: Millis = 10_000;
 const MENU_REVEAL_MS: Millis = 180;
+/// How long the camera takes to close in on the Super Game Boy once it is in.
+const SGB_ZOOM_MS: f32 = 900.0;
+/// The camera pulling back out of the Super Game Boy: off at once, landing softly on the SNES.
+const SGB_UNZOOM_MS: f32 = 700.0;
 
 const CHARGE_POLL_MS: Millis = 1_000;
 const HEADPHONES_POLL_MS: Millis = 500;
@@ -372,6 +376,7 @@ pub struct App {
     lcd_ghosting_pending: Option<bool>,
     /// A TV console's look changed: its core is told again.
     tv_changed: bool,
+    sgb_border_changed: bool,
     palette_live: bool,
     /// A palette change for the playing game: Some(None) turns the palettes off.
     palette_pending: Option<Option<GbPalette>>,
@@ -379,6 +384,12 @@ pub struct App {
     palette_capable: bool,
     link_player: Option<u8>,
     platform: Platform,
+    /// The Super Game Boy is in the SNES slot: the Game Boy shelf's games play through it.
+    sgb: bool,
+    /// When the Super Game Boy went in: the camera closes in on it from then.
+    sgb_zoom_at: Option<Millis>,
+    /// The camera pulling back out of the Super Game Boy, from the Game Boy shelf it showed.
+    sgb_unzoom: Option<(Millis, usize)>,
     named_core: bool,
     video_mode: VideoMode,
     link: Option<LinkSession>,
@@ -442,7 +453,7 @@ pub struct App {
     hud_wifi: Option<TexId>,
     hud_bolt: Option<TexId>,
     /// GBA dark, GBA light, Game Boy dark, Game Boy light.
-    slot_sets: Option<[(TexId, TexId); 8]>,
+    slot_sets: Option<[(TexId, TexId); 12]>,
     nes_lids: Option<[TexId; 2]>,
     shelf_platform: slot_ui::Printed,
     shelf_title: slot_ui::Printed,
@@ -577,11 +588,15 @@ impl App {
             core: Core::default(),
             lcd_ghosting_pending: None,
             tv_changed: false,
+            sgb_border_changed: false,
             palette_live: false,
             palette_pending: None,
             palette_capable: false,
             link_player: None,
             platform: Platform::default(),
+            sgb: false,
+            sgb_zoom_at: None,
+            sgb_unzoom: None,
             named_core: false,
             video_mode: VideoMode::default(),
             link: None,
@@ -727,6 +742,10 @@ impl App {
             Some((at, i)) => {
                 self.shelf_at = at;
                 self.shelf_mut().select(i);
+                // A Game Boy game left in the Super Game Boy goes back into it.
+                self.sgb = self.state.cart_sgb
+                    && self.shelf().carts.get(i).is_some_and(|c| c.platform == Platform::Gb)
+                    && self.carts().any(Cart::is_sgb);
                 self.insert(false);
                 if let Phase::Inserting { resumed, t, .. } = &mut self.phase {
                     *resumed = true;
@@ -752,8 +771,29 @@ impl App {
     }
 
     fn switch_shelf(&mut self, by: i32) {
-        let Some(to) = self.next_shelf(by) else {
-            return;
+        // With the Super Game Boy in, the Game Boy shelf is the only one; B takes it out. The
+        // Super Game Boy 2 has a secret: the Game Boy Color shelf beside it.
+        let to = match self.sgb {
+            true => {
+                let here = self.shelves[self.shelf_at].0;
+                let other = match here {
+                    Rack::Of(Platform::Gb) => Platform::Gbc,
+                    _ => Platform::Gb,
+                };
+                let at = self
+                    .shelves
+                    .iter()
+                    .position(|(r, _)| *r == Rack::Of(other))
+                    .filter(|_| self.sgb_two());
+                match at {
+                    Some(at) => at,
+                    None => return self.refuse(),
+                }
+            }
+            false => match self.next_shelf(by) {
+                Some(to) => to,
+                None => return,
+            },
         };
         self.shelf_mut().release_hold();
         self.play_held = None;
@@ -986,6 +1026,9 @@ impl App {
         if !platform.tv() {
             hidden.extend(TV_ROWS);
         }
+        if !self.sgb_playing() {
+            hidden.push(QuickRow::SgbBorder);
+        }
         // Only the NES's picture has colours a TV made up.
         if platform != Platform::Nes {
             hidden.push(QuickRow::Colors);
@@ -1050,6 +1093,12 @@ impl App {
                 stood_in if stood_in != row => self.quick_value(stood_in),
                 _ => None,
             },
+            QuickRow::SgbBorder => Some(match self.state.sgb_border {
+                1 => QuickValue::BorderGravy,
+                2 => QuickValue::Off,
+                n @ 11..=19 => QuickValue::ALL[QuickValue::Border1.index() + usize::from(n - 11)],
+                _ => QuickValue::BorderAuto,
+            }),
             QuickRow::NesCable => Some(cable_value(self.state.tv_cable_nes)),
             QuickRow::SnesCable => Some(cable_value(self.state.tv_cable_snes)),
             QuickRow::NesColors => Some(match self.state.nes_colors {
@@ -1547,7 +1596,7 @@ impl App {
         self.hud_bolt = Some(bolt);
     }
 
-    pub fn set_slot_sets(&mut self, sets: [(TexId, TexId); 8], nes_lids: [TexId; 2]) {
+    pub fn set_slot_sets(&mut self, sets: [(TexId, TexId); 12], nes_lids: [TexId; 2]) {
         self.slot_sets = Some(sets);
         self.nes_lids = Some(nes_lids);
     }
@@ -1595,6 +1644,13 @@ impl App {
     }
 
     pub fn shelf_platform_name(&self) -> Option<&'static str> {
+        // In the Super Game Boy the shelf is its, whichever Game Boy shelf it shows (Roy).
+        if self.sgb_band() {
+            return Some(match self.sgb_two() {
+                true => "Super Game Boy 2",
+                false => "Super Game Boy",
+            });
+        }
         self.next_shelf(1)?;
         Some(self.shelves[self.shelf_at].0.name())
     }
@@ -1751,12 +1807,12 @@ impl App {
     }
 
     pub fn source_rect(&self) -> [f32; 4] {
-        video_mode::source_rect(self.platform, self.video_mode)
+        video_mode::source_rect(self.screen_platform(), self.video_mode)
     }
 
     fn slot_owns_the_shoulders(&self) -> bool {
         matches!(self.phase, Phase::Playing { .. })
-            && matches!(self.platform, Platform::Gb | Platform::Gbc)
+            && matches!(self.screen_platform(), Platform::Gb | Platform::Gbc)
     }
 
     pub fn taken_buttons(&self) -> &'static [Btn] {
@@ -1830,15 +1886,215 @@ impl App {
     }
 
     pub fn picture_rect(&self) -> [f32; 4] {
-        let (w, h) = self.platform.picture();
-        let (sw, sh) = self.platform.canvas();
+        let (w, h) = self.screen_platform().picture();
+        let (sw, sh) = self.screen_platform().canvas();
         let (sw, sh) = (sw as f32, sh as f32);
         let (x, y) = ((sw - w as f32) / 2.0, (sh - h as f32) / 2.0);
         [x / sw, y / sh, (x + w as f32) / sw, (y + h as f32) / sh]
     }
 
+    /// The console whose screen the game is on: the SNES's for a Game Boy game played through
+    /// the Super Game Boy, else the game's own.
     pub fn platform(&self) -> Platform {
-        self.platform
+        self.screen_platform()
+    }
+
+    fn screen_platform(&self) -> Platform {
+        if self.sgb_playing() {
+            Platform::Snes
+        } else {
+            self.platform
+        }
+    }
+
+    /// Whether a Game Boy game sits in the Super Game Boy.
+    pub fn sgb_playing(&self) -> bool {
+        self.sgb
+            && self.seated_cart().is_some_and(|c| {
+                c.platform == Platform::Gb || (c.platform == Platform::Gbc && self.sgb_two())
+            })
+    }
+
+    /// How far the camera has closed in on the Super Game Boy, 0 to 1; None once it has.
+    fn sgb_zoom(&self) -> Option<f32> {
+        let at = self.sgb_zoom_at?;
+        let u = self.now().saturating_sub(at) as f32 / SGB_ZOOM_MS;
+        (u < 1.0).then_some(u)
+    }
+
+    /// The Super Game Boy coming out: the zoom in reverse, 1 down to 0, and the Game Boy shelf
+    /// it leaves; None once the camera is back on the SNES.
+    fn sgb_unzoom(&self) -> Option<(f32, usize)> {
+        let (at, shelf) = self.sgb_unzoom?;
+        let s = self.now().saturating_sub(at) as f32 / SGB_UNZOOM_MS;
+        (s < 1.0).then_some((s, shelf))
+    }
+
+    fn draw_shelf_footer(&self, out: &mut Vec<Draw>) {
+        draw_footer(
+            self.canvas(),
+            self.battery,
+            self.battery_percent,
+            self.bolt,
+            self.shelf_clock,
+            self.wifi_shown(self.wifi),
+            footer_ink(self.light()),
+            out,
+        );
+    }
+
+    /// The Super Game Boy just went in: the camera closes in on it until its top is the slot
+    /// band, the SNES and the clock passing out of the picture under it, and the Game Boy shelf
+    /// comes down into place. No fades: the camera only moves (Roy).
+    fn draw_sgb_zoom(&self, u: f32, gb_shelf: usize, out: &mut Vec<Draw>) {
+        let come = ease(((u - 0.4) / 0.6).clamp(0.0, 1.0));
+        self.draw_sgb_camera(ease(u), come, u, gb_shelf, out)
+    }
+
+    /// The camera `e` of the way from the SNES to the Super Game Boy's top, the Game Boy shelf
+    /// `come` of the way down into place, the sharp band showing from `u` 0.55 on.
+    fn draw_sgb_camera(&self, e: f32, come: f32, u: f32, gb_shelf: usize, out: &mut Vec<Draw>) {
+        self.draw_background(out);
+        let (Some(model), Some(sets)) = (self.sgb_model(), self.slot_sets) else {
+            return;
+        };
+        let canvas = self.canvas();
+        let a = slot_ui::sgb_seated_rect(model.mould(), canvas);
+        let b = slot_ui::sgb_band_rect(model, canvas);
+        // The SGB grows evenly on the way, and the camera follows it there.
+        let k = (b.2 / a.2).powf(e);
+        let (x, y) = (a.0 + (b.0 - a.0) * e, a.1 + (b.1 - a.1) * e);
+        let (dx, dy) = (x - k * a.0, y - k * a.1);
+        // The Game Boy shelf comes down from above over the second half.
+        if come > 0.0 {
+            let from = out.len();
+            slot_ui::set_sgb_band(true);
+            self.shelves[gb_shelf].1.draw_row(canvas, None, 0.0, 0.0, 1.0, out);
+            let drop = -(1.0 - come) * canvas.h;
+            for d in &mut out[from..] {
+                zoom_draw(d, 1.0, 0.0, drop, 1.0);
+            }
+        }
+        // The SNES around it, the SGB standing in its slot, the clock: all under the camera.
+        slot_ui::set_sgb_band(false);
+        let snes = Some(sets[3 * 2 + usize::from(self.light())]);
+        let from = out.len();
+        slot_ui::draw_slot_part(canvas, snes, false, out);
+        let face = self
+            .shelves
+            .iter()
+            .filter(|(r, _)| *r == Rack::Of(Platform::Snes))
+            .find_map(|(_, s)| s.find(slot_store::SGB_STEM))
+            .and_then(|(_, face)| face);
+        if let Some(tex) = face {
+            out.push(Draw::Tex {
+                x: a.0,
+                y: a.1,
+                w: a.2,
+                h: a.3,
+                tex,
+                alpha: 1.0,
+            });
+        }
+        slot_ui::draw_slot_part(canvas, snes, true, out);
+        self.draw_shelf_footer(out);
+        for d in &mut out[from..] {
+            zoom_draw(d, k, dx, dy, 1.0);
+        }
+        // Near the end the band's own sharp art fades in over the enlarged face, under the same
+        // camera, so the zoom lands on it without a jump (Roy: the enlarged face went soft).
+        slot_ui::set_sgb_band(true);
+        let sharp = ease(((u - 0.55) / 0.3).clamp(0.0, 1.0));
+        if sharp > 0.0 {
+            let band = Some(sets[8 + model as usize]);
+            let k1 = b.2 / a.2;
+            let (dx1, dy1) = (b.0 - k1 * a.0, b.1 - k1 * a.1);
+            let r = k / k1;
+            let from = out.len();
+            slot_ui::draw_slot_part(canvas, band, false, out);
+            slot_ui::draw_slot_part(canvas, band, true, out);
+            for d in &mut out[from..] {
+                zoom_draw(d, r, dx - dx1 * r, dy - dy1 * r, sharp);
+            }
+        }
+        slot_ui::set_sgb_band(self.sgb_band());
+    }
+
+    /// Whether the slot is the Super Game Boy's top: the Game Boy carts go into it.
+    fn sgb_band(&self) -> bool {
+        self.sgb
+            && matches!(self.slot_platform(), Platform::Gb | Platform::Gbc)
+            && self.sgb_model().is_some()
+    }
+
+    /// Whether the Super Game Boy in is the Super Game Boy 2, with its secret: it takes Game Boy
+    /// Color games too, and plays them in colour.
+    pub fn sgb_two(&self) -> bool {
+        self.sgb_model() == Some(slot_ui::SgbModel::Sgb2)
+    }
+
+    /// Which Super Game Boy is on the SNES shelf.
+    pub fn sgb_model(&self) -> Option<slot_ui::SgbModel> {
+        self.shelves
+            .iter()
+            .filter(|(r, _)| *r == Rack::Of(Platform::Snes))
+            .flat_map(|(_, s)| s.carts.iter())
+            .find(|c| c.is_sgb())
+            .map(slot_ui::sgb_model_of)
+    }
+
+    /// Whether the cart going in or seated is the Super Game Boy itself.
+    pub fn sgb_seated(&self) -> bool {
+        self.seated_cart().is_some_and(Cart::is_sgb)
+    }
+
+    /// Take the Super Game Boy out: back to the SNES shelf, the SGB coming out of its slot.
+    fn eject_sgb(&mut self) {
+        let Some(at) = self
+            .shelves
+            .iter()
+            .position(|(r, _)| *r == Rack::Of(Platform::Snes))
+        else {
+            self.sgb = false;
+            return;
+        };
+        let Some(i) = self.shelves[at].1.carts.iter().position(Cart::is_sgb) else {
+            self.sgb = false;
+            return;
+        };
+        self.shelf_mut().release_hold();
+        // The camera pulls back out first, the Game Boy shelf going up out of the picture.
+        self.sgb_unzoom = Some((self.now(), self.shelf_at));
+        self.sgb_zoom_at = None;
+        self.sgb = false;
+        self.shelf_at = at;
+        self.shelf_mut().select(i);
+        self.shelf_platform = slot_ui::Printed::default();
+        self.slot_letter = None;
+        self.shelf_named = None;
+        self.name_pending = true;
+        self.phase = Phase::Ejecting {
+            cart: slot_store::SGB_STEM.to_string(),
+            t: -(SGB_UNZOOM_MS / 1000.0 + 0.05),
+        };
+    }
+
+    /// The Super Game Boy is in: on to the Game Boy shelf, to pick the game that goes in it.
+    fn seat_sgb(&mut self) {
+        let Some(at) = self
+            .shelves
+            .iter()
+            .position(|(r, _)| *r == Rack::Of(Platform::Gb))
+        else {
+            return;
+        };
+        self.sgb = true;
+        self.sgb_zoom_at = Some(self.now());
+        self.shelf_at = at;
+        self.shelf_platform = slot_ui::Printed::default();
+        self.slot_letter = None;
+        self.shelf_named = None;
+        self.name_pending = true;
     }
 
     pub fn may_load_state(&self) -> bool {
@@ -1994,7 +2250,12 @@ impl App {
         }
     }
 
+    /// The console the game plays on, for its screen and menus: the SNES for a Game Boy game in
+    /// the Super Game Boy.
     pub fn playing_platform(&self) -> Platform {
+        if self.sgb_playing() {
+            return Platform::Snes;
+        }
         self.seated_cart().map_or(self.platform, |c| c.platform)
     }
 
@@ -2030,6 +2291,13 @@ impl App {
     /// carts, the NES band with its lid or the SNES band, in the theme's housing.
     fn slot_faces(&self) -> Option<(TexId, TexId)> {
         let sets = self.slot_sets?;
+        // With the Super Game Boy in, the Game Boy carts go into its top: its own colours,
+        // whatever the theme.
+        if let (true, Platform::Gb | Platform::Gbc) = (self.sgb, self.slot_platform()) {
+            if let Some(model) = self.sgb_model() {
+                return Some(sets[8 + model as usize]);
+            }
+        }
         let kind = match self.slot_platform() {
             Platform::Gba => 0,
             Platform::Gb | Platform::Gbc => 1,
@@ -2214,6 +2482,14 @@ impl App {
 
     pub fn take_lcd_ghosting(&mut self) -> Option<bool> {
         self.lcd_ghosting_pending.take()
+    }
+
+    pub fn take_sgb_border_changed(&mut self) -> bool {
+        std::mem::take(&mut self.sgb_border_changed)
+    }
+
+    pub fn sgb_border(&self) -> u8 {
+        self.state.sgb_border
     }
 
     pub fn take_tv_changed(&mut self) -> bool {
@@ -2447,6 +2723,7 @@ impl App {
                 Action::GbaDown(Btn::L1) => self.switch_shelf(-1),
                 Action::GbaDown(Btn::R1) => self.switch_shelf(1),
                 Action::GbaDown(Btn::Y) => self.toggle_favorite(),
+                Action::GbaDown(Btn::B) | Action::Eject if self.sgb => self.eject_sgb(),
                 _ => {}
             },
             Phase::Inserting { .. } if action == Action::Eject => self.eject(),
@@ -2588,7 +2865,8 @@ impl App {
             Phase::Polaroids { cart } => cart.clone(),
             _ => return None,
         };
-        Some((self.playing_platform(), stem))
+        let platform = self.seated_cart().map_or(self.platform, |c| c.platform);
+        Some((platform, stem))
     }
 
     /// Read the cheats of the game in the slot, unless they are read already. A game that had
@@ -2776,6 +3054,7 @@ impl App {
                 }
             }
             QuickRow::EjectSave
+            | QuickRow::SgbBorder
             | QuickRow::Turbo
             | QuickRow::Rewind
             | QuickRow::FastForward
@@ -2854,6 +3133,31 @@ impl App {
 
     fn change_setting(&mut self, row: QuickRow, right: bool) {
         let row = self.playing_row(row);
+        if row == QuickRow::SgbBorder {
+            // Auto, slot.'s, the SGB's own that are in BIOS, none, and round again.
+            let mut all = vec![0u8, 1];
+            if let Some(root) = &self.root {
+                all.extend(
+                    crate::core::sgb_borders_on_card(root, self.sgb_two())
+                        .into_iter()
+                        .map(|n| 10 + n),
+                );
+            }
+            all.push(2);
+            let at = all
+                .iter()
+                .position(|b| *b == self.state.sgb_border)
+                .unwrap_or(0);
+            let n = all.len();
+            self.state.sgb_border = all[if right {
+                (at + 1) % n
+            } else {
+                (at + n - 1) % n
+            }];
+            self.sgb_border_changed = true;
+            self.persist();
+            return;
+        }
         if self.change_tv_setting(row, right) {
             self.tv_changed = true;
             self.persist();
@@ -2978,6 +3282,7 @@ impl App {
             | QuickRow::DateTime
             | QuickRow::TimeZone
             | QuickRow::About
+            | QuickRow::SgbBorder
             | QuickRow::Screenshots
             | QuickRow::Screen
             | QuickRow::Game
@@ -3428,6 +3733,9 @@ impl App {
             }
             _ => (1.0, 1.0),
         };
+        // The Super Game Boy runs nothing of its own: once it is in, the Game Boy shelf.
+        let sgb_going_in = self.sgb_seated() && matches!(self.phase, Phase::Inserting { .. });
+        let mut sgb_in = false;
         let next = match &mut self.phase {
             Phase::Shelf => {
                 let shelf = &mut self.shelves[at].1;
@@ -3447,9 +3755,15 @@ impl App {
                 *t += if was < SEATED_AT { dt / pace } else { dt };
                 let at = SEATED_AT * click - Sfx::Insert.lead() / pace;
                 touched = !*resumed && was < at && *t >= at;
-                (*t >= INSERT_S && *core_ready).then(|| Phase::Playing {
-                    cart: std::mem::take(cart),
-                })
+                if sgb_going_in {
+                    // No core to wait for: the camera moves in just after the click (Roy: snappier).
+                    sgb_in = *t >= SEATED_AT + 0.08;
+                    sgb_in.then_some(Phase::Shelf)
+                } else {
+                    (*t >= INSERT_S && *core_ready).then(|| Phase::Playing {
+                        cart: std::mem::take(cart),
+                    })
+                }
             }
             Phase::Ejecting { t, .. } => {
                 if self.screen <= 0.0 {
@@ -3469,7 +3783,10 @@ impl App {
                 _ => Sfx::Insert,
             });
         }
-        if let Some(phase) = next {
+        if sgb_in {
+            self.phase = Phase::Shelf;
+            self.seat_sgb();
+        } else if let Some(phase) = next {
             self.phase = phase;
             self.refused_from = None;
             let seated = match &self.phase {
@@ -3775,11 +4092,13 @@ impl App {
                 self.persist();
             }
         }
-        if self.state.cart == cart && self.state.cart_platform == platform {
+        let sgb = cart.is_some() && self.sgb;
+        if self.state.cart == cart && self.state.cart_platform == platform && self.state.cart_sgb == sgb {
             return;
         }
         self.state.cart = cart;
         self.state.cart_platform = platform;
+        self.state.cart_sgb = sgb;
         self.persist();
     }
 
@@ -3884,6 +4203,7 @@ impl App {
     }
 
     pub fn draw(&self, out: &mut Vec<Draw>) {
+        slot_ui::set_sgb_band(self.sgb_band());
         let start = out.len();
         self.draw_every(out);
         // A refusal in a menu (States or Screenshots with nothing in them): its words shake no.
@@ -4003,6 +4323,17 @@ impl App {
                 },
             }
             .draw(out),
+            Phase::Shelf if self.sgb_zoom().is_some() => {
+                self.draw_sgb_zoom(self.sgb_zoom().unwrap_or(1.0), self.shelf_at, out)
+            }
+            Phase::Ejecting { .. } if self.sgb_unzoom().is_some() => {
+                if let Some((s, shelf)) = self.sgb_unzoom() {
+                    // Off at once, the shelf going up first; a soft landing on the SNES.
+                    let e = (1.0 - s) * (1.0 - s);
+                    let come = (1.0 - s / 0.6).clamp(0.0, 1.0).powi(2);
+                    self.draw_sgb_camera(e, come, 1.0 - s, shelf, out)
+                }
+            }
             Phase::Shelf => {
                 self.draw_background(out);
                 match (self.core_picker_shown(), self.selected_stem()) {
@@ -4070,16 +4401,19 @@ impl App {
                         );
                     }
                 }
-                draw_footer(
-                    self.canvas(),
-                    self.battery,
-                    self.battery_percent,
-                    self.bolt,
-                    self.shelf_clock,
-                    self.wifi_shown(self.wifi),
-                    footer_ink(self.light()),
-                    out,
-                );
+                // Over the Super Game Boy the shelf is all SGB: no console band, no clock.
+                if !self.sgb_band() {
+                    draw_footer(
+                        self.canvas(),
+                        self.battery,
+                        self.battery_percent,
+                        self.bolt,
+                        self.shelf_clock,
+                        self.wifi_shown(self.wifi),
+                        footer_ink(self.light()),
+                        out,
+                    );
+                }
             }
             Phase::Buttons { page } => {
                 slot_ui::ButtonsHelp {
@@ -4124,6 +4458,11 @@ impl App {
                     );
                 }
                 self.chrome(cart, 0.0, out);
+                // The Super Game Boy goes in with the clock still showing: it goes as the camera
+                // closes in.
+                if self.sgb_seated() {
+                    self.draw_shelf_footer(out);
+                }
             }
             Phase::Ejecting { .. }
                 if self.framed_panel()
@@ -4139,6 +4478,10 @@ impl App {
                 self.shelf()
                     .draw_row(self.canvas(), Some(cart), 0.0, self.recede(cart), 1.0, out);
                 self.chrome(cart, 0.0, out);
+                // The Super Game Boy comes out under the clock the camera pulled back to.
+                if cart == slot_store::SGB_STEM {
+                    self.draw_shelf_footer(out);
+                }
             }
             Phase::Playing { cart } if self.screen < 1.0 => {
                 self.draw_background(out);
@@ -5050,6 +5393,7 @@ impl App {
         );
         let label_was = cart.label.clone();
         let picker = match cart.platform {
+            Platform::Snes if cart.is_sgb() => picker.with_sgb(slot_ui::sgb_model_of(cart)),
             Platform::Snes => {
                 // The shape the cart shows when none is picked: its label's, else its
                 // region's. Picking the other one writes it down, so a label never holds
@@ -5525,6 +5869,7 @@ impl App {
         let swatches: Vec<(Option<[u8; 3]>, usize)> = picker
             .swatches()
             .iter()
+            .filter(|_| !picker.sgb())
             .map(|s| (s.colour(), s.name_index()))
             .collect();
         let light = self.light_ground();
@@ -5543,15 +5888,10 @@ impl App {
             finish: picker.finish(),
             finishes: picker.finish_faces(),
             finish_on: picker.finish_on(),
-            model: picker.model().map(|m| {
-                (
-                    if cart.platform == Platform::Snes {
-                        0
-                    } else {
-                        2
-                    },
-                    m,
-                )
+            model: picker.model().map(|m| match (picker.sgb(), cart.platform) {
+                (true, _) => (4, shell_picker::SGB_MODELS.len(), m),
+                (false, Platform::Snes) => (0, 2, m),
+                (false, _) => (2, 2, m),
             }),
             row: match picker.row() {
                 shell_picker::Row::Tabs => slot_ui::PickerRow::Tabs,
@@ -6711,4 +7051,28 @@ pub struct SearchWords {
     pub status: Option<String>,
     /// Each game found: its name and its platform.
     pub rows: Vec<(String, String)>,
+}
+
+/// A draw seen through a camera that scales by `k` and then shifts by (`dx`, `dy`), at `alpha`.
+fn zoom_draw(d: &mut Draw, k: f32, dx: f32, dy: f32, alpha: f32) {
+    let place = |x: &mut f32, y: &mut f32, w: &mut f32, h: &mut f32| {
+        *x = *x * k + dx;
+        *y = *y * k + dy;
+        *w *= k;
+        *h *= k;
+    };
+    match d {
+        Draw::Rect { x, y, w, h, colour } | Draw::Tint { x, y, w, h, colour, .. } => {
+            place(x, y, w, h);
+            colour[3] *= alpha;
+        }
+        Draw::Tex { x, y, w, h, alpha: a, .. }
+        | Draw::Part { x, y, w, h, alpha: a, .. }
+        | Draw::Turned { x, y, w, h, alpha: a, .. }
+        | Draw::Light { x, y, w, h, alpha: a, .. } => {
+            place(x, y, w, h);
+            *a *= alpha;
+        }
+        _ => {}
+    }
 }

@@ -115,10 +115,35 @@ pub enum Row {
     Marker,
 }
 
-/// The shapes the Model row offers a Game Boy cart, in its order: Game Boy and Color.
+/// The shapes the Model row offers, in its order: Game Boy and Color.
 pub const MODELS: [Outline; 2] = [Outline::Notched, Outline::Rounded];
-/// And an SNES cart, Europe's first: PAL, then NTSC.
+/// An SNES cart's, Europe first (Roy): PAL, then NTSC.
 pub const SNES_MODELS: [Outline; 2] = [Outline::Rounded, Outline::Notched];
+
+/// The Super Game Boys the studio offers for the SGB cart, in its order; the European one is
+/// the original.
+pub const SGB_MODELS: [slot_ui::SgbModel; 3] = [
+    slot_ui::SgbModel::Pal,
+    slot_ui::SgbModel::Ntsc,
+    slot_ui::SgbModel::Sgb2,
+];
+const SGB_ORIGINAL: usize = 0;
+
+/// How a Super Game Boy is written down: in its cart's shell choice (see
+/// `slot_ui::sgb_model_of`). None for the original.
+pub fn sgb_choice(model: slot_ui::SgbModel) -> Option<ShellChoice> {
+    let (outline, finish) = match model {
+        slot_ui::SgbModel::Pal => return None,
+        slot_ui::SgbModel::Ntsc => (Outline::Notched, ShellFinish::Own),
+        slot_ui::SgbModel::Sfc => (Outline::Rounded, ShellFinish::Solid),
+        slot_ui::SgbModel::Sgb2 => (Outline::Rounded, ShellFinish::Clear),
+    };
+    Some(ShellChoice {
+        outline,
+        colour: [0x80, 0x80, 0x80],
+        finish,
+    })
+}
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum Tab {
@@ -182,6 +207,8 @@ pub struct ShellPicker {
     was: Option<ShellChoice>,
     swatches: Vec<Swatch>,
     swatch: usize,
+    /// The shapes the Model row offers, in its order.
+    shapes: [Outline; 2],
     finish: usize,
     /// The finishes the row offers: an NES cart's has metallic in glitter's place.
     finishes: &'static [ShellFinish],
@@ -199,13 +226,13 @@ pub struct ShellPicker {
     closed: Option<(Millis, f32)>,
     /// An SNES cart's shape picked, and the one its region gives it.
     model: Option<(usize, usize)>,
-    /// The shapes the Model row offers, in its order.
-    models: [Outline; 2],
     versions: Versions,
     /// The version of the label shown, once one is.
     version: Option<usize>,
     /// Y asked to take the label off: A does, B does not.
     confirm: bool,
+    /// The Super Game Boy: only its model to pick, from `SGB_MODELS`.
+    sgb: bool,
 }
 
 impl ShellPicker {
@@ -260,28 +287,49 @@ impl ShellPicker {
             opened: now,
             closed: None,
             model: None,
-            models: MODELS,
             versions: Versions::Unasked,
             version: None,
             confirm: false,
+            sgb: false,
+            shapes: MODELS,
+        }
+    }
+
+    /// The Super Game Boy cart: its model is all there is to pick.
+    pub fn with_sgb(mut self, now: slot_ui::SgbModel) -> Self {
+        let picked = SGB_MODELS.iter().position(|m| *m == now).unwrap_or(SGB_ORIGINAL);
+        self.model = Some((picked, SGB_ORIGINAL));
+        self.sgb = true;
+        self.row = Row::Model;
+        self
+    }
+
+    pub fn sgb(&self) -> bool {
+        self.sgb
+    }
+
+    fn model_count(&self) -> usize {
+        if self.sgb {
+            SGB_MODELS.len()
+        } else {
+            self.shapes.len()
         }
     }
 
     /// An SNES or Game Boy cart also picks its shape; `auto` is the one its region or folder
     /// gives it, in `MODELS`.
     pub fn with_model(mut self, auto: usize) -> Self {
-        let models = self.models;
         let picked = self
             .was
-            .and_then(|c| models.iter().position(|o| *o == c.outline))
+            .and_then(|c| self.shapes.iter().position(|o| *o == c.outline))
             .unwrap_or(auto);
         self.model = Some((picked, auto));
         self
     }
 
-    /// An SNES cart's shape, `auto` in `SNES_MODELS`.
+    /// An SNES cart: its shapes in `SNES_MODELS`, `auto` among them.
     pub fn with_snes_model(mut self, auto: usize) -> Self {
-        self.models = SNES_MODELS;
+        self.shapes = SNES_MODELS;
         self.with_model(auto)
     }
 
@@ -316,6 +364,9 @@ impl ShellPicker {
 
     /// The offered finishes' names, as places in `FINISH_NAMES`.
     pub fn finish_faces(&self) -> Vec<usize> {
+        if self.sgb {
+            return Vec::new();
+        }
         self.finishes
             .iter()
             .map(|f| FINISH_NAMES.iter().position(|(n, _)| n == f).unwrap_or(0))
@@ -336,6 +387,10 @@ impl ShellPicker {
 
     /// The tabs along the top: colour and label, and the marker for a cart with no label.
     pub fn tabs(&self) -> Vec<Tab> {
+        // The Super Game Boy has its sticker: no colour or label to pick.
+        if self.sgb {
+            return Vec::new();
+        }
         let mut tabs = vec![Tab::Colour, Tab::Label];
         if self.offers_marker() {
             tabs.push(Tab::Marker);
@@ -393,7 +448,7 @@ impl ShellPicker {
 
     /// For an SNES cart, whether the shape picked is the PAL cart.
     pub fn snes_pal(&self) -> Option<bool> {
-        let (picked, _) = self.model.filter(|_| self.models == SNES_MODELS)?;
+        let (picked, _) = self.model.filter(|_| !self.sgb && self.shapes == SNES_MODELS)?;
         Some(SNES_MODELS[picked] == Outline::Rounded)
     }
 
@@ -446,9 +501,12 @@ impl ShellPicker {
     }
 
     pub fn choice(&self) -> Option<ShellChoice> {
+        if let (true, Some((picked, _))) = (self.sgb, self.model) {
+            return sgb_choice(SGB_MODELS[picked]);
+        }
         // The shape is only written down when it is not the one the region gives.
         let outline = match self.model {
-            Some((picked, auto)) if picked != auto => self.models[picked],
+            Some((picked, auto)) if picked != auto => self.shapes[picked],
             Some(_) => Outline::Auto,
             None => self.was.map_or(Outline::Auto, |c| c.outline),
         };
@@ -497,6 +555,9 @@ impl ShellPicker {
     }
 
     fn rows(&self) -> Vec<Row> {
+        if self.sgb {
+            return vec![Row::Model];
+        }
         let mut rows = vec![Row::Tabs];
         match self.tab {
             Tab::Colour => {
@@ -589,7 +650,7 @@ impl ShellPicker {
                         let Some((picked, auto)) = self.model else {
                             return Outcome::None;
                         };
-                        let to = step(picked, by, self.models.len());
+                        let to = step(picked, by, self.model_count());
                         if to == picked {
                             return Outcome::None;
                         }

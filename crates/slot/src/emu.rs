@@ -137,7 +137,8 @@ impl EmuHandle {
         sav: Option<Vec<u8>>,
         resume: Option<Vec<u8>>,
     ) -> Self {
-        Self::spawn_as(core, rom, ring, sav, resume, None)
+        let (rumble, link) = (core.rumble(), core.net());
+        Self::spawn_as(Box::new(move || core), rumble, link, rom, ring, sav, resume, None)
     }
 
     pub fn spawn_linked(
@@ -148,7 +149,29 @@ impl EmuHandle {
         resume: Option<Vec<u8>>,
         player: u8,
     ) -> Self {
-        Self::spawn_as(core, rom, ring, sav, resume, Some(player))
+        let (rumble, link) = (core.rumble(), core.net());
+        Self::spawn_as(Box::new(move || core), rumble, link, rom, ring, sav, resume, Some(player))
+    }
+
+    /// As `spawn`, with the core opened on the emulator's own thread: reading a core in and
+    /// starting it takes the device a few frames, which held up the cart's insert (Roy: the
+    /// SNES cart stuttered going in).
+    pub fn spawn_opening(
+        open: Box<dyn FnOnce() -> Box<dyn RetroCore> + Send>,
+        rom: PathBuf,
+        ring: Arc<Ring>,
+        sav: Option<Vec<u8>>,
+        resume: Option<Vec<u8>>,
+        player: Option<u8>,
+    ) -> Self {
+        let (rumble, link) = (Rumble::default(), Link::default());
+        let (r, l) = (rumble.clone(), link.clone());
+        let open = Box::new(move || {
+            let mut core = open();
+            core.share(r, l);
+            core
+        });
+        Self::spawn_as(open, rumble, link, rom, ring, sav, resume, player)
     }
 
     pub fn refuse_save_ram(&self) {
@@ -159,16 +182,17 @@ impl EmuHandle {
         self.shared.resume_refused.store(true, Ordering::Release);
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn spawn_as(
-        core: Box<dyn RetroCore>,
+        open: Box<dyn FnOnce() -> Box<dyn RetroCore> + Send>,
+        rumble: Rumble,
+        link: Link,
         rom: PathBuf,
         ring: Arc<Ring>,
         sav: Option<Vec<u8>>,
         resume: Option<Vec<u8>>,
         player: Option<u8>,
     ) -> Self {
-        let rumble = core.rumble();
-        let link = core.net();
         let frames = Frames::new((GBA_W * GBA_H * 4) as usize);
         let shared = Arc::new(Shared {
             input: AtomicU16::new(0),
@@ -208,7 +232,7 @@ impl EmuHandle {
         let worker_link = link.clone();
         let join = std::thread::Builder::new()
             .name("slot-emu".into())
-            .spawn(move || worker.run(core, rom, ring, sav, resume, worker_link))
+            .spawn(move || worker.run(open(), rom, ring, sav, resume, worker_link))
             .ok();
         if join.is_none() {
             shared

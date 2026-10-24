@@ -73,6 +73,7 @@ pub struct Session {
     prefetch: Prefetch,
     reloading: bool,
     driven: bool,
+    sgb_turn: u32,
 }
 
 impl Session {
@@ -81,6 +82,7 @@ impl Session {
     }
 
     pub fn boot_with(root: PathBuf, sink: Box<dyn AudioSink>) -> Self {
+        crate::core::warm_cores(&root);
         let mut session = Session {
             app: App::boot(&root),
             root,
@@ -96,6 +98,7 @@ impl Session {
             prefetch: Prefetch::default(),
             reloading: false,
             driven: false,
+            sgb_turn: 0,
         };
         // A game left running comes straight back. Its core loads on its own thread, so start it
         // now and let the card read overlap the rest of the boot. Waiting for the first update
@@ -321,6 +324,21 @@ impl Session {
                 }
             }
         }
+        if self.app.take_sgb_border_changed() && self.app.sgb_playing() {
+            self.sgb_turn += 1;
+            let (key, value) =
+                crate::core::set_sgb_border(
+                &self.root,
+                self.app.sgb_border(),
+                self.app.sgb_two(),
+                self.sgb_turn,
+            );
+            if let Some(emu) = &self.emu {
+                emu.set_option(key, &value);
+                // Behind the menu too: the new border shows at once.
+                recoloured = true;
+            }
+        }
         if self.app.take_tv_changed() {
             if let Some(emu) = &self.emu {
                 let look = self.app.tv_look(self.app.playing_platform());
@@ -456,7 +474,9 @@ impl Session {
     }
 
     fn held(&self) -> bool {
-        self.app.game_menu_open() || self.app.in_game_menu().is_some() || self.app.shutting_down()
+        self.app.game_menu_open()
+            || self.app.in_game_menu().is_some()
+            || self.app.shutting_down()
     }
 
     fn dozing(&self) -> bool {
@@ -508,6 +528,11 @@ impl Session {
             Phase::Inserting { cart, .. } => cart.clone(),
             _ => return,
         };
+        // The Super Game Boy has no game of its own to run.
+        if self.app.sgb_seated() {
+            self.emu = None;
+            return;
+        }
         if self.emu.is_none() {
             let (_, serial) = self.app.link_mode(&stem);
             self.spawn_core(&stem, serial);
@@ -542,7 +567,12 @@ impl Session {
         else {
             return;
         };
-        let core = slot_store::core_for_platform(&self.root, stem, platform);
+        // A Game Boy game in the Super Game Boy plays on mGBA, the core that does the SGB.
+        let sgb = self.app.sgb_playing();
+        let core = match sgb {
+            true => slot_store::Core::Mgba,
+            false => slot_store::core_for_platform(&self.root, stem, platform),
+        };
         launch(&format!("opening {stem} on {}", core.as_str()));
         self.app.set_core(core);
         self.app.set_platform(platform);
@@ -571,35 +601,45 @@ impl Session {
         let palette = crate::core::palette_for(self.app.gb_palette(), platform, &rom, player);
         self.app.set_palette_live(palette.is_some());
         self.app.set_palette_capable(
-            crate::core::palette_for(Some(slot_store::GbPalette::DEFAULT), platform, &rom, player)
-                .is_some(),
+            crate::core::palette_for(Some(slot_store::GbPalette::DEFAULT), platform, &rom, player).is_some(),
         );
-        let mut opened = open_core(
-            &self.root, core, platform, serial,
-            // slot.'s own screen looks take the place of the cores' colour correction.
-            false, palette, player,
-        );
-        if let Some((key, value)) =
-            crate::core::lcd_ghosting_option(core, self.app.lcd_ghosting_for(platform))
-        {
-            opened.core.set_option(key, value);
-        }
-        for (key, value) in crate::core::tv_options(core, self.app.tv_look(platform)) {
-            opened.core.set_option(key, value);
-        }
-        self.app.set_named_core(opened.named);
+        // The core opens on the emulator's thread, so the cart's insert keeps moving meanwhile.
+        let root = self.root.clone();
+        let ghosting = crate::core::lcd_ghosting_option(core, self.app.lcd_ghosting_for(platform));
+        // The Super Game Boy's picture takes the SNES's look.
+        let tv = crate::core::tv_options(core, self.app.tv_look(self.app.playing_platform()));
+        let sgb_setup = sgb.then(|| (self.app.sgb_border(), self.app.sgb_two(), platform == Platform::Gbc));
+        let open = Box::new(move || {
+            let mut opened = open_core(
+                &root,
+                core,
+                platform,
+                serial,
+                // slot.'s own screen looks take the place of the cores' colour correction.
+                false,
+                palette,
+                player,
+            );
+            if let Some((key, value)) = ghosting {
+                opened.core.set_option(key, value);
+            }
+            for (key, value) in tv {
+                opened.core.set_option(key, value);
+            }
+            if let Some((border, two, gbc)) = sgb_setup {
+                crate::core::sgb_options(&root, opened.core.as_mut(), border, two, gbc);
+            }
+            opened.core
+        });
+        self.app.set_named_core(crate::core::core_found(&self.root, core));
         launch("core opened");
-        let sav = self
-            .app
-            .card_read("save", persist::read_sav(&self.root, platform, stem));
+        let sav = self.app.card_read("save", persist::read_sav(&self.root, platform, stem));
         let sav_unread = sav.is_none();
         let sav = sav.flatten();
         launch("save read");
         let ring = self.sink.ring();
-        let emu = match player.filter(|_| platform == Platform::Gba) {
-            Some(p) => EmuHandle::spawn_linked(opened.core, rom, ring, sav, resume, p),
-            None => EmuHandle::spawn(opened.core, rom, ring, sav, resume),
-        };
+        let linked = player.filter(|_| platform == Platform::Gba);
+        let emu = EmuHandle::spawn_opening(open, rom, ring, sav, resume, linked);
         if sav_unread {
             emu.refuse_save_ram();
         }

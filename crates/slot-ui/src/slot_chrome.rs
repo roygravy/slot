@@ -71,8 +71,8 @@ const LIP_Y: f32 = BAND_Y;
 
 const SEATED_Y: f32 = BAY_Y + 4.0;
 
-fn catch_at(foot: f32, seated_foot: f32) -> f32 {
-    (LIP_Y - foot) / (seated_foot - foot)
+fn catch_at(lip: f32, foot: f32, seated_foot: f32) -> f32 {
+    (lip - foot) / (seated_foot - foot)
 }
 
 const CATCH_IN: f32 = 0.42;
@@ -152,8 +152,16 @@ impl SlotChrome<'_> {
                 (x, y, lerp(w0, sw), lerp(h0, sh), pose.lid)
             }
             None => {
-                let seated_foot = SEATED_Y + sh - self.lift;
-                let catch = catch_at(foot0, seated_foot);
+                // Into the Super Game Boy, the pak goes in at its top edge and sinks until its
+                // own top is flush with it, as in the Game Boy slot (Roy).
+                let (lip, seated_foot) = match rise() > 0.0 {
+                    true => {
+                        let top = BAND_Y - rise() + SGB_TOP;
+                        (top, top + sh)
+                    }
+                    false => (LIP_Y, SEATED_Y + sh - self.lift),
+                };
+                let catch = catch_at(lip, foot0, seated_foot);
                 let travel = travel(seat, catch);
                 let k = (travel / catch).min(1.0);
                 let (cw, ch) = (w0 + (sw - w0) * k, h0 + (sh - h0) * k);
@@ -247,12 +255,65 @@ fn band(x: f32, y: f32, w: f32, h: f32, c: [f32; 4], alpha: f32) -> Draw {
     }
 }
 
+/// How far the Super Game Boy's top stands above the band while the Game Boy carts go into
+/// it: half as tall again as the band shows, its top edge in it, and the Game Boy shelf moves
+/// up out of its way (Roy).
+pub const SGB_RISE: f32 = crate::bitmaps::SGB_BAND_H as f32 - MOUTH_H;
+/// Where the Super Game Boy's top edge is in its band, as `tools/sgb/sgb_band.py` draws it.
+const SGB_TOP: f32 = 6.0;
+/// How wide `tools/sgb/sgb_band.py` draws the band.
+const SGB_ART_W: f32 = 720.0;
+
+/// The Super Game Boy in its band, as `tools/sgb/sgb_band.py` draws it in the 720-wide strip:
+/// its left edge and size.
+fn sgb_in_band(model: crate::SgbModel) -> (f32, f32, f32) {
+    match model {
+        crate::SgbModel::Ntsc => (89.0, 543.0, 475.0),
+        _ => (123.0, 472.0, 448.0),
+    }
+}
+
+/// Where the Super Game Boy's whole face is while it is the band: (x, y, w, h).
+pub fn sgb_band_rect(model: crate::SgbModel, canvas: Canvas) -> (f32, f32, f32, f32) {
+    let (x, w, h) = sgb_in_band(model);
+    // The art is drawn 720 wide and loaded cut to the strip's middle, which the canvas cuts
+    // again to its own width.
+    let strip = crate::bitmaps::SLOT_W as f32;
+    let cut = (SGB_ART_W - strip) / 2.0 + ((strip - canvas.w) / 2.0).max(0.0);
+    let top = OUT_H as f32 - crate::bitmaps::SGB_BAND_H as f32;
+    (x - cut, top + SGB_TOP, w, h)
+}
+
+/// Where the Super Game Boy stands once it is in the SNES: (x, y, w, h).
+pub fn sgb_seated_rect(mould: Mould, canvas: Canvas) -> (f32, f32, f32, f32) {
+    let (sw, sh) = seated_box(mould);
+    let (sw, sh) = (sw as f32, sh as f32);
+    match tv_pose(mould, 1.0, canvas.w / 2.0, (sw, sh)) {
+        Some(pose) => (pose.x, pose.y, sw, sh),
+        None => (canvas.w / 2.0 - sw / 2.0, BAND_Y - sh, sw, sh),
+    }
+}
+
+static SGB_TALL: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// The band is the Super Game Boy's top, standing `SGB_RISE` above the console.
+pub fn set_sgb_band(on: bool) {
+    SGB_TALL.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+pub(crate) fn rise() -> f32 {
+    match SGB_TALL.load(std::sync::atomic::Ordering::Relaxed) {
+        true => SGB_RISE,
+        false => 0.0,
+    }
+}
+
 fn strip(canvas: Canvas, tex: TexId, alpha: f32) -> Draw {
     Draw::Part {
         x: 0.0,
-        y: BAND_Y,
+        y: BAND_Y - rise(),
         w: canvas.w,
-        h: MOUTH_H,
+        h: MOUTH_H + rise(),
         tex,
         alpha,
         uv: canvas.window(crate::bitmaps::SLOT_W as f32),
@@ -283,7 +344,7 @@ fn draw_console_shadow(canvas: Canvas, alpha: f32, out: &mut Vec<Draw>) {
         let a = CONSOLE_SHADOW_ALPHA * t * t / STEPS as f32 * 2.2;
         out.push(Draw::Rect {
             x: 0.0,
-            y: BAND_Y - CONSOLE_SHADOW + k as f32 * step,
+            y: BAND_Y - rise() - CONSOLE_SHADOW + k as f32 * step,
             w: canvas.w,
             h: CONSOLE_SHADOW - k as f32 * step,
             colour: [0.0, 0.0, 0.0, a * alpha],
@@ -293,7 +354,10 @@ fn draw_console_shadow(canvas: Canvas, alpha: f32, out: &mut Vec<Draw>) {
 
 fn draw_slot_back(canvas: Canvas, slot: Option<(TexId, TexId)>, alpha: f32, out: &mut Vec<Draw>) {
     if let Some((back, _)) = slot {
-        draw_console_shadow(canvas, alpha, out);
+        // The Super Game Boy stands alone, no console around it to cast the shadow.
+        if rise() == 0.0 {
+            draw_console_shadow(canvas, alpha, out);
+        }
         out.push(strip(canvas, back, alpha));
         return;
     }
@@ -356,7 +420,7 @@ fn for_each_scoop_span(canvas: Canvas, mut span: impl FnMut(f32, f32, f32)) {
 const SLOT_NAME_GAP: f32 = 6.0;
 
 pub fn slot_name_y() -> f32 {
-    OUT_H as f32 - MOUTH_H - HINT_H as f32 - SLOT_NAME_GAP
+    OUT_H as f32 - MOUTH_H - rise() - HINT_H as f32 - SLOT_NAME_GAP
 }
 
 pub fn draw_slot_name(
@@ -401,6 +465,14 @@ pub fn draw_slot_title(
     });
 }
 
+/// The slot's back (behind a cart) or its front (over one), on their own.
+pub fn draw_slot_part(canvas: Canvas, slot: Option<(TexId, TexId)>, front: bool, out: &mut Vec<Draw>) {
+    match front {
+        false => draw_slot_back(canvas, slot, 1.0, out),
+        true => draw_slot_front(canvas, slot, 1.0, out),
+    }
+}
+
 pub fn draw_empty_slot(canvas: Canvas, slot: Option<(TexId, TexId)>, out: &mut Vec<Draw>) {
     draw_slot_back(canvas, slot, 1.0, out);
     draw_slot_front(canvas, slot, 1.0, out);
@@ -428,7 +500,7 @@ pub fn ease(u: f32) -> f32 {
 pub fn insert_seconds(mould: Mould) -> Option<f32> {
     match mould {
         Mould::Nes => Some(NES_T),
-        Mould::SnesNtsc | Mould::SnesPal => Some(SNES_T),
+        Mould::SnesNtsc | Mould::SnesPal | Mould::SgbNtsc | Mould::SgbPal => Some(SNES_T),
         _ => None,
     }
 }
@@ -437,7 +509,7 @@ pub fn insert_seconds(mould: Mould) -> Option<f32> {
 pub fn click_at(mould: Mould) -> f32 {
     match mould {
         Mould::Nes => NES_CLICK / NES_STORY,
-        Mould::SnesNtsc | Mould::SnesPal => SNES_CLICK / SNES_STORY,
+        Mould::SnesNtsc | Mould::SnesPal | Mould::SgbNtsc | Mould::SgbPal => SNES_CLICK / SNES_STORY,
         _ => 1.0,
     }
 }
@@ -449,6 +521,8 @@ const NES_STORY: f32 = 1.60;
 const NES_CLICK: f32 = 1.15;
 const SNES_T: f32 = 0.70;
 const SNES_STORY: f32 = 1.15;
+/// The European SNES game cart's seated height, for the Super Game Boys that go in as deep.
+const SNES_PAL_SEATED_H: f32 = 152.0;
 const SNES_CLICK: f32 = 1.08;
 
 /// Where an NES or SNES cart is, `seat` into its insert: its seated-size box once it has left
@@ -487,25 +561,24 @@ fn tv_pose(mould: Mould, seat: f32, cx: f32, (sw, sh): (f32, f32)) -> Option<TvP
                     (1.0, home, 7.0 * (u * std::f32::consts::PI).sin())
                 }
             };
-            Some(TvPose {
-                x,
-                y,
-                leave,
-                lid: Some(lid),
-            })
+            Some(TvPose { x, y, leave, lid: Some(lid) })
         }
-        Mould::SnesNtsc | Mould::SnesPal => {
+        Mould::SnesNtsc | Mould::SnesPal | Mould::SgbNtsc | Mould::SgbPal => {
             let t = seat * SNES_STORY;
-            let pal = mould == Mould::SnesPal;
+            let pal = matches!(mould, Mould::SnesPal | Mould::SgbPal);
             let wait = BAND_Y - sh - 8.0;
             // NTSC: the slot's edge meets the third line on the cart's side grips. A PAL cart goes
-            // in as deep and so stands a little prouder.
-            let out = if pal {
-                (86.0 - 42.6) / 86.0
-            } else {
-                132.0 / 257.0
+            // in as deep and so stands a little prouder. A Super Game Boy goes in as deep as the
+            // game cart it is shaped like, and its taller body stands out above.
+            let out = if pal { (86.0 - 42.6) / 86.0 } else { 132.0 / 257.0 };
+            let depth = match mould {
+                // The American SGB goes in like an American game: the slot's edge meets the
+                // groove just under its label.
+                Mould::SgbNtsc => sh * (1.0 - 0.693),
+                Mould::SgbPal => SNES_PAL_SEATED_H * (1.0 - out),
+                _ => sh * (1.0 - out),
             };
-            let home = BAND_Y - sh * out - if pal { 5.0 } else { 0.0 };
+            let home = BAND_Y - (sh - depth) - if pal { 5.0 } else { 0.0 };
             let slid = home - 14.0;
             let (leave, y) = match t {
                 t if t < 0.40 => (smooth(t / 0.40), wait),
@@ -514,12 +587,7 @@ fn tv_pose(mould: Mould, seat: f32, cx: f32, (sw, sh): (f32, f32)) -> Option<TvP
                 t if t < 0.88 => (1.0, slid),
                 t => (1.0, lerp(slid, home, seat_push((t - 0.88) / 0.25))),
             };
-            Some(TvPose {
-                x,
-                y,
-                leave,
-                lid: None,
-            })
+            Some(TvPose { x, y, leave, lid: None })
         }
         _ => None,
     }
@@ -567,14 +635,7 @@ fn draw_lid(canvas: Canvas, tex: TexId, theta: f32, light: bool, alpha: f32, out
     let (w, l) = (NES_LID_W as f32, MOUTH_H);
     let x = canvas.centred(w);
     if theta <= 0.01 {
-        out.push(Draw::Tex {
-            x,
-            y: BAND_Y,
-            w,
-            h: l,
-            tex,
-            alpha,
-        });
+        out.push(Draw::Tex { x, y: BAND_Y, w, h: l, tex, alpha });
         return;
     }
     let hinge = OUT_H as f32;
@@ -587,14 +648,7 @@ fn draw_lid(canvas: Canvas, tex: TexId, theta: f32, light: bool, alpha: f32, out
     };
     let fold = hinge - l * cos;
     if hinge - fold > 0.5 {
-        out.push(Draw::Tex {
-            x,
-            y: fold,
-            w,
-            h: hinge - fold,
-            tex,
-            alpha,
-        });
+        out.push(Draw::Tex { x, y: fold, w, h: hinge - fold, tex, alpha });
         sheen(fold, hinge - fold, sin, out);
     }
     let fh = l * sin;
@@ -606,14 +660,7 @@ fn draw_lid(canvas: Canvas, tex: TexId, theta: f32, light: bool, alpha: f32, out
     let shadow = if light { 0.27 } else { 0.43 };
     for k in 0..4 {
         let spread = (7.0 * sin + 2.0) * (1.0 - k as f32 / 4.0);
-        out.push(band(
-            x,
-            top - spread,
-            w,
-            spread + 1.0,
-            [0.0, 0.0, 0.0, shadow / 4.0],
-            alpha,
-        ));
+        out.push(band(x, top - spread, w, spread + 1.0, [0.0, 0.0, 0.0, shadow / 4.0], alpha));
     }
     out.push(Draw::Part {
         x,
@@ -626,11 +673,7 @@ fn draw_lid(canvas: Canvas, tex: TexId, theta: f32, light: bool, alpha: f32, out
     });
     sheen(top, fh, 1.0, out);
     // The tab: lighter, rounded, standing proud of the free edge.
-    let base: [f32; 3] = if light {
-        [182.0, 179.0, 173.0]
-    } else {
-        [41.0, 41.0, 44.0]
-    };
+    let base: [f32; 3] = if light { [182.0, 179.0, 173.0] } else { [41.0, 41.0, 44.0] };
     let shade = |k: f32, add: f32| {
         let c = base.map(|v| ((v * k + add) / 255.0).min(1.0));
         [c[0], c[1], c[2], 1.0]
@@ -638,28 +681,7 @@ fn draw_lid(canvas: Canvas, tex: TexId, theta: f32, light: bool, alpha: f32, out
     let th = (4.0 * sin).max(1.0);
     let tw = (w * 0.17).round();
     let tx = canvas.w / 2.0 - tw / 2.0;
-    out.push(band(
-        tx,
-        top - th + 1.0,
-        tw,
-        th + 1.0,
-        shade(0.7, 0.0),
-        alpha,
-    ));
-    out.push(band(
-        tx + 1.0,
-        top - th + 1.0,
-        tw - 2.0,
-        th,
-        shade(1.18, 14.0),
-        alpha,
-    ));
-    out.push(band(
-        tx + 3.0,
-        top - th + 1.0,
-        tw - 6.0,
-        1.0,
-        shade(1.18, 39.0),
-        alpha,
-    ));
+    out.push(band(tx, top - th + 1.0, tw, th + 1.0, shade(0.7, 0.0), alpha));
+    out.push(band(tx + 1.0, top - th + 1.0, tw - 2.0, th, shade(1.18, 14.0), alpha));
+    out.push(band(tx + 3.0, top - th + 1.0, tw - 6.0, 1.0, shade(1.18, 39.0), alpha));
 }

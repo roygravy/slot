@@ -23,6 +23,7 @@ use slot_ui::{
 use crate::app::{App, LinkRow, Phase};
 use crate::build_info::Build;
 use crate::cart_faces::CartFaces;
+use slot_ui::SgbModel;
 use crate::face_builder::FaceBuilder;
 use crate::label_cache::{self, Rebuild};
 use crate::link_art_builder::LinkArtBuilder;
@@ -193,7 +194,7 @@ struct Clocks {
 }
 
 struct ShelfLook {
-    slot: [(TexId, TexId); 8],
+    slot: [(TexId, TexId); 12],
     nes_lids: [TexId; 2],
     bolt: [TexId; 2],
     wifi: [TexId; 2],
@@ -389,7 +390,12 @@ impl Frontend {
         self.session.app_mut().set_cart_backings(boards);
         let slot = {
             let mut upload =
-                |bytes: &[u8]| compositor.create_texture(slot_ui::SLOT_W, slot_ui::SLOT_H, bytes);
+                |bytes: &[u8]| {
+                    // The Super Game Boy's band stands taller than the console's.
+                    let h = bytes.len() as u32 / (slot_ui::SLOT_W * 4);
+                    debug_assert!(h == slot_ui::SLOT_H || h == slot_ui::SGB_BAND_H);
+                    compositor.create_texture(slot_ui::SLOT_W, h, bytes)
+                };
             [
                 (upload(slot_back()), upload(slot_front())),
                 (upload(slot_back_light()), upload(slot_front_light())),
@@ -417,6 +423,10 @@ impl Frontend {
                     upload(slot_ui::slot_tv(false, false, true)),
                     upload(slot_ui::slot_tv(false, true, true)),
                 ),
+                (upload(slot_ui::sgb_band(SgbModel::Ntsc, false)), upload(slot_ui::sgb_band(SgbModel::Ntsc, true))),
+                (upload(slot_ui::sgb_band(SgbModel::Pal, false)), upload(slot_ui::sgb_band(SgbModel::Pal, true))),
+                (upload(slot_ui::sgb_band(SgbModel::Sfc, false)), upload(slot_ui::sgb_band(SgbModel::Sfc, true))),
+                (upload(slot_ui::sgb_band(SgbModel::Sgb2, false)), upload(slot_ui::sgb_band(SgbModel::Sgb2, true))),
             ]
         };
         let nes_lids = [false, true].map(|light| {
@@ -574,7 +584,7 @@ impl Frontend {
         let inks = words.split_off(words.len() - crate::shell_picker::MARKERS.len());
         let found = words.split_off(words.len() - 2);
         let tabs = words.split_off(words.len() - 3);
-        let models = words.split_off(words.len() - 4);
+        let models = words.split_off(words.len() - 8);
         let finishes = words.split_off(words.len() - crate::shell_picker::FINISH_NAMES.len());
         let mut shell_legend: Vec<(TexId, u32)> = faces
             .shell_legend
@@ -593,7 +603,7 @@ impl Frontend {
             original,
             names: words,
             finishes,
-            models: [models[0], models[1], models[2], models[3]],
+            models,
             tabs: [tabs[0], tabs[1], tabs[2]],
             looking: found[0],
             none_found: found[1],
@@ -1411,17 +1421,8 @@ impl UiFaces {
             shell_words: crate::shell_picker::swatch_names()
                 .into_iter()
                 .chain(crate::shell_picker::FINISH_NAMES.map(|(_, name)| name))
-                .chain([
-                    "PAL",
-                    "NTSC",
-                    "GB",
-                    "GBC",
-                    "Color",
-                    "Label",
-                    "Marker",
-                    "Looking",
-                    "None Found",
-                ])
+                .chain(["PAL", "NTSC", "GB", "GBC", "Europe", "USA", "SGB 2"])
+                .chain(["Color", "Label", "Marker", "Looking", "None Found"])
                 .chain(crate::shell_picker::MARKERS.map(|(name, _)| name))
                 .map(slot_ui::shell_picker_word)
                 .collect(),

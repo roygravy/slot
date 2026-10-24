@@ -5,8 +5,9 @@ mod bitmaps;
 mod buttons_help;
 mod cheat_page;
 pub use bitmaps::{
-    link_port, link_port_light, nes_lid, slot_back, slot_back_gb, slot_back_light, slot_front,
-    slot_front_gb, slot_front_light, slot_tv, Mould, NES_LID_W, SLOT_H, SLOT_W,
+    link_port, link_port_light, nes_lid, slot_back, slot_back_gb, slot_back_light, slot_front, slot_front_gb, slot_front_light, slot_tv, Mould,
+    SgbModel, sgb_band,
+    NES_LID_W, SGB_BAND_H, SLOT_H, SLOT_W,
 };
 mod backdrop;
 mod barcode;
@@ -56,8 +57,8 @@ pub use buttons_help::{
 };
 pub use cart::{
     cart_backing, cart_box, cart_face, cart_face_with, cart_interior, cart_shadow, clean_label,
-    gb_label_panel, gb_shell_of, is_clear, label_colour, label_panel, label_size, label_tags,
-    label_text, mould_of, neutral_shell, seated_box, shows_interior, CartFace, CART_H, CART_W,
+    gb_label_panel, gb_shell_of, mould_of, is_clear, label_colour, label_panel, label_size,
+    label_tags, label_text, neutral_shell, sgb_model_of, seated_box, shows_interior, CartFace, CART_H, CART_W,
     GBC_LABEL_H, GBC_LABEL_W, GBC_LABEL_X, GBC_LABEL_Y, GB_CART_H, GB_CART_W, GB_LABEL_H,
     GB_LABEL_W, GB_LABEL_X, GB_LABEL_Y, LABEL_H, LABEL_W, LABEL_WELL, LABEL_X, LABEL_Y,
 };
@@ -122,8 +123,9 @@ pub use shell_picker::{
 pub use shot_page::{ShotFaces, ShotPage, SHOT_H, SHOT_W};
 pub use silhouette::{gb_silhouette, silhouette, GbShell};
 pub use slot_chrome::{
-    click_at, draw_empty_slot, draw_slot_name, draw_slot_title, ease, edge, housing,
-    insert_seconds, opening, recess, set_light_ground, slot_name_y, SlotChrome, ALERT_PX,
-    GB_SEAT_LIFT, LIP_H, MOUTH_H, MOUTH_W,
+    click_at, insert_seconds, set_light_ground, set_sgb_band, sgb_band_rect, sgb_seated_rect,
+    GB_SEAT_LIFT,
+    draw_empty_slot, draw_slot_part, draw_slot_name, draw_slot_title, ease, edge, housing, opening, recess,
+    slot_name_y, SlotChrome, ALERT_PX, LIP_H, MOUTH_H, MOUTH_W,
 };
 pub use toast::{toast_box, toast_face, toast_rect, Toast};

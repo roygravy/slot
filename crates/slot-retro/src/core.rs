@@ -82,6 +82,9 @@ pub trait RetroCore: Send {
         self.run_frame(p1);
     }
     fn set_option(&mut self, _key: &str, _value: &str) {}
+    /// Take these as the core's rumble motors and link line: handed out before a core opened
+    /// on another thread exists.
+    fn share(&mut self, _rumble: crate::Rumble, _link: crate::Link) {}
     /// Replace the core's cheats with these codes, all switched on. An empty list clears them.
     fn set_cheats(&mut self, _codes: &[String]) {}
     /// Back to power on, as the console's own reset would.

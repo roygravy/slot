@@ -1,17 +1,6 @@
-use slot_ui::{badge_at, centred_hints, sticker_rect, toast_rect, Canvas, TexId, Toast, STICKER_W};
+use slot_ui::{badge_at, centred_hints, toast_rect, Canvas, TexId, Toast};
 
 const NATIVE: Canvas = Canvas { w: 640.0, h: 480.0 };
-
-#[test]
-fn the_about_sticker_fits_a_native_canvas_with_its_margin() {
-    let (x, _, w, _) = sticker_rect(NATIVE);
-    assert!(
-        x >= 16.0 && x + w <= 624.0,
-        "the sticker runs to {x}..{}",
-        x + w
-    );
-    assert_eq!(sticker_rect(Canvas::FRAMED).2, STICKER_W as f32);
-}
 
 #[test]
 fn a_lone_hint_centres_on_a_native_canvas() {
