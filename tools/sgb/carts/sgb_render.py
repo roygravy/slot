@@ -28,7 +28,7 @@ def light(height, gain=1.5, blur=0.55):
     return (1 + (lam / lz - 1) * gain) * (1 - occ)
 rng = np.random.default_rng(5)
 def grain(s):
-    g = nd.gaussian_filter(rng.normal(0, 1, (h, w)).astype(np.float32), 1.0 * SS)  # coarse enough to survive the shelf's scale (Roy)
+    g = nd.gaussian_filter(rng.normal(0, 1, (h, w)).astype(np.float32), 0.6 * SS)  # finer and fainter than before: smoother plastic (Roy 2026-10-24)
     return g / g.std() * s
 def down(a):
     return np.asarray(Image.fromarray(a.astype(np.float32), 'F').resize((W, H), Image.Resampling.BOX))
@@ -93,7 +93,7 @@ height -= pipe * window * fade * 4.0
 gaps = (gamebit(0.079, 0.313, height) | gamebit(0.921, 0.313, height)
         | gamebit(0.079, 0.949, height) | gamebit(0.921, 0.949, height))
 height *= cart
-grey = 119 * light(height) + grain(2.8)
+grey = 119 * light(height) + grain(1.3)
 grey *= 1 - 0.06 * nd.gaussian_filter(label.astype(np.float32), SS)
 grey *= 1 - 0.65 * nd.gaussian_filter(gaps.astype(np.float32), 0.5 * SS)
 near = nd.distance_transform_edt(~centre) / w

@@ -101,10 +101,14 @@ def copied(size, style):
         im, (W, H) = plate(size, (52, 36, 126)); colour = (238, 222, 236); m = SGB2_INK
     else:
         im, (W, H) = plate(size, (206, 206, 206)); colour = (34, 34, 38); m = PAL_INK
-    # one scale both ways, so the lettering keeps its own proportions on a flatter sticker
-    sw = int(m.width * H / m.height)
-    m = m.resize((sw, H), Image.Resampling.LANCZOS)
-    full = Image.new('L', (W, H), 0); full.paste(m, ((W - sw) // 2, 0))
+    # one scale both ways, so the lettering keeps its own proportions on a flatter sticker; the
+    # SGB2's keeps a margin all round as on the real sticker (Roy: the logo didn't fit)
+    k = 0.80 if style == 'sgb2' else 1.0
+    sh = int(H * k); sw = int(m.width * sh / m.height)
+    if sw > W * 0.90:
+        sw = int(W * 0.90); sh = int(m.height * sw / m.width)
+    m = m.resize((sw, sh), Image.Resampling.LANCZOS)
+    full = Image.new('L', (W, H), 0); full.paste(m, ((W - sw) // 2, (H - sh) // 2 + int(H * 0.04 * (style == 'sgb2'))))
     layer = Image.new('RGBA', (W, H), colour + (255,))
     layer.putalpha(Image.fromarray((np.asarray(full).astype(np.float32) * np.asarray(im)[..., 3] / 255).astype(np.uint8)))
     im.alpha_composite(layer)

@@ -7,7 +7,7 @@ RENDERS holds sgb_render.py / sgb_pal_render.py output made with SGB_F=F (and SG
 extra argument). Writes assets/sgb_band_<model>_{back,front}.png."""
 import sys
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageFilter
 
 R, F = sys.argv[1].rstrip('/') + '/', float(sys.argv[2])
 W, TOP = 720, 6
@@ -18,11 +18,40 @@ def overlay(b, c):
     b, c = b / 255, c / 255
     return np.where(b < 0.5, 2 * b * c, 1 - 2 * (1 - b) * (1 - c)) * 255
 
-def face(neutral, mouth, colour, clear=False):
-    n = np.asarray(Image.open(R + neutral)).astype(np.float32)
+# the zoomed top close up wants more light and shade than the shelf's small carts (Roy: too flat,
+# the shadows unclear): the render's relief pushed away from flat grey, shadows deepened most
+CONTRAST, SHADOW = 1.45, 1.25
+
+def punch(g):
+    d = (g - 128) * CONTRAST
+    return np.clip(128 + np.where(d < 0, d * SHADOW, d), 0, 255)
+
+def tinted(path, colour, alpha=1.0):
+    n = np.asarray(Image.open(R + path)).astype(np.float32)
     a = n.copy()
+    g = punch(n[..., 0])
     for k in range(3):
-        a[..., k] = overlay(n[..., 0], colour[k])
+        a[..., k] = overlay(g, colour[k])
+    a[..., 3] *= alpha
+    return a
+
+def over(dst, src):
+    sa, da = src[..., 3:] / 255, dst[..., 3:] / 255
+    out = sa + da * (1 - sa)
+    rgb = (src[..., :3] * sa + dst[..., :3] * da * (1 - sa)) / np.maximum(out, 1e-6)
+    return np.concatenate([rgb, out * 255], axis=2)
+
+def face(neutral, mouth, colour, clear=False):
+    if clear:
+        # as tools/sgb/carts/colour2.py builds the SGB2's face: the back shell under the clear
+        # front, the opaque render's light and shade over both
+        a = over(tinted('sgb2_interior.png', [c * 0.85 for c in colour], 0.92), tinted(neutral, colour, 0.55))
+        g = punch(np.asarray(Image.open(R + 'sgb2_neutral.png')).astype(np.float32)[..., 0])
+        lift = np.clip((g - 128) / 127, 0, 1)[..., None]
+        dark = np.clip((128 - g) / 128, 0, 1)[..., None]
+        a[..., :3] = a[..., :3] * (1 - 0.75 * dark) + (255 - a[..., :3]) * 0.7 * lift
+    else:
+        a = tinted(neutral, colour)
     mo = np.load(R + mouth)
     rows = np.cumsum(mo > 0.5, axis=0)
     shade = np.clip(1 - 0.35 * np.exp(-rows / (4.0 * F)), 0, 1)
@@ -32,15 +61,13 @@ def face(neutral, mouth, colour, clear=False):
         a[..., k] = a[..., k] * (1 - mo) + v * shade * sheen * mo
     above = (np.roll(mo, -1, axis=0) > 0.3) & (mo < 0.3)
     a[..., :3] = np.where(above[..., None], np.clip(a[..., :3] * 1.12, 0, 255), a[..., :3])
-    if clear:
-        a[..., 3] *= 0.72
     return Image.fromarray(np.clip(a, 0, 255).astype(np.uint8), 'RGBA'), mo > 0.5
 
 def band(name, im, mouth):
     ys, xs = np.where(mouth)
     zoom = (HOLE[1] - HOLE[0]) / (xs.max() + 1 - xs.min())
     fw, fh = round(im.width * zoom), round(im.height * zoom)
-    big = im.resize((fw, fh), Image.Resampling.LANCZOS)
+    big = im.resize((fw, fh), Image.Resampling.LANCZOS).filter(ImageFilter.UnsharpMask(1.2, 60, 2))  # crisp after the zoom down
     mbig = np.asarray(Image.fromarray(mouth.astype(np.uint8) * 255).resize((fw, fh), Image.Resampling.BILINEAR)) > 127
     cx = (xs.min() + xs.max() + 1) / 2 * zoom
     ox = round(W / 2 - cx)
@@ -58,4 +85,4 @@ band('ntsc', *face('sgb_neutral.png', 'sgb_mouth.npy', (134, 134, 138)))
 pal = face('sgb_pal_neutral.png', 'sgb_pal_mouth.npy', (198, 198, 201))
 band('pal', *pal)
 band('sfc', *pal)
-band('sgb2', *face('sgb2_clear.png', 'sgb2_mouth.npy', (40, 150, 225), clear=True))
+band('sgb2', *face('sgb2_clear.png', 'sgb2_mouth.npy', (28, 146, 162), clear=True))

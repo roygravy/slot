@@ -29,7 +29,7 @@ def light(height, gain=1.5, blur=0.9):
     return (1 + (lam / lz - 1) * gain) * (1 - occ)
 rng = np.random.default_rng(5)
 def grain(s):
-    g = nd.gaussian_filter(rng.normal(0, 1, (h, w)).astype(np.float32), 1.0 * SS)  # coarse enough to survive the shelf's scale (Roy)
+    g = nd.gaussian_filter(rng.normal(0, 1, (h, w)).astype(np.float32), 0.6 * SS)  # finer and fainter than before: smoother plastic (Roy 2026-10-24)
     return g / g.std() * s
 def down(a):
     return np.asarray(Image.fromarray(a.astype(np.float32), 'F').resize((W, H), Image.Resampling.BOX))
@@ -163,10 +163,8 @@ fade = 1 - tp * tp * (3 - 2 * tp)
 height -= pipe * window * fade * 4.0
 gaps = (gamebit(0.058, 0.288, height) | gamebit(0.942, 0.288, height)
         | gamebit(0.058, 0.929, height) | gamebit(0.942, 0.929, height))
-if SGB2:  # a fifth screw on the right, just under the seam, beside the link port (Roy's photo)
-    gaps |= gamebit(0.942, 0.70, height)
 height *= cart
-grey = 119 * crisp(height) + grain(2.8)
+grey = 119 * crisp(height) + grain(1.3)
 grey *= 1 - 0.06 * nd.gaussian_filter(label.astype(np.float32), SS)
 grey *= 1 - (0.10 if SGB2 else 0.20) * nd.gaussian_filter(letters.astype(np.float32), 0.5 * SS)  # the raised name catches a little shade
 grey *= 1 - 0.65 * nd.gaussian_filter(gaps.astype(np.float32), 0.5 * SS)
@@ -201,4 +199,48 @@ rim = Ad & ~nd.binary_erosion(Ad, iterations=max(1, round(5 * F)))
 clear = np.where(rim, 100, 128 + (G - 128) * 0.45)
 c = np.zeros((H, W, 4), np.uint8); c[..., :3] = np.clip(clear, 0, 255).astype(np.uint8)[..., None]; c[..., 3] = (A * 255).round().astype(np.uint8)
 Image.fromarray(c, 'RGBA').save(f'{out}/{NAME}_clear.png')
+if SGB2:
+    # what the clear shell shows (Roy's photo): the back shell's walls and bosses, and the green
+    # board filling the lower half with its red light, its gold fingers in the grip
+    height = np.zeros((h, w), np.float32)
+    wall = cart & ~nd.binary_erosion(cart, iterations=int(4.5 * SS))
+    height += wall * 7 + cart * 1
+    for u in (0.262, 0.744):
+        height += rect(u - 0.006, 0.02, u + 0.006, 0.36) * 5
+    for u in (0.058, 0.942):
+        for v in (0.288, 0.929):
+            height += disc(u, v, 0.030) * 6 - disc(u, v, 0.012) * 9
+    height *= cart
+    grey = 128 * light(height) + grain(1.2)
+    save(grey3(grey), cart, 'sgb2_interior.png')
+    board = rect(0.045, 0.385, 0.955, 0.905, 0.006) | rect(0.235, 0.86, 0.765, 0.99, 0.003)
+    for u in (0.058, 0.942):
+        for v in (0.929,):
+            board &= ~disc(u, v, 0.022)
+    GREEN, TRACE, NAVY, PIN, GOLD = (np.array(c, np.float32) for c in ((8, 92, 46), (2, 60, 26), (16, 18, 22), (196, 198, 200), (150, 96, 30)))
+    rgb = np.zeros((h, w, 3), np.float32) + GREEN
+    img = Image.new('L', (w, h), 0); d = ImageDraw.Draw(img)
+    for k in range(10):
+        y = V(0.70 + k * 0.016)
+        d.line([(U(0.08), y), (U(0.40), y), (U(0.44), y + 0.04 * h)], fill=255, width=int(1.2 * SS))
+    traces = np.asarray(img) > 127
+    rgb[traces] = TRACE
+    def chip(u0, v0, u1, v1):
+        box = rect(u0, v0, u1, v1, 0.003)
+        for k in range(14):
+            u = u0 + (k + 0.5) / 14 * (u1 - u0)
+            for v in (v0 - 0.008, v1 + 0.001):
+                rgb[rect(u - 0.003, v, u + 0.003, v + 0.007)] = PIN
+        rgb[box] = NAVY
+    chip(0.30, 0.47, 0.52, 0.60)
+    chip(0.58, 0.47, 0.74, 0.58)
+    rgb[disc(0.21, 0.47, 0.009)] = (225, 40, 30)   # the red power light, seen through the shell
+    fingers = np.zeros((h, w), bool)
+    for k in range(31):
+        u = 0.25 + k * 0.50 / 31
+        fingers |= rect(u + 0.0015, 0.905, u + 0.50 / 31 - 0.002, 0.985, 0.0015)
+    rgb[fingers] = GOLD
+    shade = light(board.astype(np.float32) * 3 + fingers * -0.5 + traces * 0.3, gain=1.2)
+    rgb = rgb * shade[..., None] + grain(1.5)[..., None]
+    save(np.clip(rgb, 0, 255), board & cart, 'sgb2_board.png')
 print('ok')
