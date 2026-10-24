@@ -74,6 +74,8 @@ pub struct Session {
     reloading: bool,
     driven: bool,
     sgb_turn: u32,
+    /// The Game Boy's game shows in the core's own grey: every screen effect is off.
+    grey: bool,
 }
 
 impl Session {
@@ -99,6 +101,7 @@ impl Session {
             reloading: false,
             driven: false,
             sgb_turn: 0,
+            grey: false,
         };
         // A game left running comes straight back. Its core loads on its own thread, so start it
         // now and let the card read overlap the rest of the boot. Waiting for the first update
@@ -313,6 +316,8 @@ impl Session {
         }
         let mut recoloured = false;
         if let Some(p) = self.app.take_gb_palette() {
+            // A palette set over the grey: the grey goes on again below while effects are off.
+            self.grey = false;
             if let Some(emu) = &self.emu {
                 let options = match p {
                     Some(p) => crate::core::gb_palette_options(self.app.core(), p),
@@ -322,6 +327,23 @@ impl Session {
                     emu.set_option(key, &value);
                     recoloured = true;
                 }
+            }
+        }
+        // Effects off is the bare emulator: a Game Boy game in the core's own grey, not the
+        // chosen palette (Roy). Back on, the palette returns.
+        let grey = self.app.screen_bare() && self.app.palette_live();
+        if grey != self.grey {
+            if let Some(emu) = &self.emu {
+                let options = match (grey, self.app.gb_palette()) {
+                    (true, _) => crate::core::gb_grey_options(self.app.core()),
+                    (false, Some(p)) => crate::core::gb_palette_options(self.app.core(), p),
+                    (false, None) => Vec::new(),
+                };
+                for (key, value) in options {
+                    emu.set_option(key, &value);
+                    recoloured = true;
+                }
+                self.grey = grey;
             }
         }
         if self.app.take_sgb_border_changed() && self.app.sgb_playing() {
@@ -574,6 +596,8 @@ impl Session {
             false => slot_store::core_for_platform(&self.root, stem, platform),
         };
         launch(&format!("opening {stem} on {}", core.as_str()));
+        // The core opens in the chosen palette: the grey, if wanted, follows once it runs.
+        self.grey = false;
         self.app.set_core(core);
         self.app.set_platform(platform);
         self.app

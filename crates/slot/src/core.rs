@@ -372,6 +372,18 @@ pub fn gb_palette_options(which: Core, palette: GbPalette) -> Vec<(&'static str,
     }
 }
 
+/// Every screen effect off: the Game Boy's picture in the core's own plain grey.
+pub fn gb_grey_options(which: Core) -> Vec<(&'static str, String)> {
+    match which {
+        Core::Mgba => vec![
+            ("mgba_gb_colors_preset", "0".to_string()),
+            ("mgba_gb_colors", "Grayscale".to_string()),
+        ],
+        Core::Gambatte => vec![("gambatte_gb_colorization", "disabled".to_string())],
+        Core::Gpsp | Core::Fceumm | Core::Snes9x => Vec::new(),
+    }
+}
+
 /// Palettes off: the game's own Game Boy Color colors, as when it starts that way.
 pub fn gb_palette_off_options(which: Core) -> Vec<(&'static str, String)> {
     match which {
