@@ -68,6 +68,8 @@ const BATTERY_POLL_MS: Millis = 10_000;
 const MENU_REVEAL_MS: Millis = 180;
 /// How long the camera takes to close in on the Super Game Boy once it is in.
 const SGB_ZOOM_MS: f32 = 900.0;
+/// The camera pulling back out of the Super Game Boy: off at once, landing softly on the SNES.
+const SGB_UNZOOM_MS: f32 = 700.0;
 
 const CHARGE_POLL_MS: Millis = 1_000;
 const HEADPHONES_POLL_MS: Millis = 500;
@@ -384,6 +386,8 @@ pub struct App {
     sgb: bool,
     /// When the Super Game Boy went in: the camera closes in on it from then.
     sgb_zoom_at: Option<Millis>,
+    /// The camera pulling back out of the Super Game Boy, from the Game Boy shelf it showed.
+    sgb_unzoom: Option<(Millis, usize)>,
     named_core: bool,
     video_mode: VideoMode,
     link: Option<LinkSession>,
@@ -588,6 +592,7 @@ impl App {
             platform: Platform::default(),
             sgb: false,
             sgb_zoom_at: None,
+            sgb_unzoom: None,
             named_core: false,
             video_mode: VideoMode::default(),
             link: None,
@@ -1903,6 +1908,14 @@ impl App {
         (u < 1.0).then_some(u)
     }
 
+    /// The Super Game Boy coming out: the zoom in reverse, 1 down to 0, and the Game Boy shelf
+    /// it leaves; None once the camera is back on the SNES.
+    fn sgb_unzoom(&self) -> Option<(f32, usize)> {
+        let (at, shelf) = self.sgb_unzoom?;
+        let s = self.now().saturating_sub(at) as f32 / SGB_UNZOOM_MS;
+        (s < 1.0).then_some((s, shelf))
+    }
+
     fn draw_shelf_footer(&self, out: &mut Vec<Draw>) {
         draw_footer(
             self.canvas(),
@@ -1919,13 +1932,19 @@ impl App {
     /// The Super Game Boy just went in: the camera closes in on it until its top is the slot
     /// band, the SNES and the clock passing out of the picture under it, and the Game Boy shelf
     /// comes down into place. No fades: the camera only moves (Roy).
-    fn draw_sgb_zoom(&self, u: f32, out: &mut Vec<Draw>) {
+    fn draw_sgb_zoom(&self, u: f32, gb_shelf: usize, out: &mut Vec<Draw>) {
+        let come = ease(((u - 0.4) / 0.6).clamp(0.0, 1.0));
+        self.draw_sgb_camera(ease(u), come, u, gb_shelf, out)
+    }
+
+    /// The camera `e` of the way from the SNES to the Super Game Boy's top, the Game Boy shelf
+    /// `come` of the way down into place, the sharp band showing from `u` 0.55 on.
+    fn draw_sgb_camera(&self, e: f32, come: f32, u: f32, gb_shelf: usize, out: &mut Vec<Draw>) {
         self.draw_background(out);
         let (Some(model), Some(sets)) = (self.sgb_model(), self.slot_sets) else {
             return;
         };
         let canvas = self.canvas();
-        let e = ease(u);
         let a = slot_ui::sgb_seated_rect(model.mould(), canvas);
         let b = slot_ui::sgb_band_rect(model, canvas);
         // The SGB grows evenly on the way, and the camera follows it there.
@@ -1933,10 +1952,10 @@ impl App {
         let (x, y) = (a.0 + (b.0 - a.0) * e, a.1 + (b.1 - a.1) * e);
         let (dx, dy) = (x - k * a.0, y - k * a.1);
         // The Game Boy shelf comes down from above over the second half.
-        let come = ease(((u - 0.4) / 0.6).clamp(0.0, 1.0));
         if come > 0.0 {
             let from = out.len();
-            self.shelf().draw_row(canvas, None, 0.0, 0.0, 1.0, out);
+            slot_ui::set_sgb_band(true);
+            self.shelves[gb_shelf].1.draw_row(canvas, None, 0.0, 0.0, 1.0, out);
             let drop = -(1.0 - come) * canvas.h;
             for d in &mut out[from..] {
                 zoom_draw(d, 1.0, 0.0, drop, 1.0);
@@ -1970,7 +1989,7 @@ impl App {
         }
         // Near the end the band's own sharp art fades in over the enlarged face, under the same
         // camera, so the zoom lands on it without a jump (Roy: the enlarged face went soft).
-        slot_ui::set_sgb_band(self.sgb_band());
+        slot_ui::set_sgb_band(true);
         let sharp = ease(((u - 0.55) / 0.3).clamp(0.0, 1.0));
         if sharp > 0.0 {
             let band = Some(sets[8 + model as usize]);
@@ -1984,6 +2003,7 @@ impl App {
                 zoom_draw(d, r, dx - dx1 * r, dy - dy1 * r, sharp);
             }
         }
+        slot_ui::set_sgb_band(self.sgb_band());
     }
 
     /// Whether the slot is the Super Game Boy's top: the Game Boy carts go into it.
@@ -2029,6 +2049,9 @@ impl App {
             return;
         };
         self.shelf_mut().release_hold();
+        // The camera pulls back out first, the Game Boy shelf going up out of the picture.
+        self.sgb_unzoom = Some((self.now(), self.shelf_at));
+        self.sgb_zoom_at = None;
         self.sgb = false;
         self.shelf_at = at;
         self.shelf_mut().select(i);
@@ -2038,7 +2061,7 @@ impl App {
         self.name_pending = true;
         self.phase = Phase::Ejecting {
             cart: slot_store::SGB_STEM.to_string(),
-            t: -EJECT_HOLD_S,
+            t: -(SGB_UNZOOM_MS / 1000.0 + 0.05),
         };
     }
 
@@ -4238,7 +4261,15 @@ impl App {
             }
             .draw(out),
             Phase::Shelf if self.sgb_zoom().is_some() => {
-                self.draw_sgb_zoom(self.sgb_zoom().unwrap_or(1.0), out)
+                self.draw_sgb_zoom(self.sgb_zoom().unwrap_or(1.0), self.shelf_at, out)
+            }
+            Phase::Ejecting { .. } if self.sgb_unzoom().is_some() => {
+                if let Some((s, shelf)) = self.sgb_unzoom() {
+                    // Off at once, the shelf going up first; a soft landing on the SNES.
+                    let e = (1.0 - s) * (1.0 - s);
+                    let come = (1.0 - s / 0.6).clamp(0.0, 1.0).powi(2);
+                    self.draw_sgb_camera(e, come, 1.0 - s, shelf, out)
+                }
             }
             Phase::Shelf => {
                 self.draw_background(out);
@@ -4374,6 +4405,10 @@ impl App {
                 self.shelf()
                     .draw_row(self.canvas(), Some(cart), 0.0, self.recede(cart), 1.0, out);
                 self.chrome(cart, 0.0, out);
+                // The Super Game Boy comes out under the clock the camera pulled back to.
+                if cart == slot_store::SGB_STEM {
+                    self.draw_shelf_footer(out);
+                }
             }
             Phase::Playing { cart } if self.screen < 1.0 => {
                 self.draw_background(out);
