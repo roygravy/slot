@@ -32,6 +32,23 @@ fn candidates(root: &Path, core: Core) -> Vec<PathBuf> {
     paths
 }
 
+/// Read every core's library once, in the background, so the first game of a console does not
+/// wait on the card for its core: on the device the first SNES insert stuttered while Snes9x
+/// was read in (Roy). Later opens find it in memory.
+pub fn warm_cores(root: &Path) {
+    let files: Vec<PathBuf> = Core::ALL
+        .into_iter()
+        .filter_map(|c| candidates(root, c).into_iter().find(|p| p.exists()))
+        .collect();
+    let _ = std::thread::Builder::new()
+        .name("warm-cores".into())
+        .spawn(move || {
+            for file in files {
+                let _ = std::fs::read(file);
+            }
+        });
+}
+
 pub struct Opened {
     pub core: Box<dyn RetroCore>,
     pub named: bool,

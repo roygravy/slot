@@ -82,6 +82,7 @@ impl Session {
     }
 
     pub fn boot_with(root: PathBuf, sink: Box<dyn AudioSink>) -> Self {
+        crate::core::warm_cores(&root);
         let mut session = Session {
             app: App::boot(&root),
             root,

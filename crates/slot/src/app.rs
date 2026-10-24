@@ -67,7 +67,7 @@ const BATTERY_CRITICAL: u8 = 5;
 const BATTERY_POLL_MS: Millis = 10_000;
 const MENU_REVEAL_MS: Millis = 180;
 /// How long the camera takes to close in on the Super Game Boy once it is in.
-const SGB_ZOOM_MS: f32 = 1400.0;
+const SGB_ZOOM_MS: f32 = 900.0;
 
 const CHARGE_POLL_MS: Millis = 1_000;
 const HEADPHONES_POLL_MS: Millis = 500;
@@ -3680,7 +3680,8 @@ impl App {
                 let at = SEATED_AT * click - Sfx::Insert.lead() / pace;
                 touched = !*resumed && was < at && *t >= at;
                 if sgb_going_in {
-                    sgb_in = *t >= INSERT_S;
+                    // No core to wait for: the camera moves in just after the click (Roy: snappier).
+                    sgb_in = *t >= SEATED_AT + 0.08;
                     sgb_in.then_some(Phase::Shelf)
                 } else {
                     (*t >= INSERT_S && *core_ready).then(|| Phase::Playing {
