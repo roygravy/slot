@@ -102,9 +102,15 @@ pub fn mould_of(cart: &Cart) -> Mould {
         Platform::Snes => match outline {
             Some(Outline::Notched) => Mould::SnesNtsc,
             Some(Outline::Rounded) => Mould::SnesPal,
-            _ => match slot_store::snes::cached_region(&cart.rom) {
-                slot_store::snes::Region::Ntsc => Mould::SnesNtsc,
-                slot_store::snes::Region::Pal => Mould::SnesPal,
+            // A sticker fits only the cart it was printed for: a wide PAL/SFC one goes on the
+            // flatter cart, a taller NTSC one on the American cart, whatever the game's region.
+            _ => match cart.label.as_deref().and_then(art::is_wide_snes_label) {
+                Some(true) => Mould::SnesPal,
+                Some(false) => Mould::SnesNtsc,
+                None => match slot_store::snes::cached_region(&cart.rom) {
+                    slot_store::snes::Region::Ntsc => Mould::SnesNtsc,
+                    slot_store::snes::Region::Pal => Mould::SnesPal,
+                },
             },
         },
         // The folder a cart sits in makes it a Game Boy or a Game Boy Color cart; the studio's
