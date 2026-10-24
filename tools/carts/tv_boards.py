@@ -54,11 +54,6 @@ st = 55  # a middle finger of the GBA board: gold from x 55, 7 wide, pitch 9
 # alternates as it does there; each cell is the via over a finger, the finger, the green under it
 def finger_cell(x0):
     c = gba[156:201, x0 - 1:x0 + 8].copy()
-    # round the gold's corners a touch more: the corner pixel and its two neighbours lean green
-    for y, sy in ((166 - 156, 1), (195 - 156, -1)):
-        for x, sx in ((1, 1), (7, -1)):
-            for (dy, dx), k in (((0, 0), 0.6), ((sy, 0), 0.25), ((0, sx), 0.25)):
-                c[y + dy, x + dx, :3] = c[y + dy, x + dx, :3] * (1 - k) + FLAT * k
     return c
 FINGERS = [finger_cell(46 + 9 * i) for i in range(8)]
 FINGER_BOTTOM = 200 - 156                       # the cell's last board row
@@ -125,8 +120,8 @@ def rr(h, w, box, r):
 BW, BH = 247, 147  # the last 4 rows hold the drop shadow
 FOOT = BH - 5       # the board's last row
 def snes_board():
-    m = rr(BH, BW, (0, 0, BW - 1, 116), 3)
-    m |= rr(BH, BW, (44, 100, 202, FOOT), 2)
+    m = rr(BH, BW, (0, 0, BW - 1, 116), 7)  # round corners, as the GBA board's
+    m |= rr(BH, BW, (44, 100, 202, FOOT), 6)
     for cx in (0, BW - 1):  # the half-round notches the shell's posts sit in
         m &= ~rr(BH, BW, (cx - 5, 53, cx + 5, 63), 5)
     x0, n = 48, 17
@@ -157,9 +152,9 @@ def nes_board():
     a wide body, a narrower piece on top at the right, and a tab with the fingers that fits
     the cart's narrower foot."""
     h, w = 337, 312
-    m = rr(h, w, (28, 219, 280, 288), 5)
-    m |= rr(h, w, (155, 180, 279, 230), 5)
-    m |= rr(h, w, (37, 270, 271, 331), 4)
+    m = rr(h, w, (28, 219, 280, 288), 7)
+    m |= rr(h, w, (155, 180, 279, 230), 7)
+    m |= rr(h, w, (37, 270, 271, 331), 6)
     x0, n = 37 + (234 - 25 * 9) // 2, 25
     traces, vias = [], []
     for k in range(n):
@@ -168,8 +163,8 @@ def nes_board():
             traces.append([(x, 292), (x, 284)])
     traces += [[(180, 199), (180, 214), (190, 222)], [(262, 200), (274, 212), (274, 262)], [(32, 226), (32, 280)]]
     vias += [(274, 265), (180, 196), (32, 223), (32, 283)]
-    chips = [(CHIP_BIG, 34, 219), (CHIP_BIG, 146, 219), (CHIP_SMALL, 206, 182)]
-    parts = [(PART, 254, 222)]
+    chips = [(CHIP_BIG, 37, 221), (CHIP_BIG, 147, 221), (CHIP_SMALL, 206, 184)]
+    parts = [(PART, 257, 226)]
     return build(m, (x0, n, 331), chips, parts, vias, traces)
 
 Image.fromarray(nes_board(), 'RGBA').save('assets/nes_board.png', optimize=True)
