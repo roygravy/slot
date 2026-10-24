@@ -4,7 +4,7 @@ patched out), its edge (a lighter cut rim) and drop shadow are copied by profile
 and the via over each one are copied cell by cell, and the chips are the Game Boy board's own,
 turned on their side. Only the traces are drawn. One SNES board serves the NTSC and the PAL cart
 (as the real carts share one), at the same size in both.
-Usage: tv_boards.py (from the repo root). The NES outline is read from tools/carts/nes_board_mask.png."""
+Usage: tv_boards.py (from the repo root)."""
 import numpy as np
 from PIL import Image, ImageDraw
 from scipy import ndimage as nd
@@ -50,7 +50,17 @@ def feature(px):
 
 # ---- parts to copy ----
 st = 55  # a middle finger of the GBA board: gold from x 55, 7 wide, pitch 9
-FINGER = gba[156:201, st - 1:st + 8]          # the via over it, the finger, the green under it
+# eight neighbouring fingers of the GBA board in turn, so the diagonal shading in the gold
+# alternates as it does there; each cell is the via over a finger, the finger, the green under it
+def finger_cell(x0):
+    c = gba[156:201, x0 - 1:x0 + 8].copy()
+    # round the gold's corners a touch more: the corner pixel and its two neighbours lean green
+    for y, sy in ((166 - 156, 1), (195 - 156, -1)):
+        for x, sx in ((1, 1), (7, -1)):
+            for (dy, dx), k in (((0, 0), 0.6), ((sy, 0), 0.25), ((0, sx), 0.25)):
+                c[y + dy, x + dx, :3] = c[y + dy, x + dx, :3] * (1 - k) + FLAT * k
+    return c
+FINGERS = [finger_cell(46 + 9 * i) for i in range(8)]
 FINGER_BOTTOM = 200 - 156                       # the cell's last board row
 VIA = gba[146:155, 300:309]                     # a lone via, drill and ring
 CHIP_BIG = np.rot90(gb[168:270, 66:134])        # the Game Boy board's 32-pin chip, on its side
@@ -90,7 +100,7 @@ def build(mask, fingers, chips, parts, vias, traces):
         paste(rgb, VIA, x - 4, y - 4, holes)
     x0, n, bottom = fingers
     for k in range(n):
-        paste(rgb, FINGER, x0 + k * 9, bottom - FINGER_BOTTOM, holes)
+        paste(rgb, FINGERS[k % len(FINGERS)], x0 + k * 9, bottom - FINGER_BOTTOM, holes)
     alpha = mask * 255.0
     def shift(m, dy, dx):
         out = np.zeros_like(m)
@@ -143,19 +153,24 @@ for name, (W, H) in (('snes_board', (360, 231)), ('snes_pal_board', (336, 228)))
 
 # ---- NES: its own outline (a wide body, a narrower piece on top), fingers across the bottom ----
 def nes_board():
-    m = np.asarray(Image.open('tools/carts/nes_board_mask.png').convert('L')) > 127
-    h, w = m.shape
-    vias, traces = [], []
-    x0, n = 22, 29
+    """Sized on Roy's photo of an open NES cart (cart 6..305 wide here, so 0.755 of the photo):
+    a wide body, a narrower piece on top at the right, and a tab with the fingers that fits
+    the cart's narrower foot."""
+    h, w = 337, 312
+    m = rr(h, w, (28, 219, 280, 288), 5)
+    m |= rr(h, w, (155, 180, 279, 230), 5)
+    m |= rr(h, w, (37, 270, 271, 331), 4)
+    x0, n = 37 + (234 - 25 * 9) // 2, 25
+    traces, vias = [], []
     for k in range(n):
-        x = x0 + k * 9 + 3
+        x = x0 + k * 9 + 4
         if k % 3 == 0:
-            traces.append([(x, 300), (x, 294)])
-    traces += [[(180, 199), (180, 214), (190, 222)], [(258, 200), (270, 212), (270, 280)], [(26, 223), (24, 290)]]
-    vias += [(270, 283), (180, 196), (26, 220), (278, 220)]
-    chips = [(CHIP_BIG, 26, 222), (CHIP_BIG, 134, 222), (CHIP_SMALL, 204, 184)]
-    parts = [(PART, 248, 236)]
-    return build(m, (x0, n, 334), chips, parts, vias, traces)
+            traces.append([(x, 292), (x, 284)])
+    traces += [[(180, 199), (180, 214), (190, 222)], [(262, 200), (274, 212), (274, 262)], [(32, 226), (32, 280)]]
+    vias += [(274, 265), (180, 196), (32, 223), (32, 283)]
+    chips = [(CHIP_BIG, 34, 219), (CHIP_BIG, 146, 219), (CHIP_SMALL, 206, 182)]
+    parts = [(PART, 254, 222)]
+    return build(m, (x0, n, 331), chips, parts, vias, traces)
 
 Image.fromarray(nes_board(), 'RGBA').save('assets/nes_board.png', optimize=True)
 print('ok')
