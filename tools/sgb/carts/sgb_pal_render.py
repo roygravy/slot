@@ -200,47 +200,73 @@ clear = np.where(rim, 100, 128 + (G - 128) * 0.45)
 c = np.zeros((H, W, 4), np.uint8); c[..., :3] = np.clip(clear, 0, 255).astype(np.uint8)[..., None]; c[..., 3] = (A * 255).round().astype(np.uint8)
 Image.fromarray(c, 'RGBA').save(f'{out}/{NAME}_clear.png')
 if SGB2:
-    # what the clear shell shows (Roy's photo): the back shell's walls and bosses, and the green
-    # board filling the lower half with its red light, its gold fingers in the grip
+    # what the clear shell shows, from Roy's photo of a Super Game Boy opened up: the back shell's
+    # walls, posts and screw bosses; the green board across the lower half with its gold fingers
+    # in three groups; the black Game Boy slot moulding standing on it, its smile-shaped top
+    # carrying the bay's two ridges down
     height = np.zeros((h, w), np.float32)
     wall = cart & ~nd.binary_erosion(cart, iterations=int(4.5 * SS))
     height += wall * 7 + cart * 1
-    for u in (0.262, 0.744):
-        height += rect(u - 0.006, 0.02, u + 0.006, 0.36) * 5
-    for u in (0.058, 0.942):
-        for v in (0.288, 0.929):
-            height += disc(u, v, 0.030) * 6 - disc(u, v, 0.012) * 9
+    for u, v in ((0.055, 0.255), (0.945, 0.265)):                     # the round posts
+        height += disc(u, v, 0.028) * 6 - disc(u, v, 0.010) * 4
+    for u in (0.058, 0.942):                                          # the screw bosses
+        height += disc(u, 0.929, 0.032) * 6 - disc(u, 0.929, 0.012) * 9
+    for v in (0.43, 0.62):                                            # ribs along the sides
+        height += (rect(0.02, v - 0.006, 0.10, v + 0.006) | rect(0.90, v - 0.006, 0.98, v + 0.006)) * 4
+    height -= rect(0.39, 0.17, 0.56, 0.19, 0.003) * 3                 # the slot in the back
     height *= cart
     grey = 128 * light(height) + grain(1.2)
+    holes = disc(0.058, 0.929, 0.012) | disc(0.942, 0.929, 0.012)
+    grey = np.where(holes, grey * 0.55, grey)
     save(grey3(grey), cart, 'sgb2_interior.png')
-    board = rect(0.045, 0.385, 0.955, 0.905, 0.006) | rect(0.235, 0.86, 0.765, 0.99, 0.003)
-    for u in (0.058, 0.942):
-        for v in (0.929,):
-            board &= ~disc(u, v, 0.022)
-    GREEN, TRACE, NAVY, PIN, GOLD = (np.array(c, np.float32) for c in ((8, 92, 46), (2, 60, 26), (16, 18, 22), (196, 198, 200), (150, 96, 30)))
+
+    board = (rect(0.12, 0.39, 0.93, 0.90, 0.006) & ~rect(0.10, 0.36, 0.165, 0.44) & ~rect(0.885, 0.36, 0.95, 0.44)) \
+        | rect(0.165, 0.39, 0.885, 0.45)
+    GREEN, TRACE, VIA, GOLD = (np.array(c, np.float32) for c in ((10, 112, 48), (4, 78, 32), (190, 160, 70), (176, 128, 46)))
     rgb = np.zeros((h, w, 3), np.float32) + GREEN
     img = Image.new('L', (w, h), 0); d = ImageDraw.Draw(img)
-    for k in range(10):
-        y = V(0.70 + k * 0.016)
-        d.line([(U(0.08), y), (U(0.40), y), (U(0.44), y + 0.04 * h)], fill=255, width=int(1.2 * SS))
-    traces = np.asarray(img) > 127
+    trng = np.random.default_rng(11)
+    for k in range(26):                                               # traces wandering over it
+        x, y = U(trng.uniform(0.16, 0.88)), V(trng.uniform(0.60, 0.86))
+        pts = [(x, y)]
+        for _ in range(3):
+            x += trng.choice([-1, 1]) * U(trng.uniform(0.02, 0.10)); y += trng.choice([-1, 1]) * V(trng.uniform(0.0, 0.04))
+            pts.append((x, y))
+        d.line(pts, fill=255, width=int(0.9 * SS))
+    traces = (np.asarray(img) > 127) & board
     rgb[traces] = TRACE
-    def chip(u0, v0, u1, v1):
-        box = rect(u0, v0, u1, v1, 0.003)
-        for k in range(14):
-            u = u0 + (k + 0.5) / 14 * (u1 - u0)
-            for v in (v0 - 0.008, v1 + 0.001):
-                rgb[rect(u - 0.003, v, u + 0.003, v + 0.007)] = PIN
-        rgb[box] = NAVY
-    chip(0.30, 0.47, 0.52, 0.60)
-    chip(0.58, 0.47, 0.74, 0.58)
+    vimg = Image.new('L', (w, h), 0); vd = ImageDraw.Draw(vimg)
+    for _ in range(140):                                              # the vias, in little rows
+        u, v = trng.uniform(0.15, 0.90), trng.uniform(0.60, 0.87)
+        for k in range(trng.integers(1, 5)):
+            x, y = U(u + k * 0.012), V(v)
+            vd.ellipse([x - 1.3 * SS, y - 1.3 * SS, x + 1.3 * SS, y + 1.3 * SS], fill=255)
+    vias = (np.asarray(vimg) > 127) & board
+    rgb[vias] = VIA
     rgb[disc(0.21, 0.47, 0.009)] = (225, 40, 30)   # the red power light, seen through the shell
     fingers = np.zeros((h, w), bool)
-    for k in range(31):
-        u = 0.25 + k * 0.50 / 31
-        fingers |= rect(u + 0.0015, 0.905, u + 0.50 / 31 - 0.002, 0.985, 0.0015)
+    for u0, u1, n in ((0.135, 0.225, 5), (0.25, 0.75, 31), (0.775, 0.865, 5)):
+        pitch = (u1 - u0) / n
+        for k in range(n):
+            u = u0 + k * pitch
+            fingers |= rect(u + 0.0015, 0.905, u + pitch - 0.002, 0.985, 0.0015)
+    board |= fingers
     rgb[fingers] = GOLD
-    shade = light(board.astype(np.float32) * 3 + fingers * -0.5 + traces * 0.3, gain=1.2)
+    # the black slot moulding: wall to wall across the bay, its top the bay's smile, down past
+    # the board's edge to the connector with its two ears
+    smile2 = 0.033 * (1 - np.clip((xx / w - 0.503) / 0.241, -1, 1) ** 2)
+    housing = (rect(0.262, 0.16, 0.744, 0.58, 0.01) & (yy / h > 0.255 + smile2 * 0.8)) | rect(0.235, 0.40, 0.771, 0.58, 0.006)
+    BLACK = np.array((30, 30, 33), np.float32)
+    rgb[housing] = BLACK
+    hh = board.astype(np.float32) * 3 + fingers * -0.5 + traces * 0.3 + housing * 6
+    for f in (0.25, 0.75):                                            # the bay's ridges, carried on
+        uc = 0.262 + f * (0.744 - 0.262)
+        hh += (np.abs(xx - U(uc)) < 0.004 * w) * housing * 1.2
+    hh += (np.abs(yy - V(0.40)) < 0.003 * h) * housing * -1.0         # the connector's top edge
+    shade = light(hh, gain=1.2)
     rgb = rgb * shade[..., None] + grain(1.5)[..., None]
-    save(np.clip(rgb, 0, 255), board & cart, 'sgb2_board.png')
+    for f in (0.25, 0.75):
+        uc = 0.262 + f * (0.744 - 0.262)
+        rgb[housing & (np.abs(xx - U(uc)) < 0.004 * w)] += 26
+    save(np.clip(rgb, 0, 255), (board | housing) & cart, 'sgb2_board.png')
 print('ok')

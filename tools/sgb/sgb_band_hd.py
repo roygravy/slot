@@ -59,6 +59,14 @@ def face(neutral, mouth, colour, clear=False):
     sheen = 1 + 0.18 * np.clip(depth, 0, 1) ** 2
     for k, v in enumerate((44, 44, 48)):
         a[..., k] = a[..., k] * (1 - mo) + v * shade * sheen * mo
+    # the bay's two ridges run on down the black moulding, as on the faces
+    u0, u1 = (0.29, 0.71) if mouth == 'sgb_mouth.npy' else (0.262, 0.744)
+    xs = np.arange(a.shape[1]) / a.shape[1]
+    for f in (0.25, 0.75):
+        uc = u0 + f * (u1 - u0)
+        on = (np.abs(xs - uc) < 0.004)[None, :] * mo
+        beside = ((xs >= uc + 0.004) & (xs < uc + 0.009))[None, :] * mo
+        a[..., :3] += on[..., None] * 24 - beside[..., None] * 10
     above = (np.roll(mo, -1, axis=0) > 0.3) & (mo < 0.3)
     a[..., :3] = np.where(above[..., None], np.clip(a[..., :3] * 1.12, 0, 255), a[..., :3])
     return Image.fromarray(np.clip(a, 0, 255).astype(np.uint8), 'RGBA'), mo > 0.5

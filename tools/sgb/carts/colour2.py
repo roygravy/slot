@@ -27,6 +27,7 @@ def over(dst, src):
     a = sa + da * (1 - sa)
     rgb = (src[..., :3] * sa + dst[..., :3] * da * (1 - sa)) / np.maximum(a, 1e-6)
     return np.concatenate([rgb, a * 255], axis=2)
+BAY = {'sgb': (0.29, 0.71), 'sgb_pal': (0.262, 0.744), 'sgb2': (0.262, 0.744)}  # the renders' bay walls
 def mouth(a, stem):
     # the mouth is black plastic whatever the shell's colour: a little lighter than black, its
     # top edge in shadow under the lip of the bay
@@ -39,6 +40,14 @@ def mouth(a, stem):
     sheen = 1 + 0.18 * np.clip(depth, 0, 1) ** 2
     for k, v in enumerate((44, 44, 48)):
         a[..., k] = a[..., k] * (1 - mo) + v * shade * sheen * mo
+    # the bay's two ridges run on down the black moulding (Roy's photo of the inside)
+    u0, u1 = BAY[stem]
+    xs = np.arange(a.shape[1]) / a.shape[1]
+    for f in (0.25, 0.75):
+        uc = u0 + f * (u1 - u0)
+        on = (np.abs(xs - uc) < 0.004)[None, :] * mo
+        beside = ((xs >= uc + 0.004) & (xs < uc + 0.009))[None, :] * mo
+        a[..., :3] += on[..., None] * 24 - beside[..., None] * 10
     a[..., 3] = np.maximum(a[..., 3], mo * 255)
     above = (np.roll(mo, -1, axis=0) > 0.3) & (mo < 0.3)
     a[..., :3] = np.where(above[..., None], np.clip(a[..., :3] * 1.12, 0, 255), a[..., :3])
