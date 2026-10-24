@@ -3,6 +3,8 @@ use std::time::{Duration, Instant};
 use slot_gfx::{Compositor, Draw, ScreenEffect, TexId, OUT_H, OUT_W};
 
 /// Labels cached quicker than this are done before the banner would show them.
+/// The studio's Model row words: the SNES's, the Game Boy's, then the Super Game Boy's.
+const MODEL_WORDS: [&str; 7] = ["PAL", "NTSC", "GB", "GBC", "Europe", "USA", "SGB 2"];
 const REBUILD_BANNER_AFTER: Duration = Duration::from_millis(600);
 const PAPER: &[u8] = include_bytes!("../assets/paper.png");
 const GBA_LCD_OVERLAY: &[u8] = include_bytes!("../assets/gba_lcd_overlay.png");
@@ -584,7 +586,7 @@ impl Frontend {
         let inks = words.split_off(words.len() - crate::shell_picker::MARKERS.len());
         let found = words.split_off(words.len() - 2);
         let tabs = words.split_off(words.len() - 3);
-        let models = words.split_off(words.len() - 8);
+        let models = words.split_off(words.len() - MODEL_WORDS.len());
         let finishes = words.split_off(words.len() - crate::shell_picker::FINISH_NAMES.len());
         let mut shell_legend: Vec<(TexId, u32)> = faces
             .shell_legend
@@ -791,7 +793,9 @@ impl Frontend {
         let gb = platform == slot_store::Platform::Gb && !colour;
         let gbc = platform == slot_store::Platform::Gbc
             || (platform == slot_store::Platform::Gb && colour);
-        compositor.set_picture_appearance(gb, if gb { 0.03 } else { 0.0 });
+        // Effects off is the emulator's own picture: no dimming, saturation or panel tone.
+        let bare = self.session.app().screen_bare();
+        compositor.set_picture_appearance(gb, if gb && !bare { 0.03 } else { 0.0 });
         let gba = platform == slot_store::Platform::Gba;
         // The colour screens, GBC and GBA, cast lighter shadows than the Game Boy's.
         compositor.set_pixel_shadow(match (gba || gbc, gb) {
@@ -804,13 +808,16 @@ impl Frontend {
             false => GB_PALE_OPACITY,
         });
         compositor.set_lcd_mix(GBC_LCD[0], GBC_LCD[1], gba);
-        compositor.set_black_edge(self.session.app().black_border());
+        // Effects off: black around the picture too, nothing of slot.'s screen left.
+        compositor.set_black_edge(self.session.app().black_border() || bare);
         compositor.set_saturation(match (gba, gbc) {
+            _ if bare => 1.0,
             (true, _) => GBA_SATURATION,
             (_, true) => GBC_SATURATION,
             _ => 1.0,
         });
         match gbc || gba {
+            true if bare => compositor.set_panel(Some(GBC_PANEL), [1.0; 3]),
             true => compositor.set_panel(Some(GBC_PANEL), GBC_PANEL),
             false => compositor.set_panel(None, [1.0; 3]),
         }
@@ -1421,7 +1428,7 @@ impl UiFaces {
             shell_words: crate::shell_picker::swatch_names()
                 .into_iter()
                 .chain(crate::shell_picker::FINISH_NAMES.map(|(_, name)| name))
-                .chain(["PAL", "NTSC", "GB", "GBC", "Europe", "USA", "SGB 2"])
+                .chain(MODEL_WORDS)
                 .chain(["Color", "Label", "Marker", "Looking", "None Found"])
                 .chain(crate::shell_picker::MARKERS.map(|(name, _)| name))
                 .map(slot_ui::shell_picker_word)

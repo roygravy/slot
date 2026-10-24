@@ -2250,6 +2250,16 @@ impl App {
         }
     }
 
+    /// Every screen effect of a Game Boy off (SELECT + B, or each one in the menu): the
+    /// emulator's own picture, without slot.'s dimming, saturation or panel tone either.
+    pub fn screen_bare(&self) -> bool {
+        let platform = self.playing_platform();
+        !platform.tv()
+            && self.screen_shader() == Shader::Off
+            && !self.pixel_transparency()
+            && !self.lcd_ghosting_for(platform)
+    }
+
     /// The console the game plays on, for its screen and menus: the SNES for a Game Boy game in
     /// the Super Game Boy.
     pub fn playing_platform(&self) -> Platform {

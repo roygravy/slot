@@ -437,17 +437,65 @@ pub fn search_heading_face(text: &str) -> UndoFace {
     plain(text, 13.0, 3.0, true)
 }
 
+/// How wide the typed words can show in the field, between the magnifier and the clear button.
+const TYPED_MAX: u32 = FIELD.2 as u32 - 100;
+/// How far in the first letters shown fade, when the start of a long name is cut off.
+const TYPED_FADE: u32 = 24;
+/// How wide a game's name can show in the list.
+const ROW_MAX: f32 = OUT_W as f32 - 2.0 * LIST_X;
+
+/// What is typed. A name longer than the field shows its end, where the caret is, the
+/// letters before it fading out at the field's left, as a phone's search field does.
 pub fn search_typed_face(text: &str) -> UndoFace {
-    plain(text, FIELD_PX, 0.0, false)
+    let face = plain(text, FIELD_PX, 0.0, false);
+    if face.w <= TYPED_MAX {
+        return face;
+    }
+    let (w, h) = (TYPED_MAX, face.h);
+    let skip = face.w - w;
+    let mut rgba = vec![0u8; (w * h * 4) as usize];
+    for y in 0..h {
+        for x in 0..w {
+            let from = ((y * face.w + x + skip) * 4) as usize;
+            let to = ((y * w + x) * 4) as usize;
+            rgba[to..to + 4].copy_from_slice(&face.rgba[from..from + 4]);
+            if x < TYPED_FADE {
+                let a = rgba[to + 3] as u32 * x / TYPED_FADE;
+                rgba[to + 3] = a as u8;
+            }
+        }
+    }
+    UndoFace { rgba, w, h }
 }
 
 pub fn search_status_face(text: &str) -> UndoFace {
     plain(text, 15.0, 3.0, true)
 }
 
+/// A game found: its name, cut short with an ellipsis when it is wider than the list, and
+/// its platform under it.
 pub fn search_row_faces(name: &str, platform: &str) -> (UndoFace, UndoFace) {
+    let (px, tracking) = (19.0, 3.0);
+    let fits = |s: &str| {
+        text::label_font().is_none_or(|font| {
+            text::line_width(font, &s.to_uppercase(), px, tracking) + 4.0 <= ROW_MAX
+        })
+    };
+    let mut shown = name.trim().to_owned();
+    if !fits(&shown) {
+        let mut chars: Vec<char> = shown.chars().collect();
+        while !chars.is_empty() {
+            chars.pop();
+            let cut: String = chars.iter().collect();
+            let cut = format!("{}…", cut.trim_end());
+            if fits(&cut) {
+                shown = cut;
+                break;
+            }
+        }
+    }
     (
-        plain(name, 19.0, 3.0, true),
+        plain(&shown, px, tracking, true),
         plain(platform, 11.0, 2.5, true),
     )
 }
@@ -620,28 +668,14 @@ pub fn draw_label_search(canvas: Canvas, v: &SearchView, out: &mut Vec<Draw>) {
             let tx = fx + 48.0;
             let typed_w = match v.texts.typed {
                 Some(f) => {
-                    let w = (f.1 as f32).min(fw - 100.0);
-                    out.push(Draw::Part {
-                        x: tx.round(),
-                        y: (fy + (fh - f.2 as f32) / 2.0).round(),
-                        w,
-                        h: f.2 as f32,
-                        tex: f.0,
-                        alpha: 1.0,
-                        uv: [1.0 - w / f.1 as f32, 0.0, w / f.1 as f32, 1.0],
-                    });
-                    // Part draws the face's own white; tint it by drawing it as the glyph ink.
-                    if let Some(Draw::Part { .. }) = out.last() {
-                        out.pop();
-                        out.push(tint(
-                            f.0,
-                            tx,
-                            fy + (fh - f.2 as f32) / 2.0,
-                            f.1 as f32,
-                            f.2 as f32,
-                            k.glyph,
-                        ));
-                    }
+                    out.push(tint(
+                        f.0,
+                        tx,
+                        fy + (fh - f.2 as f32) / 2.0,
+                        f.1 as f32,
+                        f.2 as f32,
+                        k.glyph,
+                    ));
                     let clear = v.faces.icons[4];
                     out.push(tint(
                         clear.0,

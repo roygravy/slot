@@ -10,8 +10,8 @@ use slot_ui::{key_rows, Key, SearchScreen};
 const OPEN_MS: f32 = 160.0;
 const CLOSE_MS: f32 = 120.0;
 const BLINK_MS: u64 = 530;
-/// The most typed: what fits in the field.
-const MAX_TYPED: usize = 40;
+/// The most typed: a long name scrolls in the field, its end showing.
+const MAX_TYPED: usize = 80;
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum Press {
@@ -376,6 +376,11 @@ mod tests {
             "Legend of Zelda - Link's Awakening"
         );
         assert_eq!(search("Tetris (World) (Rev 1)").text(), "Tetris");
+        // A long name is kept whole: the field shows its end.
+        assert_eq!(
+            typed_title("A Very Long Game Name That Goes On And On (USA)"),
+            "A Very Long Game Name That Goes On And On"
+        );
     }
 
     #[test]

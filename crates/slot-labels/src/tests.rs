@@ -94,7 +94,7 @@ fn title_resolution_requires_unique_exact_gba_match() {
 }
 
 #[test]
-fn cart_fronts_rank_own_region_photos_then_renders_then_other_regions() {
+fn cart_fronts_rank_own_region_renders_then_photos_then_other_regions_japan_last() {
     let page = r#"
         <a href="https://images.launchbox-app.com/box.png" data-title="Test - Box - Front Image (North America)"></a>
         <a href="https://images.launchbox-app.com/eu.png" data-title="Test - Cart - Front Image (Europe)"></a>
@@ -110,10 +110,16 @@ fn cart_fronts_rank_own_region_photos_then_renders_then_other_regions() {
             .map(|u| u.rsplit('/').next().unwrap().to_owned())
             .collect::<Vec<_>>()
     };
-    assert_eq!(urls("Test (USA)"), ["us.png", "us-fan.png", "eu.png"]);
+    assert_eq!(urls("Test (USA)"), ["us-fan.png", "us.png", "eu.png"]);
     // Another region's: Europe's, then America's, then any other.
-    assert_eq!(urls("Test (Europe)"), ["eu.png", "us.png", "us-fan.png"]);
-    assert_eq!(urls("Test (Japan)"), ["eu.png", "us.png", "us-fan.png"]);
+    assert_eq!(urls("Test (Europe)"), ["eu.png", "us-fan.png", "us.png"]);
+    assert_eq!(urls("Test (Japan)"), ["eu.png", "us-fan.png", "us.png"]);
+    // Japan's come after every other region's, unregioned ones too.
+    let japan = r#"
+        <a href="https://images.launchbox-app.com/jp-fan.png" data-title="Test - Fanart - Cart - Front Image (Japan)"></a>
+        <a href="https://images.launchbox-app.com/any.png" data-title="Test - Cart - Front Image"></a>
+    "#;
+    assert!(source::image_urls(japan, &cart("Test (Europe)")).unwrap()[0].ends_with("/any.png"));
     // LaunchBox has only a fanart render for most Game Boy and Game Boy Color carts.
     let render = r#"<a href="https://images.launchbox-app.com/fan.png" data-title="Boxxle - Fanart - Cart - Front Image (North America)"></a>"#;
     assert!(

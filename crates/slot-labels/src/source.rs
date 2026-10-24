@@ -272,8 +272,8 @@ fn regions(stem: &str, code: &str) -> &'static [&'static str] {
 pub const PHOTO: &str = "Cart - Front";
 pub const RENDER: &str = "Fanart - Cart - Front";
 
-/// Cart fronts, best first and at most three: a photo of the cart from its own region, a fanart
-/// render of that cart, then the same from the other regions, Europe, America, then Japan. A render is a scan of the real label
+/// Cart fronts, best first and at most three: a fanart render of the cart from its own region,
+/// a photo of it, then the same from the other regions, Europe, America, the rest, Japan last. A render is a scan of the real label
 /// on a stock shell, and for Game Boy and Game Boy Color it is most of what LaunchBox has.
 pub fn rank<T: Clone>(stem: &str, code: &str, images: &[(&str, &str, T)]) -> Vec<T> {
     rank_all(stem, code, images)
@@ -299,16 +299,19 @@ fn rank_all<T: Clone>(
                 _ => return None,
             };
             let away = !own.contains(region);
-            // Another region's label: Europe's first, then America's, then Japan's.
+            // Another region's label: Europe's first, then America's, then the rest, and
+            // Japan's last of all (Roy).
             let far = match *region {
                 _ if !away => 0,
                 "Europe" => 1,
                 "North America" | "United States" => 2,
-                "Japan" => 3,
-                _ => 4,
+                "Japan" => 4,
+                _ => 3,
             };
+            // Within a region the render comes first: the real label on a clean shell,
+            // where a photo has glare, wear and a crop to guess.
             Some((
-                (far, u8::from(render)),
+                (far, u8::from(!render)),
                 (render, region.to_string(), image.clone()),
             ))
         })
