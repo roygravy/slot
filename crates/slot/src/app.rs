@@ -3989,6 +3989,11 @@ impl App {
     }
 
     pub fn draw(&self, out: &mut Vec<Draw>) {
+        slot_ui::set_sgb_band(
+            self.sgb
+                && matches!(self.slot_platform(), Platform::Gb | Platform::Gbc)
+                && self.sgb_model().is_some(),
+        );
         let start = out.len();
         self.draw_every(out);
         // A refusal in a menu (States or Screenshots with nothing in them): its words shake no.

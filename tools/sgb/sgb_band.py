@@ -10,9 +10,10 @@ import numpy as np
 from PIL import Image
 
 A = 'assets/'
-W, H = 720, 58
+W, H = 720, 87
+RISE = 29           # the SGB stands this far above the console's 58px band (Roy: 1.5x)
 HOLE = (246, 474)   # the Game Boy slot's opening in slot_front_gb_*.png
-LIP_Y = 44          # where the lip below the opening crosses the middle of the band
+LIP_Y = 44 + RISE   # where the lip below the opening crosses the middle of the band
 
 face = Image.open(sys.argv[1]).convert('RGBA')
 mouth = np.load(sys.argv[2])
@@ -29,7 +30,8 @@ lip = np.where(mbig[:, mid])[0].max() + 1
 ox, oy = round(W / 2 - cx), LIP_Y - lip
 
 def band(snes):
-    im = Image.open(A + snes).convert('RGBA')
+    im = Image.new('RGBA', (W, H), (0, 0, 0, 0))
+    im.alpha_composite(Image.open(A + snes).convert('RGBA'), (0, RISE))
     im.alpha_composite(big, (ox, oy))
     return im
 

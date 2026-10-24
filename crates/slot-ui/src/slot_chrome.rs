@@ -247,12 +247,30 @@ fn band(x: f32, y: f32, w: f32, h: f32, c: [f32; 4], alpha: f32) -> Draw {
     }
 }
 
+/// How far the Super Game Boy's top stands above the band while the Game Boy carts go into
+/// it: the SGB shows half as tall again as the band (Roy).
+pub const SGB_RISE: f32 = 29.0;
+
+static SGB_TALL: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// The band is the Super Game Boy's top, standing `SGB_RISE` above the console.
+pub fn set_sgb_band(on: bool) {
+    SGB_TALL.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+fn rise() -> f32 {
+    match SGB_TALL.load(std::sync::atomic::Ordering::Relaxed) {
+        true => SGB_RISE,
+        false => 0.0,
+    }
+}
+
 fn strip(canvas: Canvas, tex: TexId, alpha: f32) -> Draw {
     Draw::Part {
         x: 0.0,
-        y: BAND_Y,
+        y: BAND_Y - rise(),
         w: canvas.w,
-        h: MOUTH_H,
+        h: MOUTH_H + rise(),
         tex,
         alpha,
         uv: canvas.window(crate::bitmaps::SLOT_W as f32),
@@ -283,7 +301,7 @@ fn draw_console_shadow(canvas: Canvas, alpha: f32, out: &mut Vec<Draw>) {
         let a = CONSOLE_SHADOW_ALPHA * t * t / STEPS as f32 * 2.2;
         out.push(Draw::Rect {
             x: 0.0,
-            y: BAND_Y - CONSOLE_SHADOW + k as f32 * step,
+            y: BAND_Y - rise() - CONSOLE_SHADOW + k as f32 * step,
             w: canvas.w,
             h: CONSOLE_SHADOW - k as f32 * step,
             colour: [0.0, 0.0, 0.0, a * alpha],
@@ -356,7 +374,7 @@ fn for_each_scoop_span(canvas: Canvas, mut span: impl FnMut(f32, f32, f32)) {
 const SLOT_NAME_GAP: f32 = 6.0;
 
 pub fn slot_name_y() -> f32 {
-    OUT_H as f32 - MOUTH_H - HINT_H as f32 - SLOT_NAME_GAP
+    OUT_H as f32 - MOUTH_H - rise() - HINT_H as f32 - SLOT_NAME_GAP
 }
 
 pub fn draw_slot_name(

@@ -7,7 +7,7 @@ mod cheat_page;
 pub use bitmaps::{
     link_port, link_port_light, nes_lid, slot_back, slot_back_gb, slot_back_light, slot_front, slot_front_gb, slot_front_light, slot_tv, Mould,
     SgbModel, sgb_band,
-    NES_LID_W, SLOT_H, SLOT_W,
+    NES_LID_W, SGB_BAND_H, SLOT_H, SLOT_W,
 };
 mod backdrop;
 mod barcode;
@@ -114,7 +114,7 @@ pub use shell_picker::{
 };
 pub use silhouette::{gb_silhouette, silhouette, GbShell};
 pub use slot_chrome::{
-    click_at, insert_seconds, set_light_ground, GB_SEAT_LIFT,
+    click_at, insert_seconds, set_light_ground, set_sgb_band, GB_SEAT_LIFT,
     draw_empty_slot, draw_slot_name, draw_slot_title, ease, edge, housing, opening, recess,
     slot_name_y, SlotChrome, ALERT_PX, LIP_H, MOUTH_H, MOUTH_W,
 };

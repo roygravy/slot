@@ -85,6 +85,8 @@ pub const CHIP_W: u32 = 59;
 pub const CHIP_H: u32 = 41;
 pub const SLOT_W: u32 = OUT_W;
 pub const SLOT_H: u32 = 58;
+/// The band while the Super Game Boy is in: its top stands above the console's.
+pub const SGB_BAND_H: u32 = 87;
 pub const PORT_W: u32 = OUT_W;
 pub const PORT_H: u32 = SLOT_H;
 pub const PLUG_W: u32 = 92;
@@ -491,7 +493,7 @@ pub fn sgb_band(model: SgbModel, front: bool) -> &'static [u8] {
             include_bytes!("../../../assets/sgb_band_sgb2_front.png"),
         ],
     };
-    load(bytes[usize::from(front)], SLOT_W, SLOT_H, &SLOTS[model as usize][usize::from(front)])
+    load(bytes[usize::from(front)], SLOT_W, SGB_BAND_H, &SLOTS[model as usize][usize::from(front)])
 }
 
 pub fn tv_art(mould: Mould, part: TvPart) -> &'static [u8] {

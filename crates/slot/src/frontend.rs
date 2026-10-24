@@ -386,7 +386,12 @@ impl Frontend {
         self.session.app_mut().set_cart_backings(boards);
         let slot = {
             let mut upload =
-                |bytes: &[u8]| compositor.create_texture(slot_ui::SLOT_W, slot_ui::SLOT_H, bytes);
+                |bytes: &[u8]| {
+                    // The Super Game Boy's band stands taller than the console's.
+                    let h = bytes.len() as u32 / (slot_ui::SLOT_W * 4);
+                    debug_assert!(h == slot_ui::SLOT_H || h == slot_ui::SGB_BAND_H);
+                    compositor.create_texture(slot_ui::SLOT_W, h, bytes)
+                };
             [
                 (upload(slot_back()), upload(slot_front())),
                 (upload(slot_back_light()), upload(slot_front_light())),
