@@ -1864,6 +1864,13 @@ impl App {
         self.sgb && self.seated_cart().is_some_and(|c| c.platform == Platform::Gb)
     }
 
+    /// Whether the slot is the Super Game Boy's top: the Game Boy carts go into it.
+    fn sgb_band(&self) -> bool {
+        self.sgb
+            && matches!(self.slot_platform(), Platform::Gb | Platform::Gbc)
+            && self.sgb_model().is_some()
+    }
+
     /// Which Super Game Boy is on the SNES shelf.
     pub fn sgb_model(&self) -> Option<slot_ui::SgbModel> {
         self.shelves
@@ -3989,11 +3996,7 @@ impl App {
     }
 
     pub fn draw(&self, out: &mut Vec<Draw>) {
-        slot_ui::set_sgb_band(
-            self.sgb
-                && matches!(self.slot_platform(), Platform::Gb | Platform::Gbc)
-                && self.sgb_model().is_some(),
-        );
+        slot_ui::set_sgb_band(self.sgb_band());
         let start = out.len();
         self.draw_every(out);
         // A refusal in a menu (States or Screenshots with nothing in them): its words shake no.
@@ -4166,16 +4169,19 @@ impl App {
                         );
                     }
                 }
-                draw_footer(
-                    self.canvas(),
-                    self.battery,
-                    self.battery_percent,
-                    self.bolt,
-                    self.shelf_clock,
-                    self.wifi_shown(self.wifi),
-                    footer_ink(self.light()),
-                    out,
-                );
+                // Over the Super Game Boy the shelf is all SGB: no console band, no clock.
+                if !self.sgb_band() {
+                    draw_footer(
+                        self.canvas(),
+                        self.battery,
+                        self.battery_percent,
+                        self.bolt,
+                        self.shelf_clock,
+                        self.wifi_shown(self.wifi),
+                        footer_ink(self.light()),
+                        out,
+                    );
+                }
             }
             Phase::Buttons { page } => {
                 slot_ui::ButtonsHelp {

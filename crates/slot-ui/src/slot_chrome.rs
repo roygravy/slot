@@ -248,8 +248,8 @@ fn band(x: f32, y: f32, w: f32, h: f32, c: [f32; 4], alpha: f32) -> Draw {
 }
 
 /// How far the Super Game Boy's top stands above the band while the Game Boy carts go into
-/// it: the SGB shows half as tall again as the band (Roy).
-pub const SGB_RISE: f32 = 29.0;
+/// it: twice the band's height shows, and the Game Boy shelf moves up out of its way (Roy).
+pub const SGB_RISE: f32 = 60.0;
 
 static SGB_TALL: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
@@ -258,7 +258,7 @@ pub fn set_sgb_band(on: bool) {
     SGB_TALL.store(on, std::sync::atomic::Ordering::Relaxed);
 }
 
-fn rise() -> f32 {
+pub(crate) fn rise() -> f32 {
     match SGB_TALL.load(std::sync::atomic::Ordering::Relaxed) {
         true => SGB_RISE,
         false => 0.0,
@@ -311,7 +311,10 @@ fn draw_console_shadow(canvas: Canvas, alpha: f32, out: &mut Vec<Draw>) {
 
 fn draw_slot_back(canvas: Canvas, slot: Option<(TexId, TexId)>, alpha: f32, out: &mut Vec<Draw>) {
     if let Some((back, _)) = slot {
-        draw_console_shadow(canvas, alpha, out);
+        // The Super Game Boy stands alone, no console around it to cast the shadow.
+        if rise() == 0.0 {
+            draw_console_shadow(canvas, alpha, out);
+        }
         out.push(strip(canvas, back, alpha));
         return;
     }
