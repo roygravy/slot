@@ -601,45 +601,43 @@ impl Session {
         self.app.set_palette_capable(
             crate::core::palette_for(Some(slot_store::GbPalette::DEFAULT), platform, &rom, player).is_some(),
         );
-        let mut opened = open_core(
-            &self.root,
-            core,
-            platform,
-            serial,
-            // slot.'s own screen looks take the place of the cores' colour correction.
-            false,
-            palette,
-            player,
-        );
-        if let Some((key, value)) =
-            crate::core::lcd_ghosting_option(core, self.app.lcd_ghosting_for(platform))
-        {
-            opened.core.set_option(key, value);
-        }
+        // The core opens on the emulator's thread, so the cart's insert keeps moving meanwhile.
+        let root = self.root.clone();
+        let ghosting = crate::core::lcd_ghosting_option(core, self.app.lcd_ghosting_for(platform));
         // The Super Game Boy's picture takes the SNES's look.
-        for (key, value) in crate::core::tv_options(core, self.app.tv_look(self.app.playing_platform())) {
-            opened.core.set_option(key, value);
-        }
-        if sgb {
-            crate::core::sgb_options(
-                &self.root,
-                opened.core.as_mut(),
-                self.app.sgb_border(),
-                self.app.sgb_two(),
-                platform == Platform::Gbc,
+        let tv = crate::core::tv_options(core, self.app.tv_look(self.app.playing_platform()));
+        let sgb_setup = sgb.then(|| (self.app.sgb_border(), self.app.sgb_two(), platform == Platform::Gbc));
+        let open = Box::new(move || {
+            let mut opened = open_core(
+                &root,
+                core,
+                platform,
+                serial,
+                // slot.'s own screen looks take the place of the cores' colour correction.
+                false,
+                palette,
+                player,
             );
-        }
-        self.app.set_named_core(opened.named);
+            if let Some((key, value)) = ghosting {
+                opened.core.set_option(key, value);
+            }
+            for (key, value) in tv {
+                opened.core.set_option(key, value);
+            }
+            if let Some((border, two, gbc)) = sgb_setup {
+                crate::core::sgb_options(&root, opened.core.as_mut(), border, two, gbc);
+            }
+            opened.core
+        });
+        self.app.set_named_core(crate::core::core_found(&self.root, core));
         launch("core opened");
         let sav = self.app.card_read("save", persist::read_sav(&self.root, platform, stem));
         let sav_unread = sav.is_none();
         let sav = sav.flatten();
         launch("save read");
         let ring = self.sink.ring();
-        let emu = match player.filter(|_| platform == Platform::Gba) {
-            Some(p) => EmuHandle::spawn_linked(opened.core, rom, ring, sav, resume, p),
-            None => EmuHandle::spawn(opened.core, rom, ring, sav, resume),
-        };
+        let linked = player.filter(|_| platform == Platform::Gba);
+        let emu = EmuHandle::spawn_opening(open, rom, ring, sav, resume, linked);
         if sav_unread {
             emu.refuse_save_ram();
         }

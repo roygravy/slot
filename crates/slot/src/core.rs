@@ -49,6 +49,11 @@ pub fn warm_cores(root: &Path) {
         });
 }
 
+/// Whether a library for this core is on the card (or named): what `open_core` will find.
+pub fn core_found(root: &Path, core: Core) -> bool {
+    candidates(root, core).iter().any(|p| p.exists())
+}
+
 pub struct Opened {
     pub core: Box<dyn RetroCore>,
     pub named: bool,

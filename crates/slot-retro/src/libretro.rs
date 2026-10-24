@@ -825,6 +825,11 @@ impl RetroCore for LibretroCore {
         self.host.rumble.clone()
     }
 
+    fn share(&mut self, rumble: Rumble, link: Link) {
+        self.host.rumble = rumble;
+        self.host.net = link;
+    }
+
     fn net(&self) -> Link {
         self.host.net.clone()
     }
