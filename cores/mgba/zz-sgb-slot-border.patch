@@ -1,0 +1,153 @@
+diff --git a/include/mgba/internal/gb/video.h b/include/mgba/internal/gb/video.h
+index fc0f650..66b5824 100644
+--- a/include/mgba/internal/gb/video.h
++++ b/include/mgba/internal/gb/video.h
+@@ -173,6 +173,13 @@ struct GBVideo {
+ 
+ void GBVideoInit(struct GBVideo* video);
+ void GBVideoReset(struct GBVideo* video);
++
++/* slot.: a frontend's own default Super Game Boy border (character RAM then map RAM, with the
++ * border palette at 0x800 of the map), used in place of the built-in one; a locked border also
++ * keeps a game from sending its own. GBSGBBorderFromGame is set once a game has sent one. */
++extern const uint8_t* GBSGBDefaultBorder;
++extern bool GBSGBBorderLocked;
++extern bool GBSGBBorderFromGame;
+ void GBVideoDeinit(struct GBVideo* video);
+ 
+ void GBVideoDummyRendererCreate(struct GBVideoRenderer*);
+diff --git a/src/gb/renderers/software.c b/src/gb/renderers/software.c
+index 08e703b..d8d028a 100644
+--- a/src/gb/renderers/software.c
++++ b/src/gb/renderers/software.c
+@@ -806,10 +806,15 @@ static void GBVideoSoftwareRendererFinishScanline(struct GBVideoRenderer* render
+ 			buffer = renderer->sgbPalRam;
+ 			break;
+ 		case SGB_CHR_TRN:
+-			buffer = &renderer->sgbCharRam[SGB_SIZE_CHAR_RAM / 2 * (softwareRenderer->sgbPacket[1] & 1)];
++			if (!GBSGBBorderLocked) {
++				buffer = &renderer->sgbCharRam[SGB_SIZE_CHAR_RAM / 2 * (softwareRenderer->sgbPacket[1] & 1)];
++			}
+ 			break;
+ 		case SGB_PCT_TRN:
+-			buffer = renderer->sgbMapRam;
++			if (!GBSGBBorderLocked) {
++				buffer = renderer->sgbMapRam;
++				GBSGBBorderFromGame = true;
++			}
+ 			break;
+ 		case SGB_ATTR_TRN:
+ 			buffer = renderer->sgbAttributeFiles;
+diff --git a/src/gb/video.c b/src/gb/video.c
+index 191a490..2d0df25 100644
+--- a/src/gb/video.c
++++ b/src/gb/video.c
+@@ -39,6 +39,10 @@ static void _endMode2(struct mTiming* timing, void* context, uint32_t cyclesLate
+ static void _endMode3(struct mTiming* timing, void* context, uint32_t cyclesLate);
+ static void _updateFrameCount(struct mTiming* timing, void* context, uint32_t cyclesLate);
+ 
++const uint8_t* GBSGBDefaultBorder = NULL;
++bool GBSGBBorderLocked = false;
++bool GBSGBBorderFromGame = false;
++
+ static const uint16_t _defaultBorderPalette[16] = {
+ 	0x0000,
+ 	0x7FDE,
+@@ -343,6 +347,11 @@ void GBVideoReset(struct GBVideo* video) {
+ 		for (i = 0; i < 16; ++i) {
+ 			STORE_16LE(_defaultBorderPalette[i], 0x800 + i * 2, video->renderer->sgbMapRam);
+ 		}
++		GBSGBBorderFromGame = false;
++		if (GBSGBDefaultBorder) {
++			memcpy(video->renderer->sgbCharRam, GBSGBDefaultBorder, SGB_SIZE_CHAR_RAM);
++			memcpy(video->renderer->sgbMapRam, &GBSGBDefaultBorder[SGB_SIZE_CHAR_RAM], SGB_SIZE_MAP_RAM);
++		}
+ 
+ 		if (video->renderer->sgbPalRam) {
+ 			memset(video->renderer->sgbPalRam, 0, SGB_SIZE_PAL_RAM);
+diff --git a/src/platform/libretro/libretro.c b/src/platform/libretro/libretro.c
+index f316929..15301d5 100644
+--- a/src/platform/libretro/libretro.c
++++ b/src/platform/libretro/libretro.c
+@@ -1219,6 +1219,62 @@ static void _updateGbPal(void) {
+ }
+ #endif
+ 
++
++#ifdef M_CORE_GB
++/* slot.: the Super Game Boy border slot. chose, read from slot_sgb_border.bin in the system
++ * directory. The option "mgba_slot_sgb_border" is "auto:N" (a game's own border wins) or
++ * "lock:N" (this border always); N changes whenever the file does, so a change in play shows. */
++static uint8_t slotSgbBorder[SGB_SIZE_CHAR_RAM + SGB_SIZE_MAP_RAM];
++static char slotSgbBorderOption[64];
++
++static void _slotSgbBorder(bool live) {
++	struct retro_variable var = {
++		.key = "mgba_slot_sgb_border",
++		.value = 0
++	};
++	if (!environCallback(RETRO_ENVIRONMENT_GET_VARIABLE, &var) || !var.value) {
++		return;
++	}
++	if (strcmp(var.value, slotSgbBorderOption) == 0) {
++		return;
++	}
++	snprintf(slotSgbBorderOption, sizeof(slotSgbBorderOption), "%s", var.value);
++	GBSGBBorderLocked = strncmp(var.value, "lock", 4) == 0;
++	const char* sysDir = 0;
++	char path[PATH_MAX];
++	environCallback(RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY, &sysDir);
++	if (!sysDir) {
++		return;
++	}
++	snprintf(path, sizeof(path), "%s%s%s", sysDir, PATH_SEP, "slot_sgb_border.bin");
++	struct VFile* vf = VFileOpen(path, O_RDONLY);
++	if (!vf) {
++		GBSGBDefaultBorder = NULL;
++		return;
++	}
++	bool whole = vf->read(vf, slotSgbBorder, sizeof(slotSgbBorder)) == (ssize_t) sizeof(slotSgbBorder);
++	vf->close(vf);
++	GBSGBDefaultBorder = whole ? slotSgbBorder : NULL;
++	if (!live || !whole || !core || core->platform(core) != mPLATFORM_GB) {
++		return;
++	}
++	struct GB* gb = core->board;
++	struct GBVideoRenderer* renderer = gb->video.renderer;
++	if (!(gb->model & GB_MODEL_SGB) || !renderer->sgbCharRam || !renderer->sgbMapRam) {
++		return;
++	}
++	if (GBSGBBorderFromGame && !GBSGBBorderLocked) {
++		return;
++	}
++	memcpy(renderer->sgbCharRam, slotSgbBorder, SGB_SIZE_CHAR_RAM);
++	memcpy(renderer->sgbMapRam, &slotSgbBorder[SGB_SIZE_CHAR_RAM], SGB_SIZE_MAP_RAM);
++	if (gb->video.sgbBorders) {
++		renderer->enableSGBBorder(renderer, false);
++		renderer->enableSGBBorder(renderer, true);
++	}
++}
++#endif
++
+ static void _reloadSettings(void) {
+ 	struct mCoreOptions opts = {
+ 		.useBios = true,
+@@ -2214,6 +2270,7 @@ void retro_run(void) {
+ #endif
+ #ifdef M_CORE_GB
+ 		_updateGbPal();
++		_slotSgbBorder(true);
+ #endif
+ 	}
+ 
+@@ -2674,6 +2731,10 @@ bool retro_load_game(const struct retro_game_info* game) {
+ 	memset(savedata, 0xFF, GBA_SIZE_FLASH1M);
+ 
+ 	_reloadSettings();
++#ifdef M_CORE_GB
++	slotSgbBorderOption[0] = 0;
++	_slotSgbBorder(false);
++#endif
+ 	core->loadROM(core, rom);
+ 	deferredSetup = true;
+ 
