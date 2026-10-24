@@ -28,22 +28,23 @@ dist = nd.distance_transform_edt(inside)
 height += np.where(inside, np.clip(dist / (3.0 * SS), 0, 1) ** 0.5, 0) * 10
 
 # the channel and its foot pad stop above a flat rim along the bottom edge (Roy)
-channel = rect(0.156, -0.01, 0.374, 0.972) & inside
-grip = rect(0.160, -0.01, 0.370, 0.132, 0.004) & inside
+channel = rect(0.156, -0.01, 0.374, 0.985) & inside
+grip = rect(0.160, -0.01, 0.370, 0.142, 0.004) & inside
 label = rect(0.400, -0.01, 0.866, 0.678, 0.010) & inside
-panel = rect(0.163, 0.882, 0.367, 0.966, 0.014)
+panel = rect(0.163, 0.895, 0.367, 0.979, 0.014)
 height -= channel * 3.0
 height -= grip * 9.0
 # ridges from the top edge down: high, low, high, low, high, low (Roy)
 ridges = np.zeros((h, w), bool)
 for k in range(3):
-    v0 = k * 0.044
+    # the top one starts under the rounded-over top edge, so it shows as wide as the rest
+    v0 = 0.010 + k * 0.044
     ridges |= rect(0.160, -0.01 if k == 0 else v0, 0.370, v0 + 0.022)
 height += ridges * 3.5
 for k in range(20):
-    v0 = 0.146 + k * 0.0374
+    v0 = 0.156 + k * 0.0374
     height += rect(0.164, v0, 0.366, v0 + 0.0175, 0.003) * 2.6
-panel |= rect(0.163, 0.93, 0.367, 0.966)  # square at the foot (Roy)
+panel |= rect(0.163, 0.94, 0.367, 0.979)  # square at the foot (Roy)
 height += panel * 2.6
 height -= label * 1.2
 tri = poly(lambda d: d.polygon([(U(0.458), V(0.741)), (U(0.547), V(0.741)), (U(0.502), V(0.810))], fill=255))
@@ -54,7 +55,7 @@ r = np.hypot(xx - U(0.502), yy - V(0.576)) / (0.017 * w)
 height += (np.where(r < 1, -np.clip(1 - r * r, 0, 1) ** 0.6, 0) + 0.18 * np.exp(-((r - 1.02) / 0.10) ** 2)
            + 0.25 * np.exp(-(r / 0.28) ** 2) * (r < 1)) * 1.8
 # a fine seam where the channel's ridge meets the right half
-height -= rect(0.372, -0.01, 0.376, 0.972) * 0.8
+height -= rect(0.372, -0.01, 0.376, 0.985) * 0.8
 
 hs = nd.gaussian_filter(height, 1.1 * SS / 2)
 gy, gx = np.gradient(hs)
