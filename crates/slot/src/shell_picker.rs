@@ -52,8 +52,11 @@ pub const FINISHES: &[ShellFinish] = &[
     ShellFinish::Glitter,
 ];
 /// An NES cart is painted metallic, as the gold ones were, instead of glittering.
-pub const NES_FINISHES: &[ShellFinish] =
-    &[ShellFinish::Solid, ShellFinish::Clear, ShellFinish::Metallic];
+pub const NES_FINISHES: &[ShellFinish] = &[
+    ShellFinish::Solid,
+    ShellFinish::Clear,
+    ShellFinish::Metallic,
+];
 
 /// Every finish's name, in the order of its face: the ones a cart is offered index into it.
 pub const FINISH_NAMES: [(ShellFinish, &str); 5] = [
@@ -112,8 +115,10 @@ pub enum Row {
     Marker,
 }
 
-/// The shapes the Model row offers, in its order: SNES NTSC and PAL, or Game Boy and Color.
+/// The shapes the Model row offers a Game Boy cart, in its order: Game Boy and Color.
 pub const MODELS: [Outline; 2] = [Outline::Notched, Outline::Rounded];
+/// And an SNES cart, Europe's first: PAL, then NTSC.
+pub const SNES_MODELS: [Outline; 2] = [Outline::Rounded, Outline::Notched];
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum Tab {
@@ -194,6 +199,8 @@ pub struct ShellPicker {
     closed: Option<(Millis, f32)>,
     /// An SNES cart's shape picked, and the one its region gives it.
     model: Option<(usize, usize)>,
+    /// The shapes the Model row offers, in its order.
+    models: [Outline; 2],
     versions: Versions,
     /// The version of the label shown, once one is.
     version: Option<usize>,
@@ -253,6 +260,7 @@ impl ShellPicker {
             opened: now,
             closed: None,
             model: None,
+            models: MODELS,
             versions: Versions::Unasked,
             version: None,
             confirm: false,
@@ -262,12 +270,19 @@ impl ShellPicker {
     /// An SNES or Game Boy cart also picks its shape; `auto` is the one its region or folder
     /// gives it, in `MODELS`.
     pub fn with_model(mut self, auto: usize) -> Self {
+        let models = self.models;
         let picked = self
             .was
-            .and_then(|c| MODELS.iter().position(|o| *o == c.outline))
+            .and_then(|c| models.iter().position(|o| *o == c.outline))
             .unwrap_or(auto);
         self.model = Some((picked, auto));
         self
+    }
+
+    /// An SNES cart's shape, `auto` in `SNES_MODELS`.
+    pub fn with_snes_model(mut self, auto: usize) -> Self {
+        self.models = SNES_MODELS;
+        self.with_model(auto)
     }
 
     pub fn model(&self) -> Option<usize> {
@@ -290,7 +305,11 @@ impl ShellPicker {
     pub fn with_metallic(mut self) -> Self {
         self.finishes = NES_FINISHES;
         if let Some(c) = self.was.filter(|c| c.finish != ShellFinish::Own) {
-            self.finish = self.finishes.iter().position(|f| *f == c.finish).unwrap_or(0);
+            self.finish = self
+                .finishes
+                .iter()
+                .position(|f| *f == c.finish)
+                .unwrap_or(0);
         }
         self
     }
@@ -346,6 +365,38 @@ impl ShellPicker {
         self.version
     }
 
+    /// The versions on offer changed, as an SNES cart's shape picked anew offers only the
+    /// labels made for it: how many there are now, and whether the first must be shown, as
+    /// the label the cart wears does not fit the shape. The version shown, if one is.
+    pub fn refound(&mut self, n: usize, show_first: bool) -> Option<usize> {
+        if matches!(self.versions, Versions::Unasked | Versions::Looking) {
+            return self.version;
+        }
+        self.versions = if n > 0 {
+            Versions::Found(n)
+        } else {
+            Versions::Missing
+        };
+        self.version = (n > 0 && (show_first || self.tab == Tab::Label)).then_some(0);
+        self.version
+    }
+
+    /// The label's versions are looked up now, unasked for by the tab: true when they were
+    /// not yet.
+    pub fn look_up_versions(&mut self) -> bool {
+        if self.versions != Versions::Unasked {
+            return false;
+        }
+        self.versions = Versions::Looking;
+        true
+    }
+
+    /// For an SNES cart, whether the shape picked is the PAL cart.
+    pub fn snes_pal(&self) -> Option<bool> {
+        let (picked, _) = self.model.filter(|_| self.models == SNES_MODELS)?;
+        Some(SNES_MODELS[picked] == Outline::Rounded)
+    }
+
     /// Y takes off the label the cart wears; a label shown from the label's tab is not on yet,
     /// and on that tab Y searches instead.
     pub fn offers_remove(&self) -> bool {
@@ -397,7 +448,7 @@ impl ShellPicker {
     pub fn choice(&self) -> Option<ShellChoice> {
         // The shape is only written down when it is not the one the region gives.
         let outline = match self.model {
-            Some((picked, auto)) if picked != auto => MODELS[picked],
+            Some((picked, auto)) if picked != auto => self.models[picked],
             Some(_) => Outline::Auto,
             None => self.was.map_or(Outline::Auto, |c| c.outline),
         };
@@ -464,7 +515,9 @@ impl ShellPicker {
     }
 
     fn changed(&self) -> bool {
-        self.choice() != self.was || self.marker_choice() != self.was_marker || self.version.is_some()
+        self.choice() != self.was
+            || self.marker_choice() != self.was_marker
+            || self.version.is_some()
     }
 
     pub fn press(&mut self, press: Press, now: Millis) -> Outcome {
@@ -536,7 +589,7 @@ impl ShellPicker {
                         let Some((picked, auto)) = self.model else {
                             return Outcome::None;
                         };
-                        let to = step(picked, by, MODELS.len());
+                        let to = step(picked, by, self.models.len());
                         if to == picked {
                             return Outcome::None;
                         }
@@ -609,7 +662,11 @@ mod tests {
     #[test]
     fn an_snes_cart_picks_its_shape_and_keeps_its_own_colour() {
         let mut p = picker(None, true).with_model(0);
-        assert_eq!(p.choice(), None, "the region's own shape is not written down");
+        assert_eq!(
+            p.choice(),
+            None,
+            "the region's own shape is not written down"
+        );
         p.press(Press::Down, 0);
         assert_eq!(p.row(), Row::Model);
         p.press(Press::Right, 0);
@@ -658,7 +715,11 @@ mod tests {
         let mut p = picker(ShellChoice::parse("auto f2c230 solid"), true);
         p.press(Press::Up, 0);
         assert_eq!(p.row(), Row::Tabs, "the label's tab is always there");
-        assert_eq!(p.tabs(), [Tab::Colour, Tab::Label], "no marker on a labelled cart");
+        assert_eq!(
+            p.tabs(),
+            [Tab::Colour, Tab::Label],
+            "no marker on a labelled cart"
+        );
     }
 
     #[test]
@@ -685,14 +746,21 @@ mod tests {
         assert!(p.offers_remove());
         assert!(matches!(p.press(Press::Remove, 0), Outcome::None));
         assert!(p.confirming());
-        assert!(matches!(p.press(Press::Right, 0), Outcome::None), "nothing else moves");
+        assert!(
+            matches!(p.press(Press::Right, 0), Outcome::None),
+            "nothing else moves"
+        );
         assert!(matches!(p.press(Press::Back, 0), Outcome::None));
         assert!(!p.confirming() && !p.closing(), "B only keeps the label");
         p.press(Press::Remove, 0);
         assert!(matches!(p.press(Press::Keep, 0), Outcome::RemoveLabel));
         assert!(!p.closing(), "the studio stays open");
         assert!(!p.offers_remove());
-        assert_eq!(p.tabs(), [Tab::Colour, Tab::Label, Tab::Marker], "the marker is offered");
+        assert_eq!(
+            p.tabs(),
+            [Tab::Colour, Tab::Label, Tab::Marker],
+            "the marker is offered"
+        );
     }
 
     #[test]
@@ -700,7 +768,10 @@ mod tests {
         let mut p = picker(None, true);
         p.press(Press::Up, 0);
         assert!(matches!(p.press(Press::Right, 0), Outcome::Versions));
-        assert!(matches!(p.press(Press::Remove, 0), Outcome::None), "still looking");
+        assert!(
+            matches!(p.press(Press::Remove, 0), Outcome::None),
+            "still looking"
+        );
         p.found(Some(0));
         assert!(!p.offers_remove());
         assert!(matches!(p.press(Press::Remove, 0), Outcome::Search));
@@ -746,9 +817,15 @@ mod tests {
         assert!(matches!(p.press(Press::Right, 0), Outcome::Version(1)));
         p.press(Press::Up, 0);
         p.press(Press::Left, 0);
-        assert!(matches!(p.press(Press::Right, 0), Outcome::None), "asked once, still shown");
+        assert!(
+            matches!(p.press(Press::Right, 0), Outcome::None),
+            "asked once, still shown"
+        );
         assert_eq!(p.version(), Some(1));
-        assert!(matches!(p.press(Press::Back, 0), Outcome::Revert(None, None)), "a version shown is undone");
+        assert!(
+            matches!(p.press(Press::Back, 0), Outcome::Revert(None, None)),
+            "a version shown is undone"
+        );
     }
 
     #[test]

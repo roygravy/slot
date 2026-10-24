@@ -20,8 +20,8 @@ const STICKER_DEG: f32 = -0.9;
 /// The whole About screen for a theme, with `serial` printed on the label.
 pub fn about_face(light: bool, serial: &str) -> UndoFace {
     let png = if light { LIGHT_PNG } else { DARK_PNG };
-    let (mut rgba, w, h) =
-        decode_png_bytes(png).unwrap_or_else(|| (vec![0; (OUT_W * OUT_H * 4) as usize], OUT_W, OUT_H));
+    let (mut rgba, w, h) = decode_png_bytes(png)
+        .unwrap_or_else(|| (vec![0; (OUT_W * OUT_H * 4) as usize], OUT_W, OUT_H));
     if let Some(font) = text::serial_font() {
         let (lx, ly, lx1, ly1) = LABEL;
         let (lw, lh) = (lx1 - lx, ly1 - ly);

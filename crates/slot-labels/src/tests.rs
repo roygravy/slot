@@ -111,8 +111,9 @@ fn cart_fronts_rank_own_region_photos_then_renders_then_other_regions() {
             .collect::<Vec<_>>()
     };
     assert_eq!(urls("Test (USA)"), ["us.png", "us-fan.png", "eu.png"]);
-    assert_eq!(urls("Test (Europe)"), ["eu.png", "us.png", "any.png"]);
-    assert_eq!(urls("Test (Japan)"), ["eu.png", "us.png", "any.png"]);
+    // Another region's: Europe's, then America's, then any other.
+    assert_eq!(urls("Test (Europe)"), ["eu.png", "us.png", "us-fan.png"]);
+    assert_eq!(urls("Test (Japan)"), ["eu.png", "us.png", "us-fan.png"]);
     // LaunchBox has only a fanart render for most Game Boy and Game Boy Color carts.
     let render = r#"<a href="https://images.launchbox-app.com/fan.png" data-title="Boxxle - Fanart - Cart - Front Image (North America)"></a>"#;
     assert!(
@@ -481,13 +482,20 @@ fn versions_are_every_cart_front_cut_to_a_label_and_a_picked_one_replaces_the_la
     };
     let found = versions(&mut http, &cart).unwrap();
     assert_eq!(found.len(), 1);
-    assert_eq!((found[0].render, found[0].region.as_str()), (false, "North America"));
+    assert_eq!(
+        (found[0].render, found[0].region.as_str()),
+        (false, "North America")
+    );
     let path = save_label(dir.path(), &cart, &found[0].png).unwrap();
     assert_eq!(path, dir.path().join("Labels/GBA/Advance Wars (USA).png"));
     cart.label = Some(path.clone());
     std::fs::write(&path, b"old").unwrap();
     save_label(dir.path(), &cart, &found[0].png).unwrap();
-    assert_ne!(std::fs::read(&path).unwrap(), b"old", "a picked label replaces the one worn");
+    assert_ne!(
+        std::fs::read(&path).unwrap(),
+        b"old",
+        "a picked label replaces the one worn"
+    );
 }
 
 #[test]
@@ -516,8 +524,17 @@ fn a_search_lists_the_shelfs_games_its_own_platform_first() {
         + &item(7, "Tetris", "Nintendo Game Boy")
         + &item(7, "Tetris", "Nintendo Game Boy");
     let found = source::games(&page, Platform::Gb);
-    let names: Vec<_> = found.iter().map(|g| (g.id, g.name.as_str(), g.platform.as_str())).collect();
-    assert_eq!(names, [(7, "Tetris", "Game Boy"), (5, "Tetris DX", "Game Boy Color")]);
+    let names: Vec<_> = found
+        .iter()
+        .map(|g| (g.id, g.name.as_str(), g.platform.as_str()))
+        .collect();
+    assert_eq!(
+        names,
+        [
+            (7, "Tetris", "Game Boy"),
+            (5, "Tetris DX", "Game Boy Color")
+        ]
+    );
 }
 
 #[test]
@@ -535,5 +552,8 @@ fn a_game_picked_from_a_search_gives_its_versions_and_an_empty_search_asks_nothi
     );
     let fronts = source::fronts_of(&mut http, &cart("Typo (USA)"), 2367).unwrap();
     assert_eq!(fronts.len(), 1);
-    assert_eq!(http.calls[1], "https://gamesdb.launchbox-app.com/games/images/2367");
+    assert_eq!(
+        http.calls[1],
+        "https://gamesdb.launchbox-app.com/games/images/2367"
+    );
 }

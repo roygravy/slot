@@ -456,9 +456,7 @@ impl Session {
     }
 
     fn held(&self) -> bool {
-        self.app.game_menu_open()
-            || self.app.in_game_menu().is_some()
-            || self.app.shutting_down()
+        self.app.game_menu_open() || self.app.in_game_menu().is_some() || self.app.shutting_down()
     }
 
     fn dozing(&self) -> bool {
@@ -573,17 +571,13 @@ impl Session {
         let palette = crate::core::palette_for(self.app.gb_palette(), platform, &rom, player);
         self.app.set_palette_live(palette.is_some());
         self.app.set_palette_capable(
-            crate::core::palette_for(Some(slot_store::GbPalette::DEFAULT), platform, &rom, player).is_some(),
+            crate::core::palette_for(Some(slot_store::GbPalette::DEFAULT), platform, &rom, player)
+                .is_some(),
         );
         let mut opened = open_core(
-            &self.root,
-            core,
-            platform,
-            serial,
+            &self.root, core, platform, serial,
             // slot.'s own screen looks take the place of the cores' colour correction.
-            false,
-            palette,
-            player,
+            false, palette, player,
         );
         if let Some((key, value)) =
             crate::core::lcd_ghosting_option(core, self.app.lcd_ghosting_for(platform))
@@ -595,7 +589,9 @@ impl Session {
         }
         self.app.set_named_core(opened.named);
         launch("core opened");
-        let sav = self.app.card_read("save", persist::read_sav(&self.root, platform, stem));
+        let sav = self
+            .app
+            .card_read("save", persist::read_sav(&self.root, platform, stem));
         let sav_unread = sav.is_none();
         let sav = sav.flatten();
         launch("save read");

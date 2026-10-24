@@ -244,7 +244,6 @@ fn a_live_session_refuses_a_switcher_pick_even_when_one_exists() {
     );
 }
 
-
 #[test]
 fn a_live_session_refuses_to_open_the_switcher() {
     let d = tmp_root_with_carts(&["Emerald"]);
@@ -263,7 +262,6 @@ fn a_live_session_refuses_to_open_the_switcher() {
         "a refused switcher open must shake"
     );
 }
-
 
 #[test]
 fn ejecting_during_a_session_ends_it() {

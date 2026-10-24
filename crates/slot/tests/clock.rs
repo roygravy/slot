@@ -292,7 +292,14 @@ fn the_12_hour_picker_shows_am_and_pm_and_keeps_the_moment() {
 
 fn general_row(state: SlotState, row: QuickRow) -> (TempDir, App) {
     let d = tmp_root_with_carts(&["Emerald", "Fusion"]);
-    write_slot_state(d.path(), &SlotState { clock_set: true, ..state }).unwrap();
+    write_slot_state(
+        d.path(),
+        &SlotState {
+            clock_set: true,
+            ..state
+        },
+    )
+    .unwrap();
     let (mut a, _clock) = app_booting_at(d.path(), AT);
     a.apply(Action::QuickMenu);
     for _ in 0..QuickRow::General.position(&[]) {
@@ -328,7 +335,10 @@ fn time_zone_steps_through_the_cities_and_is_saved() {
 fn date_and_time_stays_shut_while_auto_time_is_on() {
     let (_d, mut a) = general_row(SlotState::default(), QuickRow::DateTime);
     a.apply(Action::GbaDown(Btn::A));
-    assert!(!matches!(a.phase(), Phase::SetClock { .. }), "opened while locked");
+    assert!(
+        !matches!(a.phase(), Phase::SetClock { .. }),
+        "opened while locked"
+    );
     assert_eq!(a.quick_menu(), Some(QuickRow::DateTime));
 }
 
@@ -346,4 +356,3 @@ fn auto_time_and_the_24_hour_clock_are_on_until_turned_off() {
     assert!(!saved.auto_time);
     assert!(!saved.clock_24h);
 }
-

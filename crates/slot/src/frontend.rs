@@ -11,14 +11,13 @@ use slot_power::{Platform, Power};
 use slot_store::{format_stamp, BezelPick, Platform as Console};
 use slot_ui::{
     arrows_hint_coloured, arrows_hint_face, badge_face, bezel_face, cart_shadow, chip_face,
-    chip_shadow_face, clock_text, date_time_text_in, default_game_bezel_face, footer_ink, game_bezel_face,
-    hint_coloured, hint_face, icon_face, menu_face, photo_face,
-    quick_caret_face, quick_label_face, quick_legend_faces, quick_pointer_face, quick_value_face,
-    rebuild_banner_face, set_clock_hint_face, slot_back, slot_back_light,
-    slot_front, slot_front_light, socket_face, title_face, toast_face,
-    wallpaper_face, word_ink, CartFace, Mould, Icon, LinkBadge, QuickMenuFaces,
-    QuickRow, QuickValue, RebuildBanner, Toast, UndoFace, ALERT_PX, BOLT_PX,
-    HUD_ICON_PX, HUD_INK, LEGEND,
+    chip_shadow_face, clock_text, date_time_text_in, default_game_bezel_face, footer_ink,
+    game_bezel_face, hint_coloured, hint_face, icon_face, menu_face, photo_face, quick_caret_face,
+    quick_label_face, quick_legend_faces, quick_pointer_face, quick_value_face,
+    rebuild_banner_face, set_clock_hint_face, slot_back, slot_back_light, slot_front,
+    slot_front_light, socket_face, title_face, toast_face, wallpaper_face, word_ink, CartFace,
+    Icon, LinkBadge, Mould, QuickMenuFaces, QuickRow, QuickValue, RebuildBanner, Toast, UndoFace,
+    ALERT_PX, BOLT_PX, HUD_ICON_PX, HUD_INK, LEGEND,
 };
 
 use crate::app::{App, LinkRow, Phase};
@@ -52,7 +51,8 @@ pub struct Frontend {
     rebuild: Option<Rebuild>,
     stale_check: Option<std::sync::mpsc::Receiver<Vec<slot_store::Cart>>>,
     label_fetch: Option<std::sync::mpsc::Receiver<(slot_store::Cart, LabelFetched)>>,
-    versions_fetch: Option<std::sync::mpsc::Receiver<(std::path::PathBuf, Option<Vec<VersionFile>>)>>,
+    versions_fetch:
+        Option<std::sync::mpsc::Receiver<(std::path::PathBuf, Option<Vec<VersionFile>>)>>,
     search_fetch: Option<std::sync::mpsc::Receiver<(u64, Option<Vec<slot_labels::Game>>)>>,
     search_tex: SearchTextures,
     /// Each version's thumbnail and caption, reused from one cart to the next.
@@ -221,7 +221,11 @@ impl Frontend {
         // Missing labels come from the artwork pack or, with Home Wi-Fi on, from LaunchBox.
         // With neither there is nothing to fetch them from, so no ROM is read for it.
         let fetch = session.app().home_wifi_on()
-            || platform.root().join("Labels").join(slot_labels::build::PACK).is_file();
+            || platform
+                .root()
+                .join("Labels")
+                .join(slot_labels::build::PACK)
+                .is_file();
         let labels = crate::labels::Labels::spawn(
             platform.root().to_path_buf(),
             if fetch {
@@ -755,8 +759,11 @@ impl Frontend {
             .map(|r| r.to_path_buf())
             .and_then(|root| crate::bootlogo::take_picture(&root))
             .map(|bmp| {
-                let rgba: Vec<u8> =
-                    bmp.rgb.iter().flat_map(|p| [p[0], p[1], p[2], 255]).collect();
+                let rgba: Vec<u8> = bmp
+                    .rgb
+                    .iter()
+                    .flat_map(|p| [p[0], p[1], p[2], 255])
+                    .collect();
                 compositor.create_texture(bmp.width as u32, bmp.height as u32, &rgba)
             });
         app.set_resume_picture(tex);
@@ -1002,10 +1009,16 @@ impl Frontend {
                         if self.version_tex.len() <= i {
                             self.version_tex.resize(i + 1, (None, None));
                         }
-                        let thumb = upload_rgba(compositor, &mut self.version_tex[i].0, v.w, v.h, &v.thumb);
+                        let thumb =
+                            upload_rgba(compositor, &mut self.version_tex[i].0, v.w, v.h, &v.thumb);
                         let word = slot_ui::shell_picker_word(&v.caption);
-                        let caption =
-                            upload_rgba(compositor, &mut self.version_tex[i].1, word.w, word.h, &word.rgba);
+                        let caption = upload_rgba(
+                            compositor,
+                            &mut self.version_tex[i].1,
+                            word.w,
+                            word.h,
+                            &word.rgba,
+                        );
                         (v.path, (thumb, v.w, v.h), (caption, word.w))
                     })
                     .collect()
@@ -1398,7 +1411,17 @@ impl UiFaces {
             shell_words: crate::shell_picker::swatch_names()
                 .into_iter()
                 .chain(crate::shell_picker::FINISH_NAMES.map(|(_, name)| name))
-                .chain(["NTSC", "PAL", "GB", "GBC", "Color", "Label", "Marker", "Looking", "None Found"])
+                .chain([
+                    "PAL",
+                    "NTSC",
+                    "GB",
+                    "GBC",
+                    "Color",
+                    "Label",
+                    "Marker",
+                    "Looking",
+                    "None Found",
+                ])
                 .chain(crate::shell_picker::MARKERS.map(|(name, _)| name))
                 .map(slot_ui::shell_picker_word)
                 .collect(),
@@ -1708,7 +1731,11 @@ fn sync_quick_palette(app: &mut App, compositor: &mut Compositor, state: &mut Qu
 fn help_line_face(line: &str) -> slot_ui::UndoFace {
     use slot_ui::text;
     let Some(font) = text::label_font() else {
-        return slot_ui::UndoFace { rgba: Vec::new(), w: 0, h: 0 };
+        return slot_ui::UndoFace {
+            rgba: Vec::new(),
+            w: 0,
+            h: 0,
+        };
     };
     let layout = text::fit(font, line, 600.0, 1, 17.0, 12.0);
     let set = layout
@@ -1726,7 +1753,11 @@ fn help_line_face(line: &str) -> slot_ui::UndoFace {
 fn cheat_name_face(name: &str) -> slot_ui::UndoFace {
     use slot_ui::text;
     let Some(font) = text::label_font() else {
-        return slot_ui::UndoFace { rgba: Vec::new(), w: 0, h: 0 };
+        return slot_ui::UndoFace {
+            rgba: Vec::new(),
+            w: 0,
+            h: 0,
+        };
     };
     // Shrink to fit; past the smallest size, drop words from the end behind an ellipsis.
     let words: Vec<&str> = name.split_whitespace().collect();
@@ -1749,7 +1780,12 @@ fn cheat_name_face(name: &str) -> slot_ui::UndoFace {
         .map(|l| text::line_width(font, l, layout.px, layout.tracking))
         .fold(0.0, f32::max);
     let reference = quick_value_face("Hg", false);
-    let (w, h) = ((set.ceil() as u32 + 4).min(slot_ui::NAME_MAX_W as u32 + 4).max(1), reference.h);
+    let (w, h) = (
+        (set.ceil() as u32 + 4)
+            .min(slot_ui::NAME_MAX_W as u32 + 4)
+            .max(1),
+        reference.h,
+    );
     let mut rgba = vec![0u8; (w * h * 4) as usize];
     text::draw_centred(&mut rgba, w, h, &layout, [0xff, 0xff, 0xff]);
     slot_ui::UndoFace { rgba, w, h }
@@ -1798,7 +1834,10 @@ fn sync_cheats(app: &mut App, compositor: &mut Compositor, state: &mut CheatText
             let (w, h) = (f.w, f.h);
             (upload(compositor, slot, f), w, h)
         };
-        let empty = up(&mut state.empty, quick_value_face("No cheats for this game", false));
+        let empty = up(
+            &mut state.empty,
+            quick_value_face("No cheats for this game", false),
+        );
         let line = format!(
             "Put a .cht file named like this game in Cheats/{}.",
             app.cheat_platform().dir_name()
@@ -1806,8 +1845,14 @@ fn sync_cheats(app: &mut App, compositor: &mut Compositor, state: &mut CheatText
         let empty_help = up(&mut state.empty_help, help_line_face(&line));
         let off = up(&mut state.switches[0], slot_ui::quick_switch_face(false));
         let on = up(&mut state.switches[1], slot_ui::quick_switch_face(true));
-        let more_up = up(&mut state.more[0], quarter_turn(quick_caret_face(true), false));
-        let more_down = up(&mut state.more[1], quarter_turn(quick_caret_face(true), true));
+        let more_up = up(
+            &mut state.more[0],
+            quarter_turn(quick_caret_face(true), false),
+        );
+        let more_down = up(
+            &mut state.more[1],
+            quarter_turn(quick_caret_face(true), true),
+        );
         let mut hint = |slot: &mut Option<TexId>, key: &str, label: &str| {
             let f = slot_ui::tint_mask(hint_face(key, label));
             let w = f.w;
@@ -1848,7 +1893,11 @@ fn sync_cheats(app: &mut App, compositor: &mut Compositor, state: &mut CheatText
 fn text_face(line: &str, px: f32, max_w: f32) -> slot_ui::UndoFace {
     use slot_ui::text;
     let Some(font) = text::label_font() else {
-        return slot_ui::UndoFace { rgba: Vec::new(), w: 0, h: 0 };
+        return slot_ui::UndoFace {
+            rgba: Vec::new(),
+            w: 0,
+            h: 0,
+        };
     };
     let layout = text::fit(font, line, max_w, 1, px, 12.0);
     let set = layout
@@ -1856,7 +1905,10 @@ fn text_face(line: &str, px: f32, max_w: f32) -> slot_ui::UndoFace {
         .iter()
         .map(|l| text::line_width(font, l, layout.px, layout.tracking))
         .fold(0.0, f32::max);
-    let (w, h) = ((set.ceil() as u32 + 4).min(max_w as u32 + 4), (px * 1.5).ceil() as u32);
+    let (w, h) = (
+        (set.ceil() as u32 + 4).min(max_w as u32 + 4),
+        (px * 1.5).ceil() as u32,
+    );
     let mut rgba = vec![0u8; (w * h * 4) as usize];
     text::draw_centred(&mut rgba, w, h, &layout, [0xff, 0xff, 0xff]);
     slot_ui::UndoFace { rgba, w, h }
@@ -1873,9 +1925,15 @@ fn read_png(path: &std::path::Path) -> Option<(Vec<u8>, u32, u32)> {
     let px = (w * h) as usize;
     let rgba = match info.color_type {
         png::ColorType::Rgba => buf[..px * 4].to_vec(),
-        png::ColorType::Rgb => buf[..px * 3].chunks_exact(3).flat_map(|p| [p[0], p[1], p[2], 255]).collect(),
+        png::ColorType::Rgb => buf[..px * 3]
+            .chunks_exact(3)
+            .flat_map(|p| [p[0], p[1], p[2], 255])
+            .collect(),
         png::ColorType::Grayscale => buf[..px].iter().flat_map(|&g| [g, g, g, 255]).collect(),
-        png::ColorType::GrayscaleAlpha => buf[..px * 2].chunks_exact(2).flat_map(|p| [p[0], p[0], p[0], p[1]]).collect(),
+        png::ColorType::GrayscaleAlpha => buf[..px * 2]
+            .chunks_exact(2)
+            .flat_map(|p| [p[0], p[0], p[0], p[1]])
+            .collect(),
         _ => return None,
     };
     Some((rgba, w, h))
@@ -1891,7 +1949,10 @@ fn build_shot_faces(app: &mut App, compositor: &mut Compositor, st: &mut ShotTex
         let [f0, f1, f2] = &mut st.fixed;
         let confirm = up(f0, help_line_face("Delete this screenshot?"));
         let empty = up(f1, quick_value_face("No screenshots yet", false));
-        let empty_help = up(f2, help_line_face("Press VOL+ and POWER together to take one."));
+        let empty_help = up(
+            f2,
+            help_line_face("Press VOL+ and POWER together to take one."),
+        );
         let mut hint = |slot: &mut Option<TexId>, f: slot_ui::UndoFace| {
             let f = slot_ui::tint_mask(f);
             let w = f.w;
@@ -1972,13 +2033,20 @@ fn sync_shots(app: &mut App, compositor: &mut Compositor, st: &mut ShotTextures)
         true => Vec::new(),
         false => vec![view.sel],
     };
-    for i in [view.sel.wrapping_sub(1), view.sel + 1, view.pos.floor() as usize, view.pos.ceil() as usize] {
+    for i in [
+        view.sel.wrapping_sub(1),
+        view.sel + 1,
+        view.pos.floor() as usize,
+        view.pos.ceil() as usize,
+    ] {
         if i < view.shots.len() && !wanted.contains(&i) {
             wanted.push(i);
         }
     }
-    let paths: Vec<(usize, std::path::PathBuf)> =
-        wanted.iter().map(|&i| (i, view.shots[i].path.clone())).collect();
+    let paths: Vec<(usize, std::path::PathBuf)> = wanted
+        .iter()
+        .map(|&i| (i, view.shots[i].path.clone()))
+        .collect();
     if st.key != Some(key) {
         st.key = Some(key);
         let t = (!title.is_empty()).then(|| {
@@ -2015,7 +2083,11 @@ fn sync_shots(app: &mut App, compositor: &mut Compositor, st: &mut ShotTextures)
         };
         let keep: Vec<&std::path::PathBuf> = paths.iter().map(|(_, p)| p).collect();
         let tex = if st.pics.len() >= 5 {
-            let at = st.pics.iter().position(|(p, _)| !keep.contains(&p)).unwrap_or(0);
+            let at = st
+                .pics
+                .iter()
+                .position(|(p, _)| !keep.contains(&p))
+                .unwrap_or(0);
             let (_, tex) = st.pics.remove(at);
             compositor.update_texture(tex, w, h, &rgba);
             tex
@@ -2117,7 +2189,8 @@ fn sync_label_search(app: &mut App, compositor: &mut Compositor, state: &mut Sea
         return;
     }
     if !app.has_search_faces() {
-        let faces = slot_ui::KeyboardFaces::build().map(|f| (compositor.create_texture(f.w, f.h, &f.rgba), f.w, f.h));
+        let faces = slot_ui::KeyboardFaces::build()
+            .map(|f| (compositor.create_texture(f.w, f.h, &f.rgba), f.w, f.h));
         app.set_search_faces(faces);
     }
     let Some((rev, words)) = app.search_words() else {
@@ -2127,9 +2200,16 @@ fn sync_label_search(app: &mut App, compositor: &mut Compositor, state: &mut Sea
         let (w, h) = (f.w, f.h);
         (upload(compositor, slot, f), w, h)
     };
-    let heading = up(&mut state.heading, slot_ui::search_heading_face(&words.heading));
-    let typed = words.typed.map(|t| up(&mut state.typed, slot_ui::search_typed_face(&t)));
-    let status = words.status.map(|t| up(&mut state.status, slot_ui::search_status_face(&t)));
+    let heading = up(
+        &mut state.heading,
+        slot_ui::search_heading_face(&words.heading),
+    );
+    let typed = words
+        .typed
+        .map(|t| up(&mut state.typed, slot_ui::search_typed_face(&t)));
+    let status = words
+        .status
+        .map(|t| up(&mut state.status, slot_ui::search_status_face(&t)));
     if state.rows.len() < words.rows.len() {
         state.rows.resize(words.rows.len(), (None, None));
     }
@@ -2142,7 +2222,15 @@ fn sync_label_search(app: &mut App, compositor: &mut Compositor, state: &mut Sea
             (up(a, n), up(b, p))
         })
         .collect();
-    app.set_search_texts(rev, slot_ui::SearchTexts { heading, typed, status, rows });
+    app.set_search_texts(
+        rev,
+        slot_ui::SearchTexts {
+            heading,
+            typed,
+            status,
+            rows,
+        },
+    );
 }
 
 fn upload(compositor: &mut Compositor, slot: &mut Option<TexId>, face: slot_ui::UndoFace) -> TexId {
@@ -2160,11 +2248,28 @@ fn version_files(
     let _ = std::fs::create_dir_all(&dir);
     let (lw, lh) = slot_ui::label_size(cart);
     let (w, h) = (lw * THUMB_H / lh.max(1), THUMB_H);
-    let n = versions.len();
+    // An SNES cart's label tab offers only the labels made for its shape, so each is counted
+    // among those of its own shape: the wide PAL and Super Famicom ones, or the taller
+    // American ones.
+    let shape = |png: &[u8]| {
+        let size = |at: usize| {
+            png.get(at..at + 4)
+                .map(|b| u32::from_be_bytes(b.try_into().unwrap()))
+        };
+        match (cart.platform, size(16), size(20)) {
+            (slot_store::Platform::Snes, Some(w), Some(h)) => {
+                Some(w as f32 / h.max(1) as f32 > 2.45)
+            }
+            _ => None,
+        }
+    };
+    let shapes: Vec<_> = versions.iter().map(|v| shape(&v.png)).collect();
     versions
         .into_iter()
         .enumerate()
         .filter_map(|(i, v)| {
+            let n = shapes.iter().filter(|s| **s == shapes[i]).count();
+            let at = shapes[..i].iter().filter(|s| **s == shapes[i]).count();
             let path = dir.join(format!("{i}.png"));
             if let Err(e) = slot_store::atomic_write(&path, &v.png) {
                 eprintln!("slot: labels: {}: {e}", path.display());
@@ -2179,7 +2284,7 @@ fn version_files(
             let kind = if v.render { "Render" } else { "Photo" };
             Some(VersionFile {
                 path,
-                caption: format!("{region} · {kind} · {} of {n}", i + 1),
+                caption: format!("{region} · {kind} · {} of {n}", at + 1),
                 thumb,
                 w,
                 h,

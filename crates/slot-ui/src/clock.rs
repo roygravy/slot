@@ -300,7 +300,8 @@ impl ClockPicker {
             // A 12-hour hour of one digit sits against its colon, as 6:00 does.
             let (cell, x) = match (i, self.h24, text::label_font()) {
                 (6, false, Some(font)) => {
-                    let tight = (text::line_width(font, &text, PICKER_PX, 0.0).ceil() as u32 + 4).min(*cell);
+                    let tight = (text::line_width(font, &text, PICKER_PX, 0.0).ceil() as u32 + 4)
+                        .min(*cell);
                     (tight, self.cell_x(i) + cell - tight)
                 }
                 _ => (*cell, self.cell_x(i)),

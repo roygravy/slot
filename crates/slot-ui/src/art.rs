@@ -86,7 +86,9 @@ pub fn is_wide_snes_label(path: &Path) -> Option<bool> {
             let h = u32::from_be_bytes(head[20..24].try_into().unwrap()).max(1);
             w as f32 / h as f32 > 2.45
         });
-    seen.lock().ok()?.insert(path.to_path_buf(), (stamp.0, stamp.1, wide));
+    seen.lock()
+        .ok()?
+        .insert(path.to_path_buf(), (stamp.0, stamp.1, wide));
     wide
 }
 

@@ -713,7 +713,12 @@ fn plastic_label_bed(s: &Spec, shell: &Shell, face: &mut CartFace) {
     // pinned shut, as a fraction of the well and of the cart's width. The Game Boy Color's is
     // a small real hole; the SNES carts show none.
     let mark = match s.mould {
-        Mould::Notched => Some((0.5, 0.522 * s.h as f32 / lh as f32 - ly as f32 / lh as f32, 8.0 / 312.0, Mark::Sink(0.30))),
+        Mould::Notched => Some((
+            0.5,
+            0.522 * s.h as f32 / lh as f32 - ly as f32 / lh as f32,
+            8.0 / 312.0,
+            Mark::Sink(0.30),
+        )),
         Mould::Gba => Some((0.48, 0.44, 0.026, Mark::Sink(0.40))),
         Mould::Rounded => Some((0.5, 0.65, 0.012, Mark::Hole)),
         // The NES cart's art has its own, from the photo it was drawn from.

@@ -299,7 +299,9 @@ impl RadioJobs for RadioQueue {
     }
 
     fn home_ssid(&self) -> Option<String> {
-        std::env::var("SLOT_FAKE_HOME").ok().filter(|s| !s.is_empty())
+        std::env::var("SLOT_FAKE_HOME")
+            .ok()
+            .filter(|s| !s.is_empty())
     }
 }
 

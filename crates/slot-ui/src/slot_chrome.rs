@@ -487,7 +487,12 @@ fn tv_pose(mould: Mould, seat: f32, cx: f32, (sw, sh): (f32, f32)) -> Option<TvP
                     (1.0, home, 7.0 * (u * std::f32::consts::PI).sin())
                 }
             };
-            Some(TvPose { x, y, leave, lid: Some(lid) })
+            Some(TvPose {
+                x,
+                y,
+                leave,
+                lid: Some(lid),
+            })
         }
         Mould::SnesNtsc | Mould::SnesPal => {
             let t = seat * SNES_STORY;
@@ -495,7 +500,11 @@ fn tv_pose(mould: Mould, seat: f32, cx: f32, (sw, sh): (f32, f32)) -> Option<TvP
             let wait = BAND_Y - sh - 8.0;
             // NTSC: the slot's edge meets the third line on the cart's side grips. A PAL cart goes
             // in as deep and so stands a little prouder.
-            let out = if pal { (86.0 - 42.6) / 86.0 } else { 132.0 / 257.0 };
+            let out = if pal {
+                (86.0 - 42.6) / 86.0
+            } else {
+                132.0 / 257.0
+            };
             let home = BAND_Y - sh * out - if pal { 5.0 } else { 0.0 };
             let slid = home - 14.0;
             let (leave, y) = match t {
@@ -505,7 +514,12 @@ fn tv_pose(mould: Mould, seat: f32, cx: f32, (sw, sh): (f32, f32)) -> Option<TvP
                 t if t < 0.88 => (1.0, slid),
                 t => (1.0, lerp(slid, home, seat_push((t - 0.88) / 0.25))),
             };
-            Some(TvPose { x, y, leave, lid: None })
+            Some(TvPose {
+                x,
+                y,
+                leave,
+                lid: None,
+            })
         }
         _ => None,
     }
@@ -553,7 +567,14 @@ fn draw_lid(canvas: Canvas, tex: TexId, theta: f32, light: bool, alpha: f32, out
     let (w, l) = (NES_LID_W as f32, MOUTH_H);
     let x = canvas.centred(w);
     if theta <= 0.01 {
-        out.push(Draw::Tex { x, y: BAND_Y, w, h: l, tex, alpha });
+        out.push(Draw::Tex {
+            x,
+            y: BAND_Y,
+            w,
+            h: l,
+            tex,
+            alpha,
+        });
         return;
     }
     let hinge = OUT_H as f32;
@@ -566,7 +587,14 @@ fn draw_lid(canvas: Canvas, tex: TexId, theta: f32, light: bool, alpha: f32, out
     };
     let fold = hinge - l * cos;
     if hinge - fold > 0.5 {
-        out.push(Draw::Tex { x, y: fold, w, h: hinge - fold, tex, alpha });
+        out.push(Draw::Tex {
+            x,
+            y: fold,
+            w,
+            h: hinge - fold,
+            tex,
+            alpha,
+        });
         sheen(fold, hinge - fold, sin, out);
     }
     let fh = l * sin;
@@ -578,7 +606,14 @@ fn draw_lid(canvas: Canvas, tex: TexId, theta: f32, light: bool, alpha: f32, out
     let shadow = if light { 0.27 } else { 0.43 };
     for k in 0..4 {
         let spread = (7.0 * sin + 2.0) * (1.0 - k as f32 / 4.0);
-        out.push(band(x, top - spread, w, spread + 1.0, [0.0, 0.0, 0.0, shadow / 4.0], alpha));
+        out.push(band(
+            x,
+            top - spread,
+            w,
+            spread + 1.0,
+            [0.0, 0.0, 0.0, shadow / 4.0],
+            alpha,
+        ));
     }
     out.push(Draw::Part {
         x,
@@ -591,7 +626,11 @@ fn draw_lid(canvas: Canvas, tex: TexId, theta: f32, light: bool, alpha: f32, out
     });
     sheen(top, fh, 1.0, out);
     // The tab: lighter, rounded, standing proud of the free edge.
-    let base: [f32; 3] = if light { [182.0, 179.0, 173.0] } else { [41.0, 41.0, 44.0] };
+    let base: [f32; 3] = if light {
+        [182.0, 179.0, 173.0]
+    } else {
+        [41.0, 41.0, 44.0]
+    };
     let shade = |k: f32, add: f32| {
         let c = base.map(|v| ((v * k + add) / 255.0).min(1.0));
         [c[0], c[1], c[2], 1.0]
@@ -599,7 +638,28 @@ fn draw_lid(canvas: Canvas, tex: TexId, theta: f32, light: bool, alpha: f32, out
     let th = (4.0 * sin).max(1.0);
     let tw = (w * 0.17).round();
     let tx = canvas.w / 2.0 - tw / 2.0;
-    out.push(band(tx, top - th + 1.0, tw, th + 1.0, shade(0.7, 0.0), alpha));
-    out.push(band(tx + 1.0, top - th + 1.0, tw - 2.0, th, shade(1.18, 14.0), alpha));
-    out.push(band(tx + 3.0, top - th + 1.0, tw - 6.0, 1.0, shade(1.18, 39.0), alpha));
+    out.push(band(
+        tx,
+        top - th + 1.0,
+        tw,
+        th + 1.0,
+        shade(0.7, 0.0),
+        alpha,
+    ));
+    out.push(band(
+        tx + 1.0,
+        top - th + 1.0,
+        tw - 2.0,
+        th,
+        shade(1.18, 14.0),
+        alpha,
+    ));
+    out.push(band(
+        tx + 3.0,
+        top - th + 1.0,
+        tw - 6.0,
+        1.0,
+        shade(1.18, 39.0),
+        alpha,
+    ));
 }

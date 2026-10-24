@@ -140,11 +140,7 @@ fn powering_off_takes_the_motor_down() {
         step(&mut s, &mut now);
     }
     assert!(s.app().powering_off(), "the hold never powered off");
-    assert_eq!(
-        motor.last(),
-        0,
-        "the cart kept buzzing while powering off"
-    );
+    assert_eq!(motor.last(), 0, "the cart kept buzzing while powering off");
 }
 
 #[test]

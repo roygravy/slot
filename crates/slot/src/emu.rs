@@ -88,7 +88,9 @@ enum Cmd {
     SetOption(String, String),
     /// Settle a core after a colour or Ghosting change; `show` also puts the paused picture
     /// back on screen, for when the game is held behind a menu.
-    Refresh { show: bool },
+    Refresh {
+        show: bool,
+    },
 }
 
 struct Shared {

@@ -2,9 +2,9 @@ use crate::draw::{Canvas, Draw, TexId, OUT_H, OUT_W};
 use crate::plate::{
     arrows_hint_face, centred_hints, hint_face, tint_mask, UndoFace, HINT_H, LEGEND_GAP,
 };
-use crate::theme::{self, Ink};
 use crate::power_menu::{MENU_H, MENU_INK, MENU_PAD};
 use crate::text;
+use crate::theme::{self, Ink};
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum QuickRow {
@@ -315,16 +315,12 @@ impl QuickRow {
             QuickRow::GbaShader
             | QuickRow::GbaTransparency
             | QuickRow::GbaGhosting
-            | QuickRow::GbaBezel => {
-                &QuickRow::SCREEN_GBA
-            }
+            | QuickRow::GbaBezel => &QuickRow::SCREEN_GBA,
             QuickRow::GbcShader
             | QuickRow::GbcTransparency
             | QuickRow::GbcGhosting
             | QuickRow::GbcBlackBorder
-            | QuickRow::GbcBezel => {
-                &QuickRow::SCREEN_GBC
-            }
+            | QuickRow::GbcBezel => &QuickRow::SCREEN_GBC,
             QuickRow::GbShader
             | QuickRow::GbTransparency
             | QuickRow::GbGhosting
@@ -501,7 +497,9 @@ impl QuickRow {
             QuickRow::ScreenGba => "Game Boy Advance",
             QuickRow::ScreenGbc => "Game Boy Color",
             QuickRow::ScreenGb => "Game Boy",
-            QuickRow::GbBezel | QuickRow::GbcBezel | QuickRow::GbaBezel | QuickRow::Bezel => "Bezel",
+            QuickRow::GbBezel | QuickRow::GbcBezel | QuickRow::GbaBezel | QuickRow::Bezel => {
+                "Bezel"
+            }
             QuickRow::Buttons => "Buttons",
             QuickRow::Sleep => "Sleep",
             QuickRow::Restart => "Restart",
@@ -546,9 +544,7 @@ impl QuickRow {
             | QuickRow::ScreenGbc
             | QuickRow::ScreenGba
             | QuickRow::ScreenNes
-            | QuickRow::ScreenSnes => {
-                "Settings for this console only."
-            }
+            | QuickRow::ScreenSnes => "Settings for this console only.",
             QuickRow::GbShader => "The Game Boy's dot grid. SELECT + B turns every effect off.",
             QuickRow::GbaShader | QuickRow::GbcShader | QuickRow::Shader => {
                 "The real screen's lines. SELECT + B turns every effect off."
@@ -559,7 +555,9 @@ impl QuickRow {
             QuickRow::PixelTransparency
             | QuickRow::GbTransparency
             | QuickRow::GbcTransparency
-            | QuickRow::GbaTransparency => "Pale pixels let the light through and cast soft shadows.",
+            | QuickRow::GbaTransparency => {
+                "Pale pixels let the light through and cast soft shadows."
+            }
             QuickRow::LcdGhosting
             | QuickRow::GbGhosting
             | QuickRow::GbcGhosting
@@ -589,7 +587,9 @@ impl QuickRow {
             QuickRow::ConnectedTo => "The home network this device is on now.",
             QuickRow::AutoSleep => "Sleep after this long without a button press.",
             QuickRow::RememberPosition => "Start where you left off on the shelf.",
-            QuickRow::ResumeGame => "Power on straight back into the game, its picture as boot screen.",
+            QuickRow::ResumeGame => {
+                "Power on straight back into the game, its picture as boot screen."
+            }
             QuickRow::BootPicture => "Power off in a game and it shows while the device starts.",
             QuickRow::Resume => "Back to the game, right where you paused.",
             QuickRow::States => "Save, load and flick through save states.",
@@ -1102,7 +1102,11 @@ pub struct QuickMenu<'a> {
 
 impl QuickMenu<'_> {
     pub fn draw(&self, out: &mut Vec<Draw>) {
-        let ink = if self.over_game { theme::OVER_GAME } else { self.ink };
+        let ink = if self.over_game {
+            theme::OVER_GAME
+        } else {
+            self.ink
+        };
         match (self.over_game, self.row.page() == QuickRow::PLAY_SCREEN) {
             (false, _) => draw_menu_ground(self.canvas, self.ground, ink, out),
             (true, panel) => {
@@ -1140,11 +1144,27 @@ impl QuickMenu<'_> {
         let [up, down] = faces.more;
         if first > 0 {
             let y = top - MORE_GAP - up.2 as f32;
-            tint(out, up.0, self.canvas.centred(up.1 as f32), y, up.1, up.2, ink.dim);
+            tint(
+                out,
+                up.0,
+                self.canvas.centred(up.1 as f32),
+                y,
+                up.1,
+                up.2,
+                ink.dim,
+            );
         }
         if first + visible < shown_rows.len() {
             let y = top + pitch * visible as f32 + MORE_GAP;
-            tint(out, down.0, self.canvas.centred(down.1 as f32), y, down.1, down.2, ink.dim);
+            tint(
+                out,
+                down.0,
+                self.canvas.centred(down.1 as f32),
+                y,
+                down.1,
+                down.2,
+                ink.dim,
+            );
         }
         for (i, row) in shown_rows.iter().copied().enumerate() {
             if i < first || i >= first + visible {
@@ -1153,7 +1173,12 @@ impl QuickMenu<'_> {
             let y = top + pitch * (i - first) as f32 + TYPE_DROP;
             let lit = row == self.row;
             let colour = match (lit, self.locked == Some(row)) {
-                (true, true) => [ink.on_bar[0], ink.on_bar[1], ink.on_bar[2], ink.on_bar[3] * 0.45],
+                (true, true) => [
+                    ink.on_bar[0],
+                    ink.on_bar[1],
+                    ink.on_bar[2],
+                    ink.on_bar[3] * 0.45,
+                ],
                 (true, false) => ink.on_bar,
                 (false, true) => [ink.dim[0], ink.dim[1], ink.dim[2], ink.dim[3] * 0.45],
                 (false, false) => ink.dim,
@@ -1210,7 +1235,15 @@ impl QuickMenu<'_> {
             tint(out, right_tex, rx, y, rw, rh, colour);
             let vx = rx - CARET_GAP + pad - w as f32;
             tint(out, tex, vx, y, w, h, colour);
-            tint(out, left_tex, vx + pad - CARET_GAP - lw as f32, y, lw, lh, colour);
+            tint(
+                out,
+                left_tex,
+                vx + pad - CARET_GAP - lw as f32,
+                y,
+                lw,
+                lh,
+                colour,
+            );
         }
         let help_row = self
             .named_as

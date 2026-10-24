@@ -210,7 +210,13 @@ impl Polaroids {
             let dx = OUT_W as f32 - MARGIN - c.delete.1 as f32;
             out.push(tint(c.delete.0, dx, y, c.delete.1, HINT_H));
             let lx = (OUT_W as f32 - c.line.1 as f32) / 2.0;
-            out.push(tint(c.line.0, lx, top + (PLATE_H - c.line.2 as f32) / 2.0, c.line.1, c.line.2));
+            out.push(tint(
+                c.line.0,
+                lx,
+                top + (PLATE_H - c.line.2 as f32) / 2.0,
+                c.line.1,
+                c.line.2,
+            ));
             return;
         }
         let hints = self.hints();

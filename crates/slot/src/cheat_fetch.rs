@@ -321,7 +321,12 @@ mod tests {
             unlisted: true,
         };
         let (_stop, stopped) = mpsc::channel();
-        run(root, vec![cart(root, Platform::Gba, "Game")], &stopped, &fake);
+        run(
+            root,
+            vec![cart(root, Platform::Gba, "Game")],
+            &stopped,
+            &fake,
+        );
         assert!(checked(root, Platform::Gba).is_empty());
     }
 }

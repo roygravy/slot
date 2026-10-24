@@ -65,7 +65,14 @@ pub const MENU_FLAT_DARK: [u8; 3] = [0x16, 0x17, 0x1a];
 pub const MENU_FLAT_LIGHT: [u8; 3] = [0xea, 0xe8, 0xe3];
 
 pub fn menu_flat(light_ground: bool) -> [f32; 4] {
-    rgb(if light_ground { MENU_FLAT_LIGHT } else { MENU_FLAT_DARK }, 1.0)
+    rgb(
+        if light_ground {
+            MENU_FLAT_LIGHT
+        } else {
+            MENU_FLAT_DARK
+        },
+        1.0,
+    )
 }
 
 pub fn ink(light_theme: bool) -> Ink {

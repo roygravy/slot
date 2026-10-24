@@ -99,7 +99,8 @@ const SLOT_FRONT_NES_LIGHT_PNG: &[u8] = include_bytes!("../../../assets/slot_fro
 const SLOT_BACK_SNES_DARK_PNG: &[u8] = include_bytes!("../../../assets/slot_back_snes_dark.png");
 const SLOT_FRONT_SNES_DARK_PNG: &[u8] = include_bytes!("../../../assets/slot_front_snes_dark.png");
 const SLOT_BACK_SNES_LIGHT_PNG: &[u8] = include_bytes!("../../../assets/slot_back_snes_light.png");
-const SLOT_FRONT_SNES_LIGHT_PNG: &[u8] = include_bytes!("../../../assets/slot_front_snes_light.png");
+const SLOT_FRONT_SNES_LIGHT_PNG: &[u8] =
+    include_bytes!("../../../assets/slot_front_snes_light.png");
 const NES_LID_DARK_PNG: &[u8] = include_bytes!("../../../assets/nes_lid_dark.png");
 const NES_LID_LIGHT_PNG: &[u8] = include_bytes!("../../../assets/nes_lid_light.png");
 const PORT_DARK_PNG: &[u8] = include_bytes!("../../../assets/link_port_dark.png");
@@ -343,7 +344,14 @@ const GBC_CLEAR_PNG: &[u8] = include_bytes!("../../../assets/gbc_clear.png");
 /// blended onto it by the caller.
 pub fn shell_asset(mould: Mould, clear: bool) -> &'static [u8] {
     if mould.tv() {
-        return tv_art(mould, if clear { TvPart::Clear } else { TvPart::Neutral });
+        return tv_art(
+            mould,
+            if clear {
+                TvPart::Clear
+            } else {
+                TvPart::Neutral
+            },
+        );
     }
     static GBA: OnceLock<Vec<u8>> = OnceLock::new();
     static GB: OnceLock<Vec<u8>> = OnceLock::new();

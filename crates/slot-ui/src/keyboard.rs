@@ -49,12 +49,22 @@ pub fn key_rows(numbers: bool) -> [Vec<Cap>; 4] {
     if numbers {
         let mut third = chars(".,?!'", 1.5, 1.4);
         third.push(cap(Key::Delete, 8.5, 1.5));
-        [chars("1234567890", 0.0, 1.0), chars("-/:;()$&@\"", 0.0, 1.0), third, bottom]
+        [
+            chars("1234567890", 0.0, 1.0),
+            chars("-/:;()$&@\"", 0.0, 1.0),
+            third,
+            bottom,
+        ]
     } else {
         let mut third = vec![cap(Key::Shift, 0.0, 1.5)];
         third.extend(chars("zxcvbnm", 1.5, 1.0));
         third.push(cap(Key::Delete, 8.5, 1.5));
-        [chars("qwertyuiop", 0.0, 1.0), chars("asdfghjkl", 0.5, 1.0), third, bottom]
+        [
+            chars("qwertyuiop", 0.0, 1.0),
+            chars("asdfghjkl", 0.5, 1.0),
+            third,
+            bottom,
+        ]
     }
 }
 
@@ -100,12 +110,22 @@ fn key_box(row: usize, cap: &Cap) -> (f32, f32, f32, f32) {
 
 fn balloon_box(row: usize, cap: &Cap) -> (f32, f32, f32, f32) {
     let (x, y, w, h) = key_box(row, cap);
-    (x - BALLOON_WIDEN, y - BALLOON_RISE, w + 2.0 * BALLOON_WIDEN, h + BALLOON_RISE)
+    (
+        x - BALLOON_WIDEN,
+        y - BALLOON_RISE,
+        w + 2.0 * BALLOON_WIDEN,
+        h + BALLOON_RISE,
+    )
 }
 
 fn ring_box(row: usize, cap: &Cap) -> (f32, f32, f32, f32) {
     let (x, y, w, h) = key_box(row, cap);
-    (x - RING_OUT, y - RING_OUT, w + 2.0 * RING_OUT, h + 2.0 * RING_OUT)
+    (
+        x - RING_OUT,
+        y - RING_OUT,
+        w + 2.0 * RING_OUT,
+        h + 2.0 * RING_OUT,
+    )
 }
 
 /// The rounded shapes, by size: filled, or a ring.
@@ -173,15 +193,27 @@ fn rounded(s: Shape) -> UndoFace {
             rgba[at..at + 4].copy_from_slice(&[255, 255, 255, (a * 255.0) as u8]);
         }
     }
-    UndoFace { rgba, w: s.w, h: s.h }
+    UndoFace {
+        rgba,
+        w: s.w,
+        h: s.h,
+    }
 }
 
 /// White text on nothing, set as it is typed (no capitals forced), for `Draw::Tint`.
 fn plain(s: &str, px: f32, tracking: f32, upper: bool) -> UndoFace {
-    let line = if upper { s.to_uppercase() } else { s.to_owned() };
+    let line = if upper {
+        s.to_uppercase()
+    } else {
+        s.to_owned()
+    };
     let h = (px * 1.6).ceil() as u32;
     let Some(font) = text::label_font() else {
-        return UndoFace { rgba: vec![0; 4], w: 1, h: 1 };
+        return UndoFace {
+            rgba: vec![0; 4],
+            w: 1,
+            h: 1,
+        };
     };
     let w = (text::line_width(font, &line, px, tracking).ceil() as u32 + 4).max(1);
     let mut rgba = vec![0u8; (w * h * 4) as usize];
@@ -225,7 +257,10 @@ fn icon(cover: impl Fn(f32, f32) -> bool) -> UndoFace {
             let mut a = 0.0;
             for sy in 0..4 {
                 for sx in 0..4 {
-                    let (px, py) = (x as f32 + (sx as f32 + 0.5) / 4.0 - c, y as f32 + (sy as f32 + 0.5) / 4.0 - c);
+                    let (px, py) = (
+                        x as f32 + (sx as f32 + 0.5) / 4.0 - c,
+                        y as f32 + (sy as f32 + 0.5) / 4.0 - c,
+                    );
                     a += f32::from(u8::from(cover(px, py)));
                 }
             }
@@ -253,13 +288,21 @@ const SHIFT: [(f32, f32); 7] = [
     (-4.0, 0.5),
     (-9.0, 0.5),
 ];
-const DELETE: [(f32, f32); 5] = [(-11.0, 0.0), (-5.0, -8.0), (11.0, -8.0), (11.0, 8.0), (-5.0, 8.0)];
+const DELETE: [(f32, f32); 5] = [
+    (-11.0, 0.0),
+    (-5.0, -8.0),
+    (11.0, -8.0),
+    (11.0, 8.0),
+    (-5.0, 8.0),
+];
 
 /// Shift, shift held, delete, the magnifier and the clear button.
 fn icons() -> [UndoFace; 5] {
     let stroke = 1.9;
     let cross = |x: f32, y: f32, cx: f32, arm: f32| {
-        (x - cx).abs() <= arm && y.abs() <= arm && ((x - cx - y).abs() <= stroke * 0.75 || (x - cx + y).abs() <= stroke * 0.75)
+        (x - cx).abs() <= arm
+            && y.abs() <= arm
+            && ((x - cx - y).abs() <= stroke * 0.75 || (x - cx + y).abs() <= stroke * 0.75)
     };
     [
         icon(outline(&SHIFT, stroke, false)),
@@ -313,12 +356,22 @@ impl KeyboardFaces<UndoFace> {
             .collect();
         let all: Vec<char> = set
             .chars()
-            .chain(set.chars().filter(|c| c.is_alphabetic()).flat_map(char::to_uppercase))
+            .chain(
+                set.chars()
+                    .filter(|c| c.is_alphabetic())
+                    .flat_map(char::to_uppercase),
+            )
             .collect();
         let hint = |k: &str, l: &str| tint_mask(hint_face(k, l));
         KeyboardFaces {
-            glyphs: all.iter().map(|&c| (c, plain(&c.to_string(), KEY_PX, 0.0, false))).collect(),
-            big: all.iter().map(|&c| (c, plain(&c.to_string(), BIG_PX, 0.0, false))).collect(),
+            glyphs: all
+                .iter()
+                .map(|&c| (c, plain(&c.to_string(), KEY_PX, 0.0, false)))
+                .collect(),
+            big: all
+                .iter()
+                .map(|&c| (c, plain(&c.to_string(), BIG_PX, 0.0, false)))
+                .collect(),
             words: ["space", "search", "123", "ABC"].map(|w| plain(w, WORD_PX, 0.0, false)),
             shapes: shapes().into_iter().map(|s| (s, rounded(s))).collect(),
             icons: icons(),
@@ -326,20 +379,22 @@ impl KeyboardFaces<UndoFace> {
             searching: plain("Searching", 16.0, 3.0, true),
             try_again: plain("Try fewer or other words", 13.0, 2.0, true),
             legend_typing: vec![
+                // X still clears the field; its hint makes room for MENU's.
                 hint("B", "Delete"),
-                hint("X", "Clear"),
                 hint("Y", "Space"),
                 hint("SELECT", "Shift"),
                 hint("START", "Search"),
+                hint("MENU", "Exit"),
             ],
             legend_empty: vec![
                 hint("B", "Close"),
                 hint("Y", "Space"),
                 hint("SELECT", "Shift"),
                 hint("START", "Search"),
+                hint("MENU", "Exit"),
             ],
-            legend_results: vec![hint("B", "Back"), hint("A", "Choose")],
-            legend_back: vec![hint("B", "Back")],
+            legend_results: vec![hint("B", "Back"), hint("A", "Choose"), hint("MENU", "Exit")],
+            legend_back: vec![hint("B", "Back"), hint("MENU", "Exit")],
         }
     }
 
@@ -391,7 +446,10 @@ pub fn search_status_face(text: &str) -> UndoFace {
 }
 
 pub fn search_row_faces(name: &str, platform: &str) -> (UndoFace, UndoFace) {
-    (plain(name, 19.0, 3.0, true), plain(platform, 11.0, 2.5, true))
+    (
+        plain(name, 19.0, 3.0, true),
+        plain(platform, 11.0, 2.5, true),
+    )
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -405,7 +463,9 @@ pub enum SearchScreen {
         caret: bool,
     },
     Searching,
-    Results { at: usize },
+    Results {
+        at: usize,
+    },
     /// Nothing was found, or the search could not be made.
     Nothing,
 }
@@ -422,7 +482,12 @@ pub struct SearchView<'a> {
 }
 
 fn rgb(c: [u8; 3], a: f32) -> [f32; 4] {
-    [c[0] as f32 / 255.0, c[1] as f32 / 255.0, c[2] as f32 / 255.0, a]
+    [
+        c[0] as f32 / 255.0,
+        c[1] as f32 / 255.0,
+        c[2] as f32 / 255.0,
+        a,
+    ]
 }
 
 /// The keyboard's colours, as a phone's in its dark or light look: the panel, a letter key, a
@@ -509,11 +574,25 @@ pub fn draw_label_search(canvas: Canvas, v: &SearchView, out: &mut Vec<Draw>) {
     let legend = |faces: &[Up], gap: f32, out: &mut Vec<Draw>| {
         let pairs: Vec<(TexId, u32)> = faces.iter().map(|f| (f.0, f.1)).collect();
         for (tex, w, x) in centred_hints(canvas, &pairs, gap) {
-            out.push(tint(tex, x, LEGEND_Y, w as f32, HINT_H as f32, faded(v.ink.text, a)));
+            out.push(tint(
+                tex,
+                x,
+                LEGEND_Y,
+                w as f32,
+                HINT_H as f32,
+                faded(v.ink.text, a),
+            ));
         }
     };
     let heading = |f: Up, y: f32, colour: [f32; 4], out: &mut Vec<Draw>| {
-        out.push(tint(f.0, canvas.centred(f.1 as f32), y, f.1 as f32, f.2 as f32, colour));
+        out.push(tint(
+            f.0,
+            canvas.centred(f.1 as f32),
+            y,
+            f.1 as f32,
+            f.2 as f32,
+            colour,
+        ));
     };
 
     match v.screen {
@@ -530,7 +609,14 @@ pub fn draw_label_search(canvas: Canvas, v: &SearchView, out: &mut Vec<Draw>) {
             shape(FIELD, false, k.field, out);
             let (fx, fy, fw, fh) = at(FIELD);
             let ic = v.faces.icons[3];
-            out.push(tint(ic.0, fx + 14.0, fy + (fh - ic.2 as f32) / 2.0, ic.1 as f32, ic.2 as f32, k.faint));
+            out.push(tint(
+                ic.0,
+                fx + 14.0,
+                fy + (fh - ic.2 as f32) / 2.0,
+                ic.1 as f32,
+                ic.2 as f32,
+                k.faint,
+            ));
             let tx = fx + 48.0;
             let typed_w = match v.texts.typed {
                 Some(f) => {
@@ -547,7 +633,14 @@ pub fn draw_label_search(canvas: Canvas, v: &SearchView, out: &mut Vec<Draw>) {
                     // Part draws the face's own white; tint it by drawing it as the glyph ink.
                     if let Some(Draw::Part { .. }) = out.last() {
                         out.pop();
-                        out.push(tint(f.0, tx, fy + (fh - f.2 as f32) / 2.0, f.1 as f32, f.2 as f32, k.glyph));
+                        out.push(tint(
+                            f.0,
+                            tx,
+                            fy + (fh - f.2 as f32) / 2.0,
+                            f.1 as f32,
+                            f.2 as f32,
+                            k.glyph,
+                        ));
                     }
                     let clear = v.faces.icons[4];
                     out.push(tint(
@@ -562,7 +655,14 @@ pub fn draw_label_search(canvas: Canvas, v: &SearchView, out: &mut Vec<Draw>) {
                 }
                 None => {
                     let p = v.faces.placeholder;
-                    out.push(tint(p.0, tx, fy + (fh - p.2 as f32) / 2.0, p.1 as f32, p.2 as f32, k.faint));
+                    out.push(tint(
+                        p.0,
+                        tx,
+                        fy + (fh - p.2 as f32) / 2.0,
+                        p.1 as f32,
+                        p.2 as f32,
+                        k.faint,
+                    ));
                     0.0
                 }
             };
@@ -603,7 +703,11 @@ pub fn draw_label_search(canvas: Canvas, v: &SearchView, out: &mut Vec<Draw>) {
                             if chosen {
                                 balloon = Some((r, *cap, ch));
                             }
-                            v.faces.glyphs.iter().find(|(g, _)| *g == ch).map(|(_, f)| *f)
+                            v.faces
+                                .glyphs
+                                .iter()
+                                .find(|(g, _)| *g == ch)
+                                .map(|(_, f)| *f)
                         }
                         Key::Shift => Some(v.faces.icons[usize::from(shift)]),
                         Key::Delete => Some(v.faces.icons[2]),
@@ -630,7 +734,11 @@ pub fn draw_label_search(canvas: Canvas, v: &SearchView, out: &mut Vec<Draw>) {
             }
             let typed = v.texts.typed.is_some();
             legend(
-                if typed { &v.faces.legend_typing } else { &v.faces.legend_empty },
+                if typed {
+                    &v.faces.legend_typing
+                } else {
+                    &v.faces.legend_empty
+                },
                 KEYS_LEGEND_GAP,
                 out,
             );
@@ -653,8 +761,12 @@ pub fn draw_label_search(canvas: Canvas, v: &SearchView, out: &mut Vec<Draw>) {
                 heading(s, HEADING_Y + 6.0, faded(v.ink.dim, a), out);
             }
             let n = v.texts.rows.len();
-            let first = chosen.saturating_sub(LIST_SHOWN - 1).min(n.saturating_sub(LIST_SHOWN));
-            for (i, (name, platform)) in v.texts.rows.iter().enumerate().skip(first).take(LIST_SHOWN) {
+            let first = chosen
+                .saturating_sub(LIST_SHOWN - 1)
+                .min(n.saturating_sub(LIST_SHOWN));
+            for (i, (name, platform)) in
+                v.texts.rows.iter().enumerate().skip(first).take(LIST_SHOWN)
+            {
                 let y = LIST_Y + (i - first) as f32 * LIST_PITCH;
                 let on = i == chosen;
                 if on {
@@ -673,7 +785,14 @@ pub fn draw_label_search(canvas: Canvas, v: &SearchView, out: &mut Vec<Draw>) {
                 };
                 let x = ox + LIST_X;
                 out.push(tint(name.0, x, y + 6.0, name.1 as f32, name.2 as f32, big));
-                out.push(tint(platform.0, x, y + 34.0, platform.1 as f32, platform.2 as f32, small));
+                out.push(tint(
+                    platform.0,
+                    x,
+                    y + 34.0,
+                    platform.1 as f32,
+                    platform.2 as f32,
+                    small,
+                ));
             }
             legend(&v.faces.legend_results, LEGEND_GAP, out);
         }

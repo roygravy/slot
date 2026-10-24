@@ -94,7 +94,11 @@ pub(crate) fn game_id(page: &str, wanted: &str, platform: Platform) -> Result<u6
             // is the one far more people voted on, when one is.
             _ => {
                 let most = found.iter().map(|(_, v)| *v).max().unwrap_or(0);
-                let leaders: Vec<u64> = found.iter().filter(|(_, v)| *v == most).map(|(id, _)| *id).collect();
+                let leaders: Vec<u64> = found
+                    .iter()
+                    .filter(|(_, v)| *v == most)
+                    .map(|(id, _)| *id)
+                    .collect();
                 match leaders.as_slice() {
                     [id] if most > 0 => return Ok(*id),
                     _ => break,
@@ -114,7 +118,7 @@ pub struct Game {
 }
 
 /// The most games a search lists.
-const GAMES: usize = 8;
+const GAMES: usize = 16;
 
 /// A shelf's platform as people say it, for a source's name of it.
 fn spoken(platform: &str) -> &str {
@@ -138,7 +142,10 @@ pub(crate) fn games(page: &str, platform: Platform) -> Vec<Game> {
             continue;
         };
         let name = heading.text().collect::<String>().trim().to_owned();
-        let texts: Vec<String> = link.select(&selector("p")).map(|p| p.text().collect()).collect();
+        let texts: Vec<String> = link
+            .select(&selector("p"))
+            .map(|p| p.text().collect())
+            .collect();
         let Some((rank, listed)) = platforms(platform)
             .iter()
             .enumerate()
@@ -183,7 +190,10 @@ fn ids(doc: &Html, wanted: &str, platform: &str) -> Vec<(u64, u32)> {
             continue;
         };
         let name = heading.text().collect::<String>();
-        let texts: Vec<String> = link.select(&selector("p")).map(|p| p.text().collect()).collect();
+        let texts: Vec<String> = link
+            .select(&selector("p"))
+            .map(|p| p.text().collect())
+            .collect();
         let listed = texts.iter().any(|t| t.trim() == platform);
         if !listed || normalize(&name) != wanted {
             continue;
@@ -191,7 +201,14 @@ fn ids(doc: &Html, wanted: &str, platform: &str) -> Vec<(u64, u32)> {
         let votes = texts
             .iter()
             .find_map(|t| t.split("Total Votes:").nth(1))
-            .and_then(|v| v.trim().split_whitespace().next()?.replace(',', "").parse().ok())
+            .and_then(|v| {
+                v.trim()
+                    .split_whitespace()
+                    .next()?
+                    .replace(',', "")
+                    .parse()
+                    .ok()
+            })
             .unwrap_or(0);
         let href = link.value().attr("href").unwrap_or_default();
         if let Some(id) = href
@@ -256,7 +273,7 @@ pub const PHOTO: &str = "Cart - Front";
 pub const RENDER: &str = "Fanart - Cart - Front";
 
 /// Cart fronts, best first and at most three: a photo of the cart from its own region, a fanart
-/// render of that cart, then the same from any other region. A render is a scan of the real label
+/// render of that cart, then the same from the other regions, Europe, America, then Japan. A render is a scan of the real label
 /// on a stock shell, and for Game Boy and Game Boy Color it is most of what LaunchBox has.
 pub fn rank<T: Clone>(stem: &str, code: &str, images: &[(&str, &str, T)]) -> Vec<T> {
     rank_all(stem, code, images)
@@ -267,7 +284,11 @@ pub fn rank<T: Clone>(stem: &str, code: &str, images: &[(&str, &str, T)]) -> Vec
 }
 
 /// Every cart front in the same order, each with whether it is a render and its region.
-fn rank_all<T: Clone>(stem: &str, code: &str, images: &[(&str, &str, T)]) -> Vec<(bool, String, T)> {
+fn rank_all<T: Clone>(
+    stem: &str,
+    code: &str,
+    images: &[(&str, &str, T)],
+) -> Vec<(bool, String, T)> {
     let own = regions(stem, code);
     let mut ranked: Vec<_> = images
         .iter()
@@ -278,8 +299,16 @@ fn rank_all<T: Clone>(stem: &str, code: &str, images: &[(&str, &str, T)]) -> Vec
                 _ => return None,
             };
             let away = !own.contains(region);
+            // Another region's label: Europe's first, then America's, then Japan's.
+            let far = match *region {
+                _ if !away => 0,
+                "Europe" => 1,
+                "North America" | "United States" => 2,
+                "Japan" => 3,
+                _ => 4,
+            };
             Some((
-                u8::from(away) * 2 + u8::from(render),
+                (far, u8::from(render)),
                 (render, region.to_string(), image.clone()),
             ))
         })

@@ -190,7 +190,9 @@ fn plan(wordmark: &[u8], dir: &Path) -> Result<Plan, Outcome> {
         .ok_or(Outcome::Invalid)?;
     // The boot screen is the dark menus' flat ground, so boot, menus and shelf share a tone.
     let flat = slot_ui::theme::MENU_FLAT_DARK;
-    let ground: Vec<u8> = (0..OUT_W * OUT_H).flat_map(|_| [flat[0], flat[1], flat[2], 255]).collect();
+    let ground: Vec<u8> = (0..OUT_W * OUT_H)
+        .flat_map(|_| [flat[0], flat[1], flat[2], 255])
+        .collect();
     let logo = compose_over(&mark, panel, &ground, (OUT_W, OUT_H))
         .map(|b| encode(&b))
         .ok_or(Outcome::Invalid)?;
@@ -267,7 +269,17 @@ fn on_partition(rw: bool, f: impl FnOnce(&Path)) {
         return;
     };
     if fs::create_dir_all(MOUNT).is_err()
-        || !run("mount", &["-t", "vfat", "-o", if rw { "rw,noatime" } else { "ro,noatime" }, &device, MOUNT])
+        || !run(
+            "mount",
+            &[
+                "-t",
+                "vfat",
+                "-o",
+                if rw { "rw,noatime" } else { "ro,noatime" },
+                &device,
+                MOUNT,
+            ],
+        )
     {
         eprintln!("slot: bootlogo: could not mount {device}");
         return;
@@ -311,14 +323,22 @@ pub fn picture_bmp(rgba: &[u8], (w, h): (usize, usize), (pw, ph): (usize, usize)
             rgb.push([rgba[o], rgba[o + 1], rgba[o + 2]]);
         }
     }
-    Some(Bmp { width: pw, height: ph, rgb })
+    Some(Bmp {
+        width: pw,
+        height: ph,
+        rgb,
+    })
 }
 
 /// Write `bmp` as the boot logo in `dir`, sized like the panel's own.
 fn install_bmp(rgba: &[u8], size: (usize, usize), dir: &Path) -> io::Result<Outcome> {
     let current = fs::read(dir.join(LOGO)).ok();
     let original = fs::read(dir.join(ORIGINAL)).ok();
-    let Some(panel) = original.as_deref().or(current.as_deref()).and_then(self::size) else {
+    let Some(panel) = original
+        .as_deref()
+        .or(current.as_deref())
+        .and_then(self::size)
+    else {
         return Ok(Outcome::Invalid);
     };
     if panel.1 > panel.0 {
@@ -345,7 +365,9 @@ pub fn install_picture(card: &Path, rgba: &[u8], size: (usize, usize)) {
         }
     }
     on_partition(true, |dir| match install_bmp(rgba, size, dir) {
-        Ok(Outcome::Installed) => eprintln!("slot: bootlogo: the game's picture is the boot screen"),
+        Ok(Outcome::Installed) => {
+            eprintln!("slot: bootlogo: the game's picture is the boot screen")
+        }
         Ok(_) => eprintln!("slot: bootlogo: the game's picture does not fit this panel"),
         Err(e) => eprintln!("slot: bootlogo: {e}"),
     });

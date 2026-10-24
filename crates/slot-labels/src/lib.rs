@@ -267,7 +267,10 @@ fn versions(http: &mut impl Transport, cart: &Cart) -> Result<Vec<Version>, Erro
             let crc = catalog::crc32(&cart.rom).ok();
             let urls = crc.map(|crc| catalog::lookup(catalog::INDEX, crc));
             match urls.filter(|u| !u.is_empty()) {
-                Some(urls) => urls.into_iter().map(|u| (false, String::new(), u)).collect(),
+                Some(urls) => urls
+                    .into_iter()
+                    .map(|u| (false, String::new(), u))
+                    .collect(),
                 None => return Err(Error::Unavailable(e)),
             }
         }
@@ -289,7 +292,11 @@ fn cut(
             .get(&url)
             .and_then(|bytes| artwork::prepare(&bytes, cart.platform))
         {
-            Ok(png) => found.push(Version { render, region, png }),
+            Ok(png) => found.push(Version {
+                render,
+                region,
+                png,
+            }),
             Err(e @ Error::Network(_)) if found.is_empty() => return Err(e),
             Err(e) => last = e,
         }
@@ -304,7 +311,11 @@ fn cut(
 /// Where a cart's label is kept: the file it already wears, else one named after its ROM.
 pub fn label_path(root: &Path, cart: &Cart) -> PathBuf {
     cart.label.clone().unwrap_or_else(|| {
-        let file = cart.rom.file_name().map(Path::new).unwrap_or(Path::new(&cart.stem));
+        let file = cart
+            .rom
+            .file_name()
+            .map(Path::new)
+            .unwrap_or(Path::new(&cart.stem));
         root.join("Labels")
             .join(cart.platform.dir_name())
             .join(file.with_extension("png"))

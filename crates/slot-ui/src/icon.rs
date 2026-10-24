@@ -180,7 +180,6 @@ impl Badge {
     }
 }
 
-
 /// A spotlight for a favourite cart, added over the cart as light: a soft warm pool centred
 /// on the cart's upper half that lights the cart itself and fades out over the ground around it,
 /// with no edge and no beam. `cw` x `ch` is the cart; the face is `margin` px larger all round,
@@ -218,7 +217,10 @@ pub fn drop_shadow_face(cw: u32, ch: u32, margin: u32) -> CartFace {
     let (w, h) = (fw.div_ceil(2), fh.div_ceil(2));
     let (m, radius) = (margin as f32, 14.0_f32);
     let (cx, cy) = (fw as f32 / 2.0, fh as f32 / 2.0);
-    let (hw, hh) = (cw as f32 / 2.0 - radius - 4.0, ch as f32 / 2.0 - radius - 4.0);
+    let (hw, hh) = (
+        cw as f32 / 2.0 - radius - 4.0,
+        ch as f32 / 2.0 - radius - 4.0,
+    );
     let mut rgba = vec![0u8; (w * h * 4) as usize];
     for py in 0..h {
         for px in 0..w {
@@ -389,7 +391,11 @@ fn power_symbol(f: &Frame, px: f32) -> Raster {
             cov[(y * f.w + x) as usize] = (a * 255.0) as u8;
         }
     }
-    Raster { cov, w: f.w, h: f.h }
+    Raster {
+        cov,
+        w: f.w,
+        h: f.h,
+    }
 }
 
 struct Frame {

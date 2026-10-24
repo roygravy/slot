@@ -62,7 +62,10 @@ fn files_for(dir: &Path, stem: &str) -> Vec<PathBuf> {
         .collect();
     let picked: Vec<&String> = if exact.is_empty() {
         let t = title(stem);
-        names.iter().filter(|n| title(&n[..n.len() - 4]) == t).collect()
+        names
+            .iter()
+            .filter(|n| title(&n[..n.len() - 4]) == t)
+            .collect()
     } else {
         exact
     };
@@ -117,7 +120,9 @@ pub fn parse(text: &str) -> Vec<(String, String)> {
             if code.is_empty() {
                 return None;
             }
-            let name = d.filter(|d| !d.trim().is_empty()).unwrap_or_else(|| code.clone());
+            let name = d
+                .filter(|d| !d.trim().is_empty())
+                .unwrap_or_else(|| code.clone());
             Some((name.trim().to_string(), code))
         })
         .collect()
@@ -154,7 +159,11 @@ pub fn load(root: &Path, platform: Platform, stem: &str) -> Vec<Cheat> {
 /// Remember which cheats are on for this game; with none on, the file goes.
 pub fn save(root: &Path, platform: Platform, stem: &str, cheats: &[Cheat]) {
     let path = state_path(root, platform, stem);
-    let on: Vec<&str> = cheats.iter().filter(|c| c.on).map(|c| c.name.as_str()).collect();
+    let on: Vec<&str> = cheats
+        .iter()
+        .filter(|c| c.on)
+        .map(|c| c.name.as_str())
+        .collect();
     if on.is_empty() {
         let _ = std::fs::remove_file(&path);
         return;
@@ -171,7 +180,11 @@ pub fn save(root: &Path, platform: Platform, stem: &str, cheats: &[Cheat]) {
 
 /// The codes of the cheats that are on, for the core.
 pub fn codes(cheats: &[Cheat]) -> Vec<String> {
-    cheats.iter().filter(|c| c.on).map(|c| c.code.clone()).collect()
+    cheats
+        .iter()
+        .filter(|c| c.on)
+        .map(|c| c.code.clone())
+        .collect()
 }
 
 #[cfg(test)]
@@ -192,7 +205,10 @@ mod tests {
 
     #[test]
     fn titles_ignore_region_and_kind() {
-        assert_eq!(title("Pokemon - Emerald Version (USA, Europe) (Code Breaker)"), "pokemon - emerald version");
+        assert_eq!(
+            title("Pokemon - Emerald Version (USA, Europe) (Code Breaker)"),
+            "pokemon - emerald version"
+        );
         assert_eq!(title("Tetris (World)"), "tetris");
     }
 }

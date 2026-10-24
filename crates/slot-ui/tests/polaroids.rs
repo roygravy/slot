@@ -138,11 +138,17 @@ fn the_gauge_stays_clear_of_the_title_on_the_right() {
             _ => None,
         })
         .collect();
-    assert!(!gauge.is_empty(), "no gauge drew at the right margin at all");
+    assert!(
+        !gauge.is_empty(),
+        "no gauge drew at the right margin at all"
+    );
     let rightmost = gauge.iter().map(|(x, w)| x + w).fold(0.0, f32::max);
     assert_eq!(rightmost, OUT_W as f32 - 16.0, "the plate margin is 16");
     let leftmost = gauge.iter().map(|(x, _)| *x).fold(f32::MAX, f32::min);
-    assert!(leftmost > 500.0, "the gauge reached into the title's texture");
+    assert!(
+        leftmost > 500.0,
+        "the gauge reached into the title's texture"
+    );
 }
 
 #[test]
@@ -172,7 +178,10 @@ fn the_clock_stays_clear_of_the_title_on_the_left() {
     let leftmost = clock.iter().map(|(x, _)| *x).fold(f32::MAX, f32::min);
     assert_eq!(leftmost, 16.0, "the plate margin is 16");
     let rightmost = clock.iter().map(|(x, w)| x + w).fold(0.0, f32::max);
-    assert!(rightmost < 140.0, "the clock reached into the title's texture");
+    assert!(
+        rightmost < 140.0,
+        "the clock reached into the title's texture"
+    );
 }
 
 #[test]

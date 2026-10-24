@@ -170,7 +170,10 @@ fn original_is_the_consoles_own_standard_cart_whatever_the_game() {
     rom[0x143] = 0xc0;
     std::fs::write(games.join("Crystal.gbc"), rom).expect("rom");
     let crystal = shell_for(&scan(d.path()).expect("scan")[0]);
-    assert_eq!(crystal, GBC_CLEAR_SHELL, "the GBC's cart is clear, without a tint");
+    assert_eq!(
+        crystal, GBC_CLEAR_SHELL,
+        "the GBC's cart is clear, without a tint"
+    );
 }
 
 #[test]

@@ -49,7 +49,7 @@ pub struct ShellPickerFaces {
     /// Original, Custom, then the palette's names.
     pub names: Vec<(TexId, u32)>,
     pub finishes: Vec<(TexId, u32)>,
-    /// NTSC, PAL: an SNES cart's two shapes; then GB, GBC: a Game Boy cart's two.
+    /// PAL, NTSC: an SNES cart's two shapes; then GB, GBC: a Game Boy cart's two.
     pub models: [(TexId, u32); 4],
     /// The tabs' names: the colour's, the label's, then the marker's.
     pub tabs: [(TexId, u32); 3],

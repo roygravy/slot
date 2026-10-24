@@ -1,4 +1,3 @@
-
 use slot_store::{Cart, Platform, ShellFinish};
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]

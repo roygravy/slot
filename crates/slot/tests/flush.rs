@@ -98,7 +98,6 @@ fn power_down_flushes_and_the_hold_powers_off() {
     );
 }
 
-
 #[test]
 fn an_idle_doze_times_out_into_a_power_off() {
     let d = tmp_root_with_carts(&["Emerald"]);

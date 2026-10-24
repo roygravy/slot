@@ -121,7 +121,9 @@ impl CartFaces {
         let (key, face, interior, drawn) = built;
         self.pending.remove(&key);
         let now = app.face_cart(key.0, key.1);
-        if now.is_some_and(|c| c.shell != drawn.shell || c.marker != drawn.marker || c.label != drawn.label) {
+        if now.is_some_and(|c| {
+            c.shell != drawn.shell || c.marker != drawn.marker || c.label != drawn.label
+        }) {
             // Asked for again on the next pass, as the cart is now.
             self.asked.clear();
             return false;

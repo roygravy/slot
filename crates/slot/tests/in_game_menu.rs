@@ -331,7 +331,11 @@ fn select_b_switches_only_the_chosen_effects_off_and_back_on() {
     a.apply(Action::QuickMenu);
     assert!(a.in_game_menu().is_none());
     a.apply(Action::ShaderPrev);
-    for row in [QuickRow::Shader, QuickRow::PixelTransparency, QuickRow::LcdGhosting] {
+    for row in [
+        QuickRow::Shader,
+        QuickRow::PixelTransparency,
+        QuickRow::LcdGhosting,
+    ] {
         assert_eq!(value(&a, row), Some(false), "{row:?} stayed on");
     }
     a.apply(Action::ShaderPrev);
@@ -348,7 +352,11 @@ fn select_b_switches_only_the_chosen_effects_off_and_back_on() {
 fn select_b_with_every_effect_off_brings_the_standard_look() {
     let (_d, mut a) = playing();
     let value = |a: &App, row| a.quick_value(row).and_then(slot_ui::QuickValue::switch);
-    for row in [QuickRow::Shader, QuickRow::PixelTransparency, QuickRow::LcdGhosting] {
+    for row in [
+        QuickRow::Shader,
+        QuickRow::PixelTransparency,
+        QuickRow::LcdGhosting,
+    ] {
         go_to(&mut a, row);
         press(&mut a, Btn::Right);
         a.apply(Action::QuickMenu);

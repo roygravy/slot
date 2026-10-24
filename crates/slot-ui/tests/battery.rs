@@ -72,7 +72,10 @@ fn the_fill_tracks_the_percent_in_one_ink() {
     };
     let widths: Vec<u32> = [10u8, 50, 90].into_iter().map(lit).collect();
     for pair in widths.windows(2) {
-        assert!(pair[1] > pair[0], "the fill must grow with the percent, got {widths:?}");
+        assert!(
+            pair[1] > pair[0],
+            "the fill must grow with the percent, got {widths:?}"
+        );
     }
     let low = battery_face(5, false, ink);
     for px in low.rgba.chunks(4).filter(|p| p[3] > 0) {

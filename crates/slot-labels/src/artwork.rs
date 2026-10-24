@@ -227,7 +227,11 @@ fn find_sticker(image: &DynamicImage, spec: &Spec) -> Option<(u32, u32, u32, u32
         })
     };
     let rim_rows = (at_y(spec.rim_rows.0), at_y(spec.rim_rows.1));
-    let rims: Vec<_> = spec.rims.iter().map(|&(a, b)| ((at_x(a), at_x(b)), rim_rows)).collect();
+    let rims: Vec<_> = spec
+        .rims
+        .iter()
+        .map(|&(a, b)| ((at_x(a), at_x(b)), rim_rows))
+        .collect();
     let mut shells = vec![median(&rims)?];
     for &((xa, xb), (ya, yb)) in spec.below {
         shells.extend(median(&[((at_x(xa), at_x(xb)), (at_y(ya), at_y(yb)))]));
@@ -272,11 +276,13 @@ fn find_sticker(image: &DynamicImage, spec: &Spec) -> Option<(u32, u32, u32, u32
         // Clear plastic shows the board behind it, so the rows found are rough. A Game Boy
         // sticker has a plain strip down each side: where a strip ends, the sticker does.
         let cw = r - l;
-        let strips = [(l + cw * 2 / 100, l + cw * 8 / 100), (r - cw * 8 / 100, r - cw * 2 / 100)];
+        let strips = [
+            (l + cw * 2 / 100, l + cw * 8 / 100),
+            (r - cw * 8 / 100, r - cw * 2 / 100),
+        ];
         // A strip that ran on into plastic of its own grey is not one that ended.
-        let shape = |(t, b): (u32, u32)| {
-            (1.08..=1.21).contains(&(cw as f32 / (b - t).max(1) as f32))
-        };
+        let shape =
+            |(t, b): (u32, u32)| (1.08..=1.21).contains(&(cw as f32 / (b - t).max(1) as f32));
         let found: Vec<(u32, u32)> = strips
             .iter()
             .filter_map(|&(xa, xb)| {
@@ -307,7 +313,11 @@ fn find_sticker(image: &DynamicImage, spec: &Spec) -> Option<(u32, u32, u32, u32
             [one] => one,
             [a, b2] => {
                 let off = |(ft, fb): (u32, u32)| ft.abs_diff(t) + fb.abs_diff(b);
-                if off(a) <= off(b2) { a } else { b2 }
+                if off(a) <= off(b2) {
+                    a
+                } else {
+                    b2
+                }
             }
             _ => (t, b),
         }
@@ -335,7 +345,11 @@ fn cut(image: &DynamicImage, (l, t, r, b): (u32, u32, u32, u32), size: (u32, u32
 }
 
 fn tv_label(image: &DynamicImage, platform: Platform) -> Result<RgbImage, Error> {
-    let spec = if platform == Platform::Nes { &NES_SPEC } else { &SNES_SPEC };
+    let spec = if platform == Platform::Nes {
+        &NES_SPEC
+    } else {
+        &SNES_SPEC
+    };
     let found = find_sticker(image, spec)
         .ok_or_else(|| Error::Image("no sticker on this cartridge scan".into()))?;
     let (l, t, r, b) = found;

@@ -31,6 +31,8 @@ pub enum Press {
     Shift,
     /// START: search.
     Search,
+    /// MENU: out of the search at once, whatever is on the screen.
+    Exit,
 }
 
 pub enum Step {
@@ -250,6 +252,12 @@ impl LabelSearch {
         if self.closed.is_some() {
             return Step::None;
         }
+        if press == Press::Exit {
+            // An answer still on its way is let go.
+            self.asked += 1;
+            self.close(now);
+            return Step::Close;
+        }
         match self.stage.clone() {
             Stage::Typing => self.typing(press, now),
             Stage::Searching => {
@@ -338,6 +346,8 @@ impl LabelSearch {
                     }
                 }
             }
+            // Taken before the stages.
+            Press::Exit => {}
         }
         Step::None
     }

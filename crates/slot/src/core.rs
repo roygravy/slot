@@ -224,7 +224,10 @@ pub fn lcd_ghosting_option(which: Core, on: bool) -> Option<(&'static str, &'sta
 /// A TV console's look in its core: the picture as its cable carried it to the TV, colour
 /// fringes and all, and for the NES the colours a TV's decoder made of its signal; with the
 /// effects off, the console's own sharp pixels in the core's own colours.
-pub fn tv_options(which: Core, look: Option<crate::app::TvLook>) -> Vec<(&'static str, &'static str)> {
+pub fn tv_options(
+    which: Core,
+    look: Option<crate::app::TvLook>,
+) -> Vec<(&'static str, &'static str)> {
     let cable = look.map_or(TvCable::Off, |l| l.cable);
     let colors = look.map_or(NesColors::Standard, |l| l.colors);
     match which {
@@ -304,7 +307,9 @@ const DMG_MARK: &str = "[slot. DMG Green]";
 pub fn dmg_palette_text() -> String {
     let mut text = format!("{DMG_MARK}\n");
     for (i, c) in DMG_GREEN.iter().enumerate() {
-        text.push_str(&format!("Background{i}={c}\nSprite%201{i}={c}\nSprite%202{i}={c}\n"));
+        text.push_str(&format!(
+            "Background{i}={c}\nSprite%201{i}={c}\nSprite%202{i}={c}\n"
+        ));
     }
     text
 }
@@ -352,7 +357,10 @@ pub fn gb_palette_off_options(which: Core) -> Vec<(&'static str, String)> {
         ],
         Core::Gambatte => vec![
             ("gambatte_gb_colorization", "auto".to_string()),
-            ("gambatte_gb_internal_palette", "GBC - Dark Green".to_string()),
+            (
+                "gambatte_gb_internal_palette",
+                "GBC - Dark Green".to_string(),
+            ),
         ],
         Core::Gpsp | Core::Fceumm | Core::Snes9x => Vec::new(),
     }

@@ -128,11 +128,23 @@ impl CheatPage<'_> {
         let rows_bottom = page_top + PITCH * (last - first) as f32;
         if first > 0 {
             let f = faces.more[0];
-            tint(out, f, self.canvas.centred(f.1 as f32), page_top - MORE_GAP - f.2 as f32, ink.dim);
+            tint(
+                out,
+                f,
+                self.canvas.centred(f.1 as f32),
+                page_top - MORE_GAP - f.2 as f32,
+                ink.dim,
+            );
         }
         if last < count {
             let f = faces.more[1];
-            tint(out, f, self.canvas.centred(f.1 as f32), rows_bottom + MORE_GAP, ink.dim);
+            tint(
+                out,
+                f,
+                self.canvas.centred(f.1 as f32),
+                rows_bottom + MORE_GAP,
+                ink.dim,
+            );
         }
         if let Some(h) = faces.help {
             tint(out, h, self.canvas.centred(h.1 as f32), HELP_Y, ink.dim);

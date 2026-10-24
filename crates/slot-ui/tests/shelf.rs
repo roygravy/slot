@@ -1288,7 +1288,16 @@ fn only_a_starred_cart_glows_behind_its_face() {
     assert_eq!(halos.len(), 1, "{out:?}");
     let (at, x, w) = halos[0];
     let margin = slot_ui::GLOW_MARGIN as f32;
-    assert!((w - (CART_W as f32 + 2.0 * margin)).abs() < 0.5, "halo width {w}");
-    assert!((x + w / 2.0 - Canvas::FRAMED.w / 2.0).abs() < 0.5, "halo off centre at {x}");
-    assert!(at < out.len() - 1, "the glow must sit behind the cart's face");
+    assert!(
+        (w - (CART_W as f32 + 2.0 * margin)).abs() < 0.5,
+        "halo width {w}"
+    );
+    assert!(
+        (x + w / 2.0 - Canvas::FRAMED.w / 2.0).abs() < 0.5,
+        "halo off centre at {x}"
+    );
+    assert!(
+        at < out.len() - 1,
+        "the glow must sit behind the cart's face"
+    );
 }

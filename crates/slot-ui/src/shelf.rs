@@ -2,9 +2,11 @@ use slot_gfx::{Canvas, Draw, TexId, OUT_H};
 use slot_store::{Cart, FavoriteMark};
 use std::sync::OnceLock;
 
-use crate::board::{board_in, Placed};
 use crate::bitmaps::Mould;
-use crate::cart::{cart_box, is_clear, label_colour, label_rect, label_text, mould_of, CART_H, CART_W};
+use crate::board::{board_in, Placed};
+use crate::cart::{
+    cart_box, is_clear, label_colour, label_rect, label_text, mould_of, CART_H, CART_W,
+};
 use crate::hud::Millis;
 use crate::slot_chrome::{draw_empty_slot, MOUTH_H};
 
@@ -260,7 +262,15 @@ impl Shelf {
 
     /// The shadow a cart standing at `at` throws on the shelf, as a raised favourite's does
     /// when `rise` lifts it off; `fade` takes it away as the cart leaves the shelf.
-    pub fn draw_drop(&self, stem: &str, at: Placed, scale: f32, rise: f32, fade: f32, out: &mut Vec<Draw>) {
+    pub fn draw_drop(
+        &self,
+        stem: &str,
+        at: Placed,
+        scale: f32,
+        rise: f32,
+        fade: f32,
+        out: &mut Vec<Draw>,
+    ) {
         let Some(i) = self.carts.iter().position(|c| c.stem == stem) else {
             return;
         };
