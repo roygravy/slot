@@ -53,6 +53,8 @@ pub struct Frontend {
     stale_check: Option<std::sync::mpsc::Receiver<Vec<slot_store::Cart>>>,
     label_fetch: Option<std::sync::mpsc::Receiver<(slot_store::Cart, LabelFetched)>>,
     versions_fetch: Option<std::sync::mpsc::Receiver<(std::path::PathBuf, Option<Vec<VersionFile>>)>>,
+    search_fetch: Option<std::sync::mpsc::Receiver<(u64, Option<Vec<slot_labels::Game>>)>>,
+    search_tex: SearchTextures,
     /// Each version's thumbnail and caption, reused from one cart to the next.
     version_tex: Vec<(Option<TexId>, Option<TexId>)>,
     ui_faces: Option<std::sync::mpsc::Receiver<UiFaces>>,
@@ -247,6 +249,8 @@ impl Frontend {
             stale_check,
             label_fetch: None,
             versions_fetch: None,
+            search_fetch: None,
+            search_tex: SearchTextures::default(),
             version_tex: Vec::new(),
             cheat_fetch: None,
             labels_online: false,
@@ -576,6 +580,7 @@ impl Frontend {
                 (tex, w)
             })
             .collect();
+        let search_hint = shell_legend.pop().expect("the search hint");
         let remove_hint = shell_legend.pop().expect("the remove hint");
         let confirm = shell_legend.split_off(shell_legend.len() - 2);
         let shell_faces = slot_ui::ShellPickerFaces {
@@ -592,6 +597,7 @@ impl Frontend {
             legend: shell_legend,
             remove: remove_hint,
             confirm,
+            search: search_hint,
         };
         let roles = faces.link_roles.into_iter().map(&mut up).collect();
         let linked = up(faces.linked);
@@ -838,6 +844,8 @@ impl Frontend {
         self.sync_labels();
         self.fetch_asked_label();
         self.fetch_versions(compositor);
+        self.search_labels();
+        sync_label_search(self.session.app_mut(), compositor, &mut self.search_tex);
         self.cart_faces.sync(self.session.app_mut(), compositor);
         sync_clock(self.session.app_mut(), compositor, &mut self.clocks);
         sync_about(self.session.app_mut(), compositor, &mut self.about);
@@ -938,6 +946,41 @@ impl Frontend {
         }
     }
 
+    /// The label search asked for the games some words find: looked for on a thread of its own.
+    fn search_labels(&mut self) {
+        if let Some(rx) = &self.search_fetch {
+            match rx.try_recv() {
+                Ok((asked, games)) => {
+                    self.search_fetch = None;
+                    self.session.app_mut().search_found(asked, games);
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => return,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => self.search_fetch = None,
+            }
+        }
+        let Some((asked, words, platform)) = self.session.app_mut().take_search_ask() else {
+            return;
+        };
+        let (tx, rx) = std::sync::mpsc::channel();
+        let spawned = std::thread::Builder::new()
+            .name("slot-label-search".into())
+            .spawn(move || {
+                let games = match slot_labels::Downloader::default().search(&words, platform) {
+                    Ok(games) => Some(games),
+                    Err(slot_labels::Error::Unavailable(_)) => Some(Vec::new()),
+                    Err(e) => {
+                        eprintln!("slot: labels: search {words:?}: {e}");
+                        None
+                    }
+                };
+                let _ = tx.send((asked, games));
+            });
+        match spawned {
+            Ok(_) => self.search_fetch = Some(rx),
+            Err(e) => eprintln!("slot: labels: search thread failed to start: {e}"),
+        }
+    }
+
     /// The studio's label tab asked for the versions of a cart's label: fetched and cut on a
     /// thread of its own, then each one's thumbnail and caption uploaded.
     fn fetch_versions(&mut self, compositor: &mut Compositor) {
@@ -970,7 +1013,7 @@ impl Frontend {
             self.session.app_mut().versions_found(&rom, found);
             return;
         }
-        let Some(cart) = self.session.app_mut().take_versions_ask() else {
+        let Some((cart, picked)) = self.session.app_mut().take_versions_ask() else {
             return;
         };
         let Some(root) = self.session.app().root().map(|r| r.to_path_buf()) else {
@@ -980,7 +1023,12 @@ impl Frontend {
         let spawned = std::thread::Builder::new()
             .name("slot-label-versions".into())
             .spawn(move || {
-                let got = match slot_labels::Downloader::default().versions(&cart) {
+                let mut downloader = slot_labels::Downloader::default();
+                let versions = match picked {
+                    Some(game) => downloader.versions_of(&cart, game),
+                    None => downloader.versions(&cart),
+                };
+                let got = match versions {
                     Ok(versions) => Some(version_files(&root, &cart, versions)),
                     Err(slot_labels::Error::Unavailable(_) | slot_labels::Error::Image(_)) => {
                         Some(Vec::new())
@@ -1363,6 +1411,7 @@ impl UiFaces {
                 slot_ui::tint_mask(hint_face("B", "Keep Label")),
                 slot_ui::tint_mask(hint_face("A", "Remove Label")),
                 slot_ui::tint_mask(hint_face("Y", "Remove Label")),
+                slot_ui::tint_mask(hint_face("Y", "Search")),
             ],
             link_roles: LinkRow::ALL.iter().map(|r| menu_face(r.text())).collect(),
             linked: menu_face("Linked"),
@@ -2051,6 +2100,49 @@ fn sync_core_picker(
     );
     app.set_core_board_faces(board_id, lid_id);
     *built = Some(faces.stem);
+}
+
+/// The label search's textures: its keyboard's, made once, and its words', made again as they
+/// change.
+#[derive(Default)]
+struct SearchTextures {
+    heading: Option<TexId>,
+    typed: Option<TexId>,
+    status: Option<TexId>,
+    rows: Vec<(Option<TexId>, Option<TexId>)>,
+}
+
+fn sync_label_search(app: &mut App, compositor: &mut Compositor, state: &mut SearchTextures) {
+    if !app.label_search_open() {
+        return;
+    }
+    if !app.has_search_faces() {
+        let faces = slot_ui::KeyboardFaces::build().map(|f| (compositor.create_texture(f.w, f.h, &f.rgba), f.w, f.h));
+        app.set_search_faces(faces);
+    }
+    let Some((rev, words)) = app.search_words() else {
+        return;
+    };
+    let mut up = |slot: &mut Option<TexId>, f: slot_ui::UndoFace| {
+        let (w, h) = (f.w, f.h);
+        (upload(compositor, slot, f), w, h)
+    };
+    let heading = up(&mut state.heading, slot_ui::search_heading_face(&words.heading));
+    let typed = words.typed.map(|t| up(&mut state.typed, slot_ui::search_typed_face(&t)));
+    let status = words.status.map(|t| up(&mut state.status, slot_ui::search_status_face(&t)));
+    if state.rows.len() < words.rows.len() {
+        state.rows.resize(words.rows.len(), (None, None));
+    }
+    let rows = words
+        .rows
+        .iter()
+        .zip(state.rows.iter_mut())
+        .map(|((name, platform), (a, b))| {
+            let (n, p) = slot_ui::search_row_faces(name, platform);
+            (up(a, n), up(b, p))
+        })
+        .collect();
+    app.set_search_texts(rev, slot_ui::SearchTexts { heading, typed, status, rows });
 }
 
 fn upload(compositor: &mut Compositor, slot: &mut Option<TexId>, face: slot_ui::UndoFace) -> TexId {

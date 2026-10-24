@@ -63,6 +63,8 @@ pub struct ShellPickerFaces {
     pub remove: (TexId, u32),
     /// The legend while Y asks whether to take the label off.
     pub confirm: Vec<(TexId, u32)>,
+    /// Y searching for the label by name, on the label's tab.
+    pub search: (TexId, u32),
 }
 
 pub struct ShellPickerView<'a> {
@@ -100,6 +102,8 @@ pub struct ShellPickerView<'a> {
     pub remove: bool,
     /// Y asked: A takes the label off, B keeps it.
     pub confirming: bool,
+    /// Y searches for the label by name.
+    pub search: bool,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -464,10 +468,12 @@ pub fn draw_shell_picker(canvas: Canvas, v: &ShellPickerView, out: &mut Vec<Draw
         v.faces.confirm.clone()
     } else {
         let mut legend = v.faces.legend.clone();
+        // Before Save, as A stays last on every legend.
+        let at = legend.len().saturating_sub(1);
         if v.remove {
-            // Before Save, as A stays last on every legend.
-            let at = legend.len().saturating_sub(1);
             legend.insert(at, v.faces.remove);
+        } else if v.search {
+            legend.insert(at, v.faces.search);
         }
         legend
     };

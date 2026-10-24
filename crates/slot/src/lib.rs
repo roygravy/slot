@@ -31,6 +31,7 @@ pub mod frames;
 pub mod frontend;
 pub mod input;
 pub mod label_cache;
+pub mod label_search;
 mod labels;
 pub mod latency;
 pub mod link_art_builder;

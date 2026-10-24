@@ -155,6 +155,8 @@ pub enum Outcome {
     Versions,
     /// Show the cart in this version of its label.
     Version(usize),
+    /// Y on the label's tab: search for the game by name, to find its label that way.
+    Search,
 }
 
 pub enum Press {
@@ -163,7 +165,7 @@ pub enum Press {
     Up,
     Down,
     Keep,
-    /// Y: ask to take the cart's label off.
+    /// Y: ask to take the cart's label off, or on the label's tab, search for one.
     Remove,
     Back,
 }
@@ -344,9 +346,24 @@ impl ShellPicker {
         self.version
     }
 
-    /// Y takes off the label the cart wears; a label shown from the label's tab is not on yet.
+    /// Y takes off the label the cart wears; a label shown from the label's tab is not on yet,
+    /// and on that tab Y searches instead.
     pub fn offers_remove(&self) -> bool {
-        self.fetch == Fetch::Labelled && self.version.is_none()
+        self.fetch == Fetch::Labelled && self.version.is_none() && self.tab != Tab::Label
+    }
+
+    /// Y on the label's tab, once its versions are in or none were: search by name.
+    pub fn offers_search(&self) -> bool {
+        self.tab == Tab::Label && !matches!(self.versions, Versions::Unasked | Versions::Looking)
+    }
+
+    /// A game was picked from a search: its versions are looked for, and the cart wears its
+    /// own label again until they come.
+    pub fn searched(&mut self) {
+        self.versions = Versions::Looking;
+        self.version = None;
+        self.tab = Tab::Label;
+        self.row = Row::Label;
     }
 
     /// Asking whether to take the label off.
@@ -543,6 +560,7 @@ impl ShellPicker {
                 self.row = rows[step(at, by, rows.len())];
                 Outcome::None
             }
+            Press::Remove if self.offers_search() => Outcome::Search,
             Press::Remove => {
                 self.confirm = self.offers_remove();
                 Outcome::None
@@ -675,6 +693,20 @@ mod tests {
         assert!(!p.closing(), "the studio stays open");
         assert!(!p.offers_remove());
         assert_eq!(p.tabs(), [Tab::Colour, Tab::Label, Tab::Marker], "the marker is offered");
+    }
+
+    #[test]
+    fn y_on_the_label_tab_searches_once_the_versions_are_in() {
+        let mut p = picker(None, true);
+        p.press(Press::Up, 0);
+        assert!(matches!(p.press(Press::Right, 0), Outcome::Versions));
+        assert!(matches!(p.press(Press::Remove, 0), Outcome::None), "still looking");
+        p.found(Some(0));
+        assert!(!p.offers_remove());
+        assert!(matches!(p.press(Press::Remove, 0), Outcome::Search));
+        assert!(!p.confirming());
+        p.searched();
+        assert_eq!(p.versions(), Versions::Looking);
     }
 
     #[test]

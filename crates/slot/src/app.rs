@@ -25,6 +25,7 @@ use slot_ui::{
 
 use crate::audio::Sfx;
 use crate::core_picker::{Chip, CorePicker, Outcome, Press};
+use crate::label_search::{self, LabelSearch};
 use crate::shell_picker::{self, ShellPicker};
 use crate::link_kind::{link_carried, link_kind, serial_option, LinkKind};
 use crate::link_radio::{radio_jobs, LinkRole, RadioJob, RadioJobs};
@@ -317,8 +318,16 @@ pub struct App {
     shell_picker_faces: Option<slot_ui::ShellPickerFaces>,
     /// A cart whose label the shell picker asked for, for the frontend to fetch.
     label_ask: Option<Cart>,
-    /// The studio's label tab asked for this cart's versions of its label.
-    versions_ask: Option<Cart>,
+    /// The studio's label tab asked for this cart's versions of its label: its own, or those of
+    /// the game a search picked.
+    versions_ask: Option<(Cart, Option<u64>)>,
+    /// The label tab's search by name, over the studio while it is open.
+    label_search: Option<LabelSearch>,
+    /// A search asked for: its number, the words and the shelf, for the frontend to make.
+    search_ask: Option<(u64, String, Platform)>,
+    search_faces: Option<slot_ui::KeyboardFaces<slot_ui::Up>>,
+    /// The search's words as faces, and the search's rev they were made for.
+    search_texts: Option<(u64, slot_ui::SearchTexts<slot_ui::Up>)>,
     /// The versions found: where each is kept while it is looked at, its thumbnail and its
     /// caption.
     version_paths: Vec<std::path::PathBuf>,
@@ -522,6 +531,10 @@ impl App {
             shell_picker_faces: None,
             label_ask: None,
             versions_ask: None,
+            label_search: None,
+            search_ask: None,
+            search_faces: None,
+            search_texts: None,
             version_paths: Vec::new(),
             version_thumbs: Vec::new(),
             version_captions: Vec::new(),
@@ -2379,6 +2392,9 @@ impl App {
         let now = self.now();
         match self.phase {
             Phase::Shelf => match action {
+                _ if self.label_search.as_ref().is_some_and(|s| !s.closing()) => {
+                    self.label_search_input(action)
+                }
                 _ if self.shell_picker.is_some() => self.shell_picker_input(action),
                 Action::GbaDown(Btn::Start) if self.core_picker.is_none() => {
                     self.open_core_picker()
@@ -3345,6 +3361,9 @@ impl App {
         if self.shell_picker.as_ref().is_some_and(|p| p.finished(now)) {
             self.shell_picker = None;
         }
+        if self.label_search.as_ref().is_some_and(|s| s.finished(now)) {
+            self.label_search = None;
+        }
         if !self.on_shelf() {
             self.shelf_mut().release_hold();
         }
@@ -4155,6 +4174,9 @@ impl App {
         }
         if let Some(picker) = &self.shell_picker {
             self.draw_shell_picker(picker, out);
+        }
+        if let Some(search) = &self.label_search {
+            self.draw_label_search(search, out);
         }
         if let Some(menu) = self.game_menu {
             self.draw_game_menu(menu, out);
@@ -5025,6 +5047,7 @@ impl App {
             }
             Outcome::RemoveLabel => self.remove_label(&rom),
             Outcome::Versions => self.ask_versions(&rom),
+            Outcome::Search => self.open_label_search(&rom, &stem),
             Outcome::Version(i) => {
                 if let Some(path) = self.version_paths.get(i).cloned() {
                     self.relabel(&rom, Some(path));
@@ -5079,7 +5102,7 @@ impl App {
         match cart {
             Some(mut cart) if self.home_wifi_on() => {
                 cart.label = self.label_was.clone();
-                self.versions_ask = Some(cart);
+                self.versions_ask = Some((cart, None));
             }
             _ => {
                 self.hud.toast(Toast::TurnOnWifi, self.now());
@@ -5090,8 +5113,132 @@ impl App {
         }
     }
 
-    pub fn take_versions_ask(&mut self) -> Option<Cart> {
+    pub fn take_versions_ask(&mut self) -> Option<(Cart, Option<u64>)> {
         self.versions_ask.take()
+    }
+
+    /// Y on the studio's label tab: the keyboard opens with the cart's name typed.
+    fn open_label_search(&mut self, rom: &Path, stem: &str) {
+        let Some(platform) = self.shelf().carts.iter().find(|c| c.rom == rom).map(|c| c.platform)
+        else {
+            return;
+        };
+        if !self.home_wifi_on() {
+            self.hud.toast(Toast::TurnOnWifi, self.now());
+            return;
+        }
+        self.label_search = Some(LabelSearch::open(rom.to_path_buf(), platform, stem, self.now()));
+    }
+
+    fn label_search_input(&mut self, action: Action) {
+        use label_search::{Press, Step};
+        let press = match action {
+            Action::GbaDown(Btn::Left) | Action::ShelfLeft => Press::Left,
+            Action::GbaDown(Btn::Right) | Action::ShelfRight => Press::Right,
+            Action::GbaDown(Btn::Up) => Press::Up,
+            Action::GbaDown(Btn::Down) => Press::Down,
+            Action::GbaDown(Btn::A) => Press::Choose,
+            Action::GbaDown(Btn::B) => Press::Back,
+            Action::GbaDown(Btn::X) => Press::Clear,
+            Action::GbaDown(Btn::Y) => Press::Space,
+            Action::GbaDown(Btn::Select) => Press::Shift,
+            Action::GbaDown(Btn::Start) => Press::Search,
+            _ => return,
+        };
+        let now = self.now();
+        let Some(search) = &mut self.label_search else {
+            return;
+        };
+        let (rom, platform) = (search.rom.clone(), search.platform);
+        match search.press(press, now) {
+            Step::None | Step::Close => {}
+            Step::Search(asked, words) => self.search_ask = Some((asked, words, platform)),
+            Step::Pick(game) => {
+                let cart = self.shelf().carts.iter().find(|c| c.rom == rom).cloned();
+                if let (Some(mut cart), Some(picker)) = (cart, &mut self.shell_picker) {
+                    picker.searched();
+                    cart.label = self.label_was.clone();
+                    self.versions_ask = Some((cart, Some(game.id)));
+                    // The versions are kept in the files the last ones were, so the cart
+                    // wears its own label until they come, to be drawn again with them.
+                    self.relabel(&rom, self.label_was.clone());
+                }
+            }
+        }
+    }
+
+    pub fn take_search_ask(&mut self) -> Option<(u64, String, Platform)> {
+        self.search_ask.take()
+    }
+
+    /// The games a search found, or None when it could not be made.
+    pub fn search_found(&mut self, asked: u64, games: Option<Vec<slot_labels::Game>>) {
+        if let Some(search) = &mut self.label_search {
+            if !search.found(asked, games) {
+                self.hud.toast(Toast::LabelFailed, self.now());
+            }
+        }
+    }
+
+    pub fn label_search_open(&self) -> bool {
+        self.label_search.is_some()
+    }
+
+    pub fn has_search_faces(&self) -> bool {
+        self.search_faces.is_some()
+    }
+
+    pub fn set_search_faces(&mut self, faces: slot_ui::KeyboardFaces<slot_ui::Up>) {
+        self.search_faces = Some(faces);
+    }
+
+    /// The search's words, and the rev they belong to, when its faces were made for another.
+    pub fn search_words(&self) -> Option<(u64, SearchWords)> {
+        let search = self.label_search.as_ref()?;
+        if self.search_texts.as_ref().is_some_and(|(rev, _)| *rev == search.rev()) {
+            return None;
+        }
+        let games = search.games();
+        let status = if search.found_none() {
+            Some("Nothing Found".to_owned())
+        } else if games.len() == 1 {
+            Some("1 Game Found".to_owned())
+        } else if !games.is_empty() {
+            Some(format!("{} Games Found", games.len()))
+        } else {
+            None
+        };
+        Some((
+            search.rev(),
+            SearchWords {
+                heading: format!("Search for a label · {}", search.platform.name()),
+                typed: Some(search.text().to_owned()).filter(|t| !t.is_empty()),
+                status,
+                rows: games.iter().map(|g| (g.name.clone(), g.platform.clone())).collect(),
+            },
+        ))
+    }
+
+    pub fn set_search_texts(&mut self, rev: u64, texts: slot_ui::SearchTexts<slot_ui::Up>) {
+        self.search_texts = Some((rev, texts));
+    }
+
+    fn draw_label_search(&self, search: &LabelSearch, out: &mut Vec<Draw>) {
+        let (Some(faces), Some((_, texts))) = (&self.search_faces, &self.search_texts) else {
+            return;
+        };
+        let light = self.light_ground();
+        let now = self.now();
+        let view = slot_ui::SearchView {
+            faces,
+            texts,
+            ink: slot_ui::theme::ink(light),
+            ground: slot_ui::theme::menu_flat(light),
+            light,
+            screen: search.screen(now),
+            openness: search.openness(now),
+        };
+        slot_ui::draw_label_search(self.canvas(), &view, out);
     }
 
     /// The versions the label tab asked for came back, each with its thumbnail and caption
@@ -5254,6 +5401,7 @@ impl App {
             marker: picker.marker(),
             inks: shell_picker::MARKERS.map(|(_, ink)| ink),
             remove: picker.offers_remove(),
+            search: picker.offers_search(),
             confirming: picker.confirming(),
         };
         slot_ui::draw_shell_picker(self.canvas(), &view, out);
@@ -6372,4 +6520,13 @@ fn step_cable(cable: TvCable, right: bool, rf: bool) -> TvCable {
     let at = all.iter().position(|c| *c == cable).unwrap_or(0);
     let n = all.len();
     all[if right { (at + 1) % n } else { (at + n - 1) % n }]
+}
+
+/// The label search's words, for the frontend to make faces of.
+pub struct SearchWords {
+    pub heading: String,
+    pub typed: Option<String>,
+    pub status: Option<String>,
+    /// Each game found: its name and its platform.
+    pub rows: Vec<(String, String)>,
 }
