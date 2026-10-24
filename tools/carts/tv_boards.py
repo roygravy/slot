@@ -73,14 +73,20 @@ def paste(rgb, part, x, y, holes=None):
         solid = part[..., 3] > 128
         holes[y:y + h, x:x + w] |= nd.binary_fill_holes(solid) & ~solid
 
-def build(mask, fingers, chips, parts, vias, traces):
-    """mask: the board's outline (bool, full canvas). fingers: (x0, count, bottom row)."""
-    h, w = mask.shape
+def build(mask4, fingers, chips, parts, vias, traces):
+    """mask4: the board's outline at 4x (bool), so its edge and corners come out smooth.
+    fingers: (x0, count, bottom row)."""
+    h, w = mask4.shape[0] // 4, mask4.shape[1] // 4
+    def down(a):
+        return a.reshape(h, 4, w, 4).mean((1, 3))
+    cover = down(mask4.astype(np.float32))
+    mask = cover > 0
     rgb = green(h, w)
-    d = nd.distance_transform_edt(np.pad(mask, 1))[1:-1, 1:-1]
+    # the cut rim, by each pixel's mean distance from the edge, so it follows the curves
+    d = down(nd.distance_transform_edt(np.pad(mask4, 4))[4:-4, 4:-4] / 4)
     for k, c in RIM.items():
-        band = mask & (np.abs(d - k) < 0.5)
-        rgb[band] = c + (rgb[band] - FLAT) * 0.5
+        wgt = np.clip(1 - np.abs(d - (k - 0.5)), 0, 1)[..., None] * mask[..., None]
+        rgb = rgb * (1 - wgt) + (c + (rgb - FLAT) * 0.5) * wgt
     # traces, drawn at 4x for soft edges, in the GBA board's trace green
     S = 4
     im = Image.new('L', (w * S, h * S), 0); dr = ImageDraw.Draw(im)
@@ -96,24 +102,26 @@ def build(mask, fingers, chips, parts, vias, traces):
     x0, n, bottom = fingers
     for k in range(n):
         paste(rgb, FINGERS[k % len(FINGERS)], x0 + k * 9, bottom - FINGER_BOTTOM, holes)
-    alpha = mask * 255.0
     def shift(m, dy, dx):
         out = np.zeros_like(m)
         out[dy:, dx:] = m[:m.shape[0] - dy, :m.shape[1] - dx]
         return out
+    # the drop shadow under the board (black), behind its partly covered edge pixels
+    shadow = np.zeros((h, w), np.float32)
     for k, a in enumerate(SHADOW_DOWN, 1):
-        sh = shift(mask, k, 0) & ~mask
-        alpha = np.where(sh & (alpha < a), a, alpha)
-    sh = shift(mask, 0, 1) & ~mask
-    alpha = np.where(sh & (alpha < SHADOW_RIGHT), SHADOW_RIGHT, alpha)
-    alpha[holes & mask] = 0
-    rgb = np.where(mask[..., None], rgb, 0)
-    out = np.dstack([np.clip(rgb, 0, 255), alpha]).round().astype(np.uint8)
+        shadow = np.maximum(shadow, shift(cover, k, 0) * a / 255)
+    shadow = np.maximum(shadow, shift(cover, 0, 1) * SHADOW_RIGHT / 255)
+    cover = np.where(holes & (cover > 0.99), 0, cover)
+    alpha = cover + (1 - cover) * shadow
+    rgb = np.where(alpha[..., None] > 0, rgb * cover[..., None] / np.maximum(alpha, 1e-6)[..., None], 0)
+    out = np.dstack([np.clip(rgb, 0, 255), alpha * 255]).round().astype(np.uint8)
     return out
 
 def rr(h, w, box, r):
-    m = Image.new('L', (w, h), 0)
-    ImageDraw.Draw(m).rounded_rectangle(box, radius=r, fill=255)
+    """A rounded rectangle at 4x; box is inclusive, in board pixels."""
+    m = Image.new('L', (w * 4, h * 4), 0)
+    x0, y0, x1, y1 = box
+    ImageDraw.Draw(m).rounded_rectangle((x0 * 4, y0 * 4, x1 * 4 + 3, y1 * 4 + 3), radius=r * 4, fill=255)
     return np.asarray(m) > 127
 
 # ---- SNES: one board, 247 wide, for both carts ----
