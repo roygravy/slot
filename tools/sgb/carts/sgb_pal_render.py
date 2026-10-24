@@ -1,12 +1,16 @@
 """Render the PAL SNES / Super Famicom cart: front (50% grey), clear front, silhouette, inside of the back shell, board."""
-import sys, numpy as np
+import os, sys, numpy as np
 from PIL import Image, ImageDraw, ImageFont
 from scipy import ndimage as nd
 
 out, font_path = sys.argv[1], sys.argv[2]
 SGB2 = len(sys.argv) > 3
 W, H, SS = 400, 380, 4
-w, h = W * SS, H * SS
+# SGB_F renders it that many times larger, every detail with it: the band's zoomed top (Roy)
+F = float(os.environ.get('SGB_F', '1'))
+SS = SS * F
+w, h = int(W * SS), int(H * SS)
+W, H = round(W * F), round(H * F)
 def U(u): return u * w
 def V(v): return v * h
 def mask(fn):
@@ -133,6 +137,9 @@ height -= seam * 1.0
 # name alike, and lying on top of the SGB2's (Roy)
 PILL = (0.403, 0.389, 0.597, 0.389 + 0.194 * w / h * 160 / 728)  # the logo's own proportions (Roy)
 def logo_mask(name):
+    if not os.path.exists(f'/tmp/claude-0/sgb/{name}'):
+        print(f'no {name}: no badge')
+        return np.zeros((h, w), bool)
     m = Image.open(f'/tmp/claude-0/sgb/{name}').resize((int(U(PILL[2]) - U(PILL[0])), int(V(PILL[3]) - V(PILL[1]))), Image.Resampling.LANCZOS)
     full = np.zeros((h, w), bool)
     full[int(V(PILL[1])):int(V(PILL[1])) + m.height, int(U(PILL[0])):int(U(PILL[0])) + m.width] = np.asarray(m) > 127
@@ -190,7 +197,7 @@ NAME = 'sgb2' if SGB2 else 'sgb_pal'
 A = save(grey3(grey), cart, NAME + '_neutral.png')
 G = np.asarray(Image.open(f'{out}/{NAME}_neutral.png'))[..., 0].astype(np.float32)
 Ad = A > 0.5
-rim = Ad & ~nd.binary_erosion(Ad, iterations=5)
+rim = Ad & ~nd.binary_erosion(Ad, iterations=max(1, round(5 * F)))
 clear = np.where(rim, 100, 128 + (G - 128) * 0.45)
 c = np.zeros((H, W, 4), np.uint8); c[..., :3] = np.clip(clear, 0, 255).astype(np.uint8)[..., None]; c[..., 3] = (A * 255).round().astype(np.uint8)
 Image.fromarray(c, 'RGBA').save(f'{out}/{NAME}_clear.png')

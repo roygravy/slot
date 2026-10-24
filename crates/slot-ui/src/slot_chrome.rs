@@ -261,21 +261,25 @@ fn band(x: f32, y: f32, w: f32, h: f32, c: [f32; 4], alpha: f32) -> Draw {
 pub const SGB_RISE: f32 = crate::bitmaps::SGB_BAND_H as f32 - MOUTH_H;
 /// Where the Super Game Boy's top edge is in its band, as `tools/sgb/sgb_band.py` draws it.
 const SGB_TOP: f32 = 6.0;
+/// How wide `tools/sgb/sgb_band.py` draws the band.
+const SGB_ART_W: f32 = 720.0;
 
 /// The Super Game Boy in its band, as `tools/sgb/sgb_band.py` draws it in the 720-wide strip:
 /// its left edge and size.
 fn sgb_in_band(model: crate::SgbModel) -> (f32, f32, f32) {
     match model {
-        crate::SgbModel::Ntsc => (90.0, 540.0, 472.0),
-        _ => (122.0, 473.0, 449.0),
+        crate::SgbModel::Ntsc => (89.0, 543.0, 475.0),
+        _ => (123.0, 472.0, 448.0),
     }
 }
 
 /// Where the Super Game Boy's whole face is while it is the band: (x, y, w, h).
 pub fn sgb_band_rect(model: crate::SgbModel, canvas: Canvas) -> (f32, f32, f32, f32) {
     let (x, w, h) = sgb_in_band(model);
+    // The art is drawn 720 wide and loaded cut to the strip's middle, which the canvas cuts
+    // again to its own width.
     let strip = crate::bitmaps::SLOT_W as f32;
-    let cut = ((strip - canvas.w) / 2.0).max(0.0);
+    let cut = (SGB_ART_W - strip) / 2.0 + ((strip - canvas.w) / 2.0).max(0.0);
     let top = OUT_H as f32 - crate::bitmaps::SGB_BAND_H as f32;
     (x - cut, top + SGB_TOP, w, h)
 }
@@ -564,9 +568,9 @@ fn tv_pose(mould: Mould, seat: f32, cx: f32, (sw, sh): (f32, f32)) -> Option<TvP
             // game cart it is shaped like, and its taller body stands out above.
             let out = if pal { (86.0 - 42.6) / 86.0 } else { 132.0 / 257.0 };
             let depth = match mould {
-                // The American SGB stands prouder: the slot's edge meets its lowest groove but
-                // one (Roy: it went in too deep).
-                Mould::SgbNtsc => sh * (1.0 - 0.797),
+                // The American SGB goes in like an American game: the slot's edge meets the
+                // groove just under its label.
+                Mould::SgbNtsc => sh * (1.0 - 0.693),
                 Mould::SgbPal => SNES_PAL_SEATED_H * (1.0 - out),
                 _ => sh * (1.0 - out),
             };

@@ -1961,7 +1961,22 @@ impl App {
         for d in &mut out[from..] {
             zoom_draw(d, k, dx, dy, 1.0);
         }
+        // Near the end the band's own sharp art fades in over the enlarged face, under the same
+        // camera, so the zoom lands on it without a jump (Roy: the enlarged face went soft).
         slot_ui::set_sgb_band(self.sgb_band());
+        let sharp = ease(((u - 0.55) / 0.3).clamp(0.0, 1.0));
+        if sharp > 0.0 {
+            let band = Some(sets[8 + model as usize]);
+            let k1 = b.2 / a.2;
+            let (dx1, dy1) = (b.0 - k1 * a.0, b.1 - k1 * a.1);
+            let r = k / k1;
+            let from = out.len();
+            slot_ui::draw_slot_part(canvas, band, false, out);
+            slot_ui::draw_slot_part(canvas, band, true, out);
+            for d in &mut out[from..] {
+                zoom_draw(d, r, dx - dx1 * r, dy - dy1 * r, sharp);
+            }
+        }
     }
 
     /// Whether the slot is the Super Game Boy's top: the Game Boy carts go into it.

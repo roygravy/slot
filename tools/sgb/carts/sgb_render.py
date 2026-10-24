@@ -1,11 +1,15 @@
 """Render the NTSC Super Game Boy: front (50% grey) and silhouette."""
-import sys, numpy as np
+import os, sys, numpy as np
 from PIL import Image, ImageDraw, ImageFont
 from scipy import ndimage as nd
 
 out, font_path = sys.argv[1], sys.argv[2]
 W, H, SS = 400, 350, 4
-w, h = W * SS, H * SS
+# SGB_F renders it that many times larger, every detail with it: the band's zoomed top (Roy)
+F = float(os.environ.get('SGB_F', '1'))
+SS = SS * F
+w, h = int(W * SS), int(H * SS)
+W, H = round(W * F), round(H * F)
 def U(u): return u * w
 def V(v): return v * h
 def mask(fn):
