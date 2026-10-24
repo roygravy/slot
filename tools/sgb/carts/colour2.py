@@ -9,13 +9,14 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from PIL import Image, ImageFont, ImageDraw, ImageFilter
 from scipy import ndimage as nd
 from stickers import sticker
+from edges import darken_edges
 R = sys.argv[1].rstrip('/') + '/'
 OUT = sys.argv[2] if len(sys.argv) > 2 else 'assets'
 def overlay(b, c):
     b = b / 255; c = c / 255
     return np.where(b < 0.5, 2 * b * c, 1 - 2 * (1 - b) * (1 - c)) * 255
 def tint(path, rgb, alpha=1.0):
-    n = np.asarray(Image.open(R + path)).astype(np.float32)
+    n = darken_edges(np.asarray(Image.open(R + path)).astype(np.float32))
     o = n.copy()
     for k in range(3):
         o[..., k] = overlay(n[..., 0], rgb[k])
@@ -72,23 +73,36 @@ def make(stem, neutral, colour, style, rect, size):
     im = Image.fromarray(np.clip(a, 0, 255).astype(np.uint8), 'RGBA')
     return label(im, stem, style, rect).resize(size, Image.Resampling.LANCZOS)
 def sgb2(colour, size):
-    """Clear plastic over the board, as on Roy's photo: the back shell in the same colour, the
-    green board showing through the front's lower half, so the front lets most of it through."""
-    back = tint('sgb2_interior.png', [c * 0.85 for c in colour], 0.92)
-    # the plastic blurs what lies behind it a little and the board sits in its shade
-    board = np.asarray(Image.open(R + 'sgb2_board.png').filter(ImageFilter.GaussianBlur(0.8))).astype(np.float32)
-    board[..., :3] *= 0.75
-    front = tint('sgb2_clear.png', colour, 0.55)
-    a = over(over(back, board), front)
+    """Clear plastic over the board, as on Roy's photo: a see-through back shell in the same colour,
+    the board (tools/sgb/carts/sgb2_board.py, made at the face's own size so it stays as sharp as
+    the other boards) casting a small shadow on it, the black slot moulding, then the clear front.
+    The render-sized layers are scaled down first and everything meets at the face's size."""
+    def small(a):
+        return np.asarray(Image.fromarray(np.clip(a, 0, 255).astype(np.uint8), 'RGBA').resize(size, Image.Resampling.LANCZOS)).astype(np.float32)
+    back = small(tint('sgb2_interior.png', [c * 0.85 for c in colour], 0.5))
+    pcb = np.asarray(Image.open(R + 'sgb2_pcb.png')).astype(np.float32)
+    # the board lies a little above the back shell: its shadow falls on it, down and to the right
+    sh = Image.fromarray((pcb[..., 3] > 200).astype(np.uint8) * 255).filter(ImageFilter.GaussianBlur(1.6))
+    sh = np.roll(np.asarray(sh).astype(np.float32), (3, 2), (0, 1)) * 0.45
+    shadow = np.zeros_like(back); shadow[..., 3] = sh * (back[..., 3] > 0)
+    slot = small(np.asarray(Image.open(R + 'sgb2_slot.png')).astype(np.float32))
+    front = small(tint('sgb2_clear.png', colour, 0.42))
+    a = over(over(over(over(back, shadow), pcb), slot), front)
     # clear plastic reads by its edges: the opaque render's light and shade laid over it, so the
     # moulding stays as crisp as on the grey carts
-    n = np.asarray(Image.open(R + 'sgb2_neutral.png')).astype(np.float32)[..., 0]
+    n = darken_edges(np.asarray(Image.open(R + 'sgb2_neutral.png').resize(size, Image.Resampling.LANCZOS)).astype(np.float32))[..., 0]
     lift = np.clip((n - 128) / 127, 0, 1)[..., None]
     dark = np.clip((128 - n) / 128, 0, 1)[..., None]
     a[..., :3] = a[..., :3] * (1 - 0.75 * dark) + (255 - a[..., :3]) * 0.7 * lift
-    a = mouth(a, 'sgb2')
-    im = Image.fromarray(np.clip(a, 0, 255).astype(np.uint8), 'RGBA')
-    return label(im, 'sgb2', 'sgb2', None).resize(size, Image.Resampling.LANCZOS)
+    # the black mouth and the sticker, drawn at the render's size on their own layers
+    rh, rw = np.load(R + 'sgb2_mouth.npy').shape
+    m = mouth(np.zeros((rh, rw, 4), np.float32), 'sgb2')
+    mo = np.load(R + 'sgb2_mouth.npy')[..., None]
+    m[..., :3] = np.where(mo > 0.01, m[..., :3] / np.maximum(mo, 0.01), 0)
+    a = over(a, small(m))
+    lab = label(Image.new('RGBA', (rw, rh), (0, 0, 0, 0)), 'sgb2', 'sgb2', None)
+    a = over(a, np.asarray(lab.resize(size, Image.Resampling.LANCZOS)).astype(np.float32))
+    return Image.fromarray(np.clip(a, 0, 255).astype(np.uint8), 'RGBA')
 US = make('sgb', 'sgb_neutral.png', (134, 134, 138), 'us', (82, 145, 236, 86), (360, 315))
 PAL = make('sgb_pal', 'sgb_pal_neutral.png', (198, 198, 201), 'pal', None, (336, 319))
 SFC = make('sgb_pal', 'sgb_pal_neutral.png', (198, 198, 201), 'sfc', None, (336, 319))

@@ -8,6 +8,9 @@ extra argument). Writes assets/sgb_band_<model>_{back,front}.png."""
 import sys
 import numpy as np
 from PIL import Image, ImageFilter
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'carts'))
+from edges import darken_edges
 
 R, F = sys.argv[1].rstrip('/') + '/', float(sys.argv[2])
 W, TOP = 720, 6
@@ -27,7 +30,7 @@ def punch(g):
     return np.clip(128 + np.where(d < 0, d * SHADOW, d), 0, 255)
 
 def tinted(path, colour, alpha=1.0):
-    n = np.asarray(Image.open(R + path)).astype(np.float32)
+    n = darken_edges(np.asarray(Image.open(R + path)).astype(np.float32), round(6 * F))
     a = n.copy()
     g = punch(n[..., 0])
     for k in range(3):
@@ -46,7 +49,7 @@ def face(neutral, mouth, colour, clear=False):
         # as tools/sgb/carts/colour2.py builds the SGB2's face: the back shell under the clear
         # front, the opaque render's light and shade over both
         a = over(tinted('sgb2_interior.png', [c * 0.85 for c in colour], 0.92), tinted(neutral, colour, 0.55))
-        g = punch(np.asarray(Image.open(R + 'sgb2_neutral.png')).astype(np.float32)[..., 0])
+        g = punch(darken_edges(np.asarray(Image.open(R + 'sgb2_neutral.png')).astype(np.float32), round(6 * F))[..., 0])
         lift = np.clip((g - 128) / 127, 0, 1)[..., None]
         dark = np.clip((128 - g) / 128, 0, 1)[..., None]
         a[..., :3] = a[..., :3] * (1 - 0.75 * dark) + (255 - a[..., :3]) * 0.7 * lift

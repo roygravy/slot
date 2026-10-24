@@ -99,9 +99,9 @@ def build(mask4, fingers, chips, parts, vias, traces):
         paste(rgb, part, x, y, holes)
     for x, y in vias:
         paste(rgb, VIA, x - 4, y - 4, holes)
-    x0, n, bottom = fingers
-    for k in range(n):
-        paste(rgb, FINGERS[k % len(FINGERS)], x0 + k * 9, bottom - FINGER_BOTTOM, holes)
+    for x0, n, bottom in (fingers if isinstance(fingers, list) else [fingers]):  # one group or several
+        for k in range(n):
+            paste(rgb, FINGERS[k % len(FINGERS)], x0 + k * 9, bottom - FINGER_BOTTOM, holes)
     def shift(m, dy, dx):
         out = np.zeros_like(m)
         out[dy:, dx:] = m[:m.shape[0] - dy, :m.shape[1] - dx]
@@ -147,33 +147,34 @@ def snes_board():
     parts = [(PART, 200, 44)]
     return build(m, (x0, n, FOOT), chips, parts, vias, traces)
 
-board = snes_board()
-for name, (W, H) in (('snes_board', (360, 231)), ('snes_pal_board', (336, 228))):
-    c = np.zeros((H, W, 4), np.uint8)
-    x, y = (W - BW) // 2, H - BH
-    c[y:y + BH, x:x + BW] = board
-    Image.fromarray(c, 'RGBA').save(f'assets/{name}.png', optimize=True)
+if __name__ == '__main__':  # tools/sgb/carts/sgb2_board.py borrows build() and the parts
+    board = snes_board()
+    for name, (W, H) in (('snes_board', (360, 231)), ('snes_pal_board', (336, 228))):
+        c = np.zeros((H, W, 4), np.uint8)
+        x, y = (W - BW) // 2, H - BH
+        c[y:y + BH, x:x + BW] = board
+        Image.fromarray(c, 'RGBA').save(f'assets/{name}.png', optimize=True)
 
-# ---- NES: its own outline (a wide body, a narrower piece on top), fingers across the bottom ----
-def nes_board():
-    """Sized on Roy's photo of an open NES cart (cart 6..305 wide here, so 0.755 of the photo):
-    a wide body, a narrower piece on top at the right, and a tab with the fingers that fits
-    the cart's narrower foot."""
-    h, w = 337, 312
-    m = rr(h, w, (28, 219, 280, 288), 7)
-    m |= rr(h, w, (155, 180, 279, 230), 7)
-    m |= rr(h, w, (37, 270, 271, 331), 6)
-    x0, n = 37 + (234 - 25 * 9) // 2, 25
-    traces, vias = [], []
-    for k in range(n):
-        x = x0 + k * 9 + 4
-        if k % 3 == 0:
-            traces.append([(x, 292), (x, 284)])
-    traces += [[(180, 199), (180, 214), (190, 222)], [(262, 200), (274, 212), (274, 262)], [(32, 226), (32, 280)]]
-    vias += [(274, 265), (180, 196), (32, 223), (32, 283)]
-    chips = [(CHIP_BIG, 37, 221), (CHIP_BIG, 147, 221), (CHIP_SMALL, 206, 184)]
-    parts = [(PART, 257, 226)]
-    return build(m, (x0, n, 331), chips, parts, vias, traces)
+    # ---- NES: its own outline (a wide body, a narrower piece on top), fingers across the bottom ----
+    def nes_board():
+        """Sized on Roy's photo of an open NES cart (cart 6..305 wide here, so 0.755 of the photo):
+        a wide body, a narrower piece on top at the right, and a tab with the fingers that fits
+        the cart's narrower foot."""
+        h, w = 337, 312
+        m = rr(h, w, (28, 219, 280, 288), 7)
+        m |= rr(h, w, (155, 180, 279, 230), 7)
+        m |= rr(h, w, (37, 270, 271, 331), 6)
+        x0, n = 37 + (234 - 25 * 9) // 2, 25
+        traces, vias = [], []
+        for k in range(n):
+            x = x0 + k * 9 + 4
+            if k % 3 == 0:
+                traces.append([(x, 292), (x, 284)])
+        traces += [[(180, 199), (180, 214), (190, 222)], [(262, 200), (274, 212), (274, 262)], [(32, 226), (32, 280)]]
+        vias += [(274, 265), (180, 196), (32, 223), (32, 283)]
+        chips = [(CHIP_BIG, 37, 221), (CHIP_BIG, 147, 221), (CHIP_SMALL, 206, 184)]
+        parts = [(PART, 257, 226)]
+        return build(m, (x0, n, 331), chips, parts, vias, traces)
 
-Image.fromarray(nes_board(), 'RGBA').save('assets/nes_board.png', optimize=True)
-print('ok')
+    Image.fromarray(nes_board(), 'RGBA').save('assets/nes_board.png', optimize=True)
+    print('ok')

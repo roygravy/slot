@@ -46,10 +46,16 @@ centre = rect(0.158, 0.0, 0.842, 1.0, 0.007)
 cart = rect(0.0, 0.027, 1.0, 0.995, 0.014) | rect(0.158, 0.0, 0.842, 0.5, 0.007)
 fr = int(0.006 * w)
 fy, fx = np.mgrid[-fr:fr + 1, -fr:fr + 1]
-cart = nd.binary_closing(np.pad(cart, fr), fx * fx + fy * fy <= fr * fr)[fr:-fr, fr:-fr]
+# no fillet in the inner corners where the centre stands up from the sides: rounded, it caught
+# the light as a pale bump in the zoom (Roy)
 dist = nd.distance_transform_edt(np.pad(cart, 1))[1:-1, 1:-1]
-edge = np.clip(dist / (3.0 * SS), 0, 1) ** 0.5
 yy, xx = np.mgrid[0:h, 0:w]
+# the centre rounds off only toward its own edges: measured from the outline straight above or
+# beside it, not diagonally from the sides' top, which put a lit bump in the inner corner (Roy)
+cols = (xx >= U(0.158)) & (xx <= U(0.842))
+dist_c = nd.distance_transform_edt(np.pad(cart | ~cols, 1))[1:-1, 1:-1]
+dist = np.where(centre & cols, dist_c, dist)
+edge = np.clip(dist / (3.0 * SS), 0, 1) ** 0.5
 def gamebit(u, v, height):
     r = np.sqrt((xx - U(u)) ** 2 + (yy - V(v)) ** 2) / w
     th = np.arctan2(yy - V(v), xx - U(u))

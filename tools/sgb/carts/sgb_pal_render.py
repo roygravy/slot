@@ -201,91 +201,30 @@ c = np.zeros((H, W, 4), np.uint8); c[..., :3] = np.clip(clear, 0, 255).astype(np
 Image.fromarray(c, 'RGBA').save(f'{out}/{NAME}_clear.png')
 if SGB2:
     # what the clear shell shows, from Roy's photo of a Super Game Boy opened up: the back shell's
-    # walls, posts and screw bosses; the green board across the lower half with its gold fingers
+    # walls, ribs and a screw boss under each of the front's screws; the green board across the lower half with its gold fingers
     # in three groups; the black Game Boy slot moulding standing on it, its smile-shaped top
     # carrying the bay's two ridges down
     height = np.zeros((h, w), np.float32)
     wall = cart & ~nd.binary_erosion(cart, iterations=int(4.5 * SS))
     height += wall * 7 + cart * 1
-    for u, v in ((0.055, 0.255), (0.945, 0.265)):                     # the round posts
-        height += disc(u, v, 0.028) * 6 - disc(u, v, 0.010) * 4
-    for u in (0.058, 0.942):                                          # the screw bosses
-        height += disc(u, 0.929, 0.032) * 6 - disc(u, 0.929, 0.012) * 9
+    SCREWS = [(u, v) for u in (0.058, 0.942) for v in (0.288, 0.929)]  # the front's screws, exactly
+    for u, v in SCREWS:                                               # a boss under each one
+        height += disc(u, v, 0.026) * 6 - disc(u, v, 0.010) * 9
     for v in (0.43, 0.62):                                            # ribs along the sides
         height += (rect(0.02, v - 0.006, 0.10, v + 0.006) | rect(0.90, v - 0.006, 0.98, v + 0.006)) * 4
     height -= rect(0.418, 0.17, 0.588, 0.19, 0.003) * 3               # the slot in the back, centred on the bay
     height *= cart
     grey = 128 * light(height) + grain(1.2)
-    holes = disc(0.058, 0.929, 0.012) | disc(0.942, 0.929, 0.012)
+    holes = np.zeros((h, w), bool)
+    for u, v in SCREWS:
+        holes |= disc(u, v, 0.010)
     grey = np.where(holes, grey * 0.55, grey)
     save(grey3(grey), cart, 'sgb2_interior.png')
 
-    # the board in the style of slot.'s other boards (tools/carts/snes_pal_render.py): dark green,
-    # navy chips with silver legs in a silkscreen outline, pale vias, traces, gold fingers with a
-    # via above each third one, rounded corners; its shape and finger groups from Roy's photo
-    board = (rect(0.12, 0.39, 0.93, 0.89, 0.012) & ~rect(0.10, 0.36, 0.165, 0.44) & ~rect(0.885, 0.36, 0.95, 0.44)) \
-        | rect(0.165, 0.39, 0.885, 0.45, 0.008)
-    board |= rect(0.13, 0.86, 0.87, 0.99, 0.006)
-    board &= ~(rect(0.225, 0.95, 0.25, 1.0) | rect(0.75, 0.95, 0.775, 1.0))   # the gaps between the groups
-    board &= ~(disc(0.12, 0.66, 0.012) | disc(0.93, 0.66, 0.012))
-    GREEN, TRACE, VIA, SILK = np.array([2, 70, 34.]), np.array([0, 44, 18.]), np.array([196, 210, 190.]), np.array([225, 232, 222.])
-    NAVY, PIN, GOLD = np.array([4, 24, 44.]), np.array([196, 198, 200.]), np.array([150, 96, 30.])
-    rgb = np.zeros((h, w, 3), np.float32) + GREEN
-    img = Image.new('L', (w, h), 0); d = ImageDraw.Draw(img)
-    groups = ((0.14, 0.22, 5), (0.26, 0.74, 31), (0.78, 0.86, 5))
-    ends = []
-    for u0, u1, n in groups:
-        for k in range(n):
-            x = U(u0 + (k + 0.5) * (u1 - u0) / n)
-            top = V(0.84 - (k % 6) * 0.02)
-            bend = x + ((k % 9) - 4) * 4 * SS
-            d.line([(x, V(0.90)), (x, top), (bend, top - 8 * SS)], fill=255, width=int(1.5 * SS))
-            ends.append((bend, top - 8 * SS))
-    for k in range(6):
-        y = V(0.62 + k * 0.022)
-        d.line([(U(0.18), y), (U(0.50), y)], fill=255, width=int(1.2 * SS))
-    traces = (np.asarray(img) > 127) & board
-    rgb[traces] = TRACE
-    def chip(u0, v0, u1, v1, pins, sides=False):
-        box = rect(u0, v0, u1, v1, 0.003)
-        silk = rect(u0 - 0.009, v0 - 0.016, u1 + 0.009, v1 + 0.016, 0.004) & ~rect(u0 - 0.006, v0 - 0.011, u1 + 0.006, v1 + 0.011, 0.004)
-        rgb[silk] = SILK
-        for k in range(pins):
-            u = u0 + (k + 0.5) / pins * (u1 - u0)
-            for v in (v0 - 0.01, v1 + 0.001):
-                rgb[rect(u - 0.003, v, u + 0.003, v + 0.009)] = PIN
-        if sides:
-            m = max(2, round(pins * (v1 - v0) * h / ((u1 - u0) * w)))
-            for k in range(m):
-                v = v0 + (k + 0.5) / m * (v1 - v0)
-                for u in (u0 - 0.011, u1 + 0.001):
-                    rgb[rect(u, v - 0.003, u + 0.01, v + 0.003)] = PIN
-        sheen = 1 + 0.25 * np.clip(1 - (yy - V(v0)) / max(V(v1) - V(v0), 1), 0, 1)
-        rgb[box] = NAVY[None, :] * sheen[box][:, None]
-        rgb[disc(u0 + 0.01, v0 + 0.012, 0.004) & box] = NAVY * 0.6
-    chip(0.20, 0.62, 0.40, 0.76, 16, sides=True)     # the Super Game Boy's CPU
-    chip(0.60, 0.62, 0.80, 0.70, 10)                 # its program ROM
-    chip(0.62, 0.75, 0.74, 0.81, 6)
-    rgb[rect(0.47, 0.76, 0.485, 0.80, 0.004)] = [40, 110, 190]
-    rgb[disc(0.21, 0.47, 0.009)] = (225, 40, 30)   # the red power light, seen through the shell
-    vimg = Image.new('L', (w, h), 0); vd = ImageDraw.Draw(vimg)
-    for k, (x, y) in enumerate(ends):
-        if k % 3 == 0:
-            vd.ellipse([x - 1.6 * SS, y - 1.6 * SS, x + 1.6 * SS, y + 1.6 * SS], fill=255)
-    for u, v in [(0.15, 0.48), (0.90, 0.48), (0.15, 0.84), (0.90, 0.84), (0.55, 0.64), (0.83, 0.78), (0.45, 0.70)]:
-        vd.ellipse([U(u) - 2 * SS, V(v) - 2 * SS, U(u) + 2 * SS, V(v) + 2 * SS], fill=255)
-    rgb[(np.asarray(vimg) > 127) & board] = VIA
-    fingers = np.zeros((h, w), bool)
-    for u0, u1, n in groups:
-        pitch = (u1 - u0) / n
-        for k in range(n):
-            u = u0 + k * pitch
-            fingers |= rect(u + 0.0015, 0.90, u + pitch - 0.002, 0.985, 0.0015)
-    rgb[fingers] = GOLD
-    t = Image.new('L', (w, h), 0); td = ImageDraw.Draw(t)
-    td.text((U(0.60), V(0.585)), 'SHVC-SGB2-01', font=ImageFont.truetype(font_path, int(0.018 * w)), fill=255)
-    td.text((U(0.18), V(0.80)), '2026 Slot.', font=ImageFont.truetype(font_path, int(0.022 * w)), fill=255)
-    rgb[(np.asarray(t) > 110) & board] = SILK
+    # the board itself comes from tools/sgb/carts/sgb2_board.py, in the other boards' make; this
+    # draws what stands on it
+    board = np.zeros((h, w), bool); fingers = board; traces = board
+    rgb = np.zeros((h, w, 3), np.float32)
     # the black slot moulding: wall to wall across the bay, its top the bay's smile, down past
     # the board's edge to the connector with its two ears
     smile2 = 0.033 * (1 - np.clip((xx / w - 0.503) / 0.241, -1, 1) ** 2)
@@ -302,5 +241,5 @@ if SGB2:
     for f in (0.25, 0.75):
         uc = 0.262 + f * (0.744 - 0.262)
         rgb[housing & (np.abs(xx - U(uc)) < 0.004 * w)] += 26
-    save(np.clip(rgb, 0, 255), (board | housing) & cart, 'sgb2_board.png')
+    save(np.clip(rgb, 0, 255), housing & cart, 'sgb2_slot.png')
 print('ok')
