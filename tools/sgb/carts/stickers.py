@@ -65,8 +65,9 @@ def pal_like(size, style):
         f = ImageFont.truetype('/usr/share/fonts/opentype/inter/Inter-ExtraBoldItalic.otf', int(H * 0.72))
         ImageDraw.Draw(im).text((W * 0.81, H * 0.84), '2', font=f, fill=colour + (255,), anchor='ls')
     else:
-        ink(im, SUPER, (int(W * 0.15), int(H * 0.13), int(W * 0.58), int(H * 0.42)), colour)
-        ink(im, GB, (int(W * 0.09), int(H * 0.45), int(W * 0.63), int(H * 0.82)), colour)
+        dy = 0.06 if style == 'sfc' else 0.0  # the Super Famicom's print sat too high (Roy)
+        ink(im, SUPER, (int(W * 0.15), int(H * (0.13 + dy)), int(W * 0.58), int(H * (0.42 + dy))), colour)
+        ink(im, GB, (int(W * 0.09), int(H * (0.45 + dy)), int(W * 0.63), int(H * (0.82 + dy))), colour)
         d = ImageDraw.Draw(im)
         if style == 'pal':
             nes_dots(d, W * 0.82, H * 0.34, H * 0.23, colour + (255,))
@@ -78,7 +79,7 @@ def pal_like(size, style):
             lay = Image.new('RGBA', tl.size, colour + (255,)); lay.putalpha(tl)
             im.alpha_composite(lay, (int(W * 0.83 - tl.width / 2), int(H * 0.80 - tl.height * 0.8)))
         else:  # the Super Famicom seal: a dark disc ringed by its lettering, the four ovals inside
-            cx, cy, rr = W * 0.82, H * 0.55, H * 0.30
+            cx, cy, rr = W * 0.82, H * (0.55 + dy), H * 0.30
             d.ellipse((cx - rr, cy - rr, cx + rr, cy + rr), outline=colour + (255,), width=max(2, int(S * 0.6)))
             d.ellipse((cx - rr * 0.68, cy - rr * 0.68, cx + rr * 0.68, cy + rr * 0.68), fill=colour + (255,))
             nes_dots(d, cx, cy, rr * 0.42, (206, 206, 206, 255))

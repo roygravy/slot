@@ -40,10 +40,16 @@ def board():
                 traces.append([(x, FOOT - 46), (x, top + 4)])
     for _ in range(6):
         x, y = rng.integers(70, 280), rng.integers(170, 225)
-        dx = int(rng.choice([-1, 1]) * rng.integers(16, 40))
+        dx = int((1 if x < W / 2 else -1) * rng.integers(16, 40))  # inward, never off the board
         traces.append([(x, y), (x + dx, y), (x + dx + 8 * np.sign(dx), y + 8)])
         vias.append((x + dx + 8 * np.sign(dx), y + 11))
     vias += [(52, 150), (288, 150), (290, 262), (50, 262)]
+    # no two vias touching, nor one on the row of vias over the fingers (Roy)
+    kept = []
+    for x, y in vias:
+        if y < FOOT - 50 and all((x - a) ** 2 + (y - b) ** 2 >= 12 ** 2 for a, b in kept):
+            kept.append((x, y))
+    vias = kept
     chips, parts = [], []
     return tb.build(m, groups, chips, parts, vias, traces)
 
