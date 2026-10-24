@@ -326,7 +326,12 @@ impl Session {
         if self.app.take_sgb_border_changed() && self.app.sgb_playing() {
             self.sgb_turn += 1;
             let (key, value) =
-                crate::core::set_sgb_border(&self.root, self.app.sgb_border(), self.sgb_turn);
+                crate::core::set_sgb_border(
+                &self.root,
+                self.app.sgb_border(),
+                self.app.sgb_two(),
+                self.sgb_turn,
+            );
             if let Some(emu) = &self.emu {
                 emu.set_option(key, &value);
             }
@@ -614,7 +619,13 @@ impl Session {
             opened.core.set_option(key, value);
         }
         if sgb {
-            crate::core::sgb_options(&self.root, opened.core.as_mut(), self.app.sgb_border());
+            crate::core::sgb_options(
+                &self.root,
+                opened.core.as_mut(),
+                self.app.sgb_border(),
+                self.app.sgb_two(),
+                platform == Platform::Gbc,
+            );
         }
         self.app.set_named_core(opened.named);
         launch("core opened");

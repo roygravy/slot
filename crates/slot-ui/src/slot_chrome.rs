@@ -152,10 +152,13 @@ impl SlotChrome<'_> {
                 (x, y, lerp(w0, sw), lerp(h0, sh), pose.lid)
             }
             None => {
-                // Into the Super Game Boy, the pak goes in at its top edge and stands in its bay,
-                // its foot down past the screen's edge.
+                // Into the Super Game Boy, the pak goes in at its top edge and sinks until its
+                // own top is flush with it, as in the Game Boy slot (Roy).
                 let (lip, seated_foot) = match rise() > 0.0 {
-                    true => (BAND_Y - rise() + SGB_TOP, OUT_H as f32 + 16.0),
+                    true => {
+                        let top = BAND_Y - rise() + SGB_TOP;
+                        (top, top + sh)
+                    }
                     false => (LIP_Y, SEATED_Y + sh - self.lift),
                 };
                 let catch = catch_at(lip, foot0, seated_foot);
@@ -253,7 +256,8 @@ fn band(x: f32, y: f32, w: f32, h: f32, c: [f32; 4], alpha: f32) -> Draw {
 }
 
 /// How far the Super Game Boy's top stands above the band while the Game Boy carts go into
-/// it: its top edge shows, and the Game Boy shelf moves up out of its way (Roy).
+/// it: half as tall again as the band shows, its top edge in it, and the Game Boy shelf moves
+/// up out of its way (Roy).
 pub const SGB_RISE: f32 = crate::bitmaps::SGB_BAND_H as f32 - MOUTH_H;
 /// Where the Super Game Boy's top edge is in its band, as `tools/sgb/sgb_band.py` draws it.
 const SGB_TOP: f32 = 6.0;
@@ -457,6 +461,14 @@ pub fn draw_slot_title(
     });
 }
 
+/// The slot's back (behind a cart) or its front (over one), on their own.
+pub fn draw_slot_part(canvas: Canvas, slot: Option<(TexId, TexId)>, front: bool, out: &mut Vec<Draw>) {
+    match front {
+        false => draw_slot_back(canvas, slot, 1.0, out),
+        true => draw_slot_front(canvas, slot, 1.0, out),
+    }
+}
+
 pub fn draw_empty_slot(canvas: Canvas, slot: Option<(TexId, TexId)>, out: &mut Vec<Draw>) {
     draw_slot_back(canvas, slot, 1.0, out);
     draw_slot_front(canvas, slot, 1.0, out);
@@ -501,8 +513,7 @@ pub fn click_at(mould: Mould) -> f32 {
 const NES_T: f32 = 1.60;
 const NES_CLICK: f32 = 1.15;
 const SNES_T: f32 = 1.15;
-/// The SNES game carts' seated heights, for the Super Game Boys that go in as deep.
-const SNES_SEATED_H: f32 = 154.0;
+/// The European SNES game cart's seated height, for the Super Game Boys that go in as deep.
 const SNES_PAL_SEATED_H: f32 = 152.0;
 const SNES_CLICK: f32 = 1.08;
 
@@ -553,7 +564,9 @@ fn tv_pose(mould: Mould, seat: f32, cx: f32, (sw, sh): (f32, f32)) -> Option<TvP
             // game cart it is shaped like, and its taller body stands out above.
             let out = if pal { (86.0 - 42.6) / 86.0 } else { 132.0 / 257.0 };
             let depth = match mould {
-                Mould::SgbNtsc => SNES_SEATED_H * (1.0 - out),
+                // The American SGB stands prouder: the slot's edge meets its lowest groove but
+                // one (Roy: it went in too deep).
+                Mould::SgbNtsc => sh * (1.0 - 0.797),
                 Mould::SgbPal => SNES_PAL_SEATED_H * (1.0 - out),
                 _ => sh * (1.0 - out),
             };

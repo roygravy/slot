@@ -369,14 +369,17 @@ pub fn apply_link_options(core: &mut LibretroCore, which: Core, player: u8) {
 
 /// slot.'s own Super Game Boy border, for the games that bring none.
 const SGB_BORDER_GRAVY: &[u8] = include_bytes!("../../../assets/sgb_border_gravy.bin");
+/// The same for the Super Game Boy 2, in its own layout.
+const SGB2_BORDER_GRAVY: &[u8] = include_bytes!("../../../assets/sgb_border_gravy2.bin");
 
 /// The Super Game Boy's own borders the player lifted from their SGB into BIOS/sgb_borders
-/// (sgb1_1.bin to sgb1_9.bin): their numbers.
-pub fn sgb_borders_on_card(root: &Path) -> Vec<u8> {
+/// (sgb1_1.bin to sgb1_9.bin, sgb2_1.bin on for the Super Game Boy 2): their numbers.
+pub fn sgb_borders_on_card(root: &Path, two: bool) -> Vec<u8> {
     let dir = root::bios_dir(root).join("sgb_borders");
+    let which = if two { 2 } else { 1 };
     (1..=9)
         .filter(|n| {
-            std::fs::metadata(dir.join(format!("sgb1_{n}.bin")))
+            std::fs::metadata(dir.join(format!("sgb{which}_{n}.bin")))
                 .is_ok_and(|m| m.len() == SGB_BORDER_GRAVY.len() as u64)
         })
         .collect()
@@ -384,29 +387,28 @@ pub fn sgb_borders_on_card(root: &Path) -> Vec<u8> {
 
 /// The border for the choice made (see `SlotState::sgb_border`), and whether it stays over a
 /// game's own: Auto takes the SGB's first border, or slot.'s, and gives way to the game's.
-fn sgb_border_for(root: &Path, choice: u8) -> (Vec<u8>, bool) {
+fn sgb_border_for(root: &Path, choice: u8, two: bool) -> (Vec<u8>, bool) {
     let dir = root::bios_dir(root).join("sgb_borders");
+    let which = if two { 2 } else { 1 };
     let own = |n: u8| {
-        std::fs::read(dir.join(format!("sgb1_{n}.bin")))
+        std::fs::read(dir.join(format!("sgb{which}_{n}.bin")))
             .ok()
             .filter(|b| b.len() == SGB_BORDER_GRAVY.len())
     };
+    let gravy = if two { SGB2_BORDER_GRAVY } else { SGB_BORDER_GRAVY };
     match choice {
-        1 => (SGB_BORDER_GRAVY.to_vec(), true),
+        1 => (gravy.to_vec(), true),
         // No border: every tile blank, every colour black.
-        2 => (vec![0; SGB_BORDER_GRAVY.len()], true),
-        n @ 11..=19 => (
-            own(n - 10).unwrap_or_else(|| SGB_BORDER_GRAVY.to_vec()),
-            true,
-        ),
-        _ => (own(1).unwrap_or_else(|| SGB_BORDER_GRAVY.to_vec()), false),
+        2 => (vec![0; gravy.len()], true),
+        n @ 11..=19 => (own(n - 10).unwrap_or_else(|| gravy.to_vec()), true),
+        _ => (own(1).unwrap_or_else(|| gravy.to_vec()), false),
     }
 }
 
 /// Put the chosen border where mGBA reads it, and the option that makes it take it: the
 /// option changes each time (`turn`) so a choice made while playing shows at once.
-pub fn set_sgb_border(root: &Path, choice: u8, turn: u32) -> (&'static str, String) {
-    let (border, lock) = sgb_border_for(root, choice);
+pub fn set_sgb_border(root: &Path, choice: u8, two: bool, turn: u32) -> (&'static str, String) {
+    let (border, lock) = sgb_border_for(root, choice, two);
     let at = root::bios_dir(root).join("slot_sgb_border.bin");
     if std::fs::read(&at).ok().as_deref() != Some(&border[..]) {
         if let Err(e) = std::fs::write(&at, &border) {
@@ -418,15 +420,17 @@ pub fn set_sgb_border(root: &Path, choice: u8, turn: u32) -> (&'static str, Stri
 }
 
 /// mGBA as a Super Game Boy, drawing on the SNES's screen: its borders, and the SGB's own
-/// colours for the games that set none.
-pub fn sgb_options(root: &Path, core: &mut dyn RetroCore, choice: u8) {
+/// colours for the games that set none. The Super Game Boy 2 has a secret: a Game Boy Color
+/// game plays in its own colours inside the border (`gbc`), as mGBA's Super Game Boy Color.
+pub fn sgb_options(root: &Path, core: &mut dyn RetroCore, choice: u8, two: bool, gbc: bool) {
     let (w, h) = Platform::Snes.canvas();
     core.set_canvas(w, h);
-    core.set_option("mgba_gb_model", "Super Game Boy");
+    let model = if gbc { "Super Game Boy Color" } else { "Super Game Boy" };
+    core.set_option("mgba_gb_model", model);
     core.set_option("mgba_sgb_borders", "ON");
     core.set_option("mgba_gb_colors_preset", "0");
     core.set_option("mgba_gb_colors", "SGB 1-A");
-    let (key, value) = set_sgb_border(root, choice, 0);
+    let (key, value) = set_sgb_border(root, choice, two, 0);
     core.set_option(key, &value);
 }
 

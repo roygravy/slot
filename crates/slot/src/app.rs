@@ -762,12 +762,29 @@ impl App {
     }
 
     fn switch_shelf(&mut self, by: i32) {
-        // With the Super Game Boy in, the Game Boy shelf is the only one; B takes it out.
-        if self.sgb {
-            return self.refuse();
-        }
-        let Some(to) = self.next_shelf(by) else {
-            return;
+        // With the Super Game Boy in, the Game Boy shelf is the only one; B takes it out. The
+        // Super Game Boy 2 has a secret: the Game Boy Color shelf beside it.
+        let to = match self.sgb {
+            true => {
+                let here = self.shelves[self.shelf_at].0;
+                let other = match here {
+                    Rack::Of(Platform::Gb) => Platform::Gbc,
+                    _ => Platform::Gb,
+                };
+                let at = self
+                    .shelves
+                    .iter()
+                    .position(|(r, _)| *r == Rack::Of(other))
+                    .filter(|_| self.sgb_two());
+                match at {
+                    Some(at) => at,
+                    None => return self.refuse(),
+                }
+            }
+            false => match self.next_shelf(by) {
+                Some(to) => to,
+                None => return,
+            },
         };
         self.shelf_mut().release_hold();
         self.play_held = None;
@@ -1866,7 +1883,10 @@ impl App {
 
     /// Whether a Game Boy game sits in the Super Game Boy.
     pub fn sgb_playing(&self) -> bool {
-        self.sgb && self.seated_cart().is_some_and(|c| c.platform == Platform::Gb)
+        self.sgb
+            && self.seated_cart().is_some_and(|c| {
+                c.platform == Platform::Gb || (c.platform == Platform::Gbc && self.sgb_two())
+            })
     }
 
     /// How far the camera has closed in on the Super Game Boy, 0 to 1; None once it has.
@@ -1890,7 +1910,8 @@ impl App {
     }
 
     /// The Super Game Boy just went in: the camera closes in on it until its top is the slot
-    /// band, as the SNES, the clock and all around it fade away and the Game Boy shelf comes in.
+    /// band, the SNES and the clock passing out of the picture under it, and the Game Boy shelf
+    /// comes down into place. No fades: the camera only moves (Roy).
     fn draw_sgb_zoom(&self, u: f32, out: &mut Vec<Draw>) {
         self.draw_background(out);
         let (Some(model), Some(sets)) = (self.sgb_model(), self.slot_sets) else {
@@ -1904,21 +1925,21 @@ impl App {
         let k = (b.2 / a.2).powf(e);
         let (x, y) = (a.0 + (b.0 - a.0) * e, a.1 + (b.1 - a.1) * e);
         let (dx, dy) = (x - k * a.0, y - k * a.1);
-        // The Game Boy shelf comes in over the second half.
-        let come = ease(((u - 0.45) / 0.55).clamp(0.0, 1.0));
+        // The Game Boy shelf comes down from above over the second half.
+        let come = ease(((u - 0.4) / 0.6).clamp(0.0, 1.0));
         if come > 0.0 {
-            self.shelf()
-                .draw_row(canvas, None, 0.0, 1.0 - come, 1.0, out);
+            let from = out.len();
+            self.shelf().draw_row(canvas, None, 0.0, 0.0, 1.0, out);
+            let drop = -(1.0 - come) * canvas.h;
+            for d in &mut out[from..] {
+                zoom_draw(d, 1.0, 0.0, drop, 1.0);
+            }
         }
-        // The SNES around it, the clock with it, under the camera and fading.
-        let around = (1.0 - e / 0.75).clamp(0.0, 1.0);
-        let from = out.len();
+        // The SNES around it, the SGB standing in its slot, the clock: all under the camera.
         slot_ui::set_sgb_band(false);
-        draw_empty_slot(canvas, Some(sets[3 * 2 + usize::from(self.light())]), out);
-        self.draw_shelf_footer(out);
-        for d in &mut out[from..] {
-            zoom_draw(d, k, dx, dy, around);
-        }
+        let snes = Some(sets[3 * 2 + usize::from(self.light())]);
+        let from = out.len();
+        slot_ui::draw_slot_part(canvas, snes, false, out);
         let face = self
             .shelves
             .iter()
@@ -1927,24 +1948,20 @@ impl App {
             .and_then(|(_, face)| face);
         if let Some(tex) = face {
             out.push(Draw::Tex {
-                x,
-                y,
-                w: a.2 * k,
-                h: a.3 * k,
+                x: a.0,
+                y: a.1,
+                w: a.2,
+                h: a.3,
                 tex,
                 alpha: 1.0,
             });
         }
-        // At the end the band takes over, the same picture in the same place.
-        let band = ((u - 0.85) / 0.15).clamp(0.0, 1.0);
-        if band > 0.0 {
-            slot_ui::set_sgb_band(true);
-            let from = out.len();
-            draw_empty_slot(canvas, Some(sets[8 + model as usize]), out);
-            for d in &mut out[from..] {
-                zoom_draw(d, 1.0, 0.0, 0.0, band);
-            }
+        slot_ui::draw_slot_part(canvas, snes, true, out);
+        self.draw_shelf_footer(out);
+        for d in &mut out[from..] {
+            zoom_draw(d, k, dx, dy, 1.0);
         }
+        slot_ui::set_sgb_band(self.sgb_band());
     }
 
     /// Whether the slot is the Super Game Boy's top: the Game Boy carts go into it.
@@ -1952,6 +1969,12 @@ impl App {
         self.sgb
             && matches!(self.slot_platform(), Platform::Gb | Platform::Gbc)
             && self.sgb_model().is_some()
+    }
+
+    /// Whether the Super Game Boy in is the Super Game Boy 2, with its secret: it takes Game Boy
+    /// Color games too, and plays them in colour.
+    pub fn sgb_two(&self) -> bool {
+        self.sgb_model() == Some(slot_ui::SgbModel::Sgb2)
     }
 
     /// Which Super Game Boy is on the SNES shelf.
@@ -3030,7 +3053,7 @@ impl App {
             let mut all = vec![0u8, 1];
             if let Some(root) = &self.root {
                 all.extend(
-                    crate::core::sgb_borders_on_card(root)
+                    crate::core::sgb_borders_on_card(root, self.sgb_two())
                         .into_iter()
                         .map(|n| 10 + n),
                 );

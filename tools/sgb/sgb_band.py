@@ -10,7 +10,7 @@ import numpy as np
 from PIL import Image
 
 A = 'assets/'
-W, H = 720, 140
+W, H = 720, 87
 TOP = 6             # the SGB's own top edge, just inside the band (Roy: its top, not its middle)
 HOLE = (246, 474)   # the Game Boy slot's opening in slot_front_gb_*.png
 
