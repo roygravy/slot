@@ -45,7 +45,7 @@ tri = poly(lambda d: d.polygon([(U(0.458), V(0.741)), (U(0.547), V(0.741)), (U(0
 height -= tri * 0.9
 yy, xx = np.mgrid[0:h, 0:w]
 # the screw dimple: a shallow round dish with a soft rim and a tiny bump in the middle
-r = np.hypot(xx - U(0.502), yy - V(0.576)) / (0.017 * w)
+r = np.hypot(xx - U(0.502), yy - V(0.444)) / (0.017 * w)  # above the board (Roy's photo)
 height += (np.where(r < 1, -np.clip(1 - r * r, 0, 1) ** 0.6, 0) + 0.18 * np.exp(-((r - 1.02) / 0.10) ** 2)
            + 0.25 * np.exp(-(r / 0.28) ** 2) * (r < 1)) * 1.8
 # a fine seam where the channel's ridge meets the right half

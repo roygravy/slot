@@ -52,7 +52,7 @@ height += rect(0.62, 0.475, 0.97, 0.49) * 3
 height += (rect(0.035, 0.62, 0.065, 0.84) | rect(0.905, 0.62, 0.94, 0.84)) * 4
 for u, v in [(0.2425, 0.27), (0.605, 0.28), (0.40, 0.18)]:
     height += disc(u, v, 0.009) * 2.5
-ring = disc(0.505, 0.58, 0.032); hole = disc(0.505, 0.58, 0.014)
+ring = disc(0.505, 0.444, 0.032); hole = disc(0.505, 0.444, 0.014)  # above the board (Roy's photo)
 height += ring * 5 - hole * 9
 height *= shell
 grey = 128 * light(height) + grain(1.2)
