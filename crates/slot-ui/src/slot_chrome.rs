@@ -428,7 +428,7 @@ pub fn ease(u: f32) -> f32 {
 pub fn insert_seconds(mould: Mould) -> Option<f32> {
     match mould {
         Mould::Nes => Some(NES_T),
-        Mould::SnesNtsc | Mould::SnesPal => Some(SNES_T),
+        Mould::SnesNtsc | Mould::SnesPal | Mould::SgbNtsc | Mould::SgbPal => Some(SNES_T),
         _ => None,
     }
 }
@@ -437,7 +437,7 @@ pub fn insert_seconds(mould: Mould) -> Option<f32> {
 pub fn click_at(mould: Mould) -> f32 {
     match mould {
         Mould::Nes => NES_CLICK / NES_T,
-        Mould::SnesNtsc | Mould::SnesPal => SNES_CLICK / SNES_T,
+        Mould::SnesNtsc | Mould::SnesPal | Mould::SgbNtsc | Mould::SgbPal => SNES_CLICK / SNES_T,
         _ => 1.0,
     }
 }
@@ -445,6 +445,9 @@ pub fn click_at(mould: Mould) -> f32 {
 const NES_T: f32 = 1.60;
 const NES_CLICK: f32 = 1.15;
 const SNES_T: f32 = 1.15;
+/// The SNES game carts' seated heights, for the Super Game Boys that go in as deep.
+const SNES_SEATED_H: f32 = 154.0;
+const SNES_PAL_SEATED_H: f32 = 152.0;
 const SNES_CLICK: f32 = 1.08;
 
 /// Where an NES or SNES cart is, `seat` into its insert: its seated-size box once it has left
@@ -485,14 +488,20 @@ fn tv_pose(mould: Mould, seat: f32, cx: f32, (sw, sh): (f32, f32)) -> Option<TvP
             };
             Some(TvPose { x, y, leave, lid: Some(lid) })
         }
-        Mould::SnesNtsc | Mould::SnesPal => {
+        Mould::SnesNtsc | Mould::SnesPal | Mould::SgbNtsc | Mould::SgbPal => {
             let t = seat * SNES_T;
-            let pal = mould == Mould::SnesPal;
+            let pal = matches!(mould, Mould::SnesPal | Mould::SgbPal);
             let wait = BAND_Y - sh - 8.0;
             // NTSC: the slot's edge meets the third line on the cart's side grips. A PAL cart goes
-            // in as deep and so stands a little prouder.
+            // in as deep and so stands a little prouder. A Super Game Boy goes in as deep as the
+            // game cart it is shaped like, and its taller body stands out above.
             let out = if pal { (86.0 - 42.6) / 86.0 } else { 132.0 / 257.0 };
-            let home = BAND_Y - sh * out - if pal { 5.0 } else { 0.0 };
+            let depth = match mould {
+                Mould::SgbNtsc => SNES_SEATED_H * (1.0 - out),
+                Mould::SgbPal => SNES_PAL_SEATED_H * (1.0 - out),
+                _ => sh * (1.0 - out),
+            };
+            let home = BAND_Y - (sh - depth) - if pal { 5.0 } else { 0.0 };
             let slid = home - 14.0;
             let (leave, y) = match t {
                 t if t < 0.40 => (smooth(t / 0.40), wait),

@@ -24,6 +24,7 @@ use slot_ui::{
 use crate::app::{App, LinkRow, Phase};
 use crate::build_info::Build;
 use crate::cart_faces::CartFaces;
+use slot_ui::SgbModel;
 use crate::face_builder::FaceBuilder;
 use crate::label_cache::{self, Rebuild};
 use crate::link_art_builder::LinkArtBuilder;
@@ -193,7 +194,7 @@ struct Clocks {
 }
 
 struct ShelfLook {
-    slot: [(TexId, TexId); 8],
+    slot: [(TexId, TexId); 12],
     nes_lids: [TexId; 2],
     bolt: [TexId; 2],
     wifi: [TexId; 2],
@@ -413,6 +414,10 @@ impl Frontend {
                     upload(slot_ui::slot_tv(false, false, true)),
                     upload(slot_ui::slot_tv(false, true, true)),
                 ),
+                (upload(slot_ui::sgb_band(SgbModel::Ntsc, false)), upload(slot_ui::sgb_band(SgbModel::Ntsc, true))),
+                (upload(slot_ui::sgb_band(SgbModel::Pal, false)), upload(slot_ui::sgb_band(SgbModel::Pal, true))),
+                (upload(slot_ui::sgb_band(SgbModel::Sfc, false)), upload(slot_ui::sgb_band(SgbModel::Sfc, true))),
+                (upload(slot_ui::sgb_band(SgbModel::Sgb2, false)), upload(slot_ui::sgb_band(SgbModel::Sgb2, true))),
             ]
         };
         let nes_lids = [false, true].map(|light| {

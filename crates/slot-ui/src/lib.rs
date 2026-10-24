@@ -6,6 +6,7 @@ mod buttons_help;
 mod cheat_page;
 pub use bitmaps::{
     link_port, link_port_light, nes_lid, slot_back, slot_back_gb, slot_back_light, slot_front, slot_front_gb, slot_front_light, slot_tv, Mould,
+    SgbModel, sgb_band,
     NES_LID_W, SLOT_H, SLOT_W,
 };
 mod backdrop;
@@ -53,7 +54,7 @@ pub use board::{
 pub use cart::{
     cart_backing, cart_box, cart_face, cart_face_with, cart_interior, cart_shadow, clean_label,
     gb_label_panel, gb_shell_of, mould_of, is_clear, label_colour, label_panel, label_size,
-    label_tags, label_text, neutral_shell, seated_box, shows_interior, CartFace, CART_H, CART_W,
+    label_tags, label_text, neutral_shell, sgb_model_of, seated_box, shows_interior, CartFace, CART_H, CART_W,
     GBC_LABEL_H, GBC_LABEL_W, GBC_LABEL_X, GBC_LABEL_Y, GB_CART_H, GB_CART_W, GB_LABEL_H,
     GB_LABEL_W, GB_LABEL_X, GB_LABEL_Y, LABEL_H, LABEL_W, LABEL_WELL, LABEL_X, LABEL_Y,
 };

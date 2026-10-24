@@ -443,7 +443,7 @@ pub struct App {
     hud_wifi: Option<TexId>,
     hud_bolt: Option<TexId>,
     /// GBA dark, GBA light, Game Boy dark, Game Boy light.
-    slot_sets: Option<[(TexId, TexId); 8]>,
+    slot_sets: Option<[(TexId, TexId); 12]>,
     nes_lids: Option<[TexId; 2]>,
     shelf_platform: slot_ui::Printed,
     shelf_title: slot_ui::Printed,
@@ -1555,7 +1555,7 @@ impl App {
         self.hud_bolt = Some(bolt);
     }
 
-    pub fn set_slot_sets(&mut self, sets: [(TexId, TexId); 8], nes_lids: [TexId; 2]) {
+    pub fn set_slot_sets(&mut self, sets: [(TexId, TexId); 12], nes_lids: [TexId; 2]) {
         self.slot_sets = Some(sets);
         self.nes_lids = Some(nes_lids);
     }
@@ -1864,6 +1864,16 @@ impl App {
         self.sgb && self.seated_cart().is_some_and(|c| c.platform == Platform::Gb)
     }
 
+    /// Which Super Game Boy is on the SNES shelf.
+    pub fn sgb_model(&self) -> Option<slot_ui::SgbModel> {
+        self.shelves
+            .iter()
+            .filter(|(r, _)| *r == Rack::Of(Platform::Snes))
+            .flat_map(|(_, s)| s.carts.iter())
+            .find(|c| c.is_sgb())
+            .map(slot_ui::sgb_model_of)
+    }
+
     /// Whether the cart going in or seated is the Super Game Boy itself.
     pub fn sgb_seated(&self) -> bool {
         self.seated_cart().is_some_and(Cart::is_sgb)
@@ -2105,6 +2115,13 @@ impl App {
     /// carts, the NES band with its lid or the SNES band, in the theme's housing.
     fn slot_faces(&self) -> Option<(TexId, TexId)> {
         let sets = self.slot_sets?;
+        // With the Super Game Boy in, the Game Boy carts go into its top: its own colours,
+        // whatever the theme.
+        if let (true, Platform::Gb | Platform::Gbc) = (self.sgb, self.slot_platform()) {
+            if let Some(model) = self.sgb_model() {
+                return Some(sets[8 + model as usize]);
+            }
+        }
         let kind = match self.slot_platform() {
             Platform::Gba => 0,
             Platform::Gb | Platform::Gbc => 1,

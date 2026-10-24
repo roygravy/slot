@@ -15,16 +15,22 @@ pub enum Mould {
     SnesNtsc,
     /// The European SNES and Super Famicom cart: smaller, rounded ends, an inset label.
     SnesPal,
+    /// The American Super Game Boy: the ridged SNES cart, taller, a Game Boy bay in its top.
+    SgbNtsc,
+    /// The European and Japanese Super Game Boy, and the Super Game Boy 2.
+    SgbPal,
 }
 
 impl Mould {
-    pub const ALL: [Mould; 6] = [
+    pub const ALL: [Mould; 8] = [
         Mould::Gba,
         Mould::Notched,
         Mould::Rounded,
         Mould::Nes,
         Mould::SnesNtsc,
         Mould::SnesPal,
+        Mould::SgbNtsc,
+        Mould::SgbPal,
     ];
 
     pub fn index(self) -> usize {
@@ -39,13 +45,23 @@ impl Mould {
             Mould::Notched | Mould::Rounded | Mould::Nes => (GB_CART_W, GB_CART_H),
             Mould::SnesNtsc => (SNES_CART_W, SNES_CART_H),
             Mould::SnesPal => (SNES_PAL_CART_W, SNES_PAL_CART_H),
+            Mould::SgbNtsc => (SGB_CART_W, SGB_CART_H),
+            Mould::SgbPal => (SGB_PAL_CART_W, SGB_PAL_CART_H),
         }
     }
 
     /// A TV console's cart: its art comes as a full set of cart, neutral, clear, interior
     /// and board, all the cart's own size.
     pub fn tv(self) -> bool {
-        matches!(self, Mould::Nes | Mould::SnesNtsc | Mould::SnesPal)
+        matches!(
+            self,
+            Mould::Nes | Mould::SnesNtsc | Mould::SnesPal | Mould::SgbNtsc | Mould::SgbPal
+        )
+    }
+
+    /// A Super Game Boy: its art is finished, sticker and plastic, one picture per model.
+    pub fn sgb(self) -> bool {
+        matches!(self, Mould::SgbNtsc | Mould::SgbPal)
     }
 }
 
@@ -57,6 +73,10 @@ pub const SNES_CART_W: u32 = 360;
 pub const SNES_CART_H: u32 = 231;
 pub const SNES_PAL_CART_W: u32 = 336;
 pub const SNES_PAL_CART_H: u32 = 228;
+pub const SGB_CART_W: u32 = 360;
+pub const SGB_CART_H: u32 = 315;
+pub const SGB_PAL_CART_W: u32 = 336;
+pub const SGB_PAL_CART_H: u32 = 319;
 pub const BOARD_W: u32 = GBA_CART_W;
 pub const BOARD_H: u32 = GBA_CART_H;
 pub const SOCKET_W: u32 = 64;
@@ -396,12 +416,92 @@ const SNES_PAL_PNGS: [&[u8]; 5] = [
     include_bytes!("../../../assets/snes_pal_board.png"),
 ];
 
+// The Super Game Boys have no plain plastic of their own to dye: every part is the finished
+// cart, and only the silhouette is its own.
+const SGB_PNGS: [&[u8]; 5] = [
+    include_bytes!("../../../assets/sgb_ntsc_cart.png"),
+    include_bytes!("../../../assets/sgb_face_ntsc.png"),
+    include_bytes!("../../../assets/sgb_face_ntsc.png"),
+    include_bytes!("../../../assets/sgb_face_ntsc.png"),
+    include_bytes!("../../../assets/sgb_face_ntsc.png"),
+];
+const SGB_PAL_PNGS: [&[u8]; 5] = [
+    include_bytes!("../../../assets/sgb_pal_cart.png"),
+    include_bytes!("../../../assets/sgb_face_pal.png"),
+    include_bytes!("../../../assets/sgb_face_pal.png"),
+    include_bytes!("../../../assets/sgb_face_pal.png"),
+    include_bytes!("../../../assets/sgb_face_pal.png"),
+];
+
+/// The Super Game Boy models, each its own finished cart.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum SgbModel {
+    /// The American one: ridged, grey, the red and blue sticker.
+    Ntsc,
+    /// The European one: light grey, the Super NES dots on its sticker.
+    Pal,
+    /// The Japanese one: as the European, the Super Famicom seal on its sticker.
+    Sfc,
+    /// The Super Game Boy 2: clear blue, its own purple sticker and the link port.
+    Sgb2,
+}
+
+impl SgbModel {
+    pub const ALL: [SgbModel; 4] = [SgbModel::Ntsc, SgbModel::Pal, SgbModel::Sfc, SgbModel::Sgb2];
+
+    pub fn mould(self) -> Mould {
+        match self {
+            SgbModel::Ntsc => Mould::SgbNtsc,
+            _ => Mould::SgbPal,
+        }
+    }
+}
+
+pub fn sgb_face(model: SgbModel) -> &'static [u8] {
+    static SLOTS: [OnceLock<Vec<u8>>; 4] = [const { OnceLock::new() }; 4];
+    let bytes: &[u8] = match model {
+        SgbModel::Ntsc => include_bytes!("../../../assets/sgb_face_ntsc.png"),
+        SgbModel::Pal => include_bytes!("../../../assets/sgb_face_pal.png"),
+        SgbModel::Sfc => include_bytes!("../../../assets/sgb_face_sfc.png"),
+        SgbModel::Sgb2 => include_bytes!("../../../assets/sgb_face_sgb2.png"),
+    };
+    let (w, h) = model.mould().size();
+    load(bytes, w, h, &SLOTS[model as usize])
+}
+
+/// The slot band while the Super Game Boy is in: its top around the Game Boy cart, behind
+/// (`front` false) or in front of it.
+pub fn sgb_band(model: SgbModel, front: bool) -> &'static [u8] {
+    static SLOTS: [[OnceLock<Vec<u8>>; 2]; 4] = [const { [const { OnceLock::new() }; 2] }; 4];
+    let bytes: [&[u8]; 2] = match model {
+        SgbModel::Ntsc => [
+            include_bytes!("../../../assets/sgb_band_ntsc_back.png"),
+            include_bytes!("../../../assets/sgb_band_ntsc_front.png"),
+        ],
+        SgbModel::Pal => [
+            include_bytes!("../../../assets/sgb_band_pal_back.png"),
+            include_bytes!("../../../assets/sgb_band_pal_front.png"),
+        ],
+        SgbModel::Sfc => [
+            include_bytes!("../../../assets/sgb_band_sfc_back.png"),
+            include_bytes!("../../../assets/sgb_band_sfc_front.png"),
+        ],
+        SgbModel::Sgb2 => [
+            include_bytes!("../../../assets/sgb_band_sgb2_back.png"),
+            include_bytes!("../../../assets/sgb_band_sgb2_front.png"),
+        ],
+    };
+    load(bytes[usize::from(front)], SLOT_W, SLOT_H, &SLOTS[model as usize][usize::from(front)])
+}
+
 pub fn tv_art(mould: Mould, part: TvPart) -> &'static [u8] {
-    static SLOTS: [[OnceLock<Vec<u8>>; 5]; 3] = [const { [const { OnceLock::new() }; 5] }; 3];
+    static SLOTS: [[OnceLock<Vec<u8>>; 5]; 5] = [const { [const { OnceLock::new() }; 5] }; 5];
     let (row, pngs) = match mould {
         Mould::Nes => (0, NES_PNGS),
         Mould::SnesNtsc => (1, SNES_PNGS),
         Mould::SnesPal => (2, SNES_PAL_PNGS),
+        Mould::SgbNtsc => (3, SGB_PNGS),
+        Mould::SgbPal => (4, SGB_PAL_PNGS),
         _ => unreachable!("only a TV cart has TV art"),
     };
     let (w, h) = mould.size();

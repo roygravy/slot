@@ -1,7 +1,7 @@
 use slot_store::{Cart, Outline, Platform};
 
 use crate::art;
-use crate::bitmaps::{self, Mould, TvPart, SNES_CART_W, SNES_PAL_CART_W};
+use crate::bitmaps::{self, Mould, SgbModel, TvPart, SNES_CART_W};
 use crate::board::{BOARD_H, BOARD_W};
 use crate::shell::{shell_for, Finish, Shell};
 use crate::silhouette::{mould_mask, GbShell};
@@ -99,6 +99,7 @@ pub fn mould_of(cart: &Cart) -> Mould {
     match cart.platform {
         Platform::Gba => Mould::Gba,
         Platform::Nes => Mould::Nes,
+        Platform::Snes if cart.is_sgb() => sgb_model_of(cart).mould(),
         Platform::Snes => match outline {
             Some(Outline::Notched) => Mould::SnesNtsc,
             Some(Outline::Rounded) => Mould::SnesPal,
@@ -121,6 +122,19 @@ pub fn mould_of(cart: &Cart) -> Mould {
             _ if cart.platform == Platform::Gbc => Mould::Rounded,
             _ => Mould::Notched,
         },
+    }
+}
+
+/// Which Super Game Boy the SGB cart is, as the studio set it: kept in its shell choice, the
+/// notched outline for the American one, the rounded for the others, told apart by finish.
+/// The European one is the original.
+pub fn sgb_model_of(cart: &Cart) -> SgbModel {
+    use slot_store::ShellFinish;
+    match cart.shell {
+        Some(c) if c.outline == Outline::Notched => SgbModel::Ntsc,
+        Some(c) if c.outline == Outline::Rounded && c.finish == ShellFinish::Clear => SgbModel::Sgb2,
+        Some(c) if c.outline == Outline::Rounded && c.finish == ShellFinish::Solid => SgbModel::Sfc,
+        _ => SgbModel::Pal,
     }
 }
 
@@ -152,6 +166,8 @@ fn spec(mould: Mould) -> Spec {
         Mould::Nes => (NES_LABEL, true),
         Mould::SnesNtsc => (SNES_LABEL, true),
         Mould::SnesPal => (SNES_PAL_LABEL, false),
+        // The Super Game Boys' stickers are in their art.
+        Mould::SgbNtsc | Mould::SgbPal => ((0, 0, w, h), false),
     };
     Spec {
         w,
@@ -165,6 +181,7 @@ fn spec(mould: Mould) -> Spec {
             Mould::Nes => NES_LABEL_RADIUS,
             Mould::SnesNtsc => SNES_LABEL_RADIUS,
             Mould::SnesPal => 10.0,
+            Mould::SgbNtsc | Mould::SgbPal => 0.0,
         },
         mask: mould_mask(mould),
         mould,
@@ -186,11 +203,11 @@ const GB_SEATED_H: u32 = 259;
 pub fn seated_box(mould: Mould) -> (u32, u32) {
     let (w, h) = mould.size();
     let seated_w = match mould {
-        Mould::SnesPal => SEATED_W * SNES_PAL_CART_W / SNES_CART_W,
+        Mould::SnesPal | Mould::SgbPal => SEATED_W * w / SNES_CART_W,
         _ => SEATED_W,
     };
     let full = match mould {
-        Mould::SnesPal => SNES_CART_W,
+        Mould::SnesPal | Mould::SgbPal => SNES_CART_W,
         _ => w,
     };
     (seated_w, (h * SEATED_W + full / 2) / full)
@@ -221,7 +238,8 @@ pub fn cart_face(cart: &Cart) -> CartFace {
 }
 
 pub fn is_clear(cart: &Cart) -> bool {
-    shell_for(cart).finish.clear()
+    // A Super Game Boy 2's clear plastic is in its finished art already.
+    !cart.is_sgb() && shell_for(cart).finish.clear()
 }
 
 /// Whether the shelf draws this cart's coloured interior under its plastic: any clear cart.
@@ -294,7 +312,16 @@ pub fn label_size(cart: &Cart) -> (u32, u32) {
 }
 
 pub fn cart_face_with(cart: &Cart, art: Option<Vec<u8>>) -> CartFace {
-    let s = spec(mould_of(cart));
+    let mould = mould_of(cart);
+    if mould.sgb() {
+        let (w, h) = mould.size();
+        return CartFace {
+            rgba: bitmaps::sgb_face(sgb_model_of(cart)).to_vec(),
+            w,
+            h,
+        };
+    }
+    let s = spec(mould);
     let shell = shell_for(cart);
     let mut face = shell_face(&s, &shell);
     // The sticker's rounded corners show the recess under it, in the shell's own plastic.
@@ -479,7 +506,7 @@ fn dress(s: &Spec, rgba: &mut [u8]) {
         Mould::Notched => "GAME BOY",
         Mould::Rounded => "GAME BOY COLOR",
         // The TV carts carry no name above a label that runs to their top edge.
-        Mould::Nes | Mould::SnesNtsc | Mould::SnesPal => return,
+        Mould::Nes | Mould::SnesNtsc | Mould::SnesPal | Mould::SgbNtsc | Mould::SgbPal => return,
     };
     stamp_console(rgba, s.w, s.h, title, y0);
 }
@@ -717,7 +744,7 @@ fn plastic_label_bed(s: &Spec, shell: &Shell, face: &mut CartFace) {
         Mould::Gba => Some((0.48, 0.44, 0.026, Mark::Sink(0.40))),
         Mould::Rounded => Some((0.5, 0.65, 0.012, Mark::Hole)),
         // The NES cart's art has its own, from the photo it was drawn from.
-        Mould::Nes | Mould::SnesNtsc | Mould::SnesPal => None,
+        Mould::Nes | Mould::SnesNtsc | Mould::SnesPal | Mould::SgbNtsc | Mould::SgbPal => None,
     };
     let (dimple_x, dimple_y, dimple_r, kind) = match mark {
         Some((fx, fy, fr, kind)) => (lw as f32 * fx, lh as f32 * fy, s.w as f32 * fr, kind),
@@ -827,14 +854,22 @@ fn generated_label(s: &Spec, shell: &Shell, title: &str, marker: Option<[u8; 3]>
     let room_w = (lw - 2 * PAD) as f32;
     let room_h = (lh - 2 * PAD) as f32;
     let max_px = match s.mould {
-        Mould::Gba | Mould::SnesNtsc | Mould::SnesPal => lh as f32 / 2.1,
+        Mould::Gba | Mould::SnesNtsc | Mould::SnesPal | Mould::SgbNtsc | Mould::SgbPal => {
+            lh as f32 / 2.1
+        }
         Mould::Notched | Mould::Rounded | Mould::Nes => room_h / 2.6,
     };
     let mut layout = text::fit_box(font, title, room_w, room_h, MAX_LINES, max_px, MIN_PX);
     layout.tracking = 0.0;
     let near_black = shell.colour.iter().map(|&c| u32::from(c)).sum::<u32>() < 3 * 0x30;
     let (ink, strength) = match s.mould {
-        Mould::Notched | Mould::Rounded | Mould::Nes | Mould::SnesNtsc | Mould::SnesPal
+        Mould::Notched
+        | Mould::Rounded
+        | Mould::Nes
+        | Mould::SnesNtsc
+        | Mould::SnesPal
+        | Mould::SgbNtsc
+        | Mould::SgbPal
             if !near_black =>
         {
             ([0x1b, 0x1c, 0x24], 235)

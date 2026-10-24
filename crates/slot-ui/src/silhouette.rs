@@ -44,7 +44,7 @@ pub(crate) fn gb_cart_mask(shell: GbShell) -> &'static [u8] {
 /// A mould's silhouette: how much of each pixel of its box the cart covers.
 pub(crate) fn mould_mask(mould: bitmaps::Mould) -> &'static [u8] {
     use bitmaps::Mould;
-    static TV: [OnceLock<Vec<u8>>; 3] = [const { OnceLock::new() }; 3];
+    static TV: [OnceLock<Vec<u8>>; 5] = [const { OnceLock::new() }; 5];
     let row = match mould {
         Mould::Gba => return cart_mask(),
         Mould::Notched => return gb_cart_mask(GbShell::Notched),
@@ -52,6 +52,8 @@ pub(crate) fn mould_mask(mould: bitmaps::Mould) -> &'static [u8] {
         Mould::Nes => 0,
         Mould::SnesNtsc => 1,
         Mould::SnesPal => 2,
+        Mould::SgbNtsc => 3,
+        Mould::SgbPal => 4,
     };
     let (w, h) = mould.size();
     TV[row].get_or_init(|| alpha(bitmaps::tv_art(mould, bitmaps::TvPart::Cart), w, h))
