@@ -86,8 +86,9 @@ struct Spec {
 /// The NES label well, in `assets/nes_neutral.png`: x 126..267, y 0..228 of 312x337. The
 /// sticker runs over the top edge.
 const NES_LABEL: (u32, u32, u32, u32) = (126, 0, 141, 228);
-/// The American SNES label well, x 70..291, y 0..109 of 360x231, over the top edge too.
-const SNES_LABEL: (u32, u32, u32, u32) = (70, 0, 221, 109);
+/// The American SNES label well, x 70..291, y 0..99 of 360x231, over the top edge too: as
+/// wide to tall (2.23) as the stickers on LaunchBox's photos of American carts.
+const SNES_LABEL: (u32, u32, u32, u32) = (70, 0, 221, 99);
 /// The European and Japanese SNES label sits inset, with plastic above it: x 29..306,
 /// y 13..110 of 336x228.
 const SNES_PAL_LABEL: (u32, u32, u32, u32) = (29, 13, 277, 97);

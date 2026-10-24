@@ -7,7 +7,7 @@ use std::thread;
 use std::time::{Duration, Instant, UNIX_EPOCH};
 
 use slot_store::Cart;
-use slot_ui::{cover, label_size};
+use slot_ui::{cover_label, label_size};
 
 const DIR: &str = "System/Cache/Labels";
 const HEAD: usize = 24;
@@ -20,7 +20,7 @@ pub fn label_art(root: &Path, cart: &Cart) -> Option<Vec<u8>> {
     if let Some(art) = read(&cached, stamp, w, h) {
         return art;
     }
-    let art = cover(src, w, h);
+    let art = cover_label(src, w, h);
     if let Some(dir) = cached.parent() {
         let _ = std::fs::create_dir_all(dir);
     }

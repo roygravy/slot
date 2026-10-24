@@ -32,6 +32,7 @@ pub const BUTTON_PAGES: [(&str, &[(&str, &str)]); 7] = [
             ("Up / Down", "Jump to the next letter"),
             ("L1 / R1", "Switch shelf"),
             ("MENU", "Settings"),
+            ("Hold MENU", "These buttons"),
         ],
     ),
     (

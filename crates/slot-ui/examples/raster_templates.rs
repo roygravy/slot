@@ -73,13 +73,6 @@ fn main() {
         268,
         182,
     );
-    // Size template only. The live sticker is assets/sticker.png.
-    save(
-        "sticker.png",
-        render(&assets.join("sticker.svg"), 660, 228),
-        660,
-        228,
-    );
 
     let pcb = with_viewbox(&board_src, "16 26 208 98");
     // Size template only. The live interior is assets/gba_interior.png.

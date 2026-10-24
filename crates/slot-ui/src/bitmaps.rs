@@ -71,8 +71,6 @@ pub const PLUG_W: u32 = 92;
 pub const PLUG_H: u32 = 244;
 pub const ADAPTER_W: u32 = 290;
 pub const ADAPTER_H: u32 = 180;
-pub const STICKER_W: u32 = 660;
-pub const STICKER_H: u32 = 228;
 
 const GBA_CART_PNG: &[u8] = include_bytes!("../../../assets/gba_cart.png");
 const GB_CART_PNG: &[u8] = include_bytes!("../../../assets/gb_cart.png");
@@ -108,7 +106,6 @@ const PORT_LIGHT_PNG: &[u8] = include_bytes!("../../../assets/link_port_light.pn
 const PLUG_HOST_PNG: &[u8] = include_bytes!("../../../assets/link_plug_host.png");
 const PLUG_JOIN_PNG: &[u8] = include_bytes!("../../../assets/link_plug_join.png");
 const ADAPTER_PNG: &[u8] = include_bytes!("../../../assets/link_adapter.png");
-const STICKER_PNG: &[u8] = include_bytes!("../../../assets/sticker.png");
 
 fn load(bytes: &'static [u8], w: u32, h: u32, slot: &'static OnceLock<Vec<u8>>) -> &'static [u8] {
     slot.get_or_init(|| {
@@ -324,11 +321,6 @@ pub fn link_plug_join() -> &'static [u8] {
 pub fn link_adapter() -> &'static [u8] {
     static P: OnceLock<Vec<u8>> = OnceLock::new();
     load(ADAPTER_PNG, ADAPTER_W, ADAPTER_H, &P)
-}
-
-pub fn sticker() -> &'static [u8] {
-    static P: OnceLock<Vec<u8>> = OnceLock::new();
-    load(STICKER_PNG, STICKER_W, STICKER_H, &P)
 }
 
 // Shells are hand drawn. There is no Game Boy clear file yet, so a clear Game Boy pak uses

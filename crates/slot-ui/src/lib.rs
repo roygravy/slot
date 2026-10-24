@@ -1,6 +1,6 @@
 mod about;
 mod art;
-pub use art::{cover, is_wide_snes_label};
+pub use art::{cover, cover_label, is_wide_snes_label};
 mod bitmaps;
 mod buttons_help;
 mod cheat_page;
@@ -32,7 +32,6 @@ mod shell_picker;
 mod shot_page;
 mod silhouette;
 mod slot_chrome;
-mod sticker;
 pub mod text;
 pub mod theme;
 mod toast;
@@ -126,9 +125,5 @@ pub use slot_chrome::{
     click_at, draw_empty_slot, draw_slot_name, draw_slot_title, ease, edge, housing,
     insert_seconds, opening, recess, set_light_ground, slot_name_y, SlotChrome, ALERT_PX,
     GB_SEAT_LIFT, LIP_H, MOUTH_H, MOUTH_W,
-};
-pub use sticker::{
-    draw_sticker, head_rows, sticker_face, sticker_lines, sticker_rect, StickerFields, COPYRIGHT,
-    CREDITS, DC, HOME, ORIGIN, STICKER_H, STICKER_W,
 };
 pub use toast::{toast_box, toast_face, toast_rect, Toast};

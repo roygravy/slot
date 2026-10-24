@@ -5,6 +5,30 @@ pub fn cover(path: &Path, w: u32, h: u32) -> Option<Vec<u8>> {
     cover_rgba(&src, sw, sh, w, h)
 }
 
+/// An American SNES label cut before its well was measured again (221x109, a little too
+/// tall) is drawn whole in the new well, which undoes the stretch it was cut with; any other
+/// picture covers the well.
+pub fn cover_label(path: &Path, w: u32, h: u32) -> Option<Vec<u8>> {
+    let (src, sw, sh) = decode(path)?;
+    if (sw, sh) == (221, 109) && (w, h) == (221, 99) {
+        return Some(stretch_rgba(&src, sw, sh, w, h));
+    }
+    cover_rgba(&src, sw, sh, w, h)
+}
+
+fn stretch_rgba(src: &[u8], sw: u32, sh: u32, w: u32, h: u32) -> Vec<u8> {
+    let (sx, sy) = (sw as f32 / w as f32, sh as f32 / h as f32);
+    let mut out = vec![0u8; (w * h * 4) as usize];
+    for y in 0..h {
+        for x in 0..w {
+            let (x0, y0) = (x as f32 * sx, y as f32 * sy);
+            let px = box_average(src, sw, sh, x0, y0, x0 + sx, y0 + sy);
+            out[((y * w + x) * 4) as usize..][..4].copy_from_slice(&px);
+        }
+    }
+    out
+}
+
 pub fn cover_bytes(bytes: &[u8], w: u32, h: u32) -> Option<Vec<u8>> {
     let (src, sw, sh) = decode_png_bytes(bytes)?;
     cover_rgba(&src, sw, sh, w, h)
@@ -58,7 +82,7 @@ fn box_average(src: &[u8], sw: u32, sh: u32, x0: f32, y0: f32, x1: f32, y1: f32)
 }
 
 /// Whether a SNES label is the wide PAL/SFC sticker (277x97) rather than the taller NTSC one
-/// (221x109), from the PNG's header. Remembered by the file's size and time, as the studio
+/// (221x99), from the PNG's header. Remembered by the file's size and time, as the studio
 /// writes a picked version over the same file.
 pub fn is_wide_snes_label(path: &Path) -> Option<bool> {
     use std::collections::HashMap;

@@ -333,6 +333,8 @@ pub struct App {
     version_captions: Vec<(TexId, u32)>,
     /// Every version found, of which those above are the ones that fit the cart's shape.
     version_all: Vec<(std::path::PathBuf, (TexId, u32, u32), (TexId, u32))>,
+    /// The buttons' pages were opened by MENU held on the shelf, so B goes back there.
+    buttons_from_shelf: bool,
     /// The label the studio's cart wore when it opened, put back if a version is not kept.
     label_was: Option<std::path::PathBuf>,
     core_board_face: Option<TexId>,
@@ -539,6 +541,7 @@ impl App {
             version_thumbs: Vec::new(),
             version_captions: Vec::new(),
             version_all: Vec::new(),
+            buttons_from_shelf: false,
             label_was: None,
             core_board_face: None,
             core_interior_face: None,
@@ -2424,6 +2427,16 @@ impl App {
                     self.shelf_mut().hold_right(now)
                 }
                 Action::QuickMenu => self.open_quick_menu(),
+                // MENU held on the shelf: what every button does, on the shelf's page.
+                Action::Eject if self.core_picker.is_none() => {
+                    self.shelf_mut().release_hold();
+                    self.play_held = None;
+                    self.buttons_from_shelf = true;
+                    let page = slot_ui::BUTTON_PAGES.iter().position(|p| p.0 == "Shelf");
+                    self.phase = Phase::Buttons {
+                        page: page.unwrap_or(0),
+                    };
+                }
                 Action::GbaDown(Btn::A) => self.play_held = Some(now),
                 Action::GbaUp(Btn::A) => {
                     if self.play_held.take().is_some() {
@@ -2495,8 +2508,11 @@ impl App {
                         }
                     }
                     Action::GbaDown(Btn::B) | Action::QuickMenu => {
-                        self.phase = Phase::QuickMenu {
-                            row: QuickRow::Buttons,
+                        self.phase = match std::mem::take(&mut self.buttons_from_shelf) {
+                            true => Phase::Shelf,
+                            false => Phase::QuickMenu {
+                                row: QuickRow::Buttons,
+                            },
                         }
                     }
                     _ => {}
