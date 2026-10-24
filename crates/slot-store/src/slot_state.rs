@@ -249,6 +249,8 @@ impl BezelPick {
 pub struct SlotState {
     pub cart: Option<String>,
     pub cart_platform: Option<Platform>,
+    /// The cart in the slot is a Game Boy game in the Super Game Boy.
+    pub cart_sgb: bool,
     pub brightness: u8,
     pub blue_light: u8,
     pub volume: u8,
@@ -491,6 +493,7 @@ impl Default for SlotState {
         SlotState {
             cart: None,
             cart_platform: None,
+            cart_sgb: false,
             brightness: 5,
             blue_light: 0,
             volume: 60,
@@ -659,6 +662,7 @@ pub fn write_slot_state(root: &Path, s: &SlotState) -> std::io::Result<()> {
     text.push_str(&format!("home_wifi_enabled={}\n", s.home_wifi_enabled as u8));
     text.push_str(&format!("auto_time={}\n", s.auto_time as u8));
     text.push_str(&format!("clock_24h={}\n", s.clock_24h as u8));
+    text.push_str(&format!("cart_sgb={}\n", s.cart_sgb as u8));
     if let Some(zone) = s.time_zone {
         text.push_str(&format!("time_zone={zone}\n"));
     }
@@ -737,6 +741,7 @@ fn parse(text: &str) -> Option<SlotState> {
     let mut time_zone = None;
     let mut auto_time = None;
     let mut clock_24h = None;
+    let mut cart_sgb = None;
     let mut ff_speed = None;
     let mut ff_sound = None;
     let mut shader_gba = None;
@@ -807,6 +812,7 @@ fn parse(text: &str) -> Option<SlotState> {
             "home_wifi_enabled" => home_wifi_enabled = flag(value),
             "auto_time" => auto_time = flag(value),
             "clock_24h" => clock_24h = flag(value),
+            "cart_sgb" => cart_sgb = flag(value),
             "time_zone" => time_zone = crate::zone_named(value).map(|z| z.name),
             "ff_speed" => ff_speed = ff_speed_value(value),
             "ff_sound" => ff_sound = flag(value),
@@ -878,6 +884,7 @@ fn parse(text: &str) -> Option<SlotState> {
         time_zone,
         auto_time: auto_time.unwrap_or(true),
         clock_24h: clock_24h.unwrap_or(true),
+        cart_sgb: cart_sgb.unwrap_or(false),
         rumble: rumble.unwrap_or(fallback.rumble),
         home_wifi_enabled: home_wifi_enabled.unwrap_or(false),
         ff_speed: ff_speed.unwrap_or(fallback.ff_speed),

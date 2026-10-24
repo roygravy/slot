@@ -367,6 +367,33 @@ pub fn apply_link_options(core: &mut LibretroCore, which: Core, player: u8) {
     eprintln!("slot: core: link mode on, player {player}");
 }
 
+/// slot.'s own Super Game Boy border, for the games that bring none.
+const SGB_BORDER_GRAVY: &[u8] = include_bytes!("../../../assets/sgb_border_gravy.bin");
+
+/// mGBA as a Super Game Boy, drawing on the SNES's screen: its borders, the SGB's own colours
+/// for the games that set none, and slot.'s border for the games that bring no border.
+pub fn sgb_options(root: &Path, core: &mut dyn RetroCore) {
+    let (w, h) = Platform::Snes.canvas();
+    core.set_canvas(w, h);
+    core.set_option("mgba_gb_model", "Super Game Boy");
+    core.set_option("mgba_sgb_borders", "ON");
+    core.set_option("mgba_gb_colors_preset", "0");
+    core.set_option("mgba_gb_colors", "SGB 1-A");
+    // A border lifted from the player's own Super Game Boy, if they put one in BIOS; else ours.
+    let bios = root::bios_dir(root);
+    let border = std::fs::read(bios.join("sgb_borders").join("sgb1_1.bin"))
+        .ok()
+        .filter(|b| b.len() == SGB_BORDER_GRAVY.len())
+        .unwrap_or_else(|| SGB_BORDER_GRAVY.to_vec());
+    let at = bios.join("slot_sgb_border.bin");
+    if std::fs::read(&at).ok().as_deref() != Some(&border[..]) {
+        if let Err(e) = std::fs::write(&at, &border) {
+            eprintln!("slot: sgb: could not write {}: {e}", at.display());
+        }
+    }
+    core.set_option("mgba_slot_sgb_border", "auto:0");
+}
+
 pub fn apply_core_options(
     core: &mut LibretroCore,
     which: Core,

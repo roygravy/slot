@@ -510,6 +510,11 @@ impl Session {
             Phase::Inserting { cart, .. } => cart.clone(),
             _ => return,
         };
+        // The Super Game Boy has no game of its own to run.
+        if self.app.sgb_seated() {
+            self.emu = None;
+            return;
+        }
         if self.emu.is_none() {
             let (_, serial) = self.app.link_mode(&stem);
             self.spawn_core(&stem, serial);
@@ -544,7 +549,12 @@ impl Session {
         else {
             return;
         };
-        let core = slot_store::core_for_platform(&self.root, stem, platform);
+        // A Game Boy game in the Super Game Boy plays on mGBA, the core that does the SGB.
+        let sgb = self.app.sgb_playing();
+        let core = match sgb {
+            true => slot_store::Core::Mgba,
+            false => slot_store::core_for_platform(&self.root, stem, platform),
+        };
         launch(&format!("opening {stem} on {}", core.as_str()));
         self.app.set_core(core);
         self.app.set_platform(platform);
@@ -592,6 +602,9 @@ impl Session {
         }
         for (key, value) in crate::core::tv_options(core, self.app.tv_look(platform)) {
             opened.core.set_option(key, value);
+        }
+        if sgb {
+            crate::core::sgb_options(&self.root, opened.core.as_mut());
         }
         self.app.set_named_core(opened.named);
         launch("core opened");

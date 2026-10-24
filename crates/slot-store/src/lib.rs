@@ -39,7 +39,7 @@ pub use gb_palette::GbPalette;
 pub use gba::{header_clean, header_code, header_title, header_title_code};
 pub use platform::{Platform, TV_CANVAS};
 pub use ring::{StateEntry, StateRing, RING_MAX};
-pub use scan::{initial, is_hidden, listing, scan, sort_key, Cart, StoreError};
+pub use scan::{initial, is_hidden, listing, scan, sort_key, Cart, StoreError, SGB_STEM};
 pub use slot_state::{
     read_slot_state, write_slot_state, Appearance, BezelPick, FavoriteMark, NesColors, Recent, Shader, SlotState, TvCable,
     WallpaperPick, WallpaperTint, AUTO_SLEEP_DEFAULT_SECS, AUTO_SLEEP_OPTIONS_SECS, BLUE_LIGHT_MAX,

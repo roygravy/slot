@@ -377,6 +377,8 @@ pub struct App {
     palette_capable: bool,
     link_player: Option<u8>,
     platform: Platform,
+    /// The Super Game Boy is in the SNES slot: the Game Boy shelf's games play through it.
+    sgb: bool,
     named_core: bool,
     video_mode: VideoMode,
     link: Option<LinkSession>,
@@ -578,6 +580,7 @@ impl App {
             palette_capable: false,
             link_player: None,
             platform: Platform::default(),
+            sgb: false,
             named_core: false,
             video_mode: VideoMode::default(),
             link: None,
@@ -723,6 +726,10 @@ impl App {
             Some((at, i)) => {
                 self.shelf_at = at;
                 self.shelf_mut().select(i);
+                // A Game Boy game left in the Super Game Boy goes back into it.
+                self.sgb = self.state.cart_sgb
+                    && self.shelf().carts.get(i).is_some_and(|c| c.platform == Platform::Gb)
+                    && self.carts().any(Cart::is_sgb);
                 self.insert(false);
                 if let Phase::Inserting { resumed, t, .. } = &mut self.phase {
                     *resumed = true;
@@ -748,6 +755,10 @@ impl App {
     }
 
     fn switch_shelf(&mut self, by: i32) {
+        // With the Super Game Boy in, the Game Boy shelf is the only one; B takes it out.
+        if self.sgb {
+            return self.refuse();
+        }
         let Some(to) = self.next_shelf(by) else {
             return;
         };
@@ -1737,12 +1748,12 @@ impl App {
     }
 
     pub fn source_rect(&self) -> [f32; 4] {
-        video_mode::source_rect(self.platform, self.video_mode)
+        video_mode::source_rect(self.screen_platform(), self.video_mode)
     }
 
     fn slot_owns_the_shoulders(&self) -> bool {
         matches!(self.phase, Phase::Playing { .. })
-            && matches!(self.platform, Platform::Gb | Platform::Gbc)
+            && matches!(self.screen_platform(), Platform::Gb | Platform::Gbc)
     }
 
     pub fn taken_buttons(&self) -> &'static [Btn] {
@@ -1816,15 +1827,80 @@ impl App {
     }
 
     pub fn picture_rect(&self) -> [f32; 4] {
-        let (w, h) = self.platform.picture();
-        let (sw, sh) = self.platform.canvas();
+        let (w, h) = self.screen_platform().picture();
+        let (sw, sh) = self.screen_platform().canvas();
         let (sw, sh) = (sw as f32, sh as f32);
         let (x, y) = ((sw - w as f32) / 2.0, (sh - h as f32) / 2.0);
         [x / sw, y / sh, (x + w as f32) / sw, (y + h as f32) / sh]
     }
 
+    /// The console whose screen the game is on: the SNES's for a Game Boy game played through
+    /// the Super Game Boy, else the game's own.
     pub fn platform(&self) -> Platform {
-        self.platform
+        self.screen_platform()
+    }
+
+    fn screen_platform(&self) -> Platform {
+        if self.sgb_playing() {
+            Platform::Snes
+        } else {
+            self.platform
+        }
+    }
+
+    /// Whether a Game Boy game sits in the Super Game Boy.
+    pub fn sgb_playing(&self) -> bool {
+        self.sgb && self.seated_cart().is_some_and(|c| c.platform == Platform::Gb)
+    }
+
+    /// Whether the cart going in or seated is the Super Game Boy itself.
+    pub fn sgb_seated(&self) -> bool {
+        self.seated_cart().is_some_and(Cart::is_sgb)
+    }
+
+    /// Take the Super Game Boy out: back to the SNES shelf, the SGB coming out of its slot.
+    fn eject_sgb(&mut self) {
+        let Some(at) = self
+            .shelves
+            .iter()
+            .position(|(r, _)| *r == Rack::Of(Platform::Snes))
+        else {
+            self.sgb = false;
+            return;
+        };
+        let Some(i) = self.shelves[at].1.carts.iter().position(Cart::is_sgb) else {
+            self.sgb = false;
+            return;
+        };
+        self.shelf_mut().release_hold();
+        self.sgb = false;
+        self.shelf_at = at;
+        self.shelf_mut().select(i);
+        self.shelf_platform = slot_ui::Printed::default();
+        self.slot_letter = None;
+        self.shelf_named = None;
+        self.name_pending = true;
+        self.phase = Phase::Ejecting {
+            cart: slot_store::SGB_STEM.to_string(),
+            t: -EJECT_HOLD_S,
+        };
+    }
+
+    /// The Super Game Boy is in: on to the Game Boy shelf, to pick the game that goes in it.
+    fn seat_sgb(&mut self) {
+        let Some(at) = self
+            .shelves
+            .iter()
+            .position(|(r, _)| *r == Rack::Of(Platform::Gb))
+        else {
+            return;
+        };
+        self.sgb = true;
+        self.shelf_at = at;
+        self.shelf_platform = slot_ui::Printed::default();
+        self.slot_letter = None;
+        self.shelf_named = None;
+        self.name_pending = true;
     }
 
     pub fn may_load_state(&self) -> bool {
@@ -1980,7 +2056,12 @@ impl App {
         }
     }
 
+    /// The console the game plays on, for its screen and menus: the SNES for a Game Boy game in
+    /// the Super Game Boy.
     pub fn playing_platform(&self) -> Platform {
+        if self.sgb_playing() {
+            return Platform::Snes;
+        }
         self.seated_cart().map_or(self.platform, |c| c.platform)
     }
 
@@ -2420,6 +2501,7 @@ impl App {
                 Action::GbaDown(Btn::L1) => self.switch_shelf(-1),
                 Action::GbaDown(Btn::R1) => self.switch_shelf(1),
                 Action::GbaDown(Btn::Y) => self.toggle_favorite(),
+                Action::GbaDown(Btn::B) | Action::Eject if self.sgb => self.eject_sgb(),
                 _ => {}
             },
             Phase::Inserting { .. } if action == Action::Eject => self.eject(),
@@ -2558,7 +2640,8 @@ impl App {
             Phase::Polaroids { cart } => cart.clone(),
             _ => return None,
         };
-        Some((self.playing_platform(), stem))
+        let platform = self.seated_cart().map_or(self.platform, |c| c.platform);
+        Some((platform, stem))
     }
 
     /// Read the cheats of the game in the slot, unless they are read already. A game that had
@@ -3375,6 +3458,9 @@ impl App {
             }
             _ => (1.0, 1.0),
         };
+        // The Super Game Boy runs nothing of its own: once it is in, the Game Boy shelf.
+        let sgb_going_in = self.sgb_seated() && matches!(self.phase, Phase::Inserting { .. });
+        let mut sgb_in = false;
         let next = match &mut self.phase {
             Phase::Shelf => {
                 let shelf = &mut self.shelves[at].1;
@@ -3394,9 +3480,14 @@ impl App {
                 *t += if was < SEATED_AT { dt / pace } else { dt };
                 let at = SEATED_AT * click - Sfx::Insert.lead() / pace;
                 touched = !*resumed && was < at && *t >= at;
-                (*t >= INSERT_S && *core_ready).then(|| Phase::Playing {
-                    cart: std::mem::take(cart),
-                })
+                if sgb_going_in {
+                    sgb_in = *t >= INSERT_S;
+                    sgb_in.then_some(Phase::Shelf)
+                } else {
+                    (*t >= INSERT_S && *core_ready).then(|| Phase::Playing {
+                        cart: std::mem::take(cart),
+                    })
+                }
             }
             Phase::Ejecting { t, .. } => {
                 if self.screen <= 0.0 {
@@ -3415,7 +3506,10 @@ impl App {
                 _ => Sfx::Insert,
             });
         }
-        if let Some(phase) = next {
+        if sgb_in {
+            self.phase = Phase::Shelf;
+            self.seat_sgb();
+        } else if let Some(phase) = next {
             self.phase = phase;
             self.refused_from = None;
             let seated = match &self.phase {
@@ -3721,11 +3815,13 @@ impl App {
                 self.persist();
             }
         }
-        if self.state.cart == cart && self.state.cart_platform == platform {
+        let sgb = cart.is_some() && self.sgb;
+        if self.state.cart == cart && self.state.cart_platform == platform && self.state.cart_sgb == sgb {
             return;
         }
         self.state.cart = cart;
         self.state.cart_platform = platform;
+        self.state.cart_sgb = sgb;
         self.persist();
     }
 

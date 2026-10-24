@@ -18,8 +18,19 @@ pub struct Cart {
     pub marker: Option<[u8; 3]>,
 }
 
+/// The Super Game Boy: a cart on the SNES shelf with no file of its own. It goes in the SNES
+/// slot and plays the Game Boy shelf's games.
+pub const SGB_STEM: &str = "Super Game Boy";
+
 impl Cart {
+    pub fn is_sgb(&self) -> bool {
+        self.platform == Platform::Snes && self.rom.as_os_str().is_empty()
+    }
+
     pub fn read_header(&mut self) {
+        if self.is_sgb() {
+            return;
+        }
         match self.platform {
             Platform::Gba => {
                 if let Some((title, code)) = header_title_code(&self.rom) {
@@ -109,6 +120,23 @@ pub fn scan(root: &Path) -> Result<Vec<Cart>, StoreError> {
                 rom,
             });
         }
+    }
+    // The Super Game Boy stands on the SNES shelf whenever there are Game Boy games to play in it.
+    let gb = carts.iter().any(|c| c.platform == Platform::Gb);
+    let taken = carts
+        .iter()
+        .any(|c| c.platform == Platform::Snes && c.stem.eq_ignore_ascii_case(SGB_STEM));
+    if gb && !taken {
+        carts.push(Cart {
+            platform: Platform::Snes,
+            stem: SGB_STEM.to_string(),
+            title: SGB_STEM.to_string(),
+            code: String::new(),
+            shell: shells.get(&crate::cart_shell::key(SGB_STEM)).copied(),
+            marker: None,
+            label: None,
+            rom: PathBuf::new(),
+        });
     }
     carts.sort_by(|a, b| {
         (a.platform as u8, sort_key(&a.stem)).cmp(&(b.platform as u8, sort_key(&b.stem)))
