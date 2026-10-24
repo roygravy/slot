@@ -296,6 +296,9 @@ fn find_sticker(image: &DynamicImage, spec: &Spec) -> Option<(u32, u32, u32, u32
                 let (st, sb) = bridged_run(&rows, 0.5, h * 6 / 100, h * 3 / 100);
                 Some((y0 + st, y0 + sb)).filter(|&found| shape(found))
             })
+            // A strip as grey as the shell runs on into it, and ends where the recess does:
+            // far from the rows the sticker's art spans, it is not the sticker's edge.
+            .filter(|&(ft, fb)| ft.abs_diff(t) + fb.abs_diff(b) <= h / 8)
             .collect();
         match found[..] {
             [(ta, ba), (tb, bb)] if ta.abs_diff(tb) + ba.abs_diff(bb) <= h / 50 => {

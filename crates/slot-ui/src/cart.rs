@@ -26,8 +26,12 @@ pub const fn label_panel(w: u32, h: u32) -> (u32, u32, u32, u32) {
 }
 
 pub const LABEL_WELL: [u8; 3] = [0x8d, 0x8d, 0x90];
-/// Stickers have rounded corners, like the printed ones.
-const LABEL_RADIUS: f32 = 6.0;
+/// Stickers have rounded corners, like the printed ones: each console's as round as its real
+/// stickers', measured on LaunchBox cart photos. The GBA's are the roundest.
+const GBA_LABEL_RADIUS: f32 = 11.0;
+const GB_LABEL_RADIUS: f32 = 5.0;
+const NES_LABEL_RADIUS: f32 = 4.0;
+const SNES_LABEL_RADIUS: f32 = 9.0;
 
 pub const LABEL_X: u32 = label_panel(CART_W, CART_H).0;
 pub const LABEL_Y: u32 = label_panel(CART_W, CART_H).1;
@@ -72,7 +76,7 @@ struct Spec {
     label: (u32, u32, u32, u32),
     /// The sticker wraps over the cart's top edge: square at the top, rounded below.
     square_top: bool,
-    /// The sticker's corner radius, concentric with its well's.
+    /// The sticker's corner radius, as round as the real ones.
     radius: f32,
     mask: &'static [u8],
     mould: Mould,
@@ -150,8 +154,11 @@ fn spec(mould: Mould) -> Spec {
         square_top,
         // The PAL/SFC sticker sits in a deep well with big round corners (Roy's photo).
         radius: match mould {
+            Mould::Gba => GBA_LABEL_RADIUS,
+            Mould::Notched | Mould::Rounded => GB_LABEL_RADIUS,
+            Mould::Nes => NES_LABEL_RADIUS,
+            Mould::SnesNtsc => SNES_LABEL_RADIUS,
             Mould::SnesPal => 10.0,
-            _ => LABEL_RADIUS,
         },
         mask: mould_mask(mould),
         mould,
