@@ -11,9 +11,9 @@ const OPEN_MS: f32 = crate::core_picker::OPEN_MS as f32;
 const CLOSE_MS: f32 = crate::core_picker::CLOSE_MS as f32;
 
 /// The colours offered, in the order they sit along the row: each one a real cart's or
-/// console's plastic, named after it (Roy: the real colours, Pokémon Red's red).
+/// console's plastic (Roy: the real colours, Pokémon Red's red), with a Nintendo name.
 pub const PALETTE: [(&str, [u8; 3]); 23] = [
-    ("Made in Wario White", [0xec, 0xee, 0xe8]),
+    ("Famicom White", [0xec, 0xee, 0xe8]),
     ("Super Famicom Grey", [0xc6, 0xc6, 0xc9]),
     ("Pokémon Silver", [0xa9, 0xaa, 0xa7]),
     ("Game Boy Grey", [0x9a, 0x97, 0x8f]),
@@ -22,16 +22,16 @@ pub const PALETTE: [(&str, [u8; 3]); 23] = [
     ("Advance Charcoal", [0x35, 0x35, 0x3a]),
     ("Zelda Black", [0x26, 0x26, 0x2a]),
     ("Pokémon Red", [0xc0, 0x28, 0x2c]),
-    ("Drill Dozer Red", [0xa9, 0x51, 0x3b]),
+    ("Donkey Kong Brown", [0xa9, 0x51, 0x3b]),
     ("Pokémon FireRed", [0xd8, 0x52, 0x24]),
-    ("Chee-Chai Alien Orange", [0xf0, 0xa9, 0x5e]),
+    ("Daisy Orange", [0xf0, 0xa9, 0x5e]),
     ("Pokémon Yellow", [0xe9, 0xa8, 0x26]),
     ("Zelda Gold", [0xc9, 0xa2, 0x3f]),
     ("Pokémon Gold", [0xb3, 0x8b, 0x3a]),
     ("Pokémon LeafGreen", [0x63, 0xb0, 0x44]),
     ("Pokémon Emerald", [0x24, 0x9c, 0x60]),
     ("Yoshi Green", [0x2f, 0x8f, 0x4e]),
-    ("Command Master Turquoise", [0x1f, 0x9f, 0xb6]),
+    ("Zero Suit Turquoise", [0x1f, 0x9f, 0xb6]),
     ("Pokémon Crystal", [0x86, 0xb9, 0xbf]),
     ("Pokémon Sapphire", [0x2f, 0x5c, 0xc0]),
     ("Pokémon Blue", [0x2b, 0x3a, 0x88]),
