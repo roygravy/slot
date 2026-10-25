@@ -81,8 +81,9 @@ const PLAY_HOLD_MS: Millis = 500;
 
 const SHUTDOWN_SHOW_MS: Millis = 250;
 
-/// Asleep this long, saves on the card and Wi-Fi let go, the console sleeps deep.
-const DEEP_SLEEP_AFTER_MS: Millis = 2_500;
+/// Asleep this long, saves on the card and Wi-Fi let go, the console sleeps deep; the
+/// green light then blinks out over two more seconds.
+const DEEP_SLEEP_AFTER_MS: Millis = 500;
 
 /// Just back from the deep sleep: the press that woke it may still arrive as input.
 const WAKE_QUIET_MS: Millis = 1_500;

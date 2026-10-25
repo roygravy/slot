@@ -30,6 +30,16 @@ const KERNEL_LINES: usize = 40;
 
 const SLEEP_LOG: &str = "deep-sleep.log";
 
+/// The green light going out: three slow blinks, each a little shorter on.
+const SLEEP_BLINKS: [(bool, u64); 6] = [
+    (false, 300),
+    (true, 500),
+    (false, 300),
+    (true, 350),
+    (false, 300),
+    (true, 200),
+];
+
 pub fn uptime_seconds(s: &str) -> Option<String> {
     let first = s.split_whitespace().next()?;
     if !first.chars().all(|c| c.is_ascii_digit() || c == '.') {
@@ -172,6 +182,37 @@ impl DevicePlatform {
             let _ = writeln!(f, "{} {line}", self.now());
             let _ = f.sync_all();
         }
+    }
+
+    /// Falling asleep, the green light breathes out in slow blinks; asleep, the red one
+    /// stays on where the power chip keeps it lit.
+    fn fall_asleep_led(&self) {
+        let Some(psy) = &self.battery else {
+            return;
+        };
+        let (green, red) = (psy.join("work_led"), psy.join("lowpwr_led"));
+        self.sleep_log(&format!(
+            "leds work_led [{}] lowpwr_led [{}]",
+            fs::read_to_string(&green).unwrap_or_default().trim(),
+            fs::read_to_string(&red).unwrap_or_default().trim()
+        ));
+        let _ = fs::write(&red, "0");
+        for (on, ms) in SLEEP_BLINKS {
+            let _ = fs::write(&green, if on { "1" } else { "0" });
+            std::thread::sleep(Duration::from_millis(ms));
+        }
+        let _ = fs::write(&red, "1");
+    }
+
+    /// Awake again: the light led.sh last chose, green unless the battery is low.
+    fn awake_led(&self) {
+        let Some(psy) = &self.battery else {
+            return;
+        };
+        let low = fs::read_to_string(Path::new(RUN_DIR).join("slot-led.state"))
+            .is_ok_and(|s| s.trim() == "red");
+        let _ = fs::write(psy.join("work_led"), if low { "0" } else { "1" });
+        let _ = fs::write(psy.join("lowpwr_led"), if low { "1" } else { "0" });
     }
 
     /// Percent and voltage, for the sleep log: a percent alone hides an overnight drain.
@@ -659,6 +700,7 @@ impl Platform for DevicePlatform {
         }
         let before = self.battery_line();
         let _ = Command::new("sync").status();
+        self.fall_asleep_led();
         let (wall, mono) = (SystemTime::now(), Instant::now());
         let wrote = fs::write(power.join("state"), "mem");
         let awake = mono.elapsed();
@@ -669,6 +711,7 @@ impl Platform for DevicePlatform {
         for (dir, soft) in &radios {
             let _ = fs::write(dir.join("soft"), soft);
         }
+        self.awake_led();
         let irq = fs::read_to_string(power.join("pm_wakeup_irq")).unwrap_or_default();
         match wrote {
             Ok(()) => {
