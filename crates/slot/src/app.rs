@@ -5558,16 +5558,39 @@ impl App {
         }
     }
 
+    /// Home Wi-Fi on and a network joined: labels can be looked up.
+    fn online(&self) -> bool {
+        self.home_wifi_on() && self.home_connected()
+    }
+
+    /// Why a label can't be looked up: Wi-Fi is off, or on but not connected yet.
+    fn offline_toast(&self) -> Toast {
+        if self.home_wifi_on() {
+            Toast::NoConnection
+        } else {
+            Toast::TurnOnWifi
+        }
+    }
+
+    /// A lookup that failed: for want of a connection when it dropped meanwhile.
+    fn failed_toast(&self) -> Toast {
+        if self.online() {
+            Toast::LabelFailed
+        } else {
+            self.offline_toast()
+        }
+    }
+
     /// The label tab's versions are looked up online, off the frame loop.
     fn ask_versions(&mut self, rom: &Path) {
         let cart = self.shelf().carts.iter().find(|c| c.rom == rom).cloned();
         match cart {
-            Some(mut cart) if self.home_wifi_on() => {
+            Some(mut cart) if self.online() => {
                 cart.label = self.label_was.clone();
                 self.versions_ask = Some((cart, None));
             }
             _ => {
-                self.hud.toast(Toast::TurnOnWifi, self.now());
+                self.hud.toast(self.offline_toast(), self.now());
                 if let Some(picker) = &mut self.shell_picker {
                     picker.found(None);
                 }
@@ -5590,8 +5613,8 @@ impl App {
         else {
             return;
         };
-        if !self.home_wifi_on() {
-            self.hud.toast(Toast::TurnOnWifi, self.now());
+        if !self.online() {
+            self.hud.toast(self.offline_toast(), self.now());
             return;
         }
         self.label_search = Some(LabelSearch::open(
@@ -5648,7 +5671,7 @@ impl App {
     pub fn search_found(&mut self, asked: u64, games: Option<Vec<slot_labels::Game>>) {
         if let Some(search) = &mut self.label_search {
             if !search.found(asked, games) {
-                self.hud.toast(Toast::LabelFailed, self.now());
+                self.hud.toast(self.failed_toast(), self.now());
             }
         }
     }
@@ -5736,7 +5759,7 @@ impl App {
         picker.found(count);
         match count {
             Some(0) => self.hud.toast(Toast::NoLabelFound, self.now()),
-            None => self.hud.toast(Toast::LabelFailed, self.now()),
+            None => self.hud.toast(self.failed_toast(), self.now()),
             _ => {}
         }
         self.version_all = found.unwrap_or_default();
@@ -5853,7 +5876,7 @@ impl App {
         let toast = match found {
             Some(true) => Toast::LabelDownloaded,
             Some(false) => Toast::NoLabelFound,
-            None => Toast::LabelFailed,
+            None => self.failed_toast(),
         };
         self.hud.toast(toast, self.now());
         if let Some(picker) = &mut self.shell_picker {

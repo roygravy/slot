@@ -21,10 +21,12 @@ pub(crate) struct Labels {
 
 impl Labels {
     pub fn spawn(root: PathBuf, carts: Vec<Cart>) -> Self {
-        // A label the player took off stays off.
+        // A label the player took off stays off, and a game looked for once and not found
+        // is not looked for again at every start; Y in the studio still searches for it.
         let carts: Vec<Cart> = carts
             .into_iter()
             .filter(|c| !slot_store::label_removed(&root, c.platform, &c.stem))
+            .filter(|c| !slot_store::has_no_label(&root, c.platform, &c.stem))
             .collect();
         let (out, ready) = mpsc::sync_channel(1);
         let (stop, stopped) = mpsc::channel();

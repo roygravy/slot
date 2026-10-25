@@ -32,11 +32,12 @@ pub enum Toast {
     NoLabelFound,
     LabelFailed,
     TurnOnWifi,
+    NoConnection,
     Palette(GbPalette),
 }
 
 impl Toast {
-    const FIXED: [Toast; 24] = [
+    const FIXED: [Toast; 25] = [
         Toast::StateSaved,
         Toast::StateLoaded,
         Toast::NeedsGpsp,
@@ -61,6 +62,7 @@ impl Toast {
         Toast::NoLabelFound,
         Toast::LabelFailed,
         Toast::TurnOnWifi,
+        Toast::NoConnection,
     ];
 
     pub fn all() -> Vec<Toast> {
@@ -114,6 +116,7 @@ impl Toast {
             Toast::NoLabelFound => "No Label Found",
             Toast::LabelFailed => "Download Failed",
             Toast::TurnOnWifi => "Turn On Home Wi-Fi",
+            Toast::NoConnection => "No Connection",
             Toast::Palette(p) => p.label(),
         }
     }
