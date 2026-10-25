@@ -184,24 +184,17 @@ impl DevicePlatform {
         }
     }
 
-    /// Falling asleep, the green light breathes out in slow blinks; asleep, the red one
-    /// stays on where the power chip keeps it lit.
+    /// Falling asleep, the green light breathes out in slow blinks.
     fn fall_asleep_led(&self) {
         let Some(psy) = &self.battery else {
             return;
         };
-        let (green, red) = (psy.join("work_led"), psy.join("lowpwr_led"));
-        self.sleep_log(&format!(
-            "leds work_led [{}] lowpwr_led [{}]",
-            fs::read_to_string(&green).unwrap_or_default().trim(),
-            fs::read_to_string(&red).unwrap_or_default().trim()
-        ));
-        let _ = fs::write(&red, "0");
+        let green = psy.join("work_led");
+        let _ = fs::write(psy.join("lowpwr_led"), "0");
         for (on, ms) in SLEEP_BLINKS {
             let _ = fs::write(&green, if on { "1" } else { "0" });
             std::thread::sleep(Duration::from_millis(ms));
         }
-        let _ = fs::write(&red, "1");
     }
 
     /// Awake again: the light led.sh last chose, green unless the battery is low.

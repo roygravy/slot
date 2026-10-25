@@ -6,6 +6,7 @@ Everything since slot. x GRAVY v1.0.2.
 
 ### New
 
+- **Deep sleep**: a tap on POWER now really puts the console to sleep (suspend to RAM). The green light blinks out as it falls asleep, POWER wakes it straight back into your game. Overnight it uses about half a percent of battery an hour.
 - **Home Wi-Fi** (ported from pvaibhav/slot): join your home network from Settings -> General -> Home Wi-Fi. Networks are listed in `Config/wifi.toml`.
 - **Network** has its own row in the menu, with Home Wi-Fi on/off and the network you are connected to.
 - **Link over the home network**: with Home Wi-Fi connected, two consoles running the same game find each other on the network. Without it the direct link works as before. The link screen shows a HOME WI-FI or DIRECT LINK plate.
