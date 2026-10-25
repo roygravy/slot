@@ -298,7 +298,10 @@ impl ShellPicker {
 
     /// The Super Game Boy cart: its model is all there is to pick.
     pub fn with_sgb(mut self, now: slot_ui::SgbModel) -> Self {
-        let picked = SGB_MODELS.iter().position(|m| *m == now).unwrap_or(SGB_ORIGINAL);
+        let picked = SGB_MODELS
+            .iter()
+            .position(|m| *m == now)
+            .unwrap_or(SGB_ORIGINAL);
         self.model = Some((picked, SGB_ORIGINAL));
         self.sgb = true;
         self.row = Row::Model;
@@ -449,7 +452,9 @@ impl ShellPicker {
 
     /// For an SNES cart, whether the shape picked is the PAL cart.
     pub fn snes_pal(&self) -> Option<bool> {
-        let (picked, _) = self.model.filter(|_| !self.sgb && self.shapes == SNES_MODELS)?;
+        let (picked, _) = self
+            .model
+            .filter(|_| !self.sgb && self.shapes == SNES_MODELS)?;
         Some(SNES_MODELS[picked] == Outline::Rounded)
     }
 

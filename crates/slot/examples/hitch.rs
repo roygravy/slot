@@ -174,7 +174,10 @@ fn main() {
         frontend.compose(&mut compositor);
         let t3 = t0.elapsed();
         if t3 > Duration::from_millis(8) {
-            eprintln!("HITCH frame {} advance {:?} emu {:?} total {:?}", frame, t1, t2, t3);
+            eprintln!(
+                "HITCH frame {} advance {:?} emu {:?} total {:?}",
+                frame, t1, t2, t3
+            );
         }
         let mut pixels = compositor.read_frame();
         panel(&mut pixels, frontend.app(), lit);

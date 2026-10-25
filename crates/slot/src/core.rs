@@ -449,7 +449,11 @@ pub fn sgb_borders_on_card(root: &Path, two: bool) -> Vec<u8> {
 fn sgb_border_for(root: &Path, choice: u8, two: bool) -> (Vec<u8>, bool) {
     let mut borders = sgb_own_borders(root, two);
     let mut own = |n: u8| borders.get_mut(usize::from(n) - 1).and_then(Option::take);
-    let gravy = if two { SGB2_BORDER_GRAVY } else { SGB_BORDER_GRAVY };
+    let gravy = if two {
+        SGB2_BORDER_GRAVY
+    } else {
+        SGB_BORDER_GRAVY
+    };
     match choice {
         1 => (gravy.to_vec(), true),
         // No border: every tile blank, every colour black.
@@ -494,7 +498,11 @@ pub fn set_sgb_border(root: &Path, choice: u8, two: bool, turn: u32) -> (&'stati
 pub fn sgb_options(root: &Path, core: &mut dyn RetroCore, choice: u8, two: bool, gbc: bool) {
     let (w, h) = Platform::Snes.canvas();
     core.set_canvas(w, h);
-    let model = if gbc { "Super Game Boy Color" } else { "Super Game Boy" };
+    let model = if gbc {
+        "Super Game Boy Color"
+    } else {
+        "Super Game Boy"
+    };
     core.set_option("mgba_gb_model", model);
     core.set_option("mgba_sgb_borders", "ON");
     core.set_option("mgba_gb_colors_preset", "0");

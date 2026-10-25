@@ -25,13 +25,13 @@ use slot_ui::{
 use crate::app::{App, LinkRow, Phase};
 use crate::build_info::Build;
 use crate::cart_faces::CartFaces;
-use slot_ui::SgbModel;
 use crate::face_builder::FaceBuilder;
 use crate::label_cache::{self, Rebuild};
 use crate::link_art_builder::LinkArtBuilder;
 use crate::link_screen::{LinkSprites, Sprite};
 use crate::link_start::{LinkFail, LinkStep};
 use crate::session::Session;
+use slot_ui::SgbModel;
 
 const DOZE_TIMEOUT: Duration = Duration::from_secs(300);
 
@@ -391,13 +391,12 @@ impl Frontend {
         });
         self.session.app_mut().set_cart_backings(boards);
         let slot = {
-            let mut upload =
-                |bytes: &[u8]| {
-                    // The Super Game Boy's band stands taller than the console's.
-                    let h = bytes.len() as u32 / (slot_ui::SLOT_W * 4);
-                    debug_assert!(h == slot_ui::SLOT_H || h == slot_ui::SGB_BAND_H);
-                    compositor.create_texture(slot_ui::SLOT_W, h, bytes)
-                };
+            let mut upload = |bytes: &[u8]| {
+                // The Super Game Boy's band stands taller than the console's.
+                let h = bytes.len() as u32 / (slot_ui::SLOT_W * 4);
+                debug_assert!(h == slot_ui::SLOT_H || h == slot_ui::SGB_BAND_H);
+                compositor.create_texture(slot_ui::SLOT_W, h, bytes)
+            };
             [
                 (upload(slot_back()), upload(slot_front())),
                 (upload(slot_back_light()), upload(slot_front_light())),
@@ -425,10 +424,22 @@ impl Frontend {
                     upload(slot_ui::slot_tv(false, false, true)),
                     upload(slot_ui::slot_tv(false, true, true)),
                 ),
-                (upload(slot_ui::sgb_band(SgbModel::Ntsc, false)), upload(slot_ui::sgb_band(SgbModel::Ntsc, true))),
-                (upload(slot_ui::sgb_band(SgbModel::Pal, false)), upload(slot_ui::sgb_band(SgbModel::Pal, true))),
-                (upload(slot_ui::sgb_band(SgbModel::Sfc, false)), upload(slot_ui::sgb_band(SgbModel::Sfc, true))),
-                (upload(slot_ui::sgb_band(SgbModel::Sgb2, false)), upload(slot_ui::sgb_band(SgbModel::Sgb2, true))),
+                (
+                    upload(slot_ui::sgb_band(SgbModel::Ntsc, false)),
+                    upload(slot_ui::sgb_band(SgbModel::Ntsc, true)),
+                ),
+                (
+                    upload(slot_ui::sgb_band(SgbModel::Pal, false)),
+                    upload(slot_ui::sgb_band(SgbModel::Pal, true)),
+                ),
+                (
+                    upload(slot_ui::sgb_band(SgbModel::Sfc, false)),
+                    upload(slot_ui::sgb_band(SgbModel::Sfc, true)),
+                ),
+                (
+                    upload(slot_ui::sgb_band(SgbModel::Sgb2, false)),
+                    upload(slot_ui::sgb_band(SgbModel::Sgb2, true)),
+                ),
             ]
         };
         let nes_lids = [false, true].map(|light| {

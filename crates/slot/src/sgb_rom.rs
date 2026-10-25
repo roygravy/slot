@@ -2,8 +2,8 @@
 //! Boy (or Super Game Boy 2) SNES program in BIOS: no Nintendo art ships with slot., only
 //! where each border sits in that program.
 //!
-//! Each border is three pieces: its tiles and its tile map, packed with the SGB's own
-//! compression, and its colours, stored as they are. They are turned into the layout mGBA takes
+//! Each border is three pieces: its tiles and its tile map (on the SGB packed with its own
+//! compression, on the SGB 2 stored as they are) and its colours. They are turned into the layout mGBA takes
 //! for a border: 0x2000 bytes of tiles, then the map, with palettes 4 to 7 at 0x800 of it.
 
 use std::path::Path;
@@ -15,7 +15,8 @@ const TILES_LEN: usize = 0x2000;
 const MAP_LEN: usize = 0x700;
 
 /// One border in the SGB program: its map, its tiles (with their unpacked sizes, which show
-/// the dump is the one the table was made from) and its colours, as file offsets.
+/// the dump is the one the table was made from; no size: stored as they are) and its colours,
+/// as file offsets.
 struct Piece {
     map: usize,
     map_len: usize,
@@ -24,7 +25,13 @@ struct Piece {
     colours: usize,
 }
 
-const fn piece(map: usize, map_len: usize, tiles: usize, tiles_len: usize, colours: usize) -> Piece {
+const fn piece(
+    map: usize,
+    map_len: usize,
+    tiles: usize,
+    tiles_len: usize,
+    colours: usize,
+) -> Piece {
     Piece {
         map,
         map_len,
@@ -47,12 +54,26 @@ const SGB1: [Piece; 8] = [
     piece(0x1e3cd, 0x800, 0x1e90a, 0xe00, 0x1e70a),
 ];
 
+/// The Super Game Boy 2 (title "Super GAMEBOY2"): Classic, Circuit, Beach, Stone, Gears,
+/// Jungle, Dolphins, Temple.
+const SGB2: [Piece; 8] = [
+    piece(0x51800, 0, 0x5c2c0, 0, 0x56d80),
+    piece(0x52000, 0, 0x59100, 0, 0x57000),
+    piece(0x67000, 0, 0x63000, 0, 0x67800),
+    piece(0x52800, 0, 0x4e000, 0, 0x57400),
+    piece(0x6d000, 0, 0x68000, 0, 0x67a00),
+    piece(0x53000, 0, 0x48000, 0, 0x57a00),
+    piece(0x53800, 0, 0x5ccc0, 0, 0x57c00),
+    piece(0x54800, 0, 0x50000, 0, 0x57800),
+];
+
 /// Unpack one piece of the SGB program. A header of four words: the escape word, the packed
 /// length, one unused, the first word out. Then words, each copied out, but for the escape
 /// word: a word offset into what is out already and a count of words to repeat from there (no
 /// count: the escape word itself).
 pub fn unpack(rom: &[u8], at: usize) -> Option<Vec<u8>> {
-    let word = |o: usize| -> Option<u16> { Some(u16::from_le_bytes([*rom.get(o)?, *rom.get(o + 1)?])) };
+    let word =
+        |o: usize| -> Option<u16> { Some(u16::from_le_bytes([*rom.get(o)?, *rom.get(o + 1)?])) };
     let escape = word(at)?;
     let len = usize::from(word(at + 2)?);
     let mut out = vec![*rom.get(at + 6)?, *rom.get(at + 7)?];
@@ -84,7 +105,11 @@ pub fn unpack(rom: &[u8], at: usize) -> Option<Vec<u8>> {
 /// Which Super Game Boy a SNES program is, from the title in its header: 1, 2 or none. A
 /// copier's 512-byte header in front is skipped.
 fn which(rom: &[u8]) -> Option<(u8, &[u8])> {
-    let rom = if rom.len() % 0x8000 == 512 { &rom[512..] } else { rom };
+    let rom = if rom.len() % 0x8000 == 512 {
+        &rom[512..]
+    } else {
+        rom
+    };
     match rom.get(0x7fc0..0x7fd5)? {
         b"Super GAMEBOY        " => Some((1, rom)),
         b"Super GAMEBOY2       " => Some((2, rom)),
@@ -92,19 +117,44 @@ fn which(rom: &[u8]) -> Option<(u8, &[u8])> {
     }
 }
 
-/// Border `n` (1 to 8) out of a Super Game Boy program, in mGBA's layout.
+/// Border `n` (1 to 8) out of a Super Game Boy program, in mGBA's layout. mGBA has room for
+/// 256 tiles, so the tiles the map uses are renumbered from 0 in the order it uses them.
 pub fn border(rom: &[u8], n: u8) -> Option<Vec<u8>> {
     let (which, rom) = which(rom)?;
     let table: &[Piece] = match which {
         1 => &SGB1,
-        _ => &[],
+        _ => &SGB2,
     };
     let p = table.get(usize::from(n).checked_sub(1)?)?;
-    let tiles = unpack(rom, p.tiles).filter(|t| t.len() == p.tiles_len && t.len() <= TILES_LEN)?;
-    let map = unpack(rom, p.map).filter(|m| m.len() == p.map_len)?;
+    let (tiles, mut map) = if p.map_len == 0 {
+        (
+            rom.get(p.tiles..)?.to_vec(),
+            rom.get(p.map..p.map + MAP_LEN)?.to_vec(),
+        )
+    } else {
+        let tiles = unpack(rom, p.tiles).filter(|t| t.len() == p.tiles_len)?;
+        (tiles, unpack(rom, p.map).filter(|m| m.len() == p.map_len)?)
+    };
     let colours = rom.get(p.colours + 4 * 32..p.colours + 8 * 32)?;
     let mut out = vec![0; BORDER_LEN];
-    out[..tiles.len()].copy_from_slice(&tiles);
+    let mut used: Vec<usize> = Vec::new();
+    for e in map[..MAP_LEN].chunks_exact_mut(2) {
+        let entry = u16::from_le_bytes([e[0], e[1]]);
+        let tile = usize::from(entry & 0x3ff);
+        let new = match used.iter().position(|&t| t == tile) {
+            Some(i) => i,
+            None => {
+                used.push(tile);
+                used.len() - 1
+            }
+        };
+        if new >= TILES_LEN / 32 {
+            return None;
+        }
+        out[new * 32..new * 32 + 32].copy_from_slice(tiles.get(tile * 32..tile * 32 + 32)?);
+        let entry = (entry & !0x3ff) | new as u16;
+        e.copy_from_slice(&entry.to_le_bytes());
+    }
     out[TILES_LEN..TILES_LEN + MAP_LEN].copy_from_slice(&map[..MAP_LEN]);
     out[TILES_LEN + 0x800..TILES_LEN + 0x880].copy_from_slice(colours);
     Some(out)
@@ -138,7 +188,10 @@ mod tests {
         rom.extend([0xef, 0xbe, 0, 0, 2]); // repeat two words from the start
         rom.extend([0xef, 0xbe, 0, 0, 0]); // the escape word itself
         let out = unpack(&rom, 0).unwrap();
-        assert_eq!(out, [0x11, 0x11, 0x22, 0x22, 0x11, 0x11, 0x22, 0x22, 0xef, 0xbe]);
+        assert_eq!(
+            out,
+            [0x11, 0x11, 0x22, 0x22, 0x11, 0x11, 0x22, 0x22, 0xef, 0xbe]
+        );
     }
 
     #[test]

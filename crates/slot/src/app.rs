@@ -744,7 +744,11 @@ impl App {
                 self.shelf_mut().select(i);
                 // A Game Boy game left in the Super Game Boy goes back into it.
                 self.sgb = self.state.cart_sgb
-                    && self.shelf().carts.get(i).is_some_and(|c| c.platform == Platform::Gb)
+                    && self
+                        .shelf()
+                        .carts
+                        .get(i)
+                        .is_some_and(|c| c.platform == Platform::Gb)
                     && self.carts().any(Cart::is_sgb);
                 self.insert(false);
                 if let Phase::Inserting { resumed, t, .. } = &mut self.phase {
@@ -1975,7 +1979,9 @@ impl App {
         if come > 0.0 {
             let from = out.len();
             slot_ui::set_sgb_band(true);
-            self.shelves[gb_shelf].1.draw_row(canvas, None, 0.0, 0.0, 1.0, out);
+            self.shelves[gb_shelf]
+                .1
+                .draw_row(canvas, None, 0.0, 0.0, 1.0, out);
             let drop = -(1.0 - come) * canvas.h;
             for d in &mut out[from..] {
                 zoom_draw(d, 1.0, 0.0, drop, 1.0);
@@ -4115,7 +4121,10 @@ impl App {
             }
         }
         let sgb = cart.is_some() && self.sgb;
-        if self.state.cart == cart && self.state.cart_platform == platform && self.state.cart_sgb == sgb {
+        if self.state.cart == cart
+            && self.state.cart_platform == platform
+            && self.state.cart_sgb == sgb
+        {
             return;
         }
         self.state.cart = cart;
@@ -7111,14 +7120,45 @@ fn zoom_draw(d: &mut Draw, k: f32, dx: f32, dy: f32, alpha: f32) {
         *h *= k;
     };
     match d {
-        Draw::Rect { x, y, w, h, colour } | Draw::Tint { x, y, w, h, colour, .. } => {
+        Draw::Rect { x, y, w, h, colour }
+        | Draw::Tint {
+            x, y, w, h, colour, ..
+        } => {
             place(x, y, w, h);
             colour[3] *= alpha;
         }
-        Draw::Tex { x, y, w, h, alpha: a, .. }
-        | Draw::Part { x, y, w, h, alpha: a, .. }
-        | Draw::Turned { x, y, w, h, alpha: a, .. }
-        | Draw::Light { x, y, w, h, alpha: a, .. } => {
+        Draw::Tex {
+            x,
+            y,
+            w,
+            h,
+            alpha: a,
+            ..
+        }
+        | Draw::Part {
+            x,
+            y,
+            w,
+            h,
+            alpha: a,
+            ..
+        }
+        | Draw::Turned {
+            x,
+            y,
+            w,
+            h,
+            alpha: a,
+            ..
+        }
+        | Draw::Light {
+            x,
+            y,
+            w,
+            h,
+            alpha: a,
+            ..
+        } => {
             place(x, y, w, h);
             *a *= alpha;
         }

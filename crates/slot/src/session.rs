@@ -348,8 +348,7 @@ impl Session {
         }
         if self.app.take_sgb_border_changed() && self.app.sgb_playing() {
             self.sgb_turn += 1;
-            let (key, value) =
-                crate::core::set_sgb_border(
+            let (key, value) = crate::core::set_sgb_border(
                 &self.root,
                 self.app.sgb_border(),
                 self.app.sgb_two(),
@@ -496,9 +495,7 @@ impl Session {
     }
 
     fn held(&self) -> bool {
-        self.app.game_menu_open()
-            || self.app.in_game_menu().is_some()
-            || self.app.shutting_down()
+        self.app.game_menu_open() || self.app.in_game_menu().is_some() || self.app.shutting_down()
     }
 
     fn dozing(&self) -> bool {
@@ -630,25 +627,31 @@ impl Session {
             .filter(|_| !sgb);
         self.app.set_palette_live(palette.is_some());
         self.app.set_palette_capable(
-            !sgb && crate::core::palette_for(Some(slot_store::GbPalette::DEFAULT), platform, &rom, player)
-                .is_some(),
+            !sgb && crate::core::palette_for(
+                Some(slot_store::GbPalette::DEFAULT),
+                platform,
+                &rom,
+                player,
+            )
+            .is_some(),
         );
         // The core opens on the emulator's thread, so the cart's insert keeps moving meanwhile.
         let root = self.root.clone();
         let ghosting = crate::core::lcd_ghosting_option(core, self.app.lcd_ghosting_for(platform));
         // The Super Game Boy's picture takes the SNES's look.
         let tv = crate::core::tv_options(core, self.app.tv_look(self.app.playing_platform()));
-        let sgb_setup = sgb.then(|| (self.app.sgb_border(), self.app.sgb_two(), platform == Platform::Gbc));
+        let sgb_setup = sgb.then(|| {
+            (
+                self.app.sgb_border(),
+                self.app.sgb_two(),
+                platform == Platform::Gbc,
+            )
+        });
         let open = Box::new(move || {
             let mut opened = open_core(
-                &root,
-                core,
-                platform,
-                serial,
+                &root, core, platform, serial,
                 // slot.'s own screen looks take the place of the cores' colour correction.
-                false,
-                palette,
-                player,
+                false, palette, player,
             );
             if let Some((key, value)) = ghosting {
                 opened.core.set_option(key, value);
@@ -661,9 +664,12 @@ impl Session {
             }
             opened.core
         });
-        self.app.set_named_core(crate::core::core_found(&self.root, core));
+        self.app
+            .set_named_core(crate::core::core_found(&self.root, core));
         launch("core opened");
-        let sav = self.app.card_read("save", persist::read_sav(&self.root, platform, stem));
+        let sav = self
+            .app
+            .card_read("save", persist::read_sav(&self.root, platform, stem));
         let sav_unread = sav.is_none();
         let sav = sav.flatten();
         launch("save read");

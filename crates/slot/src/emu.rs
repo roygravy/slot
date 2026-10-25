@@ -138,7 +138,16 @@ impl EmuHandle {
         resume: Option<Vec<u8>>,
     ) -> Self {
         let (rumble, link) = (core.rumble(), core.net());
-        Self::spawn_as(Box::new(move || core), rumble, link, rom, ring, sav, resume, None)
+        Self::spawn_as(
+            Box::new(move || core),
+            rumble,
+            link,
+            rom,
+            ring,
+            sav,
+            resume,
+            None,
+        )
     }
 
     pub fn spawn_linked(
@@ -150,7 +159,16 @@ impl EmuHandle {
         player: u8,
     ) -> Self {
         let (rumble, link) = (core.rumble(), core.net());
-        Self::spawn_as(Box::new(move || core), rumble, link, rom, ring, sav, resume, Some(player))
+        Self::spawn_as(
+            Box::new(move || core),
+            rumble,
+            link,
+            rom,
+            ring,
+            sav,
+            resume,
+            Some(player),
+        )
     }
 
     /// As `spawn`, with the core opened on the emulator's own thread: reading a core in and
