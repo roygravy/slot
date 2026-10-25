@@ -251,7 +251,7 @@ pub struct SlotState {
     pub cart_platform: Option<Platform>,
     /// The cart in the slot is a Game Boy game in the Super Game Boy.
     pub cart_sgb: bool,
-    /// The Super Game Boy's border: 0 auto, 1 slot.'s, 2 none, 11-19 the SGB's own 1-9.
+    /// The Super Game Boy's border: 0 auto, 1 slot.'s, 2 none, 11-18 the SGB's own 1-8.
     pub sgb_border: u8,
     pub brightness: u8,
     pub blue_light: u8,

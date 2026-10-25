@@ -1095,8 +1095,12 @@ impl App {
             },
             QuickRow::SgbBorder => Some(match self.state.sgb_border {
                 1 => QuickValue::BorderGravy,
-                2 => QuickValue::Off,
-                n @ 11..=19 => QuickValue::ALL[QuickValue::Border1.index() + usize::from(n - 11)],
+                2 => QuickValue::BorderOff,
+                11 => QuickValue::Border1,
+                n @ 12..=18 if self.sgb_two() => {
+                    QuickValue::ALL[QuickValue::Border2Circuit.index() + usize::from(n - 12)]
+                }
+                n @ 12..=18 => QuickValue::ALL[QuickValue::Border2.index() + usize::from(n - 12)],
                 _ => QuickValue::BorderAuto,
             }),
             QuickRow::NesCable => Some(cable_value(self.state.tv_cable_nes)),
@@ -3145,8 +3149,8 @@ impl App {
     fn change_setting(&mut self, row: QuickRow, right: bool) {
         let row = self.playing_row(row);
         if row == QuickRow::SgbBorder {
-            // Auto, slot.'s, the SGB's own that are in BIOS, none, and round again.
-            let mut all = vec![0u8, 1];
+            // Auto, the SGB's own that are in BIOS, slot.'s, none, and round again.
+            let mut all = vec![0u8];
             if let Some(root) = &self.root {
                 all.extend(
                     crate::core::sgb_borders_on_card(root, self.sgb_two())
@@ -3154,7 +3158,7 @@ impl App {
                         .map(|n| 10 + n),
                 );
             }
-            all.push(2);
+            all.extend([1, 2]);
             let at = all
                 .iter()
                 .position(|b| *b == self.state.sgb_border)

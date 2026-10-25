@@ -537,7 +537,7 @@ impl QuickRow {
             }
             QuickRow::NesColors | QuickRow::Colors => "The colors a TV made of the NES's picture.",
             QuickRow::SgbBorder => {
-                "The Super Game Boy's frame. Auto: the game's own, if it has one."
+                "The Super Game Boy's frame. Auto: the game's own, else the Classic one."
             }
             QuickRow::NesScanlines | QuickRow::SnesScanlines | QuickRow::Scanlines => {
                 "A faint dark line between the picture's lines."
@@ -699,6 +699,8 @@ pub enum QuickValue {
     Pvm,
     BorderAuto,
     BorderGravy,
+    /// No border: a word on the row, not a switch, since the row goes round its borders.
+    BorderOff,
     Border1,
     Border2,
     Border3,
@@ -707,11 +709,18 @@ pub enum QuickValue {
     Border6,
     Border7,
     Border8,
-    Border9,
+    /// The Super Game Boy 2's own borders after its Classic (Border1).
+    Border2Circuit,
+    Border2Beach,
+    Border2Stone,
+    Border2Gears,
+    Border2Jungle,
+    Border2Dolphins,
+    Border2Temple,
 }
 
 impl QuickValue {
-    pub const ALL: [QuickValue; 47] = [
+    pub const ALL: [QuickValue; 54] = [
         QuickValue::Speed2,
         QuickValue::Speed3,
         QuickValue::Speed4,
@@ -750,6 +759,7 @@ impl QuickValue {
         QuickValue::Pvm,
         QuickValue::BorderAuto,
         QuickValue::BorderGravy,
+        QuickValue::BorderOff,
         QuickValue::Border1,
         QuickValue::Border2,
         QuickValue::Border3,
@@ -758,7 +768,13 @@ impl QuickValue {
         QuickValue::Border6,
         QuickValue::Border7,
         QuickValue::Border8,
-        QuickValue::Border9,
+        QuickValue::Border2Circuit,
+        QuickValue::Border2Beach,
+        QuickValue::Border2Stone,
+        QuickValue::Border2Gears,
+        QuickValue::Border2Jungle,
+        QuickValue::Border2Dolphins,
+        QuickValue::Border2Temple,
     ];
 
     pub fn index(self) -> usize {
@@ -805,15 +821,22 @@ impl QuickValue {
             QuickValue::Pvm => "PVM",
             QuickValue::BorderAuto => "Auto",
             QuickValue::BorderGravy => "GRAVY",
-            QuickValue::Border1 => "1",
-            QuickValue::Border2 => "2",
-            QuickValue::Border3 => "3",
-            QuickValue::Border4 => "4",
-            QuickValue::Border5 => "5",
-            QuickValue::Border6 => "6",
-            QuickValue::Border7 => "7",
-            QuickValue::Border8 => "8",
-            QuickValue::Border9 => "9",
+            QuickValue::BorderOff => "Off",
+            QuickValue::Border1 => "Classic",
+            QuickValue::Border2 => "Windows",
+            QuickValue::Border3 => "Gravel",
+            QuickValue::Border4 => "Forest",
+            QuickValue::Border5 => "Theatre",
+            QuickValue::Border6 => "Cats",
+            QuickValue::Border7 => "Brick",
+            QuickValue::Border8 => "Shapes",
+            QuickValue::Border2Circuit => "Circuit",
+            QuickValue::Border2Beach => "Beach",
+            QuickValue::Border2Stone => "Stone",
+            QuickValue::Border2Gears => "Gears",
+            QuickValue::Border2Jungle => "Jungle",
+            QuickValue::Border2Dolphins => "Dolphins",
+            QuickValue::Border2Temple => "Temple",
         }
     }
 
