@@ -337,8 +337,6 @@ pub struct App {
     version_captions: Vec<(TexId, u32)>,
     /// Every version found, of which those above are the ones that fit the cart's shape.
     version_all: Vec<(std::path::PathBuf, (TexId, u32, u32), (TexId, u32))>,
-    /// The buttons' pages were opened by MENU held on the shelf, so B goes back there.
-    buttons_from_shelf: bool,
     /// The label the studio's cart wore when it opened, put back if a version is not kept.
     label_was: Option<std::path::PathBuf>,
     core_board_face: Option<TexId>,
@@ -432,6 +430,8 @@ pub struct App {
     last_shot: Option<PathBuf>,
     /// START+SELECT+L+R asked for the cart to be reset.
     reset_pending: bool,
+    /// SELECT + B switched the Game Boy's screen effects off, until one comes back on.
+    effects_off: bool,
     /// The Screenshots page, its fixed faces, and the pictures loaded for it.
     shots: Option<crate::shots::ShotView>,
     shot_faces: Option<slot_ui::ShotFaces>,
@@ -552,7 +552,6 @@ impl App {
             version_thumbs: Vec::new(),
             version_captions: Vec::new(),
             version_all: Vec::new(),
-            buttons_from_shelf: false,
             label_was: None,
             core_board_face: None,
             core_interior_face: None,
@@ -630,6 +629,7 @@ impl App {
             shot_flash: None,
             last_shot: None,
             reset_pending: false,
+            effects_off: false,
             shots: None,
             shot_faces: None,
             shot_pics: Vec::new(),
@@ -2250,9 +2250,15 @@ impl App {
         }
     }
 
-    /// Every screen effect of a Game Boy off (SELECT + B, or each one in the menu): the
-    /// emulator's own picture, without slot.'s dimming, saturation or panel tone either.
+    /// SELECT + B switched every screen effect of a Game Boy off: the emulator's own picture,
+    /// without slot.'s dimming, saturation, panel tone or palette either. Switching them off
+    /// one by one in the menu leaves the rest as it is: Ghosting off keeps the palette (Roy).
     pub fn screen_bare(&self) -> bool {
+        self.effects_off && self.effects_all_off()
+    }
+
+    /// Every screen effect of the playing Game Boy is off, however that came to be.
+    fn effects_all_off(&self) -> bool {
         let platform = self.playing_platform();
         !platform.tv()
             && self.screen_shader() == Shader::Off
@@ -2713,16 +2719,6 @@ impl App {
                     self.shelf_mut().hold_right(now)
                 }
                 Action::QuickMenu => self.open_quick_menu(),
-                // MENU held on the shelf: what every button does, on the shelf's page.
-                Action::Eject if self.core_picker.is_none() => {
-                    self.shelf_mut().release_hold();
-                    self.play_held = None;
-                    self.buttons_from_shelf = true;
-                    let page = slot_ui::BUTTON_PAGES.iter().position(|p| p.0 == "Shelf");
-                    self.phase = Phase::Buttons {
-                        page: page.unwrap_or(0),
-                    };
-                }
                 Action::GbaDown(Btn::A) => self.play_held = Some(now),
                 Action::GbaUp(Btn::A) => {
                     if self.play_held.take().is_some() {
@@ -2795,11 +2791,8 @@ impl App {
                         }
                     }
                     Action::GbaDown(Btn::B) | Action::QuickMenu => {
-                        self.phase = match std::mem::take(&mut self.buttons_from_shelf) {
-                            true => Phase::Shelf,
-                            false => Phase::QuickMenu {
-                                row: QuickRow::Buttons,
-                            },
+                        self.phase = Phase::QuickMenu {
+                            row: QuickRow::Buttons,
                         }
                     }
                     _ => {}
@@ -3509,6 +3502,7 @@ impl App {
         *ghosting = to & GHOSTING != 0;
         *border = to & BORDER != 0 && platform != Platform::Gba;
         self.lcd_ghosting_pending = Some(*ghosting);
+        self.effects_off = !on;
         if standard && platform == Platform::Gb && !self.state.gb_palettes {
             self.state.gb_palettes = true;
             self.state.gb_palette = GbPalette::DEFAULT;
@@ -3709,6 +3703,9 @@ impl App {
 
     pub fn update(&mut self, dt: f32) {
         self.clock += dt as f64 * 1000.0;
+        if self.effects_off && !self.effects_all_off() {
+            self.effects_off = false;
+        }
         self.keep_shots(dt);
         if self.name_pending && self.shelf_platform.face.is_some() {
             self.name_pending = false;

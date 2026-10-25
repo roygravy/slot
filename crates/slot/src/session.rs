@@ -622,10 +622,14 @@ impl Session {
         }
         launch("resume state read");
         let player = self.app.link_player();
-        let palette = crate::core::palette_for(self.app.gb_palette(), platform, &rom, player);
+        // The Super Game Boy has its own colours, SGB 1-A or the game's: no Game Boy palette,
+        // which mGBA would otherwise bring back as the picture's at a reset.
+        let palette = crate::core::palette_for(self.app.gb_palette(), platform, &rom, player)
+            .filter(|_| !sgb);
         self.app.set_palette_live(palette.is_some());
         self.app.set_palette_capable(
-            crate::core::palette_for(Some(slot_store::GbPalette::DEFAULT), platform, &rom, player).is_some(),
+            !sgb && crate::core::palette_for(Some(slot_store::GbPalette::DEFAULT), platform, &rom, player)
+                .is_some(),
         );
         // The core opens on the emulator's thread, so the cart's insert keeps moving meanwhile.
         let root = self.root.clone();
