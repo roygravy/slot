@@ -529,7 +529,9 @@ impl Session {
             );
             emu.set_rewinding(self.actually_rewinding());
             emu.set_turbo(self.app.turbo());
-            emu.set_native_xy(self.app.playing_platform() == Platform::Snes);
+            // Only an SNES game's own pad has X and Y: a Game Boy game in the Super Game Boy
+            // keeps them as turbo A and B.
+            emu.set_native_xy(self.app.core() == slot_store::Core::Snes9x);
             emu.set_rewind_recording(self.app.records_rewind());
         }
     }

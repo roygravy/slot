@@ -1686,8 +1686,10 @@ impl App {
         self.shelf().carts.iter().find(|c| c.stem == *stem)
     }
 
+    /// One game on the card: it plays at once and stays in. The Super Game Boy that stands
+    /// beside a lone Game Boy game is no game of its own, so it does not count.
     pub fn single_cart(&self) -> bool {
-        self.carts().count() == 1
+        self.carts().filter(|c| !c.is_sgb()).count() == 1
     }
 
     pub fn set_faces(&mut self, faces: Vec<TexId>) {

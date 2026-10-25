@@ -26,6 +26,8 @@ pub(crate) struct CheatFetch {
 
 impl CheatFetch {
     pub fn spawn(root: PathBuf, carts: Vec<Cart>) -> Self {
+        // The Super Game Boy is no game of its own: nothing to cheat in.
+        let carts: Vec<Cart> = carts.into_iter().filter(|c| !c.is_sgb()).collect();
         let (stop, stopped) = mpsc::channel();
         if let Err(e) = thread::Builder::new()
             .name("slot-cheats".into())
