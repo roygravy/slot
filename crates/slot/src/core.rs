@@ -416,28 +416,39 @@ const SGB_BORDER_GRAVY: &[u8] = include_bytes!("../../../assets/sgb_border_gravy
 /// The same for the Super Game Boy 2, in its own layout.
 const SGB2_BORDER_GRAVY: &[u8] = include_bytes!("../../../assets/sgb_border_gravy2.bin");
 
-/// One of the Super Game Boy's own borders the player lifted from their SGB: sgb1_1.bin to
-/// sgb1_8.bin, sgb2_1.bin on for the Super Game Boy 2, in BIOS/sgb_borders or loose in BIOS.
-fn sgb_border_file(root: &Path, two: bool, n: u8) -> Option<Vec<u8>> {
+/// The Super Game Boy's own eight borders (the SGB 2's with `two`), each there or not: from
+/// its program in BIOS (an .sfc or .smc of the SGB), else from files lifted from it, sgb1_1.bin
+/// to sgb1_8.bin (sgb2_ for the SGB 2) in BIOS/sgb_borders or loose in BIOS.
+fn sgb_own_borders(root: &Path, two: bool) -> Vec<Option<Vec<u8>>> {
     let bios = root::bios_dir(root);
-    let name = format!("sgb{}_{n}.bin", if two { 2 } else { 1 });
-    [bios.join("sgb_borders").join(&name), bios.join(&name)]
-        .iter()
-        .find_map(|at| std::fs::read(at).ok())
-        .filter(|b| b.len() == SGB_BORDER_GRAVY.len())
+    let rom = crate::sgb_rom::find(&bios, two);
+    (1..=8)
+        .map(|n| {
+            if let Some(b) = rom.as_deref().and_then(|r| crate::sgb_rom::border(r, n)) {
+                return Some(b);
+            }
+            let name = format!("sgb{}_{n}.bin", if two { 2 } else { 1 });
+            [bios.join("sgb_borders").join(&name), bios.join(&name)]
+                .iter()
+                .find_map(|at| std::fs::read(at).ok())
+                .filter(|b| b.len() == SGB_BORDER_GRAVY.len())
+        })
+        .collect()
 }
 
-/// The numbers of the Super Game Boy's own borders on the card (see `sgb_border_file`).
+/// The numbers of the Super Game Boy's own borders on the card (see `sgb_own_borders`).
 pub fn sgb_borders_on_card(root: &Path, two: bool) -> Vec<u8> {
     (1..=8)
-        .filter(|&n| sgb_border_file(root, two, n).is_some())
+        .zip(sgb_own_borders(root, two))
+        .filter_map(|(n, b)| b.map(|_| n))
         .collect()
 }
 
 /// The border for the choice made (see `SlotState::sgb_border`), and whether it stays over a
 /// game's own: Auto takes the SGB's first border, or slot.'s, and gives way to the game's.
 fn sgb_border_for(root: &Path, choice: u8, two: bool) -> (Vec<u8>, bool) {
-    let own = |n: u8| sgb_border_file(root, two, n);
+    let mut borders = sgb_own_borders(root, two);
+    let mut own = |n: u8| borders.get_mut(usize::from(n) - 1).and_then(Option::take);
     let gravy = if two { SGB2_BORDER_GRAVY } else { SGB_BORDER_GRAVY };
     match choice {
         1 => (gravy.to_vec(), true),
@@ -463,10 +474,8 @@ pub fn set_sgb_border(root: &Path, choice: u8, two: bool, turn: u32) -> (&'stati
     let mut ours = [SGB_BORDER_GRAVY, SGB2_BORDER_GRAVY].concat();
     ours.extend(vec![0; SGB_BORDER_GRAVY.len()]);
     for two in [false, true] {
-        for n in 1..=8 {
-            if let Some(b) = sgb_border_file(root, two, n) {
-                ours.extend(b);
-            }
+        for b in sgb_own_borders(root, two).into_iter().flatten() {
+            ours.extend(b);
         }
     }
     let at = root::bios_dir(root).join("slot_sgb_ours.bin");

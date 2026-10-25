@@ -51,6 +51,7 @@ pub mod rewind;
 pub mod root;
 pub mod screenshot;
 pub mod session;
+pub mod sgb_rom;
 pub mod shell_picker;
 pub mod shots;
 pub mod state_writer;
