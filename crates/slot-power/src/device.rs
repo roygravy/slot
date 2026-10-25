@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use crate::{Battery, Charge, LedState, Platform};
+use crate::{Battery, Charge, LedState, Platform, Woke};
 
 const TOP_STEP: u32 = 9;
 
@@ -29,6 +29,9 @@ const WIFI_UNLOAD_WAIT: Duration = Duration::from_secs(5);
 const KERNEL_LINES: usize = 40;
 
 const SLEEP_LOG: &str = "deep-sleep.log";
+
+/// Asleep, the RTC wakes the console this often to look at the battery.
+const BATTERY_LOOK: Duration = Duration::from_secs(3600);
 
 /// The green light going out: three slow blinks, each a little shorter on.
 const SLEEP_BLINKS: [(bool, u64); 6] = [
@@ -182,6 +185,19 @@ impl DevicePlatform {
             let _ = writeln!(f, "{} {line}", self.now());
             let _ = f.sync_all();
         }
+    }
+
+    /// Arms the RTC to wake the console after `after`; zero clears it. Whether it is armed.
+    fn set_alarm(&self, after: Duration) -> bool {
+        let Some(rtc) = &self.rtc else {
+            return false;
+        };
+        let file = rtc.join("wakealarm");
+        let _ = fs::write(&file, "0");
+        if after.is_zero() {
+            return false;
+        }
+        fs::write(&file, format!("+{}", after.as_secs())).is_ok()
     }
 
     /// Falling asleep, the green light breathes out in slow blinks.
@@ -671,7 +687,7 @@ impl Platform for DevicePlatform {
         }
     }
 
-    fn deep_sleep(&mut self) -> Option<Duration> {
+    fn deep_sleep(&mut self, low: u8) -> Option<Woke> {
         let power = self.sysfs.join("power");
         let states = fs::read_to_string(power.join("state")).unwrap_or_default();
         let modes = fs::read_to_string(power.join("mem_sleep")).unwrap_or_default();
@@ -694,33 +710,47 @@ impl Platform for DevicePlatform {
         let before = self.battery_line();
         let _ = Command::new("sync").status();
         self.fall_asleep_led();
-        let (wall, mono) = (SystemTime::now(), Instant::now());
-        let wrote = fs::write(power.join("state"), "mem");
-        let awake = mono.elapsed();
-        let slept = SystemTime::now()
-            .duration_since(wall)
-            .unwrap_or_default()
-            .saturating_sub(awake);
+        let woke = loop {
+            let alarm = self.set_alarm(BATTERY_LOOK);
+            let (wall, mono) = (SystemTime::now(), Instant::now());
+            let wrote = fs::write(power.join("state"), "mem");
+            let awake = mono.elapsed();
+            let slept = SystemTime::now()
+                .duration_since(wall)
+                .unwrap_or_default()
+                .saturating_sub(awake);
+            self.set_alarm(Duration::ZERO);
+            if let Err(e) = wrote {
+                self.sleep_log(&format!("mem refused: {e}"));
+                break None;
+            }
+            let irq = fs::read_to_string(power.join("pm_wakeup_irq")).unwrap_or_default();
+            self.sleep_log(&format!(
+                "slept {}s, battery {before} -> {}, wake irq [{}]",
+                slept.as_secs(),
+                self.battery_line(),
+                irq.trim()
+            ));
+            // Woken by the alarm, not by POWER: low on battery it powers off, else back to
+            // sleep with the screen dark.
+            if !alarm || slept + Duration::from_secs(5) < BATTERY_LOOK {
+                break Some(Woke::Button);
+            }
+            let battery = self.battery();
+            let charging = matches!(self.charge(), Charge::Charging | Charge::Full);
+            if battery.is_some_and(|b| b.percent <= low) && !charging {
+                self.sleep_log("battery low: powering off");
+                break Some(Woke::LowBattery);
+            }
+            if let Some(psy) = &self.battery {
+                let _ = fs::write(psy.join("work_led"), "0");
+            }
+        };
         for (dir, soft) in &radios {
             let _ = fs::write(dir.join("soft"), soft);
         }
         self.awake_led();
-        let irq = fs::read_to_string(power.join("pm_wakeup_irq")).unwrap_or_default();
-        match wrote {
-            Ok(()) => {
-                self.sleep_log(&format!(
-                    "slept {}s, battery {before} -> {}, wake irq [{}]",
-                    slept.as_secs(),
-                    self.battery_line(),
-                    irq.trim()
-                ));
-                Some(slept)
-            }
-            Err(e) => {
-                self.sleep_log(&format!("mem refused: {e}"));
-                None
-            }
-        }
+        woke
     }
 
     fn restart(&mut self) -> ! {

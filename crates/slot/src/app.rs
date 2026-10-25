@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use slot_gfx::{Canvas, Layout, OUT_H, OUT_W};
 use slot_input::{Action, Btn, MENU_DOUBLE_TAP_MS, MUTE_CHORD_MS};
-use slot_power::{Battery, Charge, LedState, LidPolicy, Power};
+use slot_power::{Battery, Charge, LedState, LidPolicy, Power, Woke};
 use slot_retro::LinkChannel;
 use slot_store::{
     format_stamp, read_slot_state, scan, write_slot_state, BezelPick, Cart, Core, FavoriteMark,
@@ -5384,18 +5384,22 @@ impl App {
             && self.now().saturating_sub(self.dozed_at) >= DEEP_SLEEP_AFTER_MS
     }
 
-    /// Suspend to RAM; back from it, the console wakes straight up. Where the kernel cannot,
-    /// the light sleep goes on and still powers off after its timeout.
+    /// Suspend to RAM; back from it, the console wakes straight up, or powers off when the
+    /// battery ran down. Where the kernel cannot, the light sleep goes on and still powers
+    /// off after its timeout.
     fn deep_sleep(&mut self) {
         self.deep_tried = true;
         let Some(power) = &mut self.power else {
             return;
         };
-        if power.deep_sleep().is_none() {
-            return;
+        match power.deep_sleep(BATTERY_CRITICAL) {
+            None => {}
+            Some(Woke::LowBattery) => self.begin_power_off(),
+            Some(Woke::Button) => {
+                self.power_quiet_until = self.now() + WAKE_QUIET_MS;
+                self.wake();
+            }
         }
-        self.power_quiet_until = self.now() + WAKE_QUIET_MS;
-        self.wake();
     }
 
     pub fn on_doze_timeout(&mut self) {

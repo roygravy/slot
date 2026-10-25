@@ -35,6 +35,13 @@ pub struct Battery {
     pub charge: Charge,
 }
 
+/// What ended a deep sleep.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum Woke {
+    Button,
+    LowBattery,
+}
+
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum LedState {
     Off,
@@ -76,9 +83,9 @@ pub trait Platform: Send {
         Vec::new()
     }
 
-    /// Suspend to RAM until something wakes the console; how long it slept, or None when
-    /// this console cannot sleep that deep.
-    fn deep_sleep(&mut self) -> Option<Duration> {
+    /// Suspend to RAM until POWER wakes the console, or until the battery is down to
+    /// `low` percent; None when this console cannot sleep that deep.
+    fn deep_sleep(&mut self, _low: u8) -> Option<Woke> {
         None
     }
 }
