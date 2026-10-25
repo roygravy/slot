@@ -690,7 +690,7 @@ impl App {
         app.root = Some(root.to_path_buf());
         app.state = read_slot_state(root);
         app.radio.ask(RadioJob::Home(app.state.home_wifi_enabled));
-        app.radio.ask(RadioJob::Time(app.state.auto_time));
+        app.radio.ask(RadioJob::Time(app.auto_time_on()));
         app.restock_recents();
         app.restock_favorites();
         if app.state.remember_position {
@@ -1127,7 +1127,7 @@ impl App {
             QuickRow::GbcShader => Some(QuickValue::flag(self.state.shader_gbc != Shader::Off)),
             QuickRow::Rumble => Some(QuickValue::flag(self.state.rumble)),
             QuickRow::HomeWifi => Some(QuickValue::flag(self.state.home_wifi_enabled)),
-            QuickRow::AutoTime => Some(QuickValue::flag(self.state.auto_time)),
+            QuickRow::AutoTime => Some(QuickValue::flag(self.auto_time_on())),
             QuickRow::Clock24 => Some(QuickValue::flag(self.state.clock_24h)),
             QuickRow::CheatIcon => Some(QuickValue::flag(self.state.cheat_icon)),
             QuickRow::GbcBlackBorder => Some(QuickValue::flag(self.state.gbc_black_border)),
@@ -3029,10 +3029,16 @@ impl App {
         }
     }
 
+    /// Auto Time only sets the clock while Home Wi-Fi is on; without it the
+    /// clock is set by hand.
+    fn auto_time_on(&self) -> bool {
+        self.state.auto_time && self.state.home_wifi_enabled
+    }
+
     fn open_quick_row(&mut self, row: QuickRow) {
         match row {
             // Auto Time keeps the clock; Date & Time only opens when it is off.
-            QuickRow::DateTime if self.state.auto_time => {}
+            QuickRow::DateTime if self.auto_time_on() => {}
             QuickRow::DateTime => {
                 self.phase = clock_screen(
                     self.utc_secs(),
@@ -3265,7 +3271,10 @@ impl App {
             QuickRow::HomeWifi => {
                 s.home_wifi_enabled = !s.home_wifi_enabled;
                 self.radio.ask(RadioJob::Home(s.home_wifi_enabled));
+                self.radio.ask(RadioJob::Time(s.auto_time && s.home_wifi_enabled));
             }
+            // Without Wi-Fi there is no time to fetch: Auto Time stays off.
+            QuickRow::AutoTime if !s.home_wifi_enabled => return,
             QuickRow::AutoTime => {
                 s.auto_time = !s.auto_time;
                 self.radio.ask(RadioJob::Time(s.auto_time));
@@ -4312,7 +4321,11 @@ impl App {
                 clock: self.quick_clock_faces,
                 network: self.quick_network_faces,
                 zone: self.quick_zone_faces,
-                locked: self.state.auto_time.then_some(QuickRow::DateTime),
+                locked: if !self.state.home_wifi_enabled {
+                    Some(QuickRow::AutoTime)
+                } else {
+                    self.state.auto_time.then_some(QuickRow::DateTime)
+                },
                 wallpaper: self.quick_wallpaper_faces,
                 faces: self.quick_menu_faces.as_ref(),
                 ground: self.menu_ground(),

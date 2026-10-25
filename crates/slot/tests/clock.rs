@@ -333,7 +333,13 @@ fn time_zone_steps_through_the_cities_and_is_saved() {
 
 #[test]
 fn date_and_time_stays_shut_while_auto_time_is_on() {
-    let (_d, mut a) = general_row(SlotState::default(), QuickRow::DateTime);
+    let (_d, mut a) = general_row(
+        SlotState {
+            home_wifi_enabled: true,
+            ..SlotState::default()
+        },
+        QuickRow::DateTime,
+    );
     a.apply(Action::GbaDown(Btn::A));
     assert!(
         !matches!(a.phase(), Phase::SetClock { .. }),
@@ -343,8 +349,25 @@ fn date_and_time_stays_shut_while_auto_time_is_on() {
 }
 
 #[test]
-fn auto_time_and_the_24_hour_clock_are_on_until_turned_off() {
+fn without_wi_fi_auto_time_is_off_and_the_clock_is_set_by_hand() {
     let (d, mut a) = general_row(SlotState::default(), QuickRow::AutoTime);
+    a.apply(Action::GbaDown(Btn::Right));
+    a.apply(Action::QuickMenu);
+    assert!(read_slot_state(d.path()).auto_time, "Auto Time turned while locked");
+    let (_d, mut a) = general_row(SlotState::default(), QuickRow::DateTime);
+    a.apply(Action::GbaDown(Btn::A));
+    assert!(matches!(a.phase(), Phase::SetClock { .. }), "{:?}", a.phase());
+}
+
+#[test]
+fn auto_time_and_the_24_hour_clock_are_on_until_turned_off() {
+    let (d, mut a) = general_row(
+        SlotState {
+            home_wifi_enabled: true,
+            ..SlotState::default()
+        },
+        QuickRow::AutoTime,
+    );
     assert!(read_slot_state(d.path()).auto_time);
     a.apply(Action::GbaDown(Btn::Right));
     a.apply(Action::GbaDown(Btn::Down));
