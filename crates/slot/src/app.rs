@@ -5977,6 +5977,7 @@ impl App {
             remove: picker.offers_remove(),
             search: picker.offers_search(),
             confirming: picker.confirming(),
+            sgb: picker.sgb(),
         };
         slot_ui::draw_shell_picker(self.canvas(), &view, out);
     }

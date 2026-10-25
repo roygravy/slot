@@ -18,6 +18,12 @@ const SWATCH_MORE: f32 = 0.35;
 const CART_TOP: f32 = 30.0;
 const CART_MAX_W: f32 = 250.0;
 const CART_MAX_H: f32 = 200.0;
+/// The Super Game Boy has only its model row, so its cart takes the room the others' rows use,
+/// up to its size on the shelf.
+const SGB_CART_MAX_W: f32 = 400.0;
+const SGB_CART_MAX_H: f32 = 330.0;
+/// How far under the Super Game Boy its model row stands.
+const SGB_MODEL_GAP: f32 = 34.0;
 const NAME_Y: f32 = 248.0;
 const SWATCH_Y: f32 = 290.0;
 const FINISH_Y: f32 = 324.0;
@@ -105,6 +111,8 @@ pub struct ShellPickerView<'a> {
     pub confirming: bool,
     /// Y searches for the label by name.
     pub search: bool,
+    /// The Super Game Boy: no rows but its model's, and the cart drawn larger for it.
+    pub sgb: bool,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -233,7 +241,15 @@ pub fn draw_shell_picker(canvas: Canvas, v: &ShellPickerView, out: &mut Vec<Draw
     });
 
     let (cw, ch) = (v.cart_box.0 as f32, v.cart_box.1 as f32);
-    let scale = (CART_MAX_W / cw).min(CART_MAX_H / ch);
+    let (max_w, max_h) = match v.sgb {
+        true => (SGB_CART_MAX_W, SGB_CART_MAX_H),
+        false => (CART_MAX_W, CART_MAX_H),
+    };
+    let mut scale = (max_w / cw).min(max_h / ch);
+    if v.sgb {
+        // Never larger than it stands on the shelf (Roy).
+        scale = scale.min(v.from.w / cw);
+    }
     let to = Placed {
         x: canvas.centred(cw * scale),
         y: CART_TOP,
@@ -457,7 +473,7 @@ pub fn draw_shell_picker(canvas: Canvas, v: &ShellPickerView, out: &mut Vec<Draw
                 &v.faces.models[first..first + count],
                 Some(model),
                 v.row == PickerRow::Model,
-                MODEL_Y + drop,
+                if v.sgb { (to.y + to.h + SGB_MODEL_GAP).round() } else { MODEL_Y + drop },
                 FINISH_GAP,
                 stage(2.5),
                 out,
