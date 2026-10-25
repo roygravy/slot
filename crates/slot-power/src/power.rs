@@ -63,6 +63,10 @@ impl Power {
         self.platform.relink_adb()
     }
 
+    pub fn deep_sleep(&mut self) -> Option<Duration> {
+        self.platform.deep_sleep()
+    }
+
     pub fn poweroff(&mut self) -> ! {
         self.platform.poweroff()
     }

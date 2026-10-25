@@ -75,6 +75,12 @@ pub trait Platform: Send {
     fn card_kernel_lines(&self) -> Vec<String> {
         Vec::new()
     }
+
+    /// Suspend to RAM until something wakes the console; how long it slept, or None when
+    /// this console cannot sleep that deep.
+    fn deep_sleep(&mut self) -> Option<Duration> {
+        None
+    }
 }
 
 pub trait LidPolicy {

@@ -81,6 +81,12 @@ const PLAY_HOLD_MS: Millis = 500;
 
 const SHUTDOWN_SHOW_MS: Millis = 250;
 
+/// Asleep this long, saves on the card and Wi-Fi let go, the console sleeps deep.
+const DEEP_SLEEP_AFTER_MS: Millis = 2_500;
+
+/// Just back from the deep sleep: the press that woke it may still arrive as input.
+const WAKE_QUIET_MS: Millis = 1_500;
+
 const CORE_PICKER_RECEDE: f32 = 0.26;
 
 const SLOT_NAME_IN_MS: Millis = 200;
@@ -471,6 +477,8 @@ pub struct App {
     last_activity: Millis,
     power: Option<Power>,
     dozed_at: Millis,
+    deep_tried: bool,
+    power_quiet_until: Millis,
     woke_on_press: bool,
     autosave_at: Millis,
     pending_save: Option<std::thread::JoinHandle<()>>,
@@ -664,6 +672,8 @@ impl App {
             last_activity: 0,
             power: None,
             dozed_at: 0,
+            deep_tried: false,
+            power_quiet_until: 0,
             woke_on_press: false,
             autosave_at: AUTOSAVE_MS,
             pending_save: None,
@@ -2630,6 +2640,14 @@ impl App {
             Action::ResetGame => return self.reset_game(),
             _ => {}
         }
+        if self.now() < self.power_quiet_until
+            && matches!(
+                action,
+                Action::PowerPress | Action::PowerTap | Action::PowerHold | Action::PowerCancel
+            )
+        {
+            return;
+        }
         match action {
             Action::LidClose => return self.doze(),
             Action::LidOpen => return self.wake(),
@@ -3943,6 +3961,9 @@ impl App {
         self.repeat_held_dir();
         if self.auto_sleep_expired() {
             self.doze();
+        }
+        if self.deep_sleep_due() {
+            self.deep_sleep();
         }
         if self.doze_expired() {
             self.on_doze_timeout();
@@ -5330,6 +5351,7 @@ impl App {
         self.polaroids = None;
         self.phase = Phase::Doze { cart };
         self.dozed_at = self.now();
+        self.deep_tried = false;
         self.radio.ask(RadioJob::Cool);
         if let Some(power) = &mut self.power {
             power.on_close();
@@ -5352,6 +5374,27 @@ impl App {
         if let Some(power) = &mut self.power {
             power.on_open();
         }
+    }
+
+    fn deep_sleep_due(&self) -> bool {
+        matches!(self.phase, Phase::Doze { .. })
+            && !self.deep_tried
+            && !self.link_active()
+            && self.now().saturating_sub(self.dozed_at) >= DEEP_SLEEP_AFTER_MS
+    }
+
+    /// Suspend to RAM; back from it, the console wakes straight up. Where the kernel cannot,
+    /// the light sleep goes on and still powers off after its timeout.
+    fn deep_sleep(&mut self) {
+        self.deep_tried = true;
+        let Some(power) = &mut self.power else {
+            return;
+        };
+        if power.deep_sleep().is_none() {
+            return;
+        }
+        self.power_quiet_until = self.now() + WAKE_QUIET_MS;
+        self.wake();
     }
 
     pub fn on_doze_timeout(&mut self) {

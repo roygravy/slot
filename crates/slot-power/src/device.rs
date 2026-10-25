@@ -28,6 +28,8 @@ const WIFI_UNLOAD_WAIT: Duration = Duration::from_secs(5);
 
 const KERNEL_LINES: usize = 40;
 
+const SLEEP_LOG: &str = "deep-sleep.log";
+
 pub fn uptime_seconds(s: &str) -> Option<String> {
     let first = s.split_whitespace().next()?;
     if !first.chars().all(|c| c.is_ascii_digit() || c == '.') {
@@ -157,6 +159,30 @@ impl DevicePlatform {
             let _ = writeln!(f, "{} {line}", self.now());
             let _ = f.sync_all();
         }
+    }
+
+    fn sleep_log(&self, line: &str) {
+        let dir = self.root.join("Logs");
+        let _ = fs::create_dir_all(&dir);
+        if let Ok(mut f) = fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(dir.join(SLEEP_LOG))
+        {
+            let _ = writeln!(f, "{} {line}", self.now());
+            let _ = f.sync_all();
+        }
+    }
+
+    /// Percent and voltage, for the sleep log: a percent alone hides an overnight drain.
+    fn battery_line(&self) -> String {
+        let Some(dir) = &self.battery else {
+            return "?".into();
+        };
+        let percent = read_number(&dir.join("capacity")).map_or("?".into(), |p| p.to_string());
+        let mv =
+            read_number(&dir.join("voltage_now")).map_or("?".into(), |v| (v / 1000).to_string());
+        format!("{percent}% {mv}mV")
     }
 
     pub fn trace_boot(&self) {
@@ -295,6 +321,21 @@ fn unload_wifi() {
         }
         std::thread::sleep(Duration::from_millis(50));
     }
+}
+
+/// The Wi-Fi radios and their soft block, to block for the sleep and put back after it.
+fn wlan_rfkills(sysfs: &Path) -> Vec<(PathBuf, String)> {
+    let Ok(dirs) = fs::read_dir(sysfs.join("class/rfkill")) else {
+        return Vec::new();
+    };
+    dirs.filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .filter(|d| fs::read_to_string(d.join("type")).is_ok_and(|t| t.trim() == "wlan"))
+        .filter_map(|d| {
+            let soft = fs::read_to_string(d.join("soft")).ok()?;
+            Some((d, soft.trim().to_string()))
+        })
+        .collect()
 }
 
 fn release_logs() {
@@ -592,6 +633,56 @@ impl Platform for DevicePlatform {
                 let on = !matches!(state, LedState::Off | LedState::Low);
                 let value = if on { *max } else { 0 };
                 let _ = fs::write(dir.join("brightness"), format!("{value}\n"));
+            }
+        }
+    }
+
+    fn deep_sleep(&mut self) -> Option<Duration> {
+        let power = self.sysfs.join("power");
+        let states = fs::read_to_string(power.join("state")).unwrap_or_default();
+        let modes = fs::read_to_string(power.join("mem_sleep")).unwrap_or_default();
+        self.sleep_log(&format!(
+            "states [{}] mem_sleep [{}]",
+            states.trim(),
+            modes.trim()
+        ));
+        if !states.split_whitespace().any(|s| s == "mem") {
+            self.sleep_log("no mem: staying in the light sleep");
+            return None;
+        }
+        if modes.split_whitespace().any(|m| m == "deep") {
+            let _ = fs::write(power.join("mem_sleep"), "deep");
+        }
+        let radios = wlan_rfkills(&self.sysfs);
+        for (dir, _) in &radios {
+            let _ = fs::write(dir.join("soft"), "1");
+        }
+        let before = self.battery_line();
+        let _ = Command::new("sync").status();
+        let (wall, mono) = (SystemTime::now(), Instant::now());
+        let wrote = fs::write(power.join("state"), "mem");
+        let awake = mono.elapsed();
+        let slept = SystemTime::now()
+            .duration_since(wall)
+            .unwrap_or_default()
+            .saturating_sub(awake);
+        for (dir, soft) in &radios {
+            let _ = fs::write(dir.join("soft"), soft);
+        }
+        let irq = fs::read_to_string(power.join("pm_wakeup_irq")).unwrap_or_default();
+        match wrote {
+            Ok(()) => {
+                self.sleep_log(&format!(
+                    "slept {}s, battery {before} -> {}, wake irq [{}]",
+                    slept.as_secs(),
+                    self.battery_line(),
+                    irq.trim()
+                ));
+                Some(slept)
+            }
+            Err(e) => {
+                self.sleep_log(&format!("mem refused: {e}"));
+                None
             }
         }
     }
