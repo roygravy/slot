@@ -825,7 +825,7 @@ impl QuickValue {
             QuickValue::Sleep10m => "10 min",
             QuickValue::Sleep30m => "30 min",
             QuickValue::GoldGlow => "Spotlight",
-            QuickValue::WhiteGlow => "White Glow",
+            QuickValue::WhiteGlow => "Highlight",
             QuickValue::StarMark => "Star",
             QuickValue::Authentic => "Authentic",
             QuickValue::Clean => "Clean",

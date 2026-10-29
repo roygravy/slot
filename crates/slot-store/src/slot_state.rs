@@ -69,21 +69,22 @@ impl Appearance {
 pub enum FavoriteMark {
     #[default]
     GoldGlow,
-    WhiteGlow,
+    /// A soft light on the ground behind the cart.
+    Highlight,
     Star,
 }
 
 impl FavoriteMark {
     pub const ALL: [FavoriteMark; 3] = [
         FavoriteMark::GoldGlow,
-        FavoriteMark::WhiteGlow,
+        FavoriteMark::Highlight,
         FavoriteMark::Star,
     ];
 
     pub fn key(self) -> &'static str {
         match self {
             FavoriteMark::GoldGlow => "gold_glow",
-            FavoriteMark::WhiteGlow => "white_glow",
+            FavoriteMark::Highlight => "highlight",
             FavoriteMark::Star => "star",
         }
     }
@@ -96,12 +97,11 @@ impl FavoriteMark {
         FavoriteMark::ALL.into_iter().find(|m| m.key() == value)
     }
 
-    /// Spotlight and Star: the white glow is no longer offered.
-    pub fn step(self, _right: bool) -> FavoriteMark {
-        match self {
-            FavoriteMark::Star => FavoriteMark::GoldGlow,
-            _ => FavoriteMark::Star,
-        }
+    /// Spotlight, Highlight and Star, round and round.
+    pub fn step(self, right: bool) -> FavoriteMark {
+        let all = FavoriteMark::ALL;
+        let at = all.iter().position(|m| *m == self).unwrap_or(0);
+        all[if right { (at + 1) % all.len() } else { (at + all.len() - 1) % all.len() }]
     }
 }
 

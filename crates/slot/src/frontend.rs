@@ -366,15 +366,15 @@ impl Frontend {
             compositor.create_texture(f.w, f.h, &f.rgba)
         });
         self.session.app_mut().set_drop_shadows(drops);
-        let mut halos = |colour: [u8; 3], peak: f32| {
+        let mut halos = |face: fn(u32, u32, u32, [u8; 3], f32) -> slot_ui::CartFace, peak: f32| {
             Mould::ALL.map(|m| {
                 let (cw, ch) = slot_ui::cart_box(m);
-                let halo = slot_ui::glow_face(cw, ch, slot_ui::GLOW_MARGIN, colour, peak);
+                let halo = face(cw, ch, slot_ui::GLOW_MARGIN, slot_ui::GLOW_GOLD, peak);
                 compositor.create_texture(halo.w, halo.h, &halo.rgba)
             })
         };
-        let gold = halos(slot_ui::GLOW_GOLD, 0.55);
-        let white = halos(slot_ui::GLOW_GOLD, 0.55);
+        let gold = halos(slot_ui::glow_face, 0.38);
+        let white = halos(slot_ui::halo_face, 0.45);
         let star = slot_ui::star_mark_face(slot_ui::STAR_PX);
         let star_id = compositor.create_texture(star.w, star.h, &star.rgba);
         self.session

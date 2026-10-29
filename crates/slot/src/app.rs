@@ -1171,7 +1171,8 @@ impl App {
                 WallpaperTint::High => QuickValue::High,
             }),
             QuickRow::FavoriteMark => Some(match self.state.favorite_mark {
-                FavoriteMark::GoldGlow | FavoriteMark::WhiteGlow => QuickValue::GoldGlow,
+                FavoriteMark::GoldGlow => QuickValue::GoldGlow,
+                FavoriteMark::Highlight => QuickValue::WhiteGlow,
                 FavoriteMark::Star => QuickValue::StarMark,
             }),
             QuickRow::Theme => Some(match self.state.appearance {
@@ -1517,13 +1518,13 @@ impl App {
     pub fn set_mark_faces(
         &mut self,
         gold: [TexId; Mould::ALL.len()],
-        white: [TexId; Mould::ALL.len()],
+        halo: [TexId; Mould::ALL.len()],
         star: (TexId, u32, u32),
     ) {
         for (_, shelf) in &mut self.shelves {
             for (style, faces) in [
                 (FavoriteMark::GoldGlow, gold),
-                (FavoriteMark::WhiteGlow, white),
+                (FavoriteMark::Highlight, halo),
             ] {
                 for (mould, face) in Mould::ALL.into_iter().zip(faces) {
                     shelf.set_glow(style, mould, face);

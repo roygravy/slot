@@ -151,7 +151,7 @@ impl Shelf {
     }
 
     pub fn set_glow(&mut self, style: FavoriteMark, mould: Mould, face: TexId) {
-        let row = (style == FavoriteMark::WhiteGlow) as usize;
+        let row = (style == FavoriteMark::Highlight) as usize;
         self.glows[row][mould.index()] = Some(face);
     }
 
@@ -172,7 +172,7 @@ impl Shelf {
     }
 
     fn glow_for(&self, i: usize) -> Option<TexId> {
-        let row = (self.mark == FavoriteMark::WhiteGlow) as usize;
+        let row = (self.mark == FavoriteMark::Highlight) as usize;
         self.glows[row][self.mould(i).index()]
     }
 
@@ -632,11 +632,17 @@ impl Shelf {
                     }
                 }
             });
-            // The spotlight lights the ground behind the cart.
+            // The spotlight falls on the cart, over its face; the highlight lights the ground
+            // behind it.
             if self.starred.get(i) == Some(&true) && self.mark != FavoriteMark::Star {
                 if let Some(tex) = self.glow_for(i) {
                     let m = GLOW_MARGIN as f32 * scale;
-                    lights.push(Draw::Light {
+                    let to = if self.mark == FavoriteMark::Highlight {
+                        &mut lights
+                    } else {
+                        &mut *out
+                    };
+                    to.push(Draw::Light {
                         x: x - m,
                         y: y - m,
                         w: w + 2.0 * m,
@@ -669,7 +675,12 @@ impl Shelf {
                 let m = GLOW_MARGIN as f32 * CAROUSEL;
                 let x = canvas.w / 2.0 - w / 2.0;
                 let y = foot_y(ch as f32) - h - LIFT * CAROUSEL;
-                lights.push(Draw::Light {
+                let to = if self.mark == FavoriteMark::Highlight {
+                    &mut lights
+                } else {
+                    &mut *out
+                };
+                to.push(Draw::Light {
                     x: x - m,
                     y: y - m,
                     w: w + 2.0 * m,
