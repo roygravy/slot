@@ -69,6 +69,10 @@ const BATTERY_POLL_MS: Millis = 10_000;
 const MENU_REVEAL_MS: Millis = 180;
 /// How long the camera takes to close in on the Super Game Boy once it is in.
 const SGB_ZOOM_MS: f32 = 900.0;
+/// The Super Game Boy 2 takes the same camera time and then a fade of its cart into its band.
+const SGB_ZOOM_MS_FADED: f32 = 1200.0;
+/// The share of that longer zoom the camera moves in; the rest is the fade.
+const SGB_CAMERA_PART: f32 = 0.75;
 /// The camera pulling back out of the Super Game Boy: off at once, landing softly on the SNES.
 const SGB_UNZOOM_MS: f32 = 700.0;
 
@@ -2021,7 +2025,8 @@ impl App {
     /// How far the camera has closed in on the Super Game Boy, 0 to 1; None once it has.
     fn sgb_zoom(&self) -> Option<f32> {
         let at = self.sgb_zoom_at?;
-        let u = self.now().saturating_sub(at) as f32 / SGB_ZOOM_MS;
+        let ms = if self.sgb_two() { SGB_ZOOM_MS_FADED } else { SGB_ZOOM_MS };
+        let u = self.now().saturating_sub(at) as f32 / ms;
         (u < 1.0).then_some(u)
     }
 
@@ -2050,8 +2055,13 @@ impl App {
     /// band, the SNES and the clock passing out of the picture under it, and the Game Boy shelf
     /// comes down into place. No fades: the camera only moves (Roy).
     fn draw_sgb_zoom(&self, u: f32, gb_shelf: usize, out: &mut Vec<Draw>) {
-        let come = ease(((u - 0.4) / 0.6).clamp(0.0, 1.0));
-        self.draw_sgb_camera(ease(u), come, u, gb_shelf, out)
+        // The camera takes the first three quarters, as it always did; the Super Game Boy 2's
+        // cart fades into its band only once the band stands in place, over the last quarter.
+        let clear = self.sgb_two();
+        let v = if clear { (u / SGB_CAMERA_PART).min(1.0) } else { u };
+        let come = ease(((v - 0.4) / 0.6).clamp(0.0, 1.0));
+        let fade = if clear { u } else { v };
+        self.draw_sgb_camera(ease(v), come, fade, gb_shelf, out)
     }
 
     /// The camera `e` of the way from the SNES to the Super Game Boy's top, the Game Boy shelf
@@ -2099,7 +2109,7 @@ impl App {
         // once the band covers it, so the two clear plastics never show through each other.
         let clear = model == slot_ui::SgbModel::Sgb2;
         let sharp = match clear {
-            true => ((u - 0.62) / 0.38).clamp(0.0, 1.0),
+            true => ((u - SGB_CAMERA_PART) / (1.0 - SGB_CAMERA_PART)).clamp(0.0, 1.0),
             false => ease(((u - 0.35) / 0.55).clamp(0.0, 1.0)),
         };
         // The face goes out exactly as the band comes in: while the band is not yet whole, the
