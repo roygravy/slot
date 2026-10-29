@@ -87,6 +87,15 @@ const vec3 luma_coeff = vec3(0.2126, 0.7152, 0.0722);
 vec2 grid_band(vec2 x) {
     return floor(x) / 3.0 + min(fract(x), vec2(1.0 / 3.0));
 }
+// How much of [x0, x1] falls on the band [a, b) of a pattern that repeats every 1.
+float band_cover(float x0, float x1, float a, float b) {
+    float sum = 0.0;
+    for (int k = -1; k <= 1; k++) {
+        float o = float(k);
+        sum += max(0.0, min(x1, b + o) - max(x0, a + o));
+    }
+    return sum;
+}
 float dot_weight(vec2 f, vec2 o, float bloom) {
     return exp(-4.0 * length(f - (o + vec2(0.5))) * bloom);
 }
@@ -138,12 +147,26 @@ void main() {
             // red, green and blue line down each pixel, and a faint dark line under every row.
             // On the GBA, which is not scaled a whole number of times, the cells follow the
             // screen's own pixels instead, three to a cell.
-            vec2 cell = u_lcd_mix.z > 0.5 ? mod(screen_px, 3.0) : floor(f * 3.0);
-            vec3 stripe = cell.x < 0.5 ? vec3(1.0, 0.0, 0.0) : (cell.x < 1.5 ? vec3(0.0, 1.0, 0.0) : vec3(0.0, 0.0, 1.0));
-            c = mix(c, stripe, u_lcd_mix.y);
-            if (cell.y > 1.5) {
-                c = mix(c, vec3(0.0), u_lcd_mix.x);
+            // Each screen pixel takes the stripes it covers, so a picture scaled by no whole
+            // number, full screen, keeps the colours it has at three times.
+            vec3 stripe;
+            float dark;
+            if (u_lcd_mix.z > 0.5) {
+                vec2 cell = mod(screen_px, 3.0);
+                stripe = cell.x < 0.5 ? vec3(1.0, 0.0, 0.0) : (cell.x < 1.5 ? vec3(0.0, 1.0, 0.0) : vec3(0.0, 0.0, 1.0));
+                dark = cell.y > 1.5 ? 1.0 : 0.0;
+            } else {
+                vec2 w = 0.5 / px;
+                vec2 lo = f - w;
+                vec2 hi = f + w;
+                stripe = vec3(
+                    band_cover(lo.x, hi.x, 0.0, 1.0 / 3.0),
+                    band_cover(lo.x, hi.x, 1.0 / 3.0, 2.0 / 3.0),
+                    band_cover(lo.x, hi.x, 2.0 / 3.0, 1.0)) / (2.0 * w.x);
+                dark = band_cover(lo.y, hi.y, 2.0 / 3.0, 1.0) / (2.0 * w.y);
             }
+            c = mix(c, stripe, u_lcd_mix.y);
+            c = mix(c, vec3(0.0), u_lcd_mix.x * dark);
         } else {
             c = mix(c, lcd.rgb, lcd.a * 0.45);
         }

@@ -370,7 +370,8 @@ impl Session {
             }
         }
         if let Some(on) = self.app.take_lcd_ghosting() {
-            let option = crate::core::lcd_ghosting_option(self.app.core(), on);
+            let option =
+                crate::core::lcd_ghosting_option(self.app.core(), self.app.playing_platform(), on);
             if let (Some((key, value)), Some(emu)) = (option, &self.emu) {
                 emu.set_option(key, value);
                 recoloured = true;
@@ -635,7 +636,8 @@ impl Session {
         );
         // The core opens on the emulator's thread, so the cart's insert keeps moving meanwhile.
         let root = self.root.clone();
-        let ghosting = crate::core::lcd_ghosting_option(core, self.app.lcd_ghosting_for(platform));
+        let ghosting =
+            crate::core::lcd_ghosting_option(core, platform, self.app.lcd_ghosting_for(platform));
         // The Super Game Boy's picture takes the SNES's look.
         let tv = crate::core::tv_options(core, self.app.tv_look(self.app.playing_platform()));
         let sgb_setup = sgb.then(|| {

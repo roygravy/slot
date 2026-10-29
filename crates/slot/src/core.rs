@@ -228,7 +228,12 @@ pub fn colour_option(
     }
 }
 
-pub fn lcd_ghosting_option(which: Core, on: bool) -> Option<(&'static str, &'static str)> {
+/// The Game Boy Color's screen answers quicker than the Game Boy's, so its games trail less.
+pub fn lcd_ghosting_option(
+    which: Core,
+    platform: Platform,
+    on: bool,
+) -> Option<(&'static str, &'static str)> {
     match which {
         Core::Mgba => Some((
             "mgba_interframe_blending",
@@ -237,7 +242,11 @@ pub fn lcd_ghosting_option(which: Core, on: bool) -> Option<(&'static str, &'sta
         Core::Gpsp => Some(("gpsp_frame_mixing", if on { "enabled" } else { "disabled" })),
         Core::Gambatte => Some((
             "gambatte_mix_frames",
-            if on { "lcd_ghosting" } else { "disabled" },
+            match (on, platform) {
+                (false, _) => "disabled",
+                (true, Platform::Gbc) => "lcd_ghosting_gbc",
+                (true, _) => "lcd_ghosting",
+            },
         )),
         Core::Fceumm | Core::Snes9x => None,
     }
@@ -522,7 +531,7 @@ pub fn apply_core_options(
 ) {
     core.set_option(&format!("{}_frameskip", which.as_str()), "auto");
     if which == Core::Mgba {
-        if let Some((key, value)) = lcd_ghosting_option(which, true) {
+        if let Some((key, value)) = lcd_ghosting_option(which, platform, true) {
             core.set_option(key, value);
         }
         core.set_option("mgba_sgb_borders", "OFF");
@@ -544,7 +553,7 @@ pub fn apply_core_options(
         }
     }
     if which == Core::Gpsp {
-        if let Some((key, value)) = lcd_ghosting_option(which, true) {
+        if let Some((key, value)) = lcd_ghosting_option(which, platform, true) {
             core.set_option(key, value);
         }
         core.set_option("gpsp_serial", serial);
@@ -557,7 +566,7 @@ pub fn apply_core_options(
         }
     }
     if which == Core::Gambatte {
-        if let Some((key, value)) = lcd_ghosting_option(which, true) {
+        if let Some((key, value)) = lcd_ghosting_option(which, platform, true) {
             core.set_option(key, value);
         }
         // A palette means a Game Boy: run the cart as one, so the palette always takes.

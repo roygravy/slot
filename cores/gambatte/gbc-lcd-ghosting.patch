@@ -1,0 +1,78 @@
+diff --git a/libgambatte/libretro/libretro.cpp b/libgambatte/libretro/libretro.cpp
+index 15b042c..4a8acad 100644
+--- a/libgambatte/libretro/libretro.cpp
++++ b/libgambatte/libretro/libretro.cpp
+@@ -740,6 +740,10 @@ static float* video_buf_acc_g                    = NULL;
+ static float* video_buf_acc_b                    = NULL;
+ static float frame_blend_response[4]             = {0.0f};
+ static bool frame_blend_response_set             = false;
++/* slot.: 'lcd_ghosting_gbc' is the same accurate ghosting with the
++ * quicker response of the Game Boy Color's screen */
++#define LCD_RESPONSE_TIME_GBC 0.2f
++static float frame_blend_response_time           = LCD_RESPONSE_TIME;
+ static void (*blend_frames)(void)                = NULL;
+ 
+ /* > Note: The individual frame blending functions
+@@ -1102,10 +1106,10 @@ static void init_frame_blending(void)
+        * increased, we may need to rethink this
+        * (but more samples == greater performance
+        * overheads) */
+-      frame_blend_response[0] = LCD_RESPONSE_TIME;
+-      frame_blend_response[1] = std::pow(LCD_RESPONSE_TIME, 2.0f);
+-      frame_blend_response[2] = std::pow(LCD_RESPONSE_TIME, 3.0f);
+-      frame_blend_response[3] = std::pow(LCD_RESPONSE_TIME, 4.0f);
++      frame_blend_response[0] = frame_blend_response_time;
++      frame_blend_response[1] = std::pow(frame_blend_response_time, 2.0f);
++      frame_blend_response[2] = std::pow(frame_blend_response_time, 3.0f);
++      frame_blend_response[3] = std::pow(frame_blend_response_time, 4.0f);
+ 
+       frame_blend_response_set = true;
+    }
+@@ -1219,8 +1223,10 @@ static void check_frame_blend_variable(void)
+ {
+    struct retro_variable var;
+    enum frame_blend_method old_frame_blend_type = frame_blend_type;
++   float old_response_time = frame_blend_response_time;
+ 
+    frame_blend_type = FRAME_BLEND_NONE;
++   frame_blend_response_time = LCD_RESPONSE_TIME;
+ 
+    var.key = "gambatte_mix_frames";
+    var.value = 0;
+@@ -1231,13 +1237,23 @@ static void check_frame_blend_variable(void)
+          frame_blend_type = FRAME_BLEND_MIX;
+       else if (!strcmp(var.value, "lcd_ghosting"))
+          frame_blend_type = FRAME_BLEND_LCD_GHOSTING;
++      else if (!strcmp(var.value, "lcd_ghosting_gbc"))
++      {
++         frame_blend_type = FRAME_BLEND_LCD_GHOSTING;
++         frame_blend_response_time = LCD_RESPONSE_TIME_GBC;
++      }
+       else if (!strcmp(var.value, "lcd_ghosting_fast"))
+          frame_blend_type = FRAME_BLEND_LCD_GHOSTING_FAST;
+    }
+ 
++   if (frame_blend_response_time != old_response_time)
++      frame_blend_response_set = false;
++
+    if (frame_blend_type == FRAME_BLEND_NONE)
+       blend_frames = NULL;
+-   else if (frame_blend_type != old_frame_blend_type)
++   else if (frame_blend_type != old_frame_blend_type ||
++            (frame_blend_type == FRAME_BLEND_LCD_GHOSTING &&
++             !frame_blend_response_set))
+       init_frame_blending();
+ }
+ 
+diff --git a/libgambatte/libretro/libretro_core_options.h b/libgambatte/libretro/libretro_core_options.h
+index 84213f7..b88a1a8 100644
+--- a/libgambatte/libretro/libretro_core_options.h
++++ b/libgambatte/libretro/libretro_core_options.h
+@@ -615,6 +615,7 @@ struct retro_core_option_v2_definition option_defs_us[] = {
+          { "disabled",          NULL },
+          { "mix",               "Simple" },
+          { "lcd_ghosting",      "LCD Ghosting (Accurate)" },
++         { "lcd_ghosting_gbc",  "LCD Ghosting (Game Boy Color)" },
+          { "lcd_ghosting_fast", "LCD Ghosting (Fast)" },
+          { NULL, NULL },
+       },
