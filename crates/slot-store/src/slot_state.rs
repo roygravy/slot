@@ -414,18 +414,26 @@ impl TvCable {
 pub enum NesColors {
     Standard,
     Sony,
+    /// The NES's own composite colours, as measured off the console.
+    Authentic,
     Nescap,
     Pvm,
 }
 
 impl NesColors {
-    pub const ALL: [NesColors; 4] =
-        [NesColors::Standard, NesColors::Sony, NesColors::Nescap, NesColors::Pvm];
+    pub const ALL: [NesColors; 5] = [
+        NesColors::Standard,
+        NesColors::Sony,
+        NesColors::Authentic,
+        NesColors::Nescap,
+        NesColors::Pvm,
+    ];
 
     pub fn name(self) -> &'static str {
         match self {
             NesColors::Standard => "standard",
             NesColors::Sony => "sony",
+            NesColors::Authentic => "authentic",
             NesColors::Nescap => "nescap",
             NesColors::Pvm => "pvm",
         }

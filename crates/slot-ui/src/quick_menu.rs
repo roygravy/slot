@@ -835,7 +835,8 @@ impl QuickValue {
             QuickValue::SVideo => "S-Video",
             QuickValue::Rgb => "RGB",
             QuickValue::Standard => "Standard",
-            QuickValue::Sony => "Sony",
+            // A TV's own colour decoder: no maker's name on screen (Roy).
+            QuickValue::Sony => "TV",
             QuickValue::Nescap => "NESCAP",
             QuickValue::Pvm => "PVM",
             QuickValue::BorderAuto => "Auto",

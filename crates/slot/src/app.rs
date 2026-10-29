@@ -1121,6 +1121,7 @@ impl App {
             QuickRow::NesColors => Some(match self.state.nes_colors {
                 NesColors::Standard => QuickValue::Standard,
                 NesColors::Sony => QuickValue::Sony,
+                NesColors::Authentic => QuickValue::Authentic,
                 NesColors::Nescap => QuickValue::Nescap,
                 NesColors::Pvm => QuickValue::Pvm,
             }),
