@@ -672,6 +672,7 @@ impl Worker {
         let mut cable_core = Duration::ZERO;
         let mut cable_wait = Duration::ZERO;
         let mut ff = (0u32, 0u32, Duration::ZERO, Instant::now());
+        let mut bench = (0u32, Duration::ZERO, Duration::ZERO, Instant::now());
         while !self.shared.stop.load(Ordering::Relaxed) {
             for cmd in self.cmds.try_iter() {
                 self.apply(cmd, core.as_mut(), &mut transport, &mut cable, &link);
@@ -838,6 +839,23 @@ impl Worker {
                 }
                 let core_time = began.elapsed();
                 cost.measured(skipped, drawn);
+                if BENCH.load(Ordering::Relaxed) {
+                    bench.0 += ran;
+                    bench.1 += core_time;
+                    bench.2 = bench.2.max(drawn).max(skipped.unwrap_or_default());
+                    let secs = bench.3.elapsed().as_secs_f32();
+                    if secs >= 2.0 {
+                        let fps = bench.0 as f32 / secs;
+                        BENCH_FPS.store((fps * 10.0).round() as u32, Ordering::Relaxed);
+                        eprintln!(
+                            "slot: bsnes-sgb: {:.1} fps, {:.1} ms core per frame, slowest {:.1} ms (a frame has 16.7 ms)",
+                            fps,
+                            bench.1.as_secs_f32() * 1000.0 / bench.0.max(1) as f32,
+                            bench.2.as_secs_f32() * 1000.0,
+                        );
+                        bench = (0, Duration::ZERO, Duration::ZERO, Instant::now());
+                    }
+                }
                 if cable.is_some() {
                     cable_presents += 1;
                     cable_core += core_time;
@@ -1121,6 +1139,9 @@ impl Worker {
         let mut buf = self.frames.take_write();
         buf.clear();
         buf.extend_from_slice(video);
+        if BENCH.load(Ordering::Relaxed) {
+            stamp_fps(&mut buf, BENCH_FPS.load(Ordering::Relaxed));
+        }
         self.frames.publish(buf);
         self.shared.published.fetch_add(1, Ordering::Relaxed);
         crate::latency::published();
@@ -1128,6 +1149,59 @@ impl Worker {
 
     fn speed(&self) -> Speed {
         Speed::from_u8(self.shared.speed.load(Ordering::Relaxed))
+    }
+}
+
+/// Test only (bsnes as the Super Game Boy): frames the core ran each second, shown in the
+/// picture's corner and written to the log, to see whether the H700 keeps up.
+static BENCH: AtomicBool = AtomicBool::new(false);
+static BENCH_FPS: AtomicU32 = AtomicU32::new(0);
+
+pub fn set_bench(on: bool) {
+    BENCH.store(on, Ordering::Relaxed);
+    BENCH_FPS.store(0, Ordering::Relaxed);
+}
+
+/// `tenths` of a frame a second as "59.9", in a 3x5 font at 3x on a black plate, top left.
+fn stamp_fps(buf: &mut [u8], tenths: u32) {
+    const DIGITS: [[u8; 5]; 10] = [
+        [7, 5, 5, 5, 7],
+        [2, 6, 2, 2, 7],
+        [7, 1, 7, 4, 7],
+        [7, 1, 7, 1, 7],
+        [5, 5, 7, 1, 1],
+        [7, 4, 7, 1, 7],
+        [7, 4, 7, 5, 7],
+        [7, 1, 1, 1, 1],
+        [7, 5, 7, 5, 7],
+        [7, 5, 7, 1, 7],
+    ];
+    const DOT: [u8; 5] = [0, 0, 0, 0, 2];
+    const SCALE: usize = 3;
+    let width = slot_store::TV_CANVAS.0 as usize;
+    let height = buf.len() / 4 / width.max(1);
+    let tenths = tenths.min(999);
+    let glyphs = [
+        &DIGITS[(tenths / 100) as usize],
+        &DIGITS[(tenths / 10 % 10) as usize],
+        &DOT,
+        &DIGITS[(tenths % 10) as usize],
+    ];
+    let (plate_w, plate_h) = ((glyphs.len() * 4 + 1) * SCALE, 7 * SCALE);
+    for y in 0..plate_h.min(height) {
+        for x in 0..plate_w.min(width) {
+            let (gx, gy) = (x / SCALE, y / SCALE);
+            let lit = gy >= 1
+                && gy <= 5
+                && gx >= 1
+                && (gx - 1) % 4 < 3
+                && glyphs
+                    .get((gx - 1) / 4)
+                    .is_some_and(|g| g[gy - 1] >> (2 - (gx - 1) % 4) & 1 == 1);
+            let at = (y * width + x) * 4;
+            let v = if lit { 0xff } else { 0 };
+            buf[at..at + 4].copy_from_slice(&[v, v, v, 0]);
+        }
     }
 }
 
@@ -1259,6 +1333,19 @@ mod tests {
     use slot_retro::LoopbackLink;
 
     const PANEL: Duration = Duration::from_micros(16_760);
+
+    #[test]
+    fn the_bench_counter_draws_59_point_9_in_the_corner_only() {
+        let (w, h) = slot_store::TV_CANVAS;
+        let mut buf = vec![0x40u8; (w * h * 4) as usize];
+        stamp_fps(&mut buf, 599);
+        let at = |x: usize, y: usize| buf[(y * w as usize + x) * 4];
+        // The 5's top bar, lit; the plate around it black; the picture beyond untouched.
+        assert_eq!(at(3, 3), 0xff);
+        assert_eq!(at(0, 0), 0);
+        assert_eq!(at(100, 100), 0x40);
+        stamp_fps(&mut [0u8; 16], 599);
+    }
 
     fn frames_in(cost: &FrameCost, budget: Duration, ceiling: u32) -> u32 {
         cost.frames(budget, ceiling)

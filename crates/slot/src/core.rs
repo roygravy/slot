@@ -514,6 +514,36 @@ pub fn set_sgb_border(root: &Path, choice: u8, two: bool, turn: u32) -> (&'stati
 /// mGBA as a Super Game Boy, drawing on the SNES's screen: its borders, and the SGB's own
 /// colours for the games that set none. The Super Game Boy 2 has a secret: a Game Boy Color
 /// game plays in its own colours inside the border (`gbc`), as mGBA's Super Game Boy Color.
+/// Test only: with bsnes on the card the Super Game Boy plays as the real thing does, a SNES
+/// running the SGB cart (BIOS/SGB1.sfc or SGB2.sfc), to see whether the H700 keeps up.
+pub fn bsnes_sgb_test(root: &Path) -> Option<PathBuf> {
+    let path = root
+        .join("System")
+        .join(format!("bsnes_libretro.{}", std::env::consts::DLL_EXTENSION));
+    path.exists().then_some(path)
+}
+
+pub fn open_bsnes_sgb(root: &Path, path: &Path, two: bool) -> Box<dyn RetroCore> {
+    let bios = root::bios_dir(root);
+    let saves = root::saves_dir(root);
+    let cart = if two { "SGB2.sfc" } else { "SGB1.sfc" };
+    if !bios.join(cart).exists() {
+        eprintln!("slot: bsnes-sgb: {} is missing; bsnes cannot start", bios.join(cart).display());
+    }
+    match LibretroCore::open_with_options(path, &bios, &saves, &[("bsnes_sgb_bios", cart)]) {
+        Ok(mut core) => {
+            let (w, h) = Platform::Snes.canvas();
+            core.set_canvas(w, h);
+            eprintln!("slot: bsnes-sgb: core {} with {cart}", path.display());
+            Box::new(core)
+        }
+        Err(e) => {
+            eprintln!("slot: bsnes-sgb: {}: {e}", path.display());
+            Box::new(MockCore::new())
+        }
+    }
+}
+
 pub fn sgb_options(root: &Path, core: &mut dyn RetroCore, choice: u8, two: bool, gbc: bool) {
     let (w, h) = Platform::Snes.canvas();
     core.set_canvas(w, h);

@@ -591,9 +591,15 @@ impl Session {
         };
         // A Game Boy game in the Super Game Boy plays on mGBA, the core that does the SGB.
         let sgb = self.app.sgb_playing();
-        let core = match sgb {
-            true => slot_store::Core::Mgba,
-            false => slot_store::core_for_platform(&self.root, stem, platform),
+        // Test only: bsnes on the card takes the Super Game Boy over from mGBA. Its states keep
+        // to a folder of their own (under Snes9x's name), so mGBA's are never written over.
+        let bsnes = sgb.then(|| crate::core::bsnes_sgb_test(&self.root)).flatten();
+        let bsnes_test = bsnes.is_some();
+        crate::emu::set_bench(bsnes_test);
+        let core = match (sgb, bsnes_test) {
+            (true, true) => slot_store::Core::Snes9x,
+            (true, false) => slot_store::Core::Mgba,
+            (false, _) => slot_store::core_for_platform(&self.root, stem, platform),
         };
         launch(&format!("opening {stem} on {}", core.as_str()));
         // The core opens in the chosen palette: the grey, if wanted, follows once it runs.
@@ -639,7 +645,11 @@ impl Session {
         let ghosting =
             crate::core::lcd_ghosting_option(core, platform, self.app.lcd_ghosting_for(platform));
         // The Super Game Boy's picture takes the SNES's look.
-        let tv = crate::core::tv_options(core, self.app.tv_look(self.app.playing_platform()));
+        let tv = crate::core::tv_options(
+            if sgb { slot_store::Core::Mgba } else { core },
+            self.app.tv_look(self.app.playing_platform()),
+        );
+        let two = self.app.sgb_two();
         let sgb_setup = sgb.then(|| {
             (
                 self.app.sgb_border(),
@@ -650,6 +660,13 @@ impl Session {
             )
         });
         let open = Box::new(move || {
+            if let Some(path) = &bsnes {
+                let mut core = crate::core::open_bsnes_sgb(&root, path, two);
+                for (key, value) in tv {
+                    core.set_option(key, value);
+                }
+                return core;
+            }
             let mut opened = open_core(
                 &root, core, platform, serial,
                 // slot.'s own screen looks take the place of the cores' colour correction.
@@ -666,8 +683,9 @@ impl Session {
             }
             opened.core
         });
-        self.app
-            .set_named_core(crate::core::core_found(&self.root, core));
+        self.app.set_named_core(
+            bsnes_test || crate::core::core_found(&self.root, core),
+        );
         launch("core opened");
         let sav = self
             .app
@@ -678,7 +696,8 @@ impl Session {
         let ring = self.sink.ring();
         let linked = player.filter(|_| platform == Platform::Gba);
         let emu = EmuHandle::spawn_opening(open, rom, ring, sav, resume, linked);
-        if sav_unread {
+        // The game's save is read but never written back from bsnes during the test.
+        if sav_unread || bsnes_test {
             emu.refuse_save_ram();
         }
         if resume_unread {
