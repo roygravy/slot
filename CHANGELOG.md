@@ -7,6 +7,13 @@ Everything since slot. x GRAVY v1.0.2.
 ### New
 
 - **Deep sleep**: a tap on POWER now really puts the console to sleep (suspend to RAM). The green light blinks out as it falls asleep, POWER wakes it straight back into your game. Overnight it uses about half a percent of battery an hour.
+- **NES and SNES**: their own shelves and slots, on FCEUmm and Snes9x, with NTSC and PAL cart moulds. The picture goes through a CRT shader and Blargg's NTSC composite filter. NES colours: Authentic or Trinitron.
+- **Super Game Boy**: put the SGB cart in the SNES slot and the camera zooms onto the Game Boy shelf inside it. Games play in SGB colours with their own border, one of the eight real borders read from `SGB1.sfc` / `SGB2.sfc` in `BIOS/`, or the slot. x GRAVY border.
+- **Light Sleep** before the deep sleep: Wi-Fi stays on, any button wakes it; after Direct / 5 / 10 / 30 minutes (5 by default) it goes into deep sleep, which only POWER wakes.
+- **Slot Color**: Dark, Light or Originals, the colours of the real consoles. The NES Originals slot has the two black blocks beside the lid.
+- **Highlight** behind the cart, next to Spotlight, Glow and Star, for Favorites.
+- **Label search**: Y in the cartridge studio searches for a label and lets you pick another, Europe first, then USA, then Japan. The on-screen keyboard has accents.
+- Your own wallpaper gets black menus, whatever the Slot Color.
 - **3:2 screens** (RG34XX SP, 720x480): the shelf and menus span the whole panel, and full screen GB/GBC, GBA, save states and screenshots fill it without black bars. The GBA LCD filter keeps to the panel's own pixels.
 - **Home Wi-Fi** (ported from pvaibhav/slot): join your home network from Settings -> General -> Home Wi-Fi. Networks are listed in `Config/wifi.toml`.
 - **Network** has its own row in the menu, with Home Wi-Fi on/off and the network you are connected to.
