@@ -445,7 +445,11 @@ impl GamePass {
                     (self.pic[3] - self.pic[1]) * SRC_H as f32,
                 ],
             );
-            (x, y, w, h, screen_brightness(self.power))
+            // Drawn across a panel wider than 4:3 (the frame's 640 columns stretched to it):
+            // the picture keeps its own pixels in the middle and its ground runs to the edges.
+            let k = (self.fbo_scale[0] / self.fbo_scale[1]).max(1.0);
+            let x = (x + OUT_W as f32 * (k - 1.0) / 2.0) / k;
+            (x, y, w / k, h, screen_brightness(self.power))
         } else {
             let (x, y, w, h) = fullscreen_game_rect(self.power);
             (x, y, w, h, screen_brightness(self.power))

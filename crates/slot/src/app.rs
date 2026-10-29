@@ -4004,12 +4004,11 @@ impl App {
 
     /// Whether a game's picture fills the panel on a 3:2 panel, drawn on the full-width canvas
     /// with no bezel: a GBA game (720x480 is its picture at 3x), and a Game Boy or Game Boy
-    /// Color game in full screen (Roy: full screen is the whole screen, no black bars).
+    /// Color game, full screen or with its ground run to the edges (Roy: no black bars).
     pub fn game_fills(&self) -> bool {
         slot_gfx::framed(self.panel)
             && match self.playing_platform() {
-                Platform::Gba => true,
-                Platform::Gb | Platform::Gbc => self.video_mode() == VideoMode::Stretch,
+                Platform::Gba | Platform::Gb | Platform::Gbc => true,
                 Platform::Nes | Platform::Snes => false,
             }
     }
