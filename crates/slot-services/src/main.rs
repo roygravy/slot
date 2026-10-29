@@ -327,6 +327,14 @@ fn serve(root: &Path, run: &Path) -> std::io::Result<()> {
                         home.enable(action == "on", root);
                         respond(&mut stream, 0, "ACCEPTED");
                     }
+                    ("home", "sleep" | "wake") => {
+                        if action == "sleep" {
+                            home.sleep();
+                        } else {
+                            home.wake();
+                        }
+                        respond(&mut stream, 0, "ACCEPTED");
+                    }
                     ("time", "auto" | "manual") => {
                         auto_time = action == "auto";
                         if auto_time {
@@ -352,7 +360,7 @@ fn serve(root: &Path, run: &Path) -> std::io::Result<()> {
                     }
                     ("service", "status") => {
                         let status = home.interface.status();
-                        let up = home.enabled && connected(&status) && home.interface.has_ip();
+                        let up = home.online();
                         // Hex, so a network name with spaces stays one word on the line.
                         let ssid = if up {
                             config::hex(system::field(&status, "ssid").unwrap_or(""))
@@ -526,7 +534,7 @@ fn main() {
         return;
     }
     if args.len() != 2 {
-        eprintln!("usage: slot-services home on|off|reload | time auto|manual | link warm|cool|host|join|down | service status|stop");
+        eprintln!("usage: slot-services home on|off|reload|sleep|wake | time auto|manual | link warm|cool|host|join|down | service status|stop");
         std::process::exit(2);
     }
     let pid = std::env::var("SLOT_OWNER_PID")

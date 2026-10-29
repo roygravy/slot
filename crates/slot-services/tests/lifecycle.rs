@@ -66,6 +66,7 @@ ip)
  '-4 -o addr show dev wlan0') [ ! -f "$MOCK_ROOT/home-ip" ] || echo '2: wlan0 inet 192.168.1.24/24' ;;
  '-4 -o addr show dev wlan1') [ ! -f "$MOCK_ROOT/link-ip" ] || echo '3: wlan1 inet 10.42.0.1/24' ;;
  '-4 route show table all') echo '192.168.1.0/24 dev wlan0' ;;
+ '-4 route show default dev wlan0') [ ! -f "$MOCK_ROOT/home-ip" ] || echo 'default via 192.168.1.1' ;;
  'addr add '*) touch "$MOCK_ROOT/link-ip" ;;
  'addr del '*) rm -f "$MOCK_ROOT/link-ip" ;;
  '-4 addr flush dev wlan0') rm -f "$MOCK_ROOT/home-ip" ;;
@@ -367,4 +368,21 @@ fn delayed_boot_radio_does_not_skip_the_preferred_network() {
     // the absent second profile first would instead stall for 25 seconds.
     r.wait_connected();
     assert!(r.record("wlan0.conf").contains("ssid=486f6d65"));
+}
+
+#[test]
+fn deep_sleep_lets_go_of_home_and_joins_afresh_after_it() {
+    let r = Rig::new();
+    r.wait_connected();
+    let before = r.record("wlan0.wpa.pid");
+    r.call(&["home", "sleep"]);
+    assert!(!r.dir.path().join("run/wlan0.wpa.pid").exists());
+    assert!(!r.dir.path().join("home-ip").exists());
+    // Asleep, nothing is started again behind the suspend's back.
+    std::thread::sleep(Duration::from_secs(1));
+    assert!(!r.dir.path().join("run/wlan0.wpa.pid").exists());
+    assert!(r.call(&["service", "status"]).contains("home_connected=false"));
+    r.call(&["home", "wake"]);
+    r.wait_connected();
+    assert_ne!(r.record("wlan0.wpa.pid"), before);
 }

@@ -707,10 +707,11 @@ impl Platform for DevicePlatform {
         for (dir, _) in &radios {
             let _ = fs::write(dir.join("soft"), "1");
         }
-        let before = self.battery_line();
         let _ = Command::new("sync").status();
         self.fall_asleep_led();
+        let mut refused = 0;
         let woke = loop {
+            let before = self.battery_line();
             let alarm = self.set_alarm(BATTERY_LOOK);
             let (wall, mono) = (SystemTime::now(), Instant::now());
             let wrote = fs::write(power.join("state"), "mem");
@@ -722,6 +723,12 @@ impl Platform for DevicePlatform {
             self.set_alarm(Duration::ZERO);
             if let Err(e) = wrote {
                 self.sleep_log(&format!("mem refused: {e}"));
+                // A driver busy for a moment (seen once in a night's log): try again shortly.
+                refused += 1;
+                if refused < 3 && e.raw_os_error() == Some(16) {
+                    std::thread::sleep(Duration::from_secs(1));
+                    continue;
+                }
                 break None;
             }
             let irq = fs::read_to_string(power.join("pm_wakeup_irq")).unwrap_or_default();

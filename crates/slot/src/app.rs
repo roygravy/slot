@@ -5392,7 +5392,10 @@ impl App {
         let Some(power) = &mut self.power else {
             return;
         };
-        match power.deep_sleep(BATTERY_CRITICAL) {
+        self.radio.deep_sleep(true);
+        let woke = power.deep_sleep(BATTERY_CRITICAL);
+        self.radio.deep_sleep(false);
+        match woke {
             None => {}
             Some(Woke::LowBattery) => self.begin_power_off(),
             Some(Woke::Button) => {

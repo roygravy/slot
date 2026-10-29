@@ -67,6 +67,10 @@ pub trait RadioJobs: Send {
     fn home_ssid(&self) -> Option<String> {
         None
     }
+
+    /// Around the deep sleep, waiting for the answer: the network is let go before the
+    /// suspend and joined afresh after it.
+    fn deep_sleep(&mut self, _asleep: bool) {}
 }
 
 pub struct RadioQueue;
@@ -100,6 +104,16 @@ impl RadioJobs for RadioQueue {
             .ok()
             .and_then(|s| s.clone())
             .filter(|_| self.home_connected())
+    }
+
+    fn deep_sleep(&mut self, asleep: bool) {
+        if !HOME_WANTED.load(Ordering::SeqCst) {
+            return;
+        }
+        HOME_CONNECTED.store(false, Ordering::SeqCst);
+        let _ = helper()
+            .args(["home", if asleep { "sleep" } else { "wake" }])
+            .status();
     }
 }
 

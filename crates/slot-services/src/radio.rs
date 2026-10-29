@@ -119,6 +119,11 @@ impl Interface {
         output("ip", &["-4", "-o", "addr", "show", "dev", self.name])
             .is_ok_and(|s| s.contains(" inet "))
     }
+    /// A default route out through this interface: without it a lookup has nowhere to go.
+    pub fn has_route(&self) -> bool {
+        output("ip", &["-4", "route", "show", "default", "dev", self.name])
+            .is_ok_and(|s| !s.trim().is_empty())
+    }
     /// The first IPv4 address on this interface, as a bare address.
     pub fn ipv4(&self) -> Option<std::net::Ipv4Addr> {
         let out = output("ip", &["-4", "-o", "addr", "show", "dev", self.name]).ok()?;
@@ -250,6 +255,8 @@ pub struct Home {
     deadline: Instant,
     retry: Instant,
     connected: bool,
+    /// The console is going into, or is in, its deep sleep: hands off the radio.
+    asleep: bool,
 }
 impl Home {
     pub fn new(run: &Path) -> Self {
@@ -264,7 +271,29 @@ impl Home {
             deadline: Instant::now() + Duration::from_secs(25),
             retry: Instant::now(),
             connected,
+            asleep: false,
         }
+    }
+    /// Before the deep sleep: let go of the network cleanly, supplicant and lease alike.
+    /// Blocking the radio under a running supplicant took the default route with it, and
+    /// the old lease came back without one: joined, an address, and no internet.
+    pub fn sleep(&mut self) {
+        self.asleep = true;
+        self.interface.stop();
+        self.connected = false;
+    }
+    /// Back from the deep sleep: join again straight away, preferred network first.
+    pub fn wake(&mut self) {
+        self.asleep = false;
+        self.next = 0;
+        self.retry = Instant::now();
+    }
+    /// Joined, an address, and a way out: the default route the lease brought.
+    pub fn online(&self) -> bool {
+        self.enabled
+            && connected(&self.interface.status())
+            && self.interface.has_ip()
+            && self.interface.has_route()
     }
     pub fn enable(&mut self, enabled: bool, root: &Path) {
         self.enabled = enabled;
@@ -313,7 +342,7 @@ impl Home {
         }
     }
     pub fn tick(&mut self, root: &Path, link_busy: bool, link_freq: Option<u32>, ours: &[u32]) {
-        if !self.enabled {
+        if !self.enabled || self.asleep {
             return;
         }
         let now = Instant::now();

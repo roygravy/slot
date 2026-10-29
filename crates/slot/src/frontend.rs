@@ -42,7 +42,7 @@ pub struct Frontend {
     // Started once Home Wi-Fi is connected, not at boot: the network is not up yet then.
     cheat_fetch: Option<crate::cheat_fetch::CheatFetch>,
     /// The label worker has run with Home Wi-Fi connected.
-    labels_online: bool,
+    was_online: bool,
     session: Session,
     start: Instant,
     last: Instant,
@@ -260,7 +260,7 @@ impl Frontend {
             search_tex: SearchTextures::default(),
             version_tex: Vec::new(),
             cheat_fetch: None,
-            labels_online: false,
+            was_online: false,
             ui_faces: None,
             rebuild_faces: RebuildFaces::default(),
             link_art: LinkArtBuilder::spawn(),
@@ -1234,29 +1234,25 @@ impl Frontend {
         self.fetch_once_online();
     }
 
-    /// Cheat files come only from online: their worker starts the first time Home Wi-Fi is
-    /// connected, whether that is shortly after boot or after it is switched on in the menu.
-    /// The label worker started at boot, mostly before Wi-Fi was up, so it has likely given
-    /// up on the network: a fresh one starts then for the carts still without a label.
+    /// Cheat files and labels come only from online: their workers start the first time Home
+    /// Wi-Fi is connected, whether that is shortly after boot or after it is switched on in
+    /// the menu. They give up on a network that keeps failing, so every time the connection
+    /// comes back (after the deep sleep, or Wi-Fi off and on) fresh ones start for the carts
+    /// still without a label or a cheat look-up.
     fn fetch_once_online(&mut self) {
         let app = self.session.app();
-        if !app.home_wifi_on() || !app.home_connected() {
-            return;
-        }
-        if self.labels_online && self.cheat_fetch.is_some() {
+        let online = app.home_wifi_on() && app.home_connected();
+        let back = online && !self.was_online;
+        self.was_online = online;
+        if !back {
             return;
         }
         let Some(root) = app.root().map(|r| r.to_path_buf()) else {
             return;
         };
         let carts: Vec<_> = app.carts().cloned().collect();
-        if !self.labels_online {
-            self.labels_online = true;
-            self.labels = crate::labels::Labels::spawn(root.clone(), carts.clone());
-        }
-        if self.cheat_fetch.is_none() {
-            self.cheat_fetch = Some(crate::cheat_fetch::CheatFetch::spawn(root, carts));
-        }
+        self.labels = crate::labels::Labels::spawn(root.clone(), carts.clone());
+        self.cheat_fetch = Some(crate::cheat_fetch::CheatFetch::spawn(root, carts));
     }
 
     pub fn app(&self) -> &crate::app::App {
