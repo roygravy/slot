@@ -599,8 +599,6 @@ impl Session {
         self.grey = false;
         self.app.set_core(core);
         self.app.set_platform(platform);
-        self.app
-            .set_video_mode(crate::video_mode::video_mode_for(&self.root, stem));
         self.app.set_link_loaded(serial);
         let resume = match self.app.starting_clean() {
             true => Ok(None),

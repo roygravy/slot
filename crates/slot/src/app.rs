@@ -396,7 +396,6 @@ pub struct App {
     /// The camera pulling back out of the Super Game Boy, from the Game Boy shelf it showed.
     sgb_unzoom: Option<(Millis, usize)>,
     named_core: bool,
-    video_mode: VideoMode,
     link: Option<LinkSession>,
     sfx: Option<Sfx>,
     polaroids: Option<Polaroids>,
@@ -606,7 +605,6 @@ impl App {
             sgb_zoom_at: None,
             sgb_unzoom: None,
             named_core: false,
-            video_mode: VideoMode::default(),
             link: None,
             sfx: None,
             polaroids: None,
@@ -1338,7 +1336,7 @@ impl App {
     }
 
     pub fn shown_game_bezel(&self) -> Option<TexId> {
-        if self.video_mode == VideoMode::Stretch {
+        if self.video_mode() == VideoMode::Stretch {
             return None;
         }
         self.game_bezel
@@ -1838,12 +1836,19 @@ impl App {
         self.named_core = named;
     }
 
-    pub fn set_video_mode(&mut self, mode: VideoMode) {
-        self.video_mode = mode;
+    /// Full screen or the game's own size: one setting for the Game Boy and the Game Boy
+    /// Color, kept between games. A game in the Super Game Boy is on the SNES's screen, which
+    /// has its border round it: never cut to the Game Boy's picture (Roy: a full-screen game
+    /// came out wrong in the SGB).
+    fn video_mode(&self) -> VideoMode {
+        match self.screen_platform() {
+            Platform::Gb | Platform::Gbc if self.state.gb_fullscreen => VideoMode::Stretch,
+            _ => VideoMode::Actual,
+        }
     }
 
     pub fn source_rect(&self) -> [f32; 4] {
-        video_mode::source_rect(self.screen_platform(), self.video_mode)
+        video_mode::source_rect(self.screen_platform(), self.video_mode())
     }
 
     fn slot_owns_the_shoulders(&self) -> bool {
@@ -1867,18 +1872,12 @@ impl App {
     }
 
     fn set_picture(&mut self, mode: VideoMode) {
-        if self.video_mode == mode {
+        let full = mode == VideoMode::Stretch;
+        if self.state.gb_fullscreen == full {
             return;
         }
-        self.video_mode = mode;
-        let (Some(root), Phase::Playing { cart }) = (self.root.clone(), &self.phase) else {
-            return;
-        };
-        let written = video_mode::write_video_mode(&root, cart, mode);
-        if let Err(e) = &written {
-            eprintln!("slot: video: could not write video_mode.txt: {e}");
-        }
-        self.card_writes.wrote("video_mode.txt", &written);
+        self.state.gb_fullscreen = full;
+        self.persist_soon();
     }
 
     pub fn set_link_loaded(&mut self, serial: &'static str) {

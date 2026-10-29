@@ -267,6 +267,9 @@ pub struct SlotState {
     pub auto_time: bool,
     /// 24-hour clock; off shows 6:00 PM.
     pub clock_24h: bool,
+    /// Game Boy and Game Boy Color games fill the screen (L) rather than showing at their
+    /// own size (R): one setting for both, kept between games (Roy).
+    pub gb_fullscreen: bool,
     pub rumble: bool,
     /// Home association only; Link holds its own radio lease.
     pub home_wifi_enabled: bool,
@@ -508,6 +511,7 @@ impl Default for SlotState {
             time_zone: None,
             auto_time: true,
             clock_24h: true,
+            gb_fullscreen: false,
             rumble: true,
             home_wifi_enabled: false,
             ff_speed: FF_SPEED_DEFAULT,
@@ -665,6 +669,7 @@ pub fn write_slot_state(root: &Path, s: &SlotState) -> std::io::Result<()> {
     text.push_str(&format!("home_wifi_enabled={}\n", s.home_wifi_enabled as u8));
     text.push_str(&format!("auto_time={}\n", s.auto_time as u8));
     text.push_str(&format!("clock_24h={}\n", s.clock_24h as u8));
+    text.push_str(&format!("gb_fullscreen={}\n", s.gb_fullscreen as u8));
     text.push_str(&format!("cart_sgb={}\n", s.cart_sgb as u8));
     text.push_str(&format!("sgb_border={}\n", s.sgb_border));
     if let Some(zone) = s.time_zone {
@@ -745,6 +750,7 @@ fn parse(text: &str) -> Option<SlotState> {
     let mut time_zone = None;
     let mut auto_time = None;
     let mut clock_24h = None;
+    let mut gb_fullscreen = None;
     let mut cart_sgb = None;
     let mut sgb_border = None;
     let mut ff_speed = None;
@@ -817,6 +823,7 @@ fn parse(text: &str) -> Option<SlotState> {
             "home_wifi_enabled" => home_wifi_enabled = flag(value),
             "auto_time" => auto_time = flag(value),
             "clock_24h" => clock_24h = flag(value),
+            "gb_fullscreen" => gb_fullscreen = flag(value),
             "cart_sgb" => cart_sgb = flag(value),
             "sgb_border" => sgb_border = value.parse::<u8>().ok(),
             "time_zone" => time_zone = crate::zone_named(value).map(|z| z.name),
@@ -890,6 +897,7 @@ fn parse(text: &str) -> Option<SlotState> {
         time_zone,
         auto_time: auto_time.unwrap_or(true),
         clock_24h: clock_24h.unwrap_or(true),
+        gb_fullscreen: gb_fullscreen.unwrap_or(false),
         cart_sgb: cart_sgb.unwrap_or(false),
         sgb_border: sgb_border.unwrap_or(0),
         rumble: rumble.unwrap_or(fallback.rumble),
