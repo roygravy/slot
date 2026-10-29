@@ -278,7 +278,13 @@ impl Compositor {
 
     pub fn fit(&mut self, window: (u32, u32)) {
         self.window = window;
-        self.resize(canvas_size(window));
+        // As begin_frame sizes it, so a native frame is not cut back and grown every frame.
+        let size = if self.native() {
+            window
+        } else {
+            canvas_size(window)
+        };
+        self.resize(size);
     }
 
     fn native(&self) -> bool {

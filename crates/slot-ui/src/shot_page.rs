@@ -2,7 +2,7 @@
 //! one in a white frame between its neighbours, and A to see it fill the screen. Deleting asks
 //! first: A deletes, B cancels.
 
-use crate::draw::{Canvas, Draw, TexId, OUT_H, OUT_W};
+use crate::draw::{Canvas, Draw, TexId, OUT_H};
 use crate::hud::{PLATE, PLATE_H};
 use crate::plate::{centred_hints, HINT_H, LEGEND_GAP};
 use crate::theme::Ink;
@@ -49,7 +49,9 @@ pub struct ShotPage<'a> {
     /// Where the carousel is, easing towards `sel` after a flick.
     pub pos: f32,
     /// The pictures loaded so far, by index.
-    pub pics: &'a [(usize, TexId)],
+    /// The pictures loaded: index, texture and the picture's width (640, or 720 off a 3:2
+    /// panel), all 480 high.
+    pub pics: &'a [(usize, TexId, f32)],
     pub full: bool,
     /// How much of the full-screen hint plate shows.
     pub hints: f32,
@@ -81,8 +83,8 @@ fn fade(mut c: [f32; 4], a: f32) -> [f32; 4] {
 }
 
 impl ShotPage<'_> {
-    fn pic(&self, i: usize) -> Option<TexId> {
-        self.pics.iter().find(|(k, _)| *k == i).map(|(_, t)| *t)
+    fn pic(&self, i: usize) -> Option<(TexId, f32)> {
+        self.pics.iter().find(|(k, ..)| *k == i).map(|(_, t, w)| (*t, *w))
     }
 
     pub fn draw(&self, out: &mut Vec<Draw>) {
@@ -126,13 +128,15 @@ impl ShotPage<'_> {
             rect(out, fx, fy, fw, fh, fade(ink.dim, 0.3));
             rect(out, fx, fy, fw, fh, fade(ink.bar, 1.0 - off));
             match self.pic(i) {
-                Some(tex) => out.push(Draw::Tex {
+                // A wider picture shows its 4:3 middle in the frame.
+                Some((tex, pw)) => out.push(Draw::Part {
                     x: x.round(),
                     y: SHOT_TOP,
                     w: SHOT_W,
                     h: SHOT_H,
                     tex,
                     alpha: 1.0,
+                    uv: Canvas::FRAMED.window(pw),
                 }),
                 None => rect(out, x, SHOT_TOP, SHOT_W, SHOT_H, fade(ink.dim, 0.2)),
             }
@@ -193,14 +197,17 @@ impl ShotPage<'_> {
     fn draw_full(&self, out: &mut Vec<Draw>) {
         let w = self.canvas.w;
         rect(out, 0.0, 0.0, w, OUT_H as f32, [0.0, 0.0, 0.0, 1.0]);
-        if let Some(tex) = self.pic(self.sel) {
-            out.push(Draw::Tex {
-                x: self.canvas.centred(OUT_W as f32),
+        if let Some((tex, pw)) = self.pic(self.sel) {
+            // As wide as it was taken, its middle where the canvas is narrower.
+            let w = pw.min(self.canvas.w);
+            out.push(Draw::Part {
+                x: self.canvas.centred(w),
                 y: 0.0,
-                w: OUT_W as f32,
+                w,
                 h: OUT_H as f32,
                 tex,
                 alpha: 1.0,
+                uv: Canvas { w, h: OUT_H as f32 }.window(pw),
             });
         }
         let a = if self.confirm { 1.0 } else { self.hints };

@@ -443,7 +443,7 @@ pub struct App {
     /// The Screenshots page, its fixed faces, and the pictures loaded for it.
     shots: Option<crate::shots::ShotView>,
     shot_faces: Option<slot_ui::ShotFaces>,
-    shot_pics: Vec<(usize, TexId)>,
+    shot_pics: Vec<(usize, TexId, f32)>,
     /// Asking before a save state goes.
     state_confirm: Option<slot_ui::ConfirmFaces>,
     boot_picture: Option<(Vec<u8>, u32, u32)>,
@@ -6712,7 +6712,7 @@ impl App {
         self.shot_faces.as_mut()
     }
 
-    pub fn set_shot_pics(&mut self, pics: Vec<(usize, TexId)>) {
+    pub fn set_shot_pics(&mut self, pics: Vec<(usize, TexId, f32)>) {
         self.shot_pics = pics;
     }
 

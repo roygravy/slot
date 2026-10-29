@@ -169,8 +169,8 @@ struct ShotTextures {
     fixed: [Option<TexId>; 3],
     hints: [Option<TexId>; 7],
     state_line: Option<TexId>,
-    /// Up to five pictures: (path, texture), least recently used first.
-    pics: Vec<(std::path::PathBuf, TexId)>,
+    /// Up to five pictures: (path, texture, width at 480 high), least recently used first.
+    pics: Vec<(std::path::PathBuf, TexId, f32)>,
 }
 
 #[derive(Default)]
@@ -2099,9 +2099,9 @@ fn sync_shots(app: &mut App, compositor: &mut Compositor, st: &mut ShotTextures)
     let mut loaded = false;
     let mut pics = Vec::new();
     for (i, path) in &paths {
-        if let Some(at) = st.pics.iter().position(|(p, _)| p == path) {
+        if let Some(at) = st.pics.iter().position(|(p, ..)| p == path) {
             let entry = st.pics.remove(at);
-            pics.push((*i, entry.1));
+            pics.push((*i, entry.1, entry.2));
             st.pics.push(entry);
             continue;
         }
@@ -2117,16 +2117,18 @@ fn sync_shots(app: &mut App, compositor: &mut Compositor, st: &mut ShotTextures)
             let at = st
                 .pics
                 .iter()
-                .position(|(p, _)| !keep.contains(&p))
+                .position(|(p, ..)| !keep.contains(&p))
                 .unwrap_or(0);
-            let (_, tex) = st.pics.remove(at);
+            let (_, tex, _) = st.pics.remove(at);
             compositor.update_texture(tex, w, h, &rgba);
             tex
         } else {
             compositor.create_texture(w, h, &rgba)
         };
-        st.pics.push((path.clone(), tex));
-        pics.push((*i, tex));
+        // Its width as drawn 480 high.
+        let pw = w as f32 * OUT_H as f32 / h.max(1) as f32;
+        st.pics.push((path.clone(), tex, pw));
+        pics.push((*i, tex, pw));
     }
     app.set_shot_pics(pics);
 }
