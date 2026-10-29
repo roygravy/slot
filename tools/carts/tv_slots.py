@@ -27,6 +27,18 @@ def plain(front, w):
     return out
 
 
+def nes_blocks(im, x0=MX - 82, x1=MX - 6):
+    d = ImageDraw.Draw(im)
+    d.line((x0 - 2, 0, x0 - 2, H), fill=(108, 107, 104, 255))
+    d.line((x0 - 1, 0, x0 - 1, H), fill=(140, 138, 134, 255))
+    for y0, y1 in ((1, 28), (29, H - 2)):
+        d.rectangle((x0, y0, x1, y1), fill=(38, 38, 40, 255))
+        d.line((x0, y0, x1, y0), fill=(78, 78, 80, 255))
+        d.line((x0, y0, x0, y1), fill=(60, 60, 62, 255))
+        d.line((x0, y1, x1, y1), fill=(18, 18, 20, 255))
+        d.line((x1, y0, x1, y1), fill=(24, 24, 26, 255))
+
+
 def strips(name):
     return (Image.open(f'{A}slot_front_gb_{name}.png').convert('RGBA'),
             Image.open(f'{A}slot_back_gb_{name}.png').convert('RGBA'))
@@ -56,6 +68,11 @@ for theme, nes_from, snes_from in [('dark', 'dark', 'dark'), ('light', 'light', 
     back = Image.new('RGBA', (W, H), seam)
     back.alpha_composite(front)
     back.alpha_composite(lid, (MX, 0))
+    if theme == 'orig':
+        # The real NES's top beside its lid: the two black blocks of the ribbed strip, as tall
+        # together as the lid (Roy's top-view photo); the ribs run on below, out of the band.
+        for part in (front, back):
+            nes_blocks(part)
     front.save(f'{A}slot_front_nes_{theme}.png', optimize=True)
     back.save(f'{A}slot_back_nes_{theme}.png', optimize=True)
     lid.save(f'{A}nes_lid_{theme}.png', optimize=True)
