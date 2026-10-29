@@ -137,8 +137,13 @@ void main() {
         lin += TV_GLOW * pow(glow, vec3(2.2));
         c = pow(clamp(lin, 0.0, 1.0), vec3(1.0 / 2.2));
     } else if (u_mode > 4.5) {
-        vec2 screen_px = floor(gl_FragCoord.xy / u_fbo);
+        // Across a panel wider than 4:3 the stripes keep to the screen's own pixels, three
+        // to a cell, past the overlay's 640 columns too, rather than being stretched.
+        vec2 screen_px = floor(gl_FragCoord.xy / u_fbo.y);
         vec2 overlay_px = floor(screen_px * u_lcd_overlay_size / u_output_size);
+        if (overlay_px.x > u_lcd_overlay_size.x - 2.0) {
+            overlay_px.x = 3.0 + mod(overlay_px.x, 3.0);
+        }
 
         vec2 overlay_uv = (overlay_px + 0.5) / u_lcd_overlay_size;
         lcd = texture2D(u_lcd_overlay, overlay_uv);
