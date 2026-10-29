@@ -7,7 +7,9 @@ use crate::cart_shell::key;
 use crate::Platform;
 
 pub const CART_MARKER_FILE: &str = "Config/cart_marker.txt";
-pub const NO_LABEL_FILE: &str = "System/Cache/Labels/none.txt";
+/// The games looked for and not found. A new name when the search learns to find more, so
+/// those are looked for once again (2: SNES renders, names as written, Europe's countries).
+pub const NO_LABEL_FILE: &str = "System/Cache/Labels/none-2.txt";
 /// The carts whose label the player took off, kept with the labels rather than the cache so
 /// clearing the cache does not bring them back.
 pub const REMOVED_LABEL_FILE: &str = "Labels/removed.txt";
