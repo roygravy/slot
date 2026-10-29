@@ -188,6 +188,15 @@ pub fn dmg_only(rom: &Path) -> bool {
         .is_ok_and(|_| header[0x143] & 0x80 == 0)
 }
 
+/// A cart that speaks to the Super Game Boy (header 0x146 = 0x03), Game Boy Color or not.
+pub fn sgb_aware(rom: &Path) -> bool {
+    use std::io::Read;
+    let mut header = [0u8; 0x150];
+    std::fs::File::open(rom)
+        .and_then(|mut f| f.read_exact(&mut header))
+        .is_ok_and(|_| header[0x146] == 0x03)
+}
+
 fn report_missing(core: Core, paths: &[PathBuf]) {
     eprintln!(
         "slot: no {} core found, running the mock test pattern instead. Looked in: {}",

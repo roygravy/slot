@@ -644,7 +644,9 @@ impl Session {
             (
                 self.app.sgb_border(),
                 self.app.sgb_two(),
-                platform == Platform::Gbc,
+                // A colour game made for the SGB too plays as on the real thing, in SGB
+                // colours with its own border; only the rest keep their colour inside slot.'s.
+                platform == Platform::Gbc && !crate::core::sgb_aware(&rom),
             )
         });
         let open = Box::new(move || {
