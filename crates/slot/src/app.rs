@@ -2094,12 +2094,17 @@ impl App {
             .filter(|(r, _)| *r == Rack::Of(Platform::Snes))
             .find_map(|(_, s)| s.find(slot_store::SGB_STEM))
             .and_then(|(_, face)| face);
-        // The clear Super Game Boy 2 shows through its band, so its face fades out as the band
-        // fades in: laid over each other, the two clear plastics would end in a jump (Roy).
+        // The clear Super Game Boy 2 zooms in as its cart, whole, and only over the last frames
+        // does the sharp band fade in on top of it (Roy). Its face goes in the very last ones,
+        // once the band covers it, so the two clear plastics never show through each other.
         let clear = model == slot_ui::SgbModel::Sgb2;
         let sharp = match clear {
-            true => ease(((u - 0.2) / 0.75).clamp(0.0, 1.0)),
+            true => ease(((u - 0.72) / 0.2).clamp(0.0, 1.0)),
             false => ease(((u - 0.35) / 0.55).clamp(0.0, 1.0)),
+        };
+        let face_alpha = match clear {
+            true => 1.0 - ease(((u - 0.88) / 0.1).clamp(0.0, 1.0)),
+            false => 1.0,
         };
         if let Some(tex) = face {
             out.push(Draw::Tex {
@@ -2108,7 +2113,7 @@ impl App {
                 w: a.2,
                 h: a.3,
                 tex,
-                alpha: if clear { 1.0 - sharp } else { 1.0 },
+                alpha: face_alpha,
             });
         }
         slot_ui::draw_slot_part(canvas, snes, true, out);
