@@ -15,11 +15,15 @@ pub const GET_VARIABLE_UPDATE: c_uint = 17;
 pub const GET_RUMBLE_INTERFACE: c_uint = 23;
 pub const GET_LOG_INTERFACE: c_uint = 27;
 pub const GET_SAVE_DIRECTORY: c_uint = 31;
+pub const GET_AUDIO_VIDEO_ENABLE: c_uint = 47 | 0x10000;
 pub const SET_AUDIO_BUFFER_STATUS_CALLBACK: c_uint = 62;
 pub const SET_NETPACKET_INTERFACE: c_uint = 78;
 
 pub const RUMBLE_STRONG: c_uint = 0;
 pub const RUMBLE_WEAK: c_uint = 1;
+
+pub const AV_ENABLE_VIDEO: c_int = 1;
+pub const AV_ENABLE_AUDIO: c_int = 2;
 
 pub const PIXEL_FORMAT_XRGB8888: c_uint = 1;
 pub const PIXEL_FORMAT_RGB565: c_uint = 2;

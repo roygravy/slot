@@ -41,6 +41,8 @@ struct Host {
     net: Link,
     net_peer: Option<u16>,
     audio_status: Option<AudioBufferStatusFn>,
+    /// The frame being run is skipped: its picture is never shown.
+    skip_video: bool,
     options: std::collections::HashMap<String, std::ffi::CString>,
     options_dirty: bool,
     declared: std::collections::HashMap<String, Vec<String>>,
@@ -202,6 +204,19 @@ unsafe extern "C" fn environment(cmd: c_uint, data: *mut c_void) -> bool {
             (*(data as *mut LogCallback)).log = log_noop as *const c_void;
             true
         }
+        // A core that skips its drawing when asked (Snes9x) has no frameskip of its own.
+        GET_AUDIO_VIDEO_ENABLE => {
+            if data.is_null() {
+                return false;
+            }
+            with_host(|h| {
+                *(data as *mut c_int) = match h.skip_video {
+                    true => AV_ENABLE_AUDIO,
+                    false => AV_ENABLE_VIDEO | AV_ENABLE_AUDIO,
+                };
+            })
+            .is_some()
+        }
         SET_AUDIO_BUFFER_STATUS_CALLBACK => {
             if data.is_null() {
                 return with_host(|h| h.audio_status = None).is_some();
@@ -326,6 +341,10 @@ unsafe extern "C" fn video_refresh(
         return;
     }
     with_host(|h| {
+        // A skipped frame is never shown: not worth filtering or copying.
+        if h.skip_video {
+            return;
+        }
         // A picture slot. filters itself goes down its cable first, then on as the cores'.
         match h.ntsc.take() {
             Some(mut ntsc) if (width as usize) <= 3 * 256 / 2 => {
@@ -601,6 +620,7 @@ impl LibretroCore {
             net: Link::default(),
             net_peer: None,
             audio_status: None,
+            skip_video: false,
             options,
             options_dirty: false,
             declared: std::collections::HashMap::new(),
@@ -748,6 +768,7 @@ impl RetroCore for LibretroCore {
     }
 
     fn set_frame_skip(&mut self, skip: bool) {
+        self.host.skip_video = skip;
         let _a = Active::bind(&mut self.host);
         unsafe { report_audio_status(skip) };
     }
@@ -872,6 +893,7 @@ mod tests {
             net: Link::default(),
             net_peer: None,
             audio_status: None,
+            skip_video: false,
             options,
             options_dirty,
             declared: HashMap::new(),
@@ -1077,6 +1099,23 @@ mod tests {
                 "the skip and the draw did not read as an underrun and a healthy buffer"
             );
         });
+    }
+
+    #[test]
+    fn a_skipped_frame_asks_the_core_to_leave_its_picture_undrawn() {
+        let mut host = host_with(HashMap::new(), false);
+        let mut asked = |skip: bool| {
+            host.skip_video = skip;
+            let mut av: c_int = -1;
+            let ok = {
+                let _active = Active::bind(&mut host);
+                unsafe { environment(GET_AUDIO_VIDEO_ENABLE, &mut av as *mut c_int as *mut c_void) }
+            };
+            assert!(ok, "Snes9x draws every frame when this goes unanswered");
+            av
+        };
+        assert_eq!(asked(true), AV_ENABLE_AUDIO);
+        assert_eq!(asked(false), AV_ENABLE_VIDEO | AV_ENABLE_AUDIO);
     }
 
     #[test]
