@@ -50,6 +50,8 @@ Game Boy games go into a Game Boy slot, GBA games into a GBA SP slot, both redra
 
 New in v1.1: an NES and a Super Nintendo shelf, each with its own slot, the NES with the two black blocks beside the lid of the real thing. Carts come in the NTSC and PAL moulds, and the picture goes through a CRT: an NES in Authentic or Trinitron colours, a Super Nintendo on a flat Trinitron, both through a composite signal.
 
+<img src=".github/resources/gravy/nes-insert.gif" width="640" alt="An NES cart going into the slot under its lid">
+
 <img src=".github/resources/gravy/tv.png" width="100%" alt="The NES shelf and the Super Nintendo shelf">
 
 <img src=".github/resources/gravy/tv-games.png" width="100%" alt="The Legend of Zelda on the NES and A Link to the Past on the Super Nintendo, through the CRT">
@@ -67,6 +69,8 @@ Put the Super Game Boy cart in the SNES slot and the camera zooms in onto the Ga
 ### A cartridge of your own
 
 Press **SELECT** on a cart to open the cartridge studio: pick its shell colour and finish (solid, clear, glitter), fetch its label with **Y**, or give a blank cart a title in black, white or gold marker. Every system, NES and SNES included.
+
+<img src=".github/resources/gravy/studio.gif" width="640" alt="The cartridge studio opening on Goodboy Galaxy and trying shell colours and finishes">
 
 <img src=".github/resources/gravy/studio.png" width="100%" alt="The cartridge studio: picking a label photo and a shell colour">
 
@@ -125,6 +129,7 @@ Tap **POWER** and the console drops into a light sleep: Wi-Fi stays on and any b
 - **START + SELECT** resets the game
 - **Resume Game** powers straight back into your game, its picture as the boot screen
 - Carts without label art get their title written on by hand
+- **3:2 screens** too (RG34XX SP, 720×480): the shelf, menus, games, save states and screenshots fill the whole panel, no black bars
 - Native 640×480, with Game Boy and Game Boy Color games filling the screen; **L1 / R1** flips between full screen and original size
 - Starts on your Favorites; GB, GBC, GBA, NES, SNES in that order
 
