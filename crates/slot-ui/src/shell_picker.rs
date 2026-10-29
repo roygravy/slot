@@ -2,7 +2,7 @@
 //! the finishes under those; for a blank cart with no label to fetch, a second tab holds the
 //! markers its title can be written in.
 use crate::board::{board_in, lift_of, slide_of, Placed, SLIDE_SHARE};
-use crate::draw::{Canvas, Draw, TexId, OUT_H, OUT_W};
+use crate::draw::{Canvas, Draw, TexId, OUT_H};
 use crate::plate::{centred_hints, tint_mask, word_face, UndoFace, HINT_EDGE, HINT_H, LEGEND_GAP};
 use crate::slot_chrome::ease;
 use crate::theme::Ink;
@@ -235,7 +235,7 @@ pub fn draw_shell_picker(canvas: Canvas, v: &ShellPickerView, out: &mut Vec<Draw
     out.push(Draw::Rect {
         x: 0.0,
         y: 0.0,
-        w: OUT_W as f32,
+        w: canvas.w,
         h: OUT_H as f32,
         colour: faded(v.ground, open),
     });

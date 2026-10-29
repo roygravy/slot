@@ -878,6 +878,7 @@ impl Frontend {
         self.grab_boot_picture(compositor);
         self.grab_screenshot(compositor);
         self.load_resume_picture(compositor);
+        compositor.set_game_fills(self.session.app().game_fills());
         compositor.begin_frame(self.session.app().layout());
         self.poll_ui_faces(compositor);
         self.poll_rebuild();

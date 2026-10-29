@@ -1,12 +1,14 @@
 use crate::surface::{OUT_H, OUT_W};
 
-pub fn framed(_panel: (u32, u32)) -> bool {
-    false
+/// A panel wider than 4:3, as the RG34XX's 720x480: the shelf is drawn across all of it, a
+/// game in the 4:3 picture in its middle.
+pub fn framed(panel: (u32, u32)) -> bool {
+    panel.1 > 0 && panel.0 * OUT_H > panel.1 * OUT_W
 }
 
 pub fn screen_rect(panel: (u32, u32)) -> (i32, i32, i32, i32) {
-    let w = panel.0;
-    let h = (w * OUT_H + OUT_W / 2) / OUT_W;
+    let h = panel.1;
+    let w = (h * OUT_W + OUT_H / 2) / OUT_H;
     ((panel.0 - w) as i32 / 2, 0, w as i32, h as i32)
 }
 

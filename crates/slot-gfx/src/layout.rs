@@ -39,4 +39,15 @@ impl Canvas {
         }
         [(tex_w - self.w) / 2.0 / tex_w, 0.0, self.w / tex_w, 1.0]
     }
+
+    /// The part of a full-screen picture (`tex_w` by `tex_h`) that covers the canvas without
+    /// stretching it: its middle, cut at the sides on a narrower canvas, at top and bottom
+    /// on a wider one.
+    pub fn cover(self, tex_w: f32, tex_h: f32) -> [f32; 4] {
+        let seen = (tex_w / tex_h) / (self.w / self.h);
+        match seen < 1.0 {
+            true => [0.0, (1.0 - seen) / 2.0, 1.0, seen],
+            false => self.window(tex_w),
+        }
+    }
 }

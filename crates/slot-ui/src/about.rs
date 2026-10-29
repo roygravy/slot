@@ -68,13 +68,30 @@ pub fn draw_about(canvas: Canvas, face: Option<TexId>, out: &mut Vec<Draw>) {
     let Some(tex) = face else {
         return;
     };
+    let (w, h) = (OUT_W as f32, OUT_H as f32);
+    let ox = canvas.centred(w).max(0.0);
+    // A canvas wider than the plate (3:2) carries its plastic out to the edges.
+    if ox > 0.0 {
+        let edge = 0.02;
+        for (x, u) in [(0.0, 0.0), (ox + w, 1.0 - edge)] {
+            out.push(Draw::Part {
+                x,
+                y: 0.0,
+                w: ox,
+                h,
+                tex,
+                alpha: 1.0,
+                uv: [u, 0.0, edge, 1.0],
+            });
+        }
+    }
     out.push(Draw::Part {
-        x: 0.0,
+        x: ox,
         y: 0.0,
-        w: canvas.w,
-        h: OUT_H as f32,
+        w: w.min(canvas.w),
+        h,
         tex,
         alpha: 1.0,
-        uv: canvas.window(OUT_W as f32),
+        uv: canvas.window(w),
     });
 }

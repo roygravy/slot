@@ -73,6 +73,6 @@ fn ground(canvas: Canvas, tex: TexId) -> Draw {
         h: OUT_H as f32,
         tex,
         alpha: 1.0,
-        uv: canvas.window(OUT_W as f32),
+        uv: canvas.cover(OUT_W as f32, OUT_H as f32),
     }
 }

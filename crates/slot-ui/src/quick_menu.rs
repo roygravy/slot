@@ -1382,7 +1382,7 @@ pub fn draw_menu_ground(canvas: Canvas, ground: Option<TexId>, ink: Ink, out: &m
                 h,
                 tex,
                 alpha: 1.0,
-                uv: canvas.window(OUT_W as f32),
+                uv: canvas.cover(OUT_W as f32, OUT_H as f32),
             });
             out.push(Draw::Rect {
                 x: 0.0,
