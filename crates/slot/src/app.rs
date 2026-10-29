@@ -1804,6 +1804,21 @@ impl App {
                 }
             }
         }
+        // The Super Game Boy's camera shows another shelf than the one chosen: the SNES one
+        // (the SGB itself) while it is in, the Game Boy one it leaves while it comes out.
+        // Their faces stay, or the SGB went missing in the zoom and the Game Boy carts turned
+        // to bare silhouettes on their way up (Roy).
+        let sgb_shelf = self.sgb.then(|| {
+            self.shelves
+                .iter()
+                .position(|(r, _)| *r == Rack::Of(Platform::Snes))
+        });
+        let leaving = self.sgb_unzoom().map(|(_, shelf)| shelf);
+        for at in [sgb_shelf.flatten(), leaving].into_iter().flatten() {
+            if at != self.shelf_at && !out.contains(&at) {
+                out.push(at);
+            }
+        }
         out
     }
 
@@ -2024,10 +2039,12 @@ impl App {
         for d in &mut out[from..] {
             zoom_draw(d, k, dx, dy, 1.0);
         }
-        // Near the end the band's own sharp art fades in over the enlarged face, under the same
-        // camera, so the zoom lands on it without a jump (Roy: the enlarged face went soft).
+        // Over the second half the band's own sharp art fades in over the enlarged face, under
+        // the same camera, so the zoom lands on it without a jump (Roy: the enlarged face went
+        // soft). The band art is matched to the face's colours (tools/sgb/sgb_band_match.py),
+        // so only the sharpness changes, and slowly.
         slot_ui::set_sgb_band(true);
-        let sharp = ease(((u - 0.55) / 0.3).clamp(0.0, 1.0));
+        let sharp = ease(((u - 0.35) / 0.55).clamp(0.0, 1.0));
         if sharp > 0.0 {
             let band = Some(sets[8 + model as usize]);
             let k1 = b.2 / a.2;
