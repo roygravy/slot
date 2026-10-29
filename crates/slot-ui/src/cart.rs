@@ -31,9 +31,9 @@ pub const LABEL_WELL: [u8; 3] = [0x8d, 0x8d, 0x90];
 const GBA_LABEL_RADIUS: f32 = 11.0;
 const GB_LABEL_RADIUS: f32 = 5.0;
 const NES_LABEL_RADIUS: f32 = 4.0;
-/// Roy's photos (2026-10-29): the American sticker's corners are about 2% of its width, the
-/// European one's under 3%; rounder than that read as a toy.
-const SNES_LABEL_RADIUS: f32 = 5.0;
+/// The American sticker keeps its round corners (Roy); the European one is measured on Roy's
+/// photo (2026-10-29), under 3% of its width.
+const SNES_LABEL_RADIUS: f32 = 9.0;
 const SNES_PAL_LABEL_RADIUS: f32 = 7.0;
 
 pub const LABEL_X: u32 = label_panel(CART_W, CART_H).0;
