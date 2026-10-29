@@ -13,6 +13,7 @@ fn render_board() {
         label: None,
         code: "BPEE".into(),
         shell: None,
+        marker: None,
         title: "POKEMON EMER".into(),
     });
     let f = std::fs::File::create(&out).unwrap();

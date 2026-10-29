@@ -9,7 +9,7 @@ of its back. Inside the mouth the
 back strip is the same plastic in shadow, and the front strip lays the walls' shadow on the cart.
 
 Writes assets/slot_{back,front}_{dark,light}.png (GBA) and
-assets/slot_{back,front}_gb_{dark,light}.png (Game Boy) at 720x58.
+assets/slot_{back,front}_gb_{dark,light}.png (Game Boy) at 720x58, and the Originals ones.
 """
 from pathlib import Path
 
@@ -31,11 +31,21 @@ RIB_TOP = 9.0
 SCOOP = (263.0, 44.5)           # the scoop: where its arc leaves the floor, and its deepest y
 METAL_TOP = 33.0                # below this the slot's back is the metal plate, not plastic
 
-# Dark: the charcoal of the original GBA slot. Light: a tint lighter than a Game Boy cart.
+# Dark: the charcoal of the original GBA slot. Light: a warm grey toward the DMG's (Roy).
 LOOKS = {
     "dark": np.array([42, 42, 45], np.float32),
-    "light": np.array([184, 181, 175], np.float32),
+    "light": np.array([178, 173, 163], np.float32),
 }
+# Originals: each console's own housing. The GBA's Indigo in its slot; in the Game Boy's, the
+# DMG's grey, the Game Boy Color's Grape and, for the NES and SNES bands cut from it
+# (tools/carts/tv_slots.py), the NES's and the Super Famicom's light greys.
+ORIGINALS = [
+    ("", "orig", np.array([84, 74, 152], np.float32)),
+    ("_gb", "orig", np.array([196, 192, 183], np.float32)),
+    ("_gb", "orig_gbc", np.array([104, 78, 146], np.float32)),
+    ("_gb", "orig_nes", np.array([188, 186, 180], np.float32)),
+    ("_gb", "orig_snes", np.array([200, 199, 202], np.float32)),
+]
 
 
 def mottle(seed: int) -> np.ndarray:
@@ -205,9 +215,11 @@ def draw(mouth: np.ndarray, plastic: np.ndarray, front: bool, metal: bool) -> np
     return np.dstack([np.clip(c, 0, 255), a * 255]).round().astype(np.uint8)
 
 
-for shape, mouth, metal in [("", gba_mouth(), True), ("_gb", gb_mouth(), False)]:
-    for look, plastic in LOOKS.items():
-        for part, front in [("back", False), ("front", True)]:
-            out = ROOT / "assets" / f"slot_{part}{shape}_{look}.png"
-            Image.fromarray(draw(mouth, plastic, front, metal), "RGBA").save(out, optimize=True)
-            print("wrote", out.name)
+MOUTHS = {"": (gba_mouth(), True), "_gb": (gb_mouth(), False)}
+STRIPS = [(shape, look, plastic) for shape in MOUTHS for look, plastic in LOOKS.items()]
+for shape, look, plastic in STRIPS + ORIGINALS:
+    mouth, metal = MOUTHS[shape]
+    for part, front in [("back", False), ("front", True)]:
+        out = ROOT / "assets" / f"slot_{part}{shape}_{look}.png"
+        Image.fromarray(draw(mouth, plastic, front, metal), "RGBA").save(out, optimize=True)
+        print("wrote", out.name)

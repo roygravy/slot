@@ -184,6 +184,14 @@ impl Compositor {
         self.game.set_effect(effect);
     }
 
+    pub fn set_tv_lines(&mut self, scanlines: bool, mask: bool) {
+        self.game.set_tv_lines(scanlines, mask);
+    }
+
+    pub fn set_afterglow(&mut self, keep: u32) {
+        self.game.set_afterglow(keep);
+    }
+
     pub fn set_picture(&mut self, rect: [f32; 4]) {
         self.game.set_picture(rect);
     }
@@ -309,6 +317,10 @@ impl Compositor {
 
     pub fn set_game_fills_frame(&mut self, on: bool) {
         self.game.set_fills_frame(on);
+    }
+
+    pub fn set_game_canvas(&mut self, w: u32, h: u32) {
+        self.game.set_canvas(w, h);
     }
 
     pub fn set_game_source_rect(&mut self, rect: [f32; 4]) {

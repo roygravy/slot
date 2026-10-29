@@ -19,6 +19,7 @@ fn cart() -> Cart {
         label: None,
         code: String::new(),
         shell: None,
+        marker: None,
         title: "POKEMON EMER".into(),
     }
 }
@@ -31,6 +32,7 @@ fn pak() -> Cart {
         label: None,
         code: String::new(),
         shell: None,
+        marker: None,
         title: "TETRIS".into(),
     }
 }

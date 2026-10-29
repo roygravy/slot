@@ -96,7 +96,13 @@ impl ShotPage<'_> {
         };
         let ink = self.ink;
         if self.count == 0 {
-            tint(out, faces.empty, self.canvas.centred(faces.empty.1 as f32), EMPTY_Y, ink.dim);
+            tint(
+                out,
+                faces.empty,
+                self.canvas.centred(faces.empty.1 as f32),
+                EMPTY_Y,
+                ink.dim,
+            );
             let h = faces.empty_help;
             tint(out, h, self.canvas.centred(h.1 as f32), LINE_Y, ink.dim);
             self.legend(&faces.legend_empty, out);
@@ -111,7 +117,12 @@ impl ShotPage<'_> {
                 continue;
             }
             let off = (i as f32 - self.pos).abs().min(1.0);
-            let (fx, fy, fw, fh) = (x - FRAME, SHOT_TOP - FRAME, SHOT_W + 2.0 * FRAME, SHOT_H + 2.0 * FRAME);
+            let (fx, fy, fw, fh) = (
+                x - FRAME,
+                SHOT_TOP - FRAME,
+                SHOT_W + 2.0 * FRAME,
+                SHOT_H + 2.0 * FRAME,
+            );
             rect(out, fx, fy, fw, fh, fade(ink.dim, 0.3));
             rect(out, fx, fy, fw, fh, fade(ink.bar, 1.0 - off));
             match self.pic(i) {
@@ -131,7 +142,13 @@ impl ShotPage<'_> {
         }
         self.dots(DOTS_Y, ink.text, out);
         if let Some(t) = faces.title {
-            tint(out, t, self.canvas.centred(t.1 as f32), (PLATE_H - t.2 as f32) / 2.0, ink.text);
+            tint(
+                out,
+                t,
+                self.canvas.centred(t.1 as f32),
+                (PLATE_H - t.2 as f32) / 2.0,
+                ink.text,
+            );
         }
         if self.confirm {
             let c = faces.confirm;
@@ -163,10 +180,7 @@ impl ShotPage<'_> {
             return;
         }
         let shown = self.count.min(DOTS_MAX);
-        let first = self
-            .sel
-            .saturating_sub(shown / 2)
-            .min(self.count - shown);
+        let first = self.sel.saturating_sub(shown / 2).min(self.count - shown);
         let row = shown as f32 * DOT + (shown as f32 - 1.0) * DOT_GAP;
         let mut x = self.canvas.centred(row).round();
         for i in first..first + shown {
@@ -206,8 +220,8 @@ impl ShotPage<'_> {
             tint(out, (tex, hw, HINT_H), x, y, white);
             x += hw as f32 + PLATE_GAP;
         }
-        let right_w: f32 =
-            right.iter().map(|&(_, hw)| hw as f32).sum::<f32>() + PLATE_GAP * right.len().saturating_sub(1) as f32;
+        let right_w: f32 = right.iter().map(|&(_, hw)| hw as f32).sum::<f32>()
+            + PLATE_GAP * right.len().saturating_sub(1) as f32;
         let mut x = w - MARGIN - right_w;
         for &(tex, hw) in right {
             tint(out, (tex, hw, HINT_H), x, y, white);
@@ -215,7 +229,13 @@ impl ShotPage<'_> {
         }
         if self.confirm {
             let c = faces.confirm;
-            tint(out, c, self.canvas.centred(c.1 as f32), top + (PLATE_H - c.2 as f32) / 2.0, white);
+            tint(
+                out,
+                c,
+                self.canvas.centred(c.1 as f32),
+                top + (PLATE_H - c.2 as f32) / 2.0,
+                white,
+            );
         } else {
             self.dots(top + (PLATE_H - DOT) / 2.0, white, out);
         }

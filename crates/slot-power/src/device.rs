@@ -6,13 +6,13 @@ use std::io::Write;
 use std::os::unix::io::AsRawFd;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use crate::{Battery, Charge, LedState, Platform};
+use crate::{Battery, Charge, LedState, Platform, Woke};
 
 const TOP_STEP: u32 = 9;
 
-const BACKLIGHT_FLOOR: f64 = 1.0;
+const BACKLIGHT_FLOOR: f64 = 8.0 / 255.0;
 
 const BACKLIGHT_CURVE: f64 = 1.75;
 
@@ -24,7 +24,35 @@ const CARD_LOG: &str = "/data/slot-card.log";
 
 const WIFI_MODULE: &str = "8821cs";
 
+const WIFI_UNLOAD_WAIT: Duration = Duration::from_secs(5);
+
 const KERNEL_LINES: usize = 40;
+
+const SLEEP_LOG: &str = "deep-sleep.log";
+
+/// Asleep, the RTC wakes the console this often to look at the battery.
+const BATTERY_LOOK: Duration = Duration::from_secs(3600);
+
+/// The green light going out: three slow blinks, each a little shorter on.
+/// Into the light sleep: the light goes out this long, once.
+const LIGHT_SLEEP_BLINK_MS: u64 = 250;
+
+/// The light led.sh last chose, green unless the battery is low.
+fn awake_led_at(psy: &Path) {
+    let low = fs::read_to_string(Path::new(RUN_DIR).join("slot-led.state"))
+        .is_ok_and(|s| s.trim() == "red");
+    let _ = fs::write(psy.join("work_led"), if low { "0" } else { "1" });
+    let _ = fs::write(psy.join("lowpwr_led"), if low { "1" } else { "0" });
+}
+
+const SLEEP_BLINKS: [(bool, u64); 6] = [
+    (false, 300),
+    (true, 500),
+    (false, 300),
+    (true, 350),
+    (false, 300),
+    (true, 200),
+];
 
 pub fn uptime_seconds(s: &str) -> Option<String> {
     let first = s.split_whitespace().next()?;
@@ -157,6 +185,63 @@ impl DevicePlatform {
         }
     }
 
+    fn sleep_log(&self, line: &str) {
+        let dir = self.root.join("Logs");
+        let _ = fs::create_dir_all(&dir);
+        if let Ok(mut f) = fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(dir.join(SLEEP_LOG))
+        {
+            let _ = writeln!(f, "{} {line}", self.now());
+            let _ = f.sync_all();
+        }
+    }
+
+    /// Arms the RTC to wake the console after `after`; zero clears it. Whether it is armed.
+    fn set_alarm(&self, after: Duration) -> bool {
+        let Some(rtc) = &self.rtc else {
+            return false;
+        };
+        let file = rtc.join("wakealarm");
+        let _ = fs::write(&file, "0");
+        if after.is_zero() {
+            return false;
+        }
+        fs::write(&file, format!("+{}", after.as_secs())).is_ok()
+    }
+
+    /// Falling asleep, the green light breathes out in slow blinks.
+    fn fall_asleep_led(&self) {
+        let Some(psy) = &self.battery else {
+            return;
+        };
+        let green = psy.join("work_led");
+        let _ = fs::write(psy.join("lowpwr_led"), "0");
+        for (on, ms) in SLEEP_BLINKS {
+            let _ = fs::write(&green, if on { "1" } else { "0" });
+            std::thread::sleep(Duration::from_millis(ms));
+        }
+    }
+
+    /// Awake again: the light led.sh last chose, green unless the battery is low.
+    fn awake_led(&self) {
+        if let Some(psy) = &self.battery {
+            awake_led_at(psy);
+        }
+    }
+
+    /// Percent and voltage, for the sleep log: a percent alone hides an overnight drain.
+    fn battery_line(&self) -> String {
+        let Some(dir) = &self.battery else {
+            return "?".into();
+        };
+        let percent = read_number(&dir.join("capacity")).map_or("?".into(), |p| p.to_string());
+        let mv =
+            read_number(&dir.join("voltage_now")).map_or("?".into(), |v| (v / 1000).to_string());
+        format!("{percent}% {mv}mV")
+    }
+
     pub fn trace_boot(&self) {
         self.breadcrumb("boot: platform up, trace working");
     }
@@ -279,6 +364,45 @@ struct FfEvent {
 #[cfg(unix)]
 extern "C" {
     fn ioctl(fd: c_int, request: c_ulong, ...) -> c_int;
+    fn dup2(old: c_int, new: c_int) -> c_int;
+}
+
+fn unload_wifi() {
+    let Ok(mut rmmod) = Command::new("rmmod").arg(WIFI_MODULE).spawn() else {
+        return;
+    };
+    let until = Instant::now() + WIFI_UNLOAD_WAIT;
+    while Instant::now() < until {
+        if !matches!(rmmod.try_wait(), Ok(None)) {
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+}
+
+/// The Wi-Fi radios and their soft block, to block for the sleep and put back after it.
+fn wlan_rfkills(sysfs: &Path) -> Vec<(PathBuf, String)> {
+    let Ok(dirs) = fs::read_dir(sysfs.join("class/rfkill")) else {
+        return Vec::new();
+    };
+    dirs.filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .filter(|d| fs::read_to_string(d.join("type")).is_ok_and(|t| t.trim() == "wlan"))
+        .filter_map(|d| {
+            let soft = fs::read_to_string(d.join("soft")).ok()?;
+            Some((d, soft.trim().to_string()))
+        })
+        .collect()
+}
+
+fn release_logs() {
+    #[cfg(unix)]
+    if let Ok(null) = fs::OpenOptions::new().write(true).open("/dev/null") {
+        unsafe {
+            dup2(null.as_raw_fd(), 1);
+            dup2(null.as_raw_fd(), 2);
+        }
+    }
 }
 
 fn upload(node: &fs::File, id: i16) -> Option<i16> {
@@ -414,8 +538,9 @@ fn backlight_value(step: u8, max: u32) -> u32 {
         return 0;
     }
     let t = f64::from(step - 1) / f64::from(TOP_STEP - 1);
-    let span = f64::from(max) - BACKLIGHT_FLOOR;
-    (BACKLIGHT_FLOOR + span * t.powf(BACKLIGHT_CURVE)).round() as u32
+    let floor = (f64::from(max) * BACKLIGHT_FLOOR).round().max(1.0);
+    let span = f64::from(max) - floor;
+    (floor + span * t.powf(BACKLIGHT_CURVE)).round() as u32
 }
 
 fn run_shutdown_command(action: &str) -> bool {
@@ -569,18 +694,113 @@ impl Platform for DevicePlatform {
         }
     }
 
+    fn blink_led(&mut self) {
+        let Some(psy) = self.battery.clone() else {
+            return;
+        };
+        // On its own thread: the menu loop goes on meanwhile.
+        let _ = std::thread::Builder::new()
+            .name("slot-blink".into())
+            .spawn(move || {
+                let _ = fs::write(psy.join("work_led"), "0");
+                let _ = fs::write(psy.join("lowpwr_led"), "0");
+                std::thread::sleep(Duration::from_millis(LIGHT_SLEEP_BLINK_MS));
+                awake_led_at(&psy);
+            });
+    }
+
+    fn deep_sleep(&mut self, low: u8) -> Option<Woke> {
+        let power = self.sysfs.join("power");
+        let states = fs::read_to_string(power.join("state")).unwrap_or_default();
+        let modes = fs::read_to_string(power.join("mem_sleep")).unwrap_or_default();
+        self.sleep_log(&format!(
+            "states [{}] mem_sleep [{}]",
+            states.trim(),
+            modes.trim()
+        ));
+        if !states.split_whitespace().any(|s| s == "mem") {
+            self.sleep_log("no mem: staying in the light sleep");
+            return None;
+        }
+        if modes.split_whitespace().any(|m| m == "deep") {
+            let _ = fs::write(power.join("mem_sleep"), "deep");
+        }
+        let radios = wlan_rfkills(&self.sysfs);
+        for (dir, _) in &radios {
+            let _ = fs::write(dir.join("soft"), "1");
+        }
+        let _ = Command::new("sync").status();
+        self.fall_asleep_led();
+        let mut refused = 0;
+        let woke = loop {
+            let before = self.battery_line();
+            let alarm = self.set_alarm(BATTERY_LOOK);
+            let (wall, mono) = (SystemTime::now(), Instant::now());
+            let wrote = fs::write(power.join("state"), "mem");
+            let awake = mono.elapsed();
+            let slept = SystemTime::now()
+                .duration_since(wall)
+                .unwrap_or_default()
+                .saturating_sub(awake);
+            self.set_alarm(Duration::ZERO);
+            if let Err(e) = wrote {
+                self.sleep_log(&format!("mem refused: {e}"));
+                // A driver busy for a moment (seen once in a night's log): try again shortly.
+                refused += 1;
+                if refused < 3 && e.raw_os_error() == Some(16) {
+                    std::thread::sleep(Duration::from_secs(1));
+                    continue;
+                }
+                break None;
+            }
+            let irq = fs::read_to_string(power.join("pm_wakeup_irq")).unwrap_or_default();
+            self.sleep_log(&format!(
+                "slept {}s, battery {before} -> {}, wake irq [{}]",
+                slept.as_secs(),
+                self.battery_line(),
+                irq.trim()
+            ));
+            // Woken by the alarm, not by POWER: low on battery it powers off, else back to
+            // sleep with the screen dark.
+            if !alarm || slept + Duration::from_secs(5) < BATTERY_LOOK {
+                break Some(Woke::Button);
+            }
+            let battery = self.battery();
+            let charging = matches!(self.charge(), Charge::Charging | Charge::Full);
+            if battery.is_some_and(|b| b.percent <= low) && !charging {
+                self.sleep_log("battery low: powering off");
+                break Some(Woke::LowBattery);
+            }
+            if let Some(psy) = &self.battery {
+                let _ = fs::write(psy.join("work_led"), "0");
+            }
+        };
+        for (dir, soft) in &radios {
+            let _ = fs::write(dir.join("soft"), soft);
+        }
+        self.awake_led();
+        woke
+    }
+
     fn restart(&mut self) -> ! {
-        self.breadcrumb("restart: reached slot, unloading the WiFi driver");
-        let _ = Command::new("rmmod").arg(WIFI_MODULE).status();
-        self.breadcrumb("restart: WiFi driver unloaded, about to sync");
+        self.breadcrumb("restart: reached slot, syncing before the WiFi driver unloads");
+        let _ = Command::new("sync").status();
+        unload_wifi();
+        self.breadcrumb("restart: WiFi driver unloaded or given up on, about to sync");
         let _ = Command::new("sync").status();
         self.breadcrumb("restart: sync returned, about to signal init");
+        release_logs();
         shutdown_until_system_acts("reboot")
     }
 
     fn poweroff(&mut self) -> ! {
-        self.breadcrumb("poweroff: reached slot, about to sync");
+        self.breadcrumb("poweroff: reached slot, syncing before the WiFi driver unloads");
+        let _ = Command::new("sync").status();
+        unload_wifi();
+        self.breadcrumb("poweroff: WiFi driver unloaded or given up on, about to sync");
+        let _ = Command::new("sync").status();
         self.breadcrumb("poweroff: sync returned, about to signal init");
+        release_logs();
         shutdown_until_system_acts("poweroff")
     }
 

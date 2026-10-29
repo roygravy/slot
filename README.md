@@ -8,7 +8,7 @@ slot.'s real cartridges on a shelf and its real cartridge slot, with a little ex
 
 <img src=".github/resources/gravy/carousel.gif" width="640" alt="Scrolling the GBA shelf and pushing Goodboy Galaxy into the slot">
 
-[**Download slot-x-gravy-v1.0.1**](https://github.com/roygravy/slot/releases) · [Install](#install) · [What GRAVY adds](#what-gravy-adds) · [Controls](#controls)
+[**Download slot-x-gravy-v1.0.2**](https://github.com/roygravy/slot/releases) · [Install](#install) · [What's in the gravy](#whats-in-the-gravy) · [Controls](#controls)
 
 </div>
 
@@ -16,84 +16,98 @@ slot.'s real cartridges on a shelf and its real cartridge slot, with a little ex
 
 ## What is slot. x GRAVY?
 
-slot. x GRAVY is a personal modification of [slot.](https://github.com/BrandonKowalski/slot), Brandon Kowalski's bespoke Game Boy, Game Boy Color and Game Boy Advance frontend. Everything that makes it special is slot.'s: the shelf of cartridges, pushing a cart into the slot to play, save states, rewind, the link cable, Markus's artwork, and how ridiculously fast it is (power on and your shelf is there in **3 to 5 seconds**).
+[slot.](https://github.com/BrandonKowalski/slot) is Brandon Kowalski's Game Boy frontend: a shelf of real cartridges, a real slot to push them into, save states, rewind, a link cable, Markus's lovely artwork, and a shelf that's there **3 to 5 seconds** after you power on. New to it? Start at **[slot-cfw.fyi](https://slot-cfw.fyi)**.
 
-New to slot.? Everything you need to know first (what it is, how it works, the full guide) is on **[slot-cfw.fyi](https://slot-cfw.fyi)**.
-
-On top of that, slot. x GRAVY adds a few things of my own, tuned for the RG35XX Plus: since that handheld is a love letter to the original Game Boy, Game Boy carts get a Game Boy slot, there's a little more screen authenticity, and a handful of menu changes. Everything else works exactly like slot.
-
-It plays GB, GBC and GBA games only (unzipped ROMs), on mGBA, gpSP and Gambatte.
-
-### A screen that looks like the real thing
-
-slot. already offers an LCD grid, the softer colors of the original screens and mGBA's 48 Game Boy palettes. slot. x GRAVY turns them all on out of the box, with Game Boy games in the green of the original DMG, and adds two effects of its own: pale pixels let the screen behind them show through, and moving pixels leave a faint trail, like an old LCD.
-
-<img src=".github/resources/gravy/screen.png" width="100%" alt="Close-ups of Goodboy Galaxy and Hauntsfield with the default screen settings">
-
-Prefer it sharp and bright? GRAVY's **Screen Look** setting switches everything at once between *Authentic* (the default) and *Clean*. Or pick and choose:
-
-| Setting | Consoles | What it does | From |
-|---|---|---|---|
-| LCD Grid | GB, GBC, GBA | Thin lines between the pixels, like the real screen | slot. |
-| Original Colors | GB, GBC, GBA | Softer colors, the way the original screen showed them | slot. |
-| Color Palettes | GB | Tint Game Boy games with one of mGBA's 48 palettes; SELECT + L2 / R2 flips through them in a game | slot. |
-| See-Through Pixels | All | Pale pixels let the screen behind them show through | GRAVY |
-| Motion Blur | All | Moving pixels fade out slowly, like an old LCD | GRAVY |
+slot. x GRAVY is that, with my own gravy poured over it, made for the Anbernic RG35XX Plus. Same slot. underneath; a screen, a slot and a set of menus that feel a bit more like mine. It plays GB, GBC and GBA games (unzipped ROMs) on mGBA, gpSP and Gambatte.
 
 ---
 
-## What GRAVY adds
+## What's in the gravy
 
-### Two slots, new wallpapers
+### A screen that looks like the real thing
 
-slot.'s Dark and Light themes get redrawn cartridge slots in moulded plastic: Game Boy games get a Game Boy slot, GBA games a GBA SP slot. Each theme gets a new plain wallpaper, and either wallpaper goes with either theme, next to your own from the `Wallpapers` folder.
+This is the big one. Every console gets its own screen: the Game Boy's green dot matrix, the Game Boy Color's warm, slightly faded LCD with its fine RGB lines, and the Game Boy Advance in the same spirit. Pale pixels let the light through, every pixel casts a soft shadow, and moving pixels leave a faint trail, like an old LCD does.
+
+<img src=".github/resources/gravy/screen.png" width="100%" alt="Close-ups of the Game Boy, Game Boy Color and Game Boy Advance screens">
+
+Rather have it clean? **SELECT + B** turns it all off, and back on.
+
+<img src=".github/resources/gravy/effects.gif" width="480" alt="SELECT + B switching the screen effects off and on in Goodboy Galaxy">
+
+<img src=".github/resources/gravy/gameplay.png" width="100%" alt="Goodboy Galaxy on the GBA screen and Hauntsfield in Game Boy green">
+
+### A slot for every cartridge
+
+Game Boy games go into a Game Boy slot, GBA games into a GBA SP slot, both redrawn in moulded plastic, down to the ribs on the back wall. Two new wallpapers come along, and either one goes with the Dark or the Light theme.
 
 <img src=".github/resources/gravy/themes.png" width="100%" alt="The Game Boy Color shelf in the dark and the light theme">
 
 <img src=".github/resources/gravy/slots.png" width="100%" alt="The empty GBA slot and a Game Boy cart seated in its slot, dark and light">
 
-### Favorites that stand out
+### Menus of their own
 
-slot. already stars a cart onto its Favorites shelf with **Y**. In GRAVY, favorites stand a little taller under a soft, warm spotlight, and on the Favorites shelf the light stays put in the middle as you scroll. Prefer slot.'s quieter star? Pick **Star** instead.
-
-<img src=".github/resources/gravy/favorites.png" width="100%" alt="The Favorites shelf in dark and light">
-
-### Carts without label art
-
-No scan for a game? It still gets a proper cartridge: bare plastic with the title written on by hand in marker, dark on Game Boy carts, white on the GBA's dark shell.
-
-<img src=".github/resources/gravy/marker.png" width="100%" alt="Carts with no label art, titled in marker">
-
-### A different look for the menus
-
-slot.'s settings pages get a new layout: options on the left with the value on the right, flat pill switches for anything that's on or off, and a plain-English line at the bottom saying what the selected option does. The light theme gets light menus.
+Quiet, monochrome menus: options on the left, values on the right, simple switches, and one plain line telling you what the selected option does. The light theme gets light menus. Every button and shortcut is on the **Buttons** pages.
 
 <img src=".github/resources/gravy/menus.png" width="100%" alt="The main menu and the General page">
-<img src=".github/resources/gravy/menus2.png" width="100%" alt="The Screen and Gameplay pages">
 
-### Every button, explained, and Sleep in the power menu
+### Every console, its own settings
 
-A **Buttons** page in the menu lists every shortcut slot. answers to. Holding **POWER** now offers **Sleep** next to slot.'s Restart and Power Off.
+Dot Matrix, palettes, Pixel Transparency, Ghosting and a Black Border, set per console, from the menu or right in the game. The Game Boy keeps to its own three palettes, DMG, Pocket and Light, or plays a game in its own Game Boy Color colours.
 
-<img src=".github/resources/gravy/buttons_power.png" width="100%" alt="The Buttons page and the power menu">
+<img src=".github/resources/gravy/menus2.png" width="100%" alt="The Game Boy screen settings and the in-game Screen page">
 
-### Playing
+### Screenshots
 
-<img src=".github/resources/gravy/gameplay.png" width="100%" alt="Goodboy Galaxy on mGBA and Hauntsfield in the original Game Boy green">
-<img src=".github/resources/gravy/ingame.png" width="100%" alt="Hauntsfield in its own colours and on the DMG Green palette">
+**VOL+ and POWER** takes a screenshot, effects and all, in a game or in the menus. They wait for you on the Screenshots page.
+
+<img src=".github/resources/gravy/shots.png" width="100%" alt="The Screenshots page, and the power-off countdown">
 
 ### Cheats
 
-The in-game menu gets a **Cheats** page: switch a game's cheats on and off while you play, and they stay on next time. The whole RetroArch cheat collection for GB, GBC and GBA comes along in the `Cheats` folder, and you can add your own `.cht` files there. While any cheat is on, a little masked robber sits by the battery; the **Cheat Icon** switch hides it.
+Switch a game's cheats on and off while you play. The whole RetroArch cheat collection for GB, GBC and GBA is included, and your own `.cht` files work too. A little masked robber by the battery keeps you honest.
 
-<img src=".github/resources/gravy/cheats.png" width="100%" alt="The in-game menu with the robber by the battery, and the Cheats page">
+<img src=".github/resources/gravy/cheats.png" width="100%" alt="The in-game menu and the Cheats page">
+
+### Favorites in the spotlight
+
+Star a cart with **Y** and it stands a little taller under a warm spotlight. Prefer a glow or a plain star? That's a setting.
+
+<img src=".github/resources/gravy/favorites.png" width="100%" alt="The Favorites shelf in dark and light">
+
+### The back of a Game Boy
+
+The About page is the back of the handheld, credits moulded into the plastic and a serial sticker stuck on slightly crooked.
+
+<img src=".github/resources/gravy/about.png" width="100%" alt="The About page in dark and light">
+
+### Home Wi-Fi
+
+Put your networks in `Config/wifi.toml` (copy `wifi.toml.example`) and turn **Home Wi-Fi** on under **Network** in the menu. From then on it works by itself:
+
+- A small Wi-Fi mark next to the battery shows when you are on your home network, and the clock sets itself
+- Carts without label art get one in the background, found by the ROM's checksum or name. No Wi-Fi? Put an `Artwork.pack` in `Labels/` and labels come from there. A label you added yourself is never replaced
+- Two handhelds at home link over your home network, no ad hoc network needed. Away from home the usual direct link still works
+
+More in [network/README.md](network/README.md).
+
+### And a handful of smaller things
+
+- Tap **POWER** to sleep; hold it and a bar counts down to power off
+- **START + SELECT** resets the game
+- **Resume Game** powers straight back into your game, its picture as the boot screen
+- Carts without label art get their title written on by hand
+- Native 640×480, with Game Boy and Game Boy Color games filling the screen; **L1 / R1** flips between full screen and original size
+- Starts on your Favorites; GB, GBC, GBA in that order
+
+<img src=".github/resources/gravy/marker.png" width="100%" alt="Carts with no label art, titled in marker">
+<img src=".github/resources/gravy/buttons.png" width="100%" alt="The Buttons pages">
 
 ---
 
 ## Install
 
-1. Download **slot-x-gravy-v1.0.1.zip** from the [releases](https://github.com/roygravy/slot/releases).
-2. Unzip it and copy the **contents** of the `slot-x-gravy-v1.0.1` folder onto the second SD card of your RG35XX Plus.
+1. Download **slot-x-gravy-v1.0.2.zip** from the [releases](https://github.com/roygravy/slot/releases).
+2. Unzip it and copy the **contents** of the `slot-x-gravy-v1.0.2` folder onto the second SD card of your RG35XX Plus.
 3. Put your games in `Games/GB`, `Games/GBC` and `Games/GBA`, and optional label art (PNG, named like the ROM) in the matching `Labels` folders.
 4. Put the BIOS files (`gb_bios.bin`, `gbc_bios.bin`, `gba_bios.bin`) in `BIOS/` if you have them.
 
@@ -103,7 +117,7 @@ ROMs must be unzipped; `.zip` and `.7z` are not read.
 
 ## Controls
 
-These are slot.'s own controls, unchanged; the full list is on the **Buttons** page in the menu. The essentials:
+The full list is on the **Buttons** pages in the menu. The essentials:
 
 | On the shelf | |
 |---|---|
@@ -115,17 +129,25 @@ These are slot.'s own controls, unchanged; the full list is on the **Buttons** p
 
 | In a game | |
 |---|---|
-| Hold MENU | Save, eject and back to the shelf |
-| Double tap MENU | Save state switcher |
+| Tap MENU | In-game menu |
+| Hold MENU | Save and eject |
+| SELECT + R1 / L1 | Save / load a state |
 | Hold L2 / Hold R2 | Rewind / fast-forward |
+| SELECT + B | Screen effects on / off |
+| L1 / R1 | Full screen / original size (GB, GBC) |
+| START + SELECT | Reset the game |
+
+| Everywhere | |
+|---|---|
+| VOL+ and POWER | Screenshot |
+| POWER / Hold POWER | Sleep / power off |
 | SELECT + Up / Down | Brightness |
-| SELECT + MENU | Link cable to another slot. device |
 
 ---
 
 ## Building
 
-slot. x GRAVY builds the same way slot. does; see [the slot. README](SLOT_README.md) and `taskfile.yml`. The cartridge slots are drawn by `tools/slot_art.py`. Screenshots in this page were rendered headless with `cargo run --release -p slot --no-default-features --example shoot`.
+slot. x GRAVY builds the same way slot. does; see `taskfile.yml`. The cartridge slots are drawn by `tools/slot_art.py`. Screenshots in this page were rendered headless with `cargo run --release -p slot --no-default-features --example shoot`.
 
 ---
 
@@ -136,6 +158,7 @@ slot. x GRAVY builds the same way slot. does; see [the slot. README](SLOT_README
 - **Permanent Marker** by Font Diner (Apache 2.0) for the handwritten titles
 - **Liberation Sans** by Red Hat (SIL OFL 1.1), subset as "slot Serial", for the serial sticker on the About page
 - The cheats from the **[libretro-database](https://github.com/libretro/libretro-database)** by the libretro team and contributors (CC BY-SA 4.0)
+- **Home Wi-Fi**, the label scraping and linking over the home network come from **[Prashant Vaibhav's fork](https://github.com/pvaibhav/slot)** of slot.
 - **Goodboy Galaxy** (demo), **Hauntsfield** and **Mud Warriors**, the free games in the screenshots
 
 Like slot., slot. x GRAVY was put together with help from Claude.

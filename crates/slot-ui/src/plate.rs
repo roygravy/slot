@@ -130,6 +130,26 @@ pub fn word_ink(text: &str, ink: [u8; 3]) -> UndoFace {
     UndoFace { rgba, w, h: HINT_H }
 }
 
+/// The status bar's clock: a touch larger than the hint labels and set tighter, as a phone
+/// sets its time.
+const STATUS_CLOCK_PX: f32 = 20.0;
+const STATUS_CLOCK_TRACKING: f32 = 1.0;
+
+pub fn status_clock_face(text: &str, ink: [u8; 3]) -> UndoFace {
+    let Some(font) = text::label_font() else {
+        return word_ink(text, ink);
+    };
+    let w = text::line_width(font, text, STATUS_CLOCK_PX, STATUS_CLOCK_TRACKING).ceil() as u32 + 2;
+    let mut rgba = vec![0u8; (w * HINT_H * 4) as usize];
+    let layout = text::Layout {
+        lines: vec![text.to_uppercase()],
+        px: STATUS_CLOCK_PX,
+        tracking: STATUS_CLOCK_TRACKING,
+    };
+    text::draw_centred(&mut rgba, w, HINT_H, &layout, ink);
+    UndoFace { rgba, w, h: HINT_H }
+}
+
 pub fn hint_quad(x: f32, y: f32, w: f32, face: Option<TexId>) -> Draw {
     let h = HINT_H as f32;
     match face {

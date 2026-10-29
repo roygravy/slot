@@ -19,6 +19,7 @@ fn shelf_with(n: usize) -> Shelf {
                 label: None,
                 code: String::new(),
                 shell: None,
+                marker: None,
                 title: format!("GAME {i}"),
             })
             .collect(),

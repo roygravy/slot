@@ -1,8 +1,3 @@
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
-use std::sync::{Mutex, OnceLock};
-
-use slot_store::gb::Class;
 use slot_store::{Cart, Platform, ShellFinish};
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -10,6 +5,16 @@ pub enum Finish {
     Solid,
     Translucent,
     Glitter,
+    /// Opaque, with the glitter's flecks.
+    SolidGlitter,
+    Metallic,
+}
+
+impl Finish {
+    /// See-through plastic: clear, and glitter, which is clear plastic with flecks in it.
+    pub fn clear(self) -> bool {
+        matches!(self, Finish::Translucent | Finish::Glitter)
+    }
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -48,9 +53,16 @@ const YOSHI: Shell = shell([0x2f, 0x8f, 0x4e], Finish::Solid);
 
 const FAMILY: &[(u8, Shell)] = &[(b'M', shell([0xc6, 0xc6, 0xc9], Finish::Solid))];
 
+/// The NES's and the American SNES's mid grey.
+pub const TV_GREY_SHELL: Shell = shell([0x86, 0x86, 0x8a], Finish::Solid);
+/// The Super Famicom's and the European SNES's light grey.
+pub const SFC_SHELL: Shell = shell([0xc6, 0xc6, 0xc9], Finish::Solid);
 pub const DMG_SHELL: Shell = shell([0x9a, 0x97, 0x8f], Finish::Solid);
 
-pub const DUAL_MODE_SHELL: Shell = shell([0x33, 0x30, 0x31], Finish::Solid);
+pub const DUAL_MODE_SHELL: Shell = shell([0x26, 0x26, 0x2a], Finish::Solid);
+
+/// The Game Boy Color's standard cart: clear smoke-grey plastic.
+pub const GBC_CLEAR_SHELL: Shell = shell([0x7c, 0x7a, 0x8a], Finish::Translucent);
 
 pub const GB_CLEAR_SHELL: Shell = shell([0x7c, 0x7a, 0x8a], Finish::Translucent);
 
@@ -81,58 +93,32 @@ const KIRBY: Shell = shell([0xec, 0x94, 0xb4], Finish::Translucent);
 pub fn shell_for(cart: &Cart) -> Shell {
     if let Some(choice) = cart.shell {
         let finish = match choice.finish {
-            ShellFinish::Solid => Finish::Solid,
-            ShellFinish::Clear => Finish::Translucent,
-            ShellFinish::Glitter => Finish::Glitter,
+            ShellFinish::Solid => Some(Finish::Solid),
+            ShellFinish::Clear => Some(Finish::Translucent),
+            ShellFinish::Glitter => Some(Finish::Glitter),
+            ShellFinish::SolidGlitter => Some(Finish::SolidGlitter),
+            ShellFinish::Metallic => Some(Finish::Metallic),
+            ShellFinish::Own => None,
         };
-        return shell(choice.colour, finish);
+        if let Some(finish) = finish {
+            return shell(choice.colour, finish);
+        }
     }
+    // Original is the console's own standard cart, whatever the game shipped in.
     match cart.platform {
-        Platform::Gba => gba_shell_for(&gba_code(cart)),
-        Platform::Gb | Platform::Gbc => gb_shell_for(&cart.rom),
+        Platform::Gba => DEFAULT_SHELL,
+        Platform::Gb => DMG_SHELL,
+        Platform::Gbc => GBC_CLEAR_SHELL,
+        Platform::Nes => TV_GREY_SHELL,
+        Platform::Snes => match crate::cart::mould_of(cart) {
+            crate::Mould::SnesPal => SFC_SHELL,
+            _ => TV_GREY_SHELL,
+        },
     }
-}
-
-fn gba_code(cart: &Cart) -> String {
-    if !cart.code.is_empty() {
-        return cart.code.clone();
-    }
-    static CODES: OnceLock<Mutex<HashMap<PathBuf, String>>> = OnceLock::new();
-    let mut codes = CODES
-        .get_or_init(Mutex::default)
-        .lock()
-        .unwrap_or_else(|e| e.into_inner());
-    codes
-        .entry(cart.rom.clone())
-        .or_insert_with(|| slot_store::header_code(&cart.rom).unwrap_or_default())
-        .clone()
 }
 
 pub fn gba_shell_for(code: &str) -> Shell {
     lookup(code, EXACT, FAMILY)
-}
-
-fn gb_shell_for(rom: &Path) -> Shell {
-    let Some(h) = slot_store::gb::cached_header(rom) else {
-        return flag_shell(slot_store::gb::class(rom));
-    };
-    let by_title = || {
-        GB_OVERSEAS_TITLES
-            .iter()
-            .find(|(t, _)| !h.japan && *t == h.title)
-            .map(|(_, s)| *s)
-    };
-    by_code(&h.code, GB_CODES)
-        .or_else(by_title)
-        .unwrap_or_else(|| flag_shell(h.class()))
-}
-
-fn flag_shell(class: Class) -> Shell {
-    match class {
-        Class::Original => DMG_SHELL,
-        Class::DualMode => DUAL_MODE_SHELL,
-        Class::ColourOnly => GB_CLEAR_SHELL,
-    }
 }
 
 pub fn table_keys() -> Vec<&'static str> {

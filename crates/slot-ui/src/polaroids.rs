@@ -133,10 +133,11 @@ impl Polaroids {
         battery_percent: Printed,
         bolt: Option<TexId>,
         clock: Printed,
+        wifi: Option<TexId>,
         out: &mut Vec<Draw>,
     ) {
         self.draw_photo(out);
-        self.draw_top(battery, battery_percent, bolt, clock, out);
+        self.draw_top(battery, battery_percent, bolt, clock, wifi, out);
         self.draw_bottom(out);
     }
 
@@ -165,6 +166,7 @@ impl Polaroids {
         battery_percent: Printed,
         bolt: Option<TexId>,
         clock: Printed,
+        wifi: Option<TexId>,
         out: &mut Vec<Draw>,
     ) {
         out.push(plate(0.0));
@@ -185,6 +187,7 @@ impl Polaroids {
             battery_percent,
             bolt,
             clock,
+            wifi,
             out,
         );
     }
@@ -207,7 +210,13 @@ impl Polaroids {
             let dx = OUT_W as f32 - MARGIN - c.delete.1 as f32;
             out.push(tint(c.delete.0, dx, y, c.delete.1, HINT_H));
             let lx = (OUT_W as f32 - c.line.1 as f32) / 2.0;
-            out.push(tint(c.line.0, lx, top + (PLATE_H - c.line.2 as f32) / 2.0, c.line.1, c.line.2));
+            out.push(tint(
+                c.line.0,
+                lx,
+                top + (PLATE_H - c.line.2 as f32) / 2.0,
+                c.line.1,
+                c.line.2,
+            ));
             return;
         }
         let hints = self.hints();

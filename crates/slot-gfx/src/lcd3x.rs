@@ -17,6 +17,8 @@ pub enum ScreenEffect {
     Dot,
     Simpletex,
     GbaLcd,
+    /// A TV console's picture: scanlines, a faint mask and glow.
+    Crt,
 }
 
 impl ScreenEffect {

@@ -12,8 +12,12 @@ const CARD: &str = "/mnt/sdcard";
 const MIN_FRAME: Duration = Duration::from_millis(12);
 
 const STEP_TIMEOUT: Duration = Duration::from_millis(12);
+/// How often the light sleep looks at the buttons and its timers, the screen off.
+const DOZE_POLL: Duration = Duration::from_millis(50);
 
 const MARGIN: Duration = Duration::from_micros(1500);
+
+const LOG_SYNC: Duration = Duration::from_secs(1);
 
 struct Pacer {
     last_return: Option<Instant>,
@@ -136,7 +140,13 @@ pub fn run() {
     let card = root.clone();
     let _ = std::thread::Builder::new()
         .name("slot-bootlogo".into())
-        .spawn(move || slot::bootlogo::refresh(&card));
+        .spawn(move || {
+            slot::bootlogo::refresh(&card);
+            slot::root::sweep_temps(&card);
+        });
+    let _ = std::thread::Builder::new()
+        .name("slot-logsync".into())
+        .spawn(sync_log_writes);
     let mut drawn = false;
     frontend.drive_emulator();
     let mut pacer = Pacer::new();
@@ -152,12 +162,23 @@ pub fn run() {
             frontend.poweroff();
             return;
         }
+        if slot::crash::stopping() {
+            eprintln!("slot: told to stop, saving first");
+            frontend.stop();
+            return;
+        }
+        // The light sleep draws nothing: the screen is dark, and the downloads go on.
+        if frontend.dozing() {
+            std::thread::sleep(DOZE_POLL);
+            continue;
+        }
         frontend.step_emulator(pacer.period, STEP_TIMEOUT);
         frontend.render(&mut compositor, window);
         let swap = Instant::now();
         let work = swap - began;
         if let Err(e) = surface.swap() {
             eprintln!("slot: {e}");
+            frontend.stop();
             return;
         }
         let swap_took = swap.elapsed();
@@ -183,6 +204,24 @@ pub fn run() {
         }
         if let Some(left) = MIN_FRAME.checked_sub(began.elapsed()) {
             std::thread::sleep(left);
+        }
+    }
+}
+
+fn sync_log_writes() {
+    let mut synced = 0;
+    loop {
+        std::thread::sleep(LOG_SYNC);
+        let mut st: libc::stat = unsafe { std::mem::zeroed() };
+        if unsafe { libc::fstat(2, &mut st) } != 0 {
+            return;
+        }
+        if st.st_size != synced {
+            #[cfg(target_os = "linux")]
+            unsafe {
+                libc::syncfs(2);
+            }
+            synced = st.st_size;
         }
     }
 }

@@ -15,11 +15,12 @@ pub const FF_SPEEDS: [u8; 4] = [2, 3, 4, 6];
 
 pub const FF_SPEED_DEFAULT: u8 = 6;
 
-pub const RUN_AHEAD_MAX: u8 = 1;
-
 pub const RECENTS_MAX: usize = 10;
 pub const AUTO_SLEEP_OPTIONS_SECS: [u16; 4] = [0, 30, 60, 300];
 pub const AUTO_SLEEP_DEFAULT_SECS: u16 = 60;
+/// From the light sleep into the deep one: 0 straight away.
+pub const DEEP_SLEEP_OPTIONS_MINS: [u16; 4] = [0, 5, 10, 30];
+pub const DEEP_SLEEP_DEFAULT_MINS: u16 = 5;
 const AUTHENTIC_LCD_PROFILE: &str = "lcd_profile=authentic-v4";
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -33,6 +34,9 @@ pub enum Appearance {
     #[default]
     Dark,
     Light,
+    /// Each console's own housing round its slot: the DMG's grey, the GBC's Grape, the GBA's
+    /// Indigo, the NES's and SNES's light greys. Menus stay dark.
+    Originals,
 }
 
 impl Appearance {
@@ -44,6 +48,7 @@ impl Appearance {
         match self {
             Appearance::Dark => "dark",
             Appearance::Light => "light",
+            Appearance::Originals => "originals",
         }
     }
 
@@ -52,15 +57,15 @@ impl Appearance {
             "dark" => Some(Appearance::Dark),
             // A card set to the DMG theme of a test build reads as light.
             "light" | "dmg" => Some(Appearance::Light),
+            "originals" => Some(Appearance::Originals),
             _ => None,
         }
     }
 
-    pub fn toggle(self) -> Appearance {
-        match self {
-            Appearance::Dark => Appearance::Light,
-            Appearance::Light => Appearance::Dark,
-        }
+    pub fn step(self, right: bool) -> Appearance {
+        const ALL: [Appearance; 3] = [Appearance::Dark, Appearance::Light, Appearance::Originals];
+        let at = ALL.iter().position(|a| *a == self).unwrap_or(0);
+        ALL[(at + if right { 1 } else { ALL.len() - 1 }) % ALL.len()]
     }
 }
 
@@ -68,21 +73,22 @@ impl Appearance {
 pub enum FavoriteMark {
     #[default]
     GoldGlow,
-    WhiteGlow,
+    /// A soft light on the ground behind the cart.
+    Highlight,
     Star,
 }
 
 impl FavoriteMark {
     pub const ALL: [FavoriteMark; 3] = [
         FavoriteMark::GoldGlow,
-        FavoriteMark::WhiteGlow,
+        FavoriteMark::Highlight,
         FavoriteMark::Star,
     ];
 
     pub fn key(self) -> &'static str {
         match self {
             FavoriteMark::GoldGlow => "gold_glow",
-            FavoriteMark::WhiteGlow => "white_glow",
+            FavoriteMark::Highlight => "highlight",
             FavoriteMark::Star => "star",
         }
     }
@@ -95,12 +101,11 @@ impl FavoriteMark {
         FavoriteMark::ALL.into_iter().find(|m| m.key() == value)
     }
 
-    /// Spotlight and Star: the white glow is no longer offered.
-    pub fn step(self, _right: bool) -> FavoriteMark {
-        match self {
-            FavoriteMark::Star => FavoriteMark::GoldGlow,
-            _ => FavoriteMark::Star,
-        }
+    /// Spotlight, Highlight and Star, round and round.
+    pub fn step(self, right: bool) -> FavoriteMark {
+        let all = FavoriteMark::ALL;
+        let at = all.iter().position(|m| *m == self).unwrap_or(0);
+        all[if right { (at + 1) % all.len() } else { (at + all.len() - 1) % all.len() }]
     }
 }
 
@@ -251,6 +256,10 @@ impl BezelPick {
 pub struct SlotState {
     pub cart: Option<String>,
     pub cart_platform: Option<Platform>,
+    /// The cart in the slot is a Game Boy game in the Super Game Boy.
+    pub cart_sgb: bool,
+    /// The Super Game Boy's border: 0 auto, 1 slot.'s, 2 none, 11-18 the SGB's own 1-8.
+    pub sgb_border: u8,
     pub brightness: u8,
     pub blue_light: u8,
     pub volume: u8,
@@ -259,7 +268,18 @@ pub struct SlotState {
     pub muted_hp: bool,
     pub clock_set: bool,
     pub utc_offset_min: i16,
+    /// A named zone with its own summer time; wins over `utc_offset_min`.
+    pub time_zone: Option<&'static str>,
+    /// The clock follows the network over Home Wi-Fi.
+    pub auto_time: bool,
+    /// 24-hour clock; off shows 6:00 PM.
+    pub clock_24h: bool,
+    /// Game Boy and Game Boy Color games fill the screen (L) rather than showing at their
+    /// own size (R): one setting for both, kept between games (Roy).
+    pub gb_fullscreen: bool,
     pub rumble: bool,
+    /// Home association only; Link holds its own radio lease.
+    pub home_wifi_enabled: bool,
     pub ff_speed: u8,
     pub ff_sound: bool,
     pub shader_gba: Shader,
@@ -268,7 +288,6 @@ pub struct SlotState {
     pub eject_save: bool,
     pub turbo: bool,
     pub rewind: bool,
-    pub runahead: u8,
     pub gb_palettes: bool,
     pub gb_palette: GbPalette,
     pub appearance: Appearance,
@@ -285,6 +304,8 @@ pub struct SlotState {
     pub shelf: Option<String>,
     pub shelf_cart: Option<Recent>,
     pub auto_sleep_secs: u16,
+    /// Minutes in the light sleep before the deep one.
+    pub deep_sleep_mins: u16,
     /// Pale pixels let the panel through, for each system on its own: GB, GBC, GBA.
     pub pixel_transparency_gb: bool,
     pub pixel_transparency_gbc: bool,
@@ -304,6 +325,23 @@ pub struct SlotState {
     pub resume_game: bool,
     /// Powering off in a game leaves its picture as the boot screen.
     pub boot_picture: bool,
+    /// The effects SELECT + B switched off, to switch back on: GB, GBC, GBA. 0 for none.
+    pub effects_saved_gb: u8,
+    pub effects_saved_gbc: u8,
+    pub effects_saved_gba: u8,
+    /// The TV consoles' screen effects as chosen below, all on or off together (SELECT + B),
+    /// for each on its own: NES, SNES.
+    pub tv_filter_nes: bool,
+    pub tv_filter_snes: bool,
+    pub tv_cable_nes: TvCable,
+    pub tv_cable_snes: TvCable,
+    pub nes_colors: NesColors,
+    pub tv_scanlines_nes: bool,
+    pub tv_scanlines_snes: bool,
+    pub tv_mask_nes: bool,
+    pub tv_mask_snes: bool,
+    pub tv_afterglow_nes: bool,
+    pub tv_afterglow_snes: bool,
 }
 
 impl SlotState {
@@ -337,6 +375,76 @@ impl SlotState {
             stem: stem.to_string(),
         });
         true
+    }
+}
+
+/// The cable a TV console's picture travels to the TV by, as its core's NTSC filter draws it;
+/// Off for the console's own sharp pixels.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum TvCable {
+    Off,
+    Rf,
+    Composite,
+    SVideo,
+    Rgb,
+}
+
+impl TvCable {
+    pub const ALL: [TvCable; 5] = [
+        TvCable::Off,
+        TvCable::Rf,
+        TvCable::Composite,
+        TvCable::SVideo,
+        TvCable::Rgb,
+    ];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            TvCable::Off => "off",
+            TvCable::Rf => "rf",
+            TvCable::Composite => "composite",
+            TvCable::SVideo => "svideo",
+            TvCable::Rgb => "rgb",
+        }
+    }
+
+    pub fn parse(name: &str) -> Option<TvCable> {
+        TvCable::ALL.into_iter().find(|c| c.name() == name)
+    }
+}
+
+/// The colours an NES's picture came out in: as a TV's decoder made them, or the core's own.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum NesColors {
+    Standard,
+    Sony,
+    /// The NES's own composite colours, as measured off the console.
+    Authentic,
+    Nescap,
+    Pvm,
+}
+
+impl NesColors {
+    pub const ALL: [NesColors; 5] = [
+        NesColors::Standard,
+        NesColors::Sony,
+        NesColors::Authentic,
+        NesColors::Nescap,
+        NesColors::Pvm,
+    ];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            NesColors::Standard => "standard",
+            NesColors::Sony => "sony",
+            NesColors::Authentic => "authentic",
+            NesColors::Nescap => "nescap",
+            NesColors::Pvm => "pvm",
+        }
+    }
+
+    pub fn parse(name: &str) -> Option<NesColors> {
+        NesColors::ALL.into_iter().find(|c| c.name() == name)
     }
 }
 
@@ -407,6 +515,8 @@ impl Default for SlotState {
         SlotState {
             cart: None,
             cart_platform: None,
+            cart_sgb: false,
+            sgb_border: 0,
             brightness: 5,
             blue_light: 0,
             volume: 60,
@@ -415,7 +525,12 @@ impl Default for SlotState {
             muted_hp: false,
             clock_set: false,
             utc_offset_min: 0,
+            time_zone: None,
+            auto_time: true,
+            clock_24h: true,
+            gb_fullscreen: false,
             rumble: true,
+            home_wifi_enabled: false,
             ff_speed: FF_SPEED_DEFAULT,
             ff_sound: false,
             shader_gba: Shader::GbaLcd,
@@ -424,7 +539,6 @@ impl Default for SlotState {
             eject_save: true,
             turbo: true,
             rewind: true,
-            runahead: 0,
             gb_palettes: true,
             gb_palette: GbPalette::DEFAULT,
             appearance: Appearance::Dark,
@@ -441,6 +555,7 @@ impl Default for SlotState {
             shelf: None,
             shelf_cart: None,
             auto_sleep_secs: AUTO_SLEEP_DEFAULT_SECS,
+            deep_sleep_mins: DEEP_SLEEP_DEFAULT_MINS,
             pixel_transparency_gb: true,
             pixel_transparency_gbc: true,
             pixel_transparency_gba: true,
@@ -454,6 +569,20 @@ impl Default for SlotState {
             remember_position: false,
             resume_game: true,
             boot_picture: true,
+            effects_saved_gb: 0,
+            effects_saved_gbc: 0,
+            effects_saved_gba: 0,
+            tv_filter_nes: true,
+            tv_filter_snes: true,
+            tv_cable_nes: TvCable::Composite,
+            tv_cable_snes: TvCable::Composite,
+            nes_colors: NesColors::Sony,
+            tv_scanlines_nes: true,
+            tv_scanlines_snes: true,
+            tv_mask_nes: true,
+            tv_mask_snes: true,
+            tv_afterglow_nes: true,
+            tv_afterglow_snes: true,
         }
     }
 }
@@ -475,6 +604,11 @@ pub fn read_slot_state(root: &Path) -> SlotState {
         .and_then(|b| String::from_utf8(b).ok())
         .and_then(|s| parse(&s))
         .unwrap_or_default();
+    // Read the lists before the profile below writes the state back: writing it writes them
+    // too, and an unread list would be written out empty.
+    s.recents = read_list(root, RECENTS_FILE);
+    s.recents.truncate(RECENTS_MAX);
+    s.favorites = read_list(root, FAVORITES_FILE);
     let text = std::fs::read_to_string(state_path(root)).unwrap_or_default();
     if !text
         .lines()
@@ -494,9 +628,6 @@ pub fn read_slot_state(root: &Path) -> SlotState {
         }
         let _ = write_slot_state(root, &s);
     }
-    s.recents = read_list(root, RECENTS_FILE);
-    s.recents.truncate(RECENTS_MAX);
-    s.favorites = read_list(root, FAVORITES_FILE);
     s
 }
 
@@ -525,7 +656,7 @@ fn write_list(root: &Path, name: &str, list: &[Recent]) -> std::io::Result<()> {
 
 pub fn write_slot_state(root: &Path, s: &SlotState) -> std::io::Result<()> {
     let mut text = format!(
-        "cart={}\ncart_platform={}\nbrightness={}\nblue_light={}\nvolume={}\nvolume_hp={}\nmuted={}\nmuted_hp={}\nclock_set={}\nutc_offset_min={}\nrumble={}\nff_speed={}\nff_sound={}\nshader_gba={}\nshader_gb={}\neject_save={}\nturbo={}\nrewind={}\nrunahead={}\ngb_palettes={}\ngb_palette={}\nappearance={}\nwallpaper={}\n",
+        "cart={}\ncart_platform={}\nbrightness={}\nblue_light={}\nvolume={}\nvolume_hp={}\nmuted={}\nmuted_hp={}\nclock_set={}\nutc_offset_min={}\nrumble={}\nff_speed={}\nff_sound={}\nshader_gba={}\nshader_gb={}\neject_save={}\nturbo={}\nrewind={}\ngb_palettes={}\ngb_palette={}\nappearance={}\nwallpaper={}\n",
         s.cart.as_deref().unwrap_or(""),
         s.cart_platform.map_or(String::new(), platform_key),
         s.brightness,
@@ -544,7 +675,6 @@ pub fn write_slot_state(root: &Path, s: &SlotState) -> std::io::Result<()> {
         s.eject_save as u8,
         s.turbo as u8,
         s.rewind as u8,
-        s.runahead,
         s.gb_palettes as u8,
         s.gb_palette.core_name(),
         s.appearance.name(),
@@ -554,6 +684,16 @@ pub fn write_slot_state(root: &Path, s: &SlotState) -> std::io::Result<()> {
     text.push_str(&format!("wallpaper_tint={}\n", s.wallpaper_tint.key()));
     text.push_str(&format!("favorite_mark={}\n", s.favorite_mark.key()));
     text.push_str(&format!("auto_sleep_secs={}\n", s.auto_sleep_secs));
+    text.push_str(&format!("deep_sleep_mins={}\n", s.deep_sleep_mins));
+    text.push_str(&format!("home_wifi_enabled={}\n", s.home_wifi_enabled as u8));
+    text.push_str(&format!("auto_time={}\n", s.auto_time as u8));
+    text.push_str(&format!("clock_24h={}\n", s.clock_24h as u8));
+    text.push_str(&format!("gb_fullscreen={}\n", s.gb_fullscreen as u8));
+    text.push_str(&format!("cart_sgb={}\n", s.cart_sgb as u8));
+    text.push_str(&format!("sgb_border={}\n", s.sgb_border));
+    if let Some(zone) = s.time_zone {
+        text.push_str(&format!("time_zone={zone}\n"));
+    }
     for (key, on) in [
         ("pixel_transparency_gb", s.pixel_transparency_gb),
         ("pixel_transparency_gbc", s.pixel_transparency_gbc),
@@ -561,14 +701,32 @@ pub fn write_slot_state(root: &Path, s: &SlotState) -> std::io::Result<()> {
         ("lcd_ghosting_gb", s.lcd_ghosting_gb),
         ("lcd_ghosting_gbc", s.lcd_ghosting_gbc),
         ("lcd_ghosting_gba", s.lcd_ghosting_gba),
+        ("tv_filter_nes", s.tv_filter_nes),
+        ("tv_filter_snes", s.tv_filter_snes),
+        ("tv_scanlines_nes", s.tv_scanlines_nes),
+        ("tv_scanlines_snes", s.tv_scanlines_snes),
+        ("tv_mask_nes", s.tv_mask_nes),
+        ("tv_mask_snes", s.tv_mask_snes),
+        ("tv_afterglow_nes", s.tv_afterglow_nes),
+        ("tv_afterglow_snes", s.tv_afterglow_snes),
     ] {
         text.push_str(&format!("{key}={}\n", on as u8));
     }
+    text.push_str(&format!("tv_cable_nes={}\n", s.tv_cable_nes.name()));
+    text.push_str(&format!("tv_cable_snes={}\n", s.tv_cable_snes.name()));
+    text.push_str(&format!("nes_colors={}\n", s.nes_colors.name()));
     text.push_str(&format!("cheat_icon={}\n", s.cheat_icon as u8));
     text.push_str(&format!("gbc_black_border={}\n", s.gbc_black_border as u8));
     text.push_str(&format!("gb_black_border={}\n", s.gb_black_border as u8));
     text.push_str(&format!("resume_game={}\n", s.resume_game as u8));
     text.push_str(&format!("boot_picture={}\n", s.boot_picture as u8));
+    for (key, saved) in [
+        ("effects_saved_gb", s.effects_saved_gb),
+        ("effects_saved_gbc", s.effects_saved_gbc),
+        ("effects_saved_gba", s.effects_saved_gba),
+    ] {
+        text.push_str(&format!("{key}={saved}\n"));
+    }
     text.push_str(&format!("in_game_menu={}\n", s.in_game_menu as u8));
     text.push_str(&format!(
         "remember_position={}\n",
@@ -607,6 +765,13 @@ fn parse(text: &str) -> Option<SlotState> {
     let mut clock_set = None;
     let mut utc_offset_min = None;
     let mut rumble = None;
+    let mut home_wifi_enabled = None;
+    let mut time_zone = None;
+    let mut auto_time = None;
+    let mut clock_24h = None;
+    let mut gb_fullscreen = None;
+    let mut cart_sgb = None;
+    let mut sgb_border = None;
     let mut ff_speed = None;
     let mut ff_sound = None;
     let mut shader_gba = None;
@@ -615,7 +780,6 @@ fn parse(text: &str) -> Option<SlotState> {
     let mut eject_save = None;
     let mut turbo = None;
     let mut rewind = None;
-    let mut runahead = None;
     let mut gb_palettes = None;
     let mut gb_palette = None;
     let mut appearance = None;
@@ -630,6 +794,7 @@ fn parse(text: &str) -> Option<SlotState> {
     let mut shelf = None;
     let mut shelf_cart = None;
     let mut auto_sleep_secs = None;
+    let mut deep_sleep_mins = None;
     let mut pixel_transparency = None;
     let mut pixel_transparency_gb = None;
     let mut pixel_transparency_gbc = None;
@@ -645,6 +810,20 @@ fn parse(text: &str) -> Option<SlotState> {
     let mut lcd_ghosting_gba = None;
     let mut in_game_menu = None;
     let mut remember_position = None;
+    let mut effects_saved_gb = None;
+    let mut effects_saved_gbc = None;
+    let mut effects_saved_gba = None;
+    let mut tv_filter_nes = None;
+    let mut tv_filter_snes = None;
+    let mut tv_cable_nes = None;
+    let mut tv_cable_snes = None;
+    let mut nes_colors = None;
+    let mut tv_scanlines_nes = None;
+    let mut tv_scanlines_snes = None;
+    let mut tv_mask_nes = None;
+    let mut tv_mask_snes = None;
+    let mut tv_afterglow_nes = None;
+    let mut tv_afterglow_snes = None;
     for line in text.lines().filter(|l| !l.is_empty()) {
         let Some((key, value)) = line.split_once('=') else {
             continue;
@@ -661,13 +840,19 @@ fn parse(text: &str) -> Option<SlotState> {
             "clock_set" => clock_set = Some(level(value, 1)? == 1),
             "utc_offset_min" => utc_offset_min = Some(offset(value)?),
             "rumble" => rumble = flag(value),
+            "home_wifi_enabled" => home_wifi_enabled = flag(value),
+            "auto_time" => auto_time = flag(value),
+            "clock_24h" => clock_24h = flag(value),
+            "gb_fullscreen" => gb_fullscreen = flag(value),
+            "cart_sgb" => cart_sgb = flag(value),
+            "sgb_border" => sgb_border = value.parse::<u8>().ok(),
+            "time_zone" => time_zone = crate::zone_named(value).map(|z| z.name),
             "ff_speed" => ff_speed = ff_speed_value(value),
             "ff_sound" => ff_sound = flag(value),
             "shader_gba" => shader_gba = Shader::parse(value).filter(|s| Shader::GBA.contains(s)),
             "eject_save" => eject_save = flag(value),
             "turbo" => turbo = flag(value),
             "rewind" => rewind = flag(value),
-            "runahead" => runahead = level(value, RUN_AHEAD_MAX),
             "gb_palettes" => gb_palettes = flag(value),
             "gb_palette" => gb_palette = GbPalette::parse(value),
             "appearance" => appearance = Appearance::parse(value),
@@ -682,6 +867,12 @@ fn parse(text: &str) -> Option<SlotState> {
             "shelf" => shelf = Some(value.to_string()).filter(|v| !v.is_empty()),
             "shelf_cart" => shelf_cart = recent_value(value),
             "auto_sleep_secs" => auto_sleep_secs = auto_sleep_value(value),
+            "deep_sleep_mins" => {
+                deep_sleep_mins = value
+                    .parse()
+                    .ok()
+                    .filter(|mins| DEEP_SLEEP_OPTIONS_MINS.contains(mins))
+            }
             "pixel_transparency" => pixel_transparency = flag(value),
             "pixel_transparency_gb" => pixel_transparency_gb = flag(value),
             "pixel_transparency_gbc" => pixel_transparency_gbc = flag(value),
@@ -695,8 +886,22 @@ fn parse(text: &str) -> Option<SlotState> {
             "lcd_ghosting_gb" => lcd_ghosting_gb = flag(value),
             "lcd_ghosting_gbc" => lcd_ghosting_gbc = flag(value),
             "lcd_ghosting_gba" => lcd_ghosting_gba = flag(value),
+            "tv_filter_nes" => tv_filter_nes = flag(value),
+            "tv_filter_snes" => tv_filter_snes = flag(value),
+            "tv_cable_nes" => tv_cable_nes = TvCable::parse(value),
+            "tv_cable_snes" => tv_cable_snes = TvCable::parse(value),
+            "nes_colors" => nes_colors = NesColors::parse(value),
+            "tv_scanlines_nes" => tv_scanlines_nes = flag(value),
+            "tv_scanlines_snes" => tv_scanlines_snes = flag(value),
+            "tv_mask_nes" => tv_mask_nes = flag(value),
+            "tv_mask_snes" => tv_mask_snes = flag(value),
+            "tv_afterglow_nes" => tv_afterglow_nes = flag(value),
+            "tv_afterglow_snes" => tv_afterglow_snes = flag(value),
             "in_game_menu" => in_game_menu = flag(value),
             "remember_position" => remember_position = flag(value),
+            "effects_saved_gb" => effects_saved_gb = value.parse().ok(),
+            "effects_saved_gbc" => effects_saved_gbc = value.parse().ok(),
+            "effects_saved_gba" => effects_saved_gba = value.parse().ok(),
             "shader_gb" => shader_gb = Shader::parse(value).filter(|s| Shader::GB.contains(s)),
             "shader_gbc" => shader_gbc = Shader::parse(value).map(Shader::for_gbc),
             _ => {}
@@ -715,7 +920,14 @@ fn parse(text: &str) -> Option<SlotState> {
         muted_hp: muted_hp.or(muted)?,
         clock_set: clock_set?,
         utc_offset_min: utc_offset_min?,
+        time_zone,
+        auto_time: auto_time.unwrap_or(true),
+        clock_24h: clock_24h.unwrap_or(true),
+        gb_fullscreen: gb_fullscreen.unwrap_or(false),
+        cart_sgb: cart_sgb.unwrap_or(false),
+        sgb_border: sgb_border.unwrap_or(0),
         rumble: rumble.unwrap_or(fallback.rumble),
+        home_wifi_enabled: home_wifi_enabled.unwrap_or(false),
         ff_speed: ff_speed.unwrap_or(fallback.ff_speed),
         ff_sound: ff_sound.unwrap_or(fallback.ff_sound),
         shader_gba: shader_gba.unwrap_or(fallback.shader_gba),
@@ -726,7 +938,6 @@ fn parse(text: &str) -> Option<SlotState> {
         eject_save: eject_save.unwrap_or(fallback.eject_save),
         turbo: turbo.unwrap_or(fallback.turbo),
         rewind: rewind.unwrap_or(fallback.rewind),
-        runahead: runahead.unwrap_or(fallback.runahead),
         gb_palettes: gb_palettes.unwrap_or(fallback.gb_palettes),
         gb_palette: gb_palette.unwrap_or(fallback.gb_palette),
         appearance: appearance.unwrap_or(fallback.appearance),
@@ -743,6 +954,7 @@ fn parse(text: &str) -> Option<SlotState> {
         shelf,
         shelf_cart,
         auto_sleep_secs: auto_sleep_secs.unwrap_or(fallback.auto_sleep_secs),
+        deep_sleep_mins: deep_sleep_mins.unwrap_or(fallback.deep_sleep_mins),
         // A card from before the screen settings went per system: the one switch, for all.
         pixel_transparency_gb: pixel_transparency_gb
             .or(pixel_transparency)
@@ -763,6 +975,20 @@ fn parse(text: &str) -> Option<SlotState> {
         lcd_ghosting_gba: lcd_ghosting_gba.or(lcd_ghosting).unwrap_or(fallback.lcd_ghosting_gba),
         in_game_menu: in_game_menu.unwrap_or(fallback.in_game_menu),
         remember_position: remember_position.unwrap_or(fallback.remember_position),
+        effects_saved_gb: effects_saved_gb.unwrap_or(fallback.effects_saved_gb),
+        effects_saved_gbc: effects_saved_gbc.unwrap_or(fallback.effects_saved_gbc),
+        effects_saved_gba: effects_saved_gba.unwrap_or(fallback.effects_saved_gba),
+        tv_filter_nes: tv_filter_nes.unwrap_or(fallback.tv_filter_nes),
+        tv_filter_snes: tv_filter_snes.unwrap_or(fallback.tv_filter_snes),
+        tv_cable_nes: tv_cable_nes.unwrap_or(fallback.tv_cable_nes),
+        tv_cable_snes: tv_cable_snes.unwrap_or(fallback.tv_cable_snes),
+        nes_colors: nes_colors.unwrap_or(fallback.nes_colors),
+        tv_scanlines_nes: tv_scanlines_nes.unwrap_or(fallback.tv_scanlines_nes),
+        tv_scanlines_snes: tv_scanlines_snes.unwrap_or(fallback.tv_scanlines_snes),
+        tv_mask_nes: tv_mask_nes.unwrap_or(fallback.tv_mask_nes),
+        tv_mask_snes: tv_mask_snes.unwrap_or(fallback.tv_mask_snes),
+        tv_afterglow_nes: tv_afterglow_nes.unwrap_or(fallback.tv_afterglow_nes),
+        tv_afterglow_snes: tv_afterglow_snes.unwrap_or(fallback.tv_afterglow_snes),
     })
 }
 

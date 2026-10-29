@@ -89,6 +89,9 @@ pub struct Gestures {
     menu_down_at: Option<Millis>,
     menu_last_tap: Option<Millis>,
     menu_eject_fired: bool,
+    /// When MENU, still held after its eject, ejects again: the Super Game Boy, after the
+    /// game that was in it (Roy).
+    menu_eject_again: Option<Millis>,
     menu_display_chorded: bool,
     power_down_at: Option<Millis>,
     power_hold_fired: bool,
@@ -157,6 +160,12 @@ impl Gestures {
                     out.retain(|a| {
                         !matches!(a, Action::GbaDown(Btn::Start) | Action::GbaDown(Btn::Select))
                     });
+                    // SELECT's release is no tap for the game, and a START that went down
+                    // first is let go before the reset.
+                    self.mark_chorded();
+                    if b == Btn::Select {
+                        out.push(Action::GbaUp(Btn::Start));
+                    }
                     out.push(Action::ResetGame);
                 }
                 out
@@ -196,6 +205,10 @@ impl Gestures {
         if let Some(d) = self.menu_down_at {
             if !self.menu_eject_fired && now.saturating_sub(d) >= MENU_HOLD_MS {
                 self.menu_eject_fired = true;
+                self.menu_eject_again = Some(d + 2 * MENU_HOLD_MS);
+                out.push(Action::Eject);
+            } else if self.menu_eject_fired && self.menu_eject_again.is_some_and(|at| now >= at) {
+                self.menu_eject_again = None;
                 out.push(Action::Eject);
             }
         }

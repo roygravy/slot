@@ -36,12 +36,16 @@ pub struct GamePass {
     u_lcd_mix: gl::types::GLint,
     u_grid_opacity: gl::types::GLint,
     u_pixel_transparency: gl::types::GLint,
+    u_tv: gl::types::GLint,
     u_lcd_overlay_size: gl::types::GLint,
     fbo_scale: [f32; 2],
     u_origin: gl::types::GLint,
     origin: [f32; 2],
     u_pic: gl::types::GLint,
     pic: [f32; 4],
+    u_src: gl::types::GLint,
+    /// The game's frame size: the GBA's 240x160, or a TV console's own.
+    canvas: (u32, u32),
     sample_background: bool,
     picture_dim: f32,
     shadow: [f32; 3],
@@ -62,7 +66,13 @@ pub struct GamePass {
     fills: bool,
     src: [f32; 4],
     background: [f32; 3],
-    bg_sample_countdown: u8,
+    shades: Shades,
+    /// A tube's phosphor still glowing from the frames before: how much of the last picture
+    /// stays (out of 256), and the picture as it glows. 0 for none.
+    afterglow: u32,
+    glow: Vec<u8>,
+    /// A TV picture's scanlines and mask, each on or off.
+    tv_lines: (bool, bool),
 }
 
 impl GamePass {
@@ -104,18 +114,17 @@ impl GamePass {
             u_lcd_mix,
             u_grid_opacity,
             u_pixel_transparency,
+            u_tv,
             u_lcd_overlay,
             u_lcd_overlay_size,
             u_origin,
+            u_src,
         );
         unsafe {
             gl::UseProgram(prog);
             gl::Uniform1i(crate::gl::uniform_location(prog, "u_game"), 0);
-            gl::Uniform2f(
-                crate::gl::uniform_location(prog, "u_src"),
-                SRC_W as f32,
-                SRC_H as f32,
-            );
+            u_src = crate::gl::uniform_location(prog, "u_src");
+            gl::Uniform2f(u_src, SRC_W as f32, SRC_H as f32);
             gl::Uniform2f(
                 crate::gl::uniform_location(prog, "u_target"),
                 OUT_W as f32,
@@ -146,6 +155,7 @@ impl GamePass {
             u_lcd_mix = crate::gl::uniform_location(prog, "u_lcd_mix");
             u_grid_opacity = crate::gl::uniform_location(prog, "u_grid_opacity");
             u_pixel_transparency = crate::gl::uniform_location(prog, "u_pixel_transparency");
+            u_tv = crate::gl::uniform_location(prog, "u_tv");
             u_lcd_overlay = crate::gl::uniform_location(prog, "u_lcd_overlay");
             u_lcd_overlay_size = crate::gl::uniform_location(prog, "u_lcd_overlay_size");
             gl::Uniform1i(u_lcd_overlay, 2);
@@ -170,12 +180,15 @@ impl GamePass {
             u_lcd_mix,
             u_grid_opacity,
             u_pixel_transparency,
+            u_tv,
             u_lcd_overlay_size,
             fbo_scale: [1.0, 1.0],
             u_origin,
             origin: [0.0, 0.0],
             u_pic,
             pic: WHOLE_TEXTURE,
+            u_src,
+            canvas: (SRC_W, SRC_H),
             sample_background: false,
             picture_dim: 0.0,
             shadow: PIXEL_SHADOW,
@@ -196,7 +209,10 @@ impl GamePass {
             fills: false,
             src: WHOLE_TEXTURE,
             background: [0.0, 0.0, 0.0],
-            bg_sample_countdown: 0,
+            shades: Shades::default(),
+            afterglow: 0,
+            glow: Vec::new(),
+            tv_lines: (false, false),
         })
     }
 
@@ -230,7 +246,11 @@ impl GamePass {
     /// For the GBC's LCD: how dark the line under each row, and how strong each column's
     /// red, green or blue.
     pub fn set_lcd_mix(&mut self, scanlines: f32, tint: f32, on_screen_pixels: bool) {
-        self.lcd_mix = [scanlines.max(0.0), tint.max(0.0), f32::from(u8::from(on_screen_pixels))];
+        self.lcd_mix = [
+            scanlines.max(0.0),
+            tint.max(0.0),
+            f32::from(u8::from(on_screen_pixels)),
+        ];
     }
 
     /// How vivid colours show, 1.0 being the game's own.
@@ -257,7 +277,7 @@ impl GamePass {
     pub fn set_picture_appearance(&mut self, sample_background: bool, dim: f32) {
         if self.sample_background != sample_background {
             self.background = [0.0, 0.0, 0.0];
-            self.bg_sample_countdown = 0;
+            self.shades.clear();
         }
         self.sample_background = sample_background;
         self.picture_dim = dim.clamp(0.0, 1.0);
@@ -281,6 +301,18 @@ impl GamePass {
 
     pub fn set_effect(&mut self, effect: ScreenEffect) {
         self.effect = effect;
+    }
+
+    pub fn set_tv_lines(&mut self, scanlines: bool, mask: bool) {
+        self.tv_lines = (scanlines, mask);
+    }
+
+    /// The share of the last picture a TV's phosphor keeps glowing with, out of 256; 0 for none.
+    pub fn set_afterglow(&mut self, keep: u32) {
+        if keep == 0 {
+            self.glow.clear();
+        }
+        self.afterglow = keep;
     }
 
     pub fn set_paper(&mut self, size: u32, gray: &[u8]) {
@@ -319,21 +351,52 @@ impl GamePass {
         self.lcd_overlay_size = [w as f32, h as f32];
     }
 
+    /// The size of the frames `upload` takes. A canvas other than the GBA's is a TV
+    /// console's: its picture fills the screen.
+    pub fn set_canvas(&mut self, w: u32, h: u32) {
+        if self.canvas == (w, h) || w == 0 || h == 0 {
+            return;
+        }
+        let game = crate::gl::texture(w, h, gl::NEAREST, gl::CLAMP_TO_EDGE, gl::BGRA, None);
+        unsafe {
+            gl::DeleteTextures(1, &self.game);
+            gl::UseProgram(self.prog);
+            gl::Uniform2f(self.u_src, w as f32, h as f32);
+        }
+        self.game = game;
+        self.canvas = (w, h);
+    }
+
+    fn tv(&self) -> bool {
+        self.canvas != (SRC_W, SRC_H)
+    }
+
     pub fn set_source_rect(&mut self, rect: [f32; 4]) {
         self.src = rect;
     }
 
     pub fn upload(&mut self, xrgb8888: &[u8]) {
-        if xrgb8888.len() < (SRC_W * SRC_H * 4) as usize {
+        let (cw, ch) = self.canvas;
+        if xrgb8888.len() < (cw * ch * 4) as usize {
             return;
         }
-        if self.sample_background && self.pic != WHOLE_TEXTURE {
-            if self.bg_sample_countdown == 0 {
-                self.background = palette_lightest_color(xrgb8888, self.pic);
-                self.bg_sample_countdown = 7;
-            } else {
-                self.bg_sample_countdown -= 1;
+        if self.sample_background && self.pic != WHOLE_TEXTURE && !self.tv() {
+            // Every frame: a Game Boy picture is small, and the screen behind it must change
+            // colour with the palette on the same frame, not some frames later.
+            self.background = self.shades.lightest(xrgb8888, self.pic);
+        }
+        let mut xrgb8888 = xrgb8888;
+        if self.afterglow > 0 && self.tv() {
+            // Each channel fades from what it was, and the new picture lights over that.
+            let n = (cw * ch * 4) as usize;
+            if self.glow.len() != n {
+                self.glow = xrgb8888[..n].to_vec();
             }
+            let keep = self.afterglow;
+            for (g, &c) in self.glow.iter_mut().zip(&xrgb8888[..n]) {
+                *g = c.max(((*g as u32 * keep) >> 8) as u8);
+            }
+            xrgb8888 = &self.glow;
         }
         unsafe {
             gl::BindTexture(gl::TEXTURE_2D, self.game);
@@ -343,8 +406,8 @@ impl GamePass {
                 0,
                 0,
                 0,
-                SRC_W as i32,
-                SRC_H as i32,
+                cw as i32,
+                ch as i32,
                 gl::BGRA,
                 gl::UNSIGNED_BYTE,
                 xrgb8888.as_ptr() as *const std::ffi::c_void,
@@ -354,7 +417,7 @@ impl GamePass {
 
     pub fn draw(&self, quad: &Quad) {
         let src = match self.effect {
-            ScreenEffect::Grid => whole_scale_source(self.src, self.fbo_scale),
+            ScreenEffect::Grid if !self.tv() => whole_scale_source(self.src, self.fbo_scale),
             _ => self.src,
         };
         self.draw_source(self.game, quad, src);
@@ -367,6 +430,9 @@ impl GamePass {
     fn draw_source(&self, tex: gl::types::GLuint, quad: &Quad, src: [f32; 4]) {
         let (x, y, w, h, bright) = if self.fills {
             (0.0, 0.0, OUT_W as f32, OUT_H as f32, 1.0)
+        } else if self.tv() {
+            let (x, y, w, h) = fullscreen_game_rect(self.power);
+            (x, y, w, h, screen_brightness(self.power))
         } else if src == WHOLE_TEXTURE && self.pic == WHOLE_TEXTURE {
             let (x, y, w, h) = gba_custom_game_rect(self.power);
             (x, y, w, h, screen_brightness(self.power))
@@ -394,24 +460,37 @@ impl GamePass {
             gl::Uniform2f(self.u_fbo, self.fbo_scale[0], self.fbo_scale[1]);
             gl::Uniform2f(self.u_origin, self.origin[0], self.origin[1]);
             let bg = self.panel.unwrap_or(self.background);
-            gl::Uniform3f(
-                self.u_bg,
-                bg[0],
-                bg[1],
-                bg[2],
-            );
+            gl::Uniform3f(self.u_bg, bg[0], bg[1], bg[2]);
             gl::Uniform1f(self.u_picture_dim, self.picture_dim);
-            gl::Uniform3f(self.u_shadow, self.shadow[0], self.shadow[1], self.shadow[2]);
+            gl::Uniform3f(
+                self.u_shadow,
+                self.shadow[0],
+                self.shadow[1],
+                self.shadow[2],
+            );
             gl::Uniform3f(self.u_tint, self.tint[0], self.tint[1], self.tint[2]);
             gl::Uniform1f(self.u_saturation, self.saturation);
             gl::Uniform1f(self.u_pale_opacity, self.pale_opacity);
-            gl::Uniform1f(self.u_panel_fixed, if self.panel.is_some() { 1.0 } else { 0.0 });
+            gl::Uniform1f(
+                self.u_panel_fixed,
+                if self.panel.is_some() { 1.0 } else { 0.0 },
+            );
             gl::Uniform1f(self.u_black_edge, if self.black_edge { 1.0 } else { 0.0 });
-            gl::Uniform3f(self.u_lcd_mix, self.lcd_mix[0], self.lcd_mix[1], self.lcd_mix[2]);
+            gl::Uniform3f(
+                self.u_lcd_mix,
+                self.lcd_mix[0],
+                self.lcd_mix[1],
+                self.lcd_mix[2],
+            );
             gl::Uniform1f(self.u_grid_opacity, self.grid_opacity);
             gl::Uniform1f(
                 self.u_pixel_transparency,
                 if self.pixel_transparency { 1.0 } else { 0.0 },
+            );
+            gl::Uniform2f(
+                self.u_tv,
+                self.tv_lines.0 as u8 as f32,
+                self.tv_lines.1 as u8 as f32,
             );
             gl::Uniform2f(
                 self.u_lcd_overlay_size,
@@ -436,7 +515,59 @@ impl GamePass {
     }
 }
 
-fn palette_lightest_color(pixels: &[u8], pic: [f32; 4]) -> [f32; 3] {
+/// How long a shade not drawn is still taken as one of the palette's: half a minute.
+const SHADE_FRAMES: u64 = 1800;
+
+/// The Game Boy palette's shades seen lately, so the screen behind the picture stays the
+/// palette's lightest while the game fades to its darkest or shows nothing but one shade.
+#[derive(Default)]
+struct Shades {
+    /// Each shade's 15-bit key, its colour, and the frame it was last drawn on.
+    seen: Vec<(usize, [f32; 3], u64)>,
+    frame: u64,
+}
+
+impl Shades {
+    fn clear(&mut self) {
+        self.seen.clear();
+    }
+
+    /// The lightest shade of the palette, from this frame and the ones before it.
+    fn lightest(&mut self, pixels: &[u8], pic: [f32; 4]) -> [f32; 3] {
+        self.frame += 1;
+        let drawn = frame_shades(pixels, pic);
+        // Two shades never seen at once: another palette, so the old one's are let go.
+        let new = drawn
+            .iter()
+            .filter(|(k, _)| !self.seen.iter().any(|s| s.0 == *k))
+            .count();
+        if new >= 2 {
+            self.seen.retain(|s| drawn.iter().any(|(k, _)| *k == s.0));
+        }
+        for (key, rgb) in drawn {
+            match self.seen.iter_mut().find(|s| s.0 == key) {
+                Some(s) => s.2 = self.frame,
+                None => self.seen.push((key, rgb, self.frame)),
+            }
+        }
+        let frame = self.frame;
+        self.seen.retain(|s| frame - s.2 <= SHADE_FRAMES);
+        self.seen
+            .iter()
+            .max_by(|a, b| luma(a.0).total_cmp(&luma(b.0)))
+            .map_or([0.0; 3], |s| s.1)
+    }
+}
+
+fn luma(key: usize) -> f32 {
+    let r = ((key >> 10) & 31) as f32 / 31.0;
+    let g = ((key >> 5) & 31) as f32 / 31.0;
+    let b = (key & 31) as f32 / 31.0;
+    0.2126 * r + 0.7152 * g + 0.0722 * b
+}
+
+/// The shades a frame draws with, enough of each to count, as 15-bit keys and colours.
+fn frame_shades(pixels: &[u8], pic: [f32; 4]) -> Vec<(usize, [f32; 3])> {
     const COLOR_BINS: usize = 1 << 15;
     let x0 = (pic[0].clamp(0.0, 1.0) * SRC_W as f32).floor() as usize;
     let y0 = (pic[1].clamp(0.0, 1.0) * SRC_H as f32).floor() as usize;
@@ -444,58 +575,38 @@ fn palette_lightest_color(pixels: &[u8], pic: [f32; 4]) -> [f32; 3] {
     let y1 = (pic[3].clamp(0.0, 1.0) * SRC_H as f32).ceil() as usize;
     let (x1, y1) = (x1.min(SRC_W as usize), y1.min(SRC_H as usize));
     if x0 >= x1 || y0 >= y1 {
-        return [0.0, 0.0, 0.0];
+        return Vec::new();
     }
-
     let mut counts = [0u16; COLOR_BINS];
+    let mut first = vec![[0u8; 3]; 0];
+    let mut keys = Vec::new();
     for y in y0..y1 {
         for x in x0..x1 {
             let px = &pixels[(y * SRC_W as usize + x) * 4..][..3];
             let key = ((px[2] as usize >> 3) << 10)
                 | ((px[1] as usize >> 3) << 5)
                 | (px[0] as usize >> 3);
+            if counts[key] == 0 {
+                keys.push(key);
+                first.push([px[2], px[1], px[0]]);
+            }
             counts[key] = counts[key].saturating_add(1);
         }
     }
-
     let min_count = (((x1 - x0) * (y1 - y0)) / 500).max(8) as u16;
-    let brightest = counts
+    let mut shades: Vec<_> = keys
         .iter()
-        .enumerate()
-        .filter(|(_, count)| **count >= min_count)
-        .max_by(|(a, count_a), (b, count_b)| {
-            let luma = |key: usize| {
-                let r = ((key >> 10) & 31) as f32 / 31.0;
-                let g = ((key >> 5) & 31) as f32 / 31.0;
-                let b = (key & 31) as f32 / 31.0;
-                0.2126 * r + 0.7152 * g + 0.0722 * b
-            };
-            luma(*a)
-                .total_cmp(&luma(*b))
-                .then_with(|| count_a.cmp(count_b))
-        })
-        .map(|(key, _)| key)
-        .or_else(|| counts.iter().position(|count| *count > 0));
-    let Some(brightest) = brightest else {
-        return [0.0, 0.0, 0.0];
-    };
-
-    for y in y0..y1 {
-        for x in x0..x1 {
-            let px = &pixels[(y * SRC_W as usize + x) * 4..][..3];
-            let key = ((px[2] as usize >> 3) << 10)
-                | ((px[1] as usize >> 3) << 5)
-                | (px[0] as usize >> 3);
-            if key == brightest {
-                return [
-                    px[2] as f32 / 255.0,
-                    px[1] as f32 / 255.0,
-                    px[0] as f32 / 255.0,
-                ];
-            }
+        .zip(&first)
+        .filter(|(k, _)| counts[**k] >= min_count)
+        .map(|(k, c)| (*k, c.map(|v| v as f32 / 255.0)))
+        .collect();
+    if shades.is_empty() {
+        // A picture of specks: its most drawn colour.
+        if let Some(i) = (0..keys.len()).max_by_key(|i| counts[keys[*i]]) {
+            shades.push((keys[i], first[i].map(|v| v as f32 / 255.0)));
         }
     }
-    [0.0, 0.0, 0.0]
+    shades
 }
 
 fn whole_scale_source(src: [f32; 4], fbo: [f32; 2]) -> [f32; 4] {
@@ -523,5 +634,35 @@ impl Drop for GamePass {
             gl::DeleteTextures(1, &self.lcd_overlay);
             gl::DeleteProgram(self.prog);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn frame(shades: &[[u8; 3]]) -> Vec<u8> {
+        let n = (SRC_W * SRC_H) as usize;
+        (0..n)
+            .flat_map(|i| {
+                let [r, g, b] = shades[i % shades.len()];
+                [b, g, r, 255]
+            })
+            .collect()
+    }
+
+    #[test]
+    fn the_screen_behind_stays_the_palettes_lightest_while_the_game_goes_dark() {
+        let pic = [0.0, 0.0, 160.0 / SRC_W as f32, 144.0 / SRC_H as f32];
+        let green = [[142, 149, 38], [95, 124, 72], [54, 85, 79], [33, 58, 59]];
+        let mut shades = Shades::default();
+        let light = shades.lightest(&frame(&green), pic);
+        assert_eq!(light, [142.0 / 255.0, 149.0 / 255.0, 38.0 / 255.0]);
+        // A fade to the darkest shade, and a screen of nothing else.
+        assert_eq!(shades.lightest(&frame(&green[2..]), pic), light);
+        assert_eq!(shades.lightest(&frame(&green[3..]), pic), light);
+        // Another palette chosen: its own lightest at once.
+        let grey = [[200, 200, 200], [120, 120, 120], [60, 60, 60], [10, 10, 10]];
+        assert_eq!(shades.lightest(&frame(&grey), pic), [200.0 / 255.0; 3]);
     }
 }

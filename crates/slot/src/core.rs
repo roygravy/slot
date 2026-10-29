@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use slot_retro::{LibretroCore, MockCore, RetroCore};
-use slot_store::{Core, GbPalette, Platform};
+use slot_store::{Core, GbPalette, NesColors, Platform, TvCable};
 
 use crate::root;
 
@@ -30,6 +30,28 @@ fn candidates(root: &Path, core: Core) -> Vec<PathBuf> {
     }
     paths.push(Path::new("vendor").join(&name));
     paths
+}
+
+/// Read every core's library once, in the background, so the first game of a console does not
+/// wait on the card for its core: on the device the first SNES insert stuttered while Snes9x
+/// was read in (Roy). Later opens find it in memory.
+pub fn warm_cores(root: &Path) {
+    let files: Vec<PathBuf> = Core::ALL
+        .into_iter()
+        .filter_map(|c| candidates(root, c).into_iter().find(|p| p.exists()))
+        .collect();
+    let _ = std::thread::Builder::new()
+        .name("warm-cores".into())
+        .spawn(move || {
+            for file in files {
+                let _ = std::fs::read(file);
+            }
+        });
+}
+
+/// Whether a library for this core is on the card (or named): what `open_core` will find.
+pub fn core_found(root: &Path, core: Core) -> bool {
+    candidates(root, core).iter().any(|p| p.exists())
 }
 
 pub struct Opened {
@@ -118,6 +140,8 @@ fn open_named(
         };
         match opened {
             Ok(mut opened) => {
+                let (w, h) = platform.canvas();
+                opened.set_canvas(w, h);
                 apply_core_options(
                     &mut opened,
                     core,
@@ -145,7 +169,15 @@ pub fn palette_for(
     rom: &Path,
     link: Option<u8>,
 ) -> Option<GbPalette> {
-    chosen.filter(|_| link.is_none() && platform != Platform::Gba && dmg_only(rom))
+    // A cart on the GB shelf is played as a Game Boy, whatever its header says: some Game Boy
+    // games mark themselves as Game Boy Color only and run fine on the DMG. On the GBC shelf
+    // only a cart that cannot do colour takes a palette.
+    let fits = match platform {
+        Platform::Gb => true,
+        Platform::Gbc => dmg_only(rom),
+        Platform::Gba | Platform::Nes | Platform::Snes => false,
+    };
+    chosen.filter(|_| link.is_none() && fits)
 }
 
 pub fn dmg_only(rom: &Path) -> bool {
@@ -154,6 +186,15 @@ pub fn dmg_only(rom: &Path) -> bool {
     std::fs::File::open(rom)
         .and_then(|mut f| f.read_exact(&mut header))
         .is_ok_and(|_| header[0x143] & 0x80 == 0)
+}
+
+/// A cart that speaks to the Super Game Boy (header 0x146 = 0x03), Game Boy Color or not.
+pub fn sgb_aware(rom: &Path) -> bool {
+    use std::io::Read;
+    let mut header = [0u8; 0x150];
+    std::fs::File::open(rom)
+        .and_then(|mut f| f.read_exact(&mut header))
+        .is_ok_and(|_| header[0x146] == 0x03)
 }
 
 fn report_missing(core: Core, paths: &[PathBuf]) {
@@ -192,20 +233,79 @@ pub fn colour_option(
             "gambatte_gbc_color_correction",
             if on { "GBC only" } else { "disabled" },
         )),
+        Core::Fceumm | Core::Snes9x => None,
     }
 }
 
-pub fn lcd_ghosting_option(which: Core, on: bool) -> (&'static str, &'static str) {
+/// The Game Boy Color's screen answers quicker than the Game Boy's, so its games trail less.
+pub fn lcd_ghosting_option(
+    which: Core,
+    platform: Platform,
+    on: bool,
+) -> Option<(&'static str, &'static str)> {
     match which {
-        Core::Mgba => (
+        Core::Mgba => Some((
             "mgba_interframe_blending",
             if on { "lcd_ghosting" } else { "OFF" },
-        ),
-        Core::Gpsp => ("gpsp_frame_mixing", if on { "enabled" } else { "disabled" }),
-        Core::Gambatte => (
+        )),
+        Core::Gpsp => Some(("gpsp_frame_mixing", if on { "enabled" } else { "disabled" })),
+        Core::Gambatte => Some((
             "gambatte_mix_frames",
-            if on { "lcd_ghosting" } else { "disabled" },
-        ),
+            match (on, platform) {
+                (false, _) => "disabled",
+                (true, Platform::Gbc) => "lcd_ghosting_gbc",
+                (true, _) => "lcd_ghosting",
+            },
+        )),
+        Core::Fceumm | Core::Snes9x => None,
+    }
+}
+
+/// A TV console's look in its core: the picture as its cable carried it to the TV, colour
+/// fringes and all, and for the NES the colours a TV's decoder made of its signal; with the
+/// effects off, the console's own sharp pixels in the core's own colours.
+pub fn tv_options(
+    which: Core,
+    look: Option<crate::app::TvLook>,
+) -> Vec<(&'static str, &'static str)> {
+    let cable = look.map_or(TvCable::Off, |l| l.cable);
+    let colors = look.map_or(NesColors::Standard, |l| l.colors);
+    match which {
+        Core::Fceumm => vec![
+            (
+                "fceumm_ntsc_filter",
+                match cable {
+                    TvCable::Off => "disabled",
+                    // The NES's core draws no aerial: its RF is the nearest, composite.
+                    TvCable::Rf | TvCable::Composite => "composite",
+                    TvCable::SVideo => "svideo",
+                    TvCable::Rgb => "rgb",
+                },
+            ),
+            (
+                "fceumm_palette",
+                match colors {
+                    NesColors::Standard => "default",
+                    NesColors::Sony => "sony-cxa2025as-us",
+                    NesColors::Authentic => "composite-direct-fbx",
+                    NesColors::Nescap => "nescap",
+                    NesColors::Pvm => "pvm-style-d93-fbx",
+                },
+            ),
+        ],
+        Core::Snes9x => vec![(
+            "snes9x_blargg",
+            match cable {
+                TvCable::Off => "disabled",
+                TvCable::Rf => "rf",
+                TvCable::Composite => "composite",
+                TvCable::SVideo => "s-video",
+                TvCable::Rgb => "rgb",
+            },
+        )],
+        // mGBA has no filter of its own: slot. runs Snes9x's on the Super Game Boy's picture.
+        Core::Mgba => vec![(slot_retro::SLOT_NTSC, cable.name())],
+        Core::Gpsp | Core::Gambatte => Vec::new(),
     }
 }
 
@@ -250,7 +350,9 @@ const DMG_MARK: &str = "[slot. DMG Green]";
 pub fn dmg_palette_text() -> String {
     let mut text = format!("{DMG_MARK}\n");
     for (i, c) in DMG_GREEN.iter().enumerate() {
-        text.push_str(&format!("Background{i}={c}\nSprite%201{i}={c}\nSprite%202{i}={c}\n"));
+        text.push_str(&format!(
+            "Background{i}={c}\nSprite%201{i}={c}\nSprite%202{i}={c}\n"
+        ));
     }
     text
 }
@@ -285,7 +387,19 @@ pub fn gb_palette_options(which: Core, palette: GbPalette) -> Vec<(&'static str,
                 gambatte_palette_name(palette),
             ),
         ],
-        Core::Gpsp => Vec::new(),
+        Core::Gpsp | Core::Fceumm | Core::Snes9x => Vec::new(),
+    }
+}
+
+/// Every screen effect off: the Game Boy's picture in the core's own plain grey.
+pub fn gb_grey_options(which: Core) -> Vec<(&'static str, String)> {
+    match which {
+        Core::Mgba => vec![
+            ("mgba_gb_colors_preset", "0".to_string()),
+            ("mgba_gb_colors", "Grayscale".to_string()),
+        ],
+        Core::Gambatte => vec![("gambatte_gb_colorization", "disabled".to_string())],
+        Core::Gpsp | Core::Fceumm | Core::Snes9x => Vec::new(),
     }
 }
 
@@ -298,9 +412,12 @@ pub fn gb_palette_off_options(which: Core) -> Vec<(&'static str, String)> {
         ],
         Core::Gambatte => vec![
             ("gambatte_gb_colorization", "auto".to_string()),
-            ("gambatte_gb_internal_palette", "GBC - Dark Green".to_string()),
+            (
+                "gambatte_gb_internal_palette",
+                "GBC - Dark Green".to_string(),
+            ),
         ],
-        Core::Gpsp => Vec::new(),
+        Core::Gpsp | Core::Fceumm | Core::Snes9x => Vec::new(),
     }
 }
 
@@ -311,6 +428,106 @@ pub fn apply_link_options(core: &mut LibretroCore, which: Core, player: u8) {
     core.set_option("mgba_link", "on");
     core.set_option("mgba_link_player", &player.to_string());
     eprintln!("slot: core: link mode on, player {player}");
+}
+
+/// slot.'s own Super Game Boy border, for the games that bring none.
+const SGB_BORDER_GRAVY: &[u8] = include_bytes!("../../../assets/sgb_border_gravy.bin");
+/// The same for the Super Game Boy 2, in its own layout.
+const SGB2_BORDER_GRAVY: &[u8] = include_bytes!("../../../assets/sgb_border_gravy2.bin");
+
+/// The Super Game Boy's own eight borders (the SGB 2's with `two`), each there or not: from
+/// its program in BIOS (an .sfc or .smc of the SGB), else from files lifted from it, sgb1_1.bin
+/// to sgb1_8.bin (sgb2_ for the SGB 2) in BIOS/sgb_borders or loose in BIOS.
+fn sgb_own_borders(root: &Path, two: bool) -> Vec<Option<Vec<u8>>> {
+    let bios = root::bios_dir(root);
+    let rom = crate::sgb_rom::find(&bios, two);
+    (1..=8)
+        .map(|n| {
+            if let Some(b) = rom.as_deref().and_then(|r| crate::sgb_rom::border(r, n)) {
+                return Some(b);
+            }
+            let name = format!("sgb{}_{n}.bin", if two { 2 } else { 1 });
+            [bios.join("sgb_borders").join(&name), bios.join(&name)]
+                .iter()
+                .find_map(|at| std::fs::read(at).ok())
+                .filter(|b| b.len() == SGB_BORDER_GRAVY.len())
+        })
+        .collect()
+}
+
+/// The numbers of the Super Game Boy's own borders on the card (see `sgb_own_borders`).
+pub fn sgb_borders_on_card(root: &Path, two: bool) -> Vec<u8> {
+    (1..=8)
+        .zip(sgb_own_borders(root, two))
+        .filter_map(|(n, b)| b.map(|_| n))
+        .collect()
+}
+
+/// The border for the choice made (see `SlotState::sgb_border`), and whether it stays over a
+/// game's own: Auto takes the SGB's first border, or slot.'s, and gives way to the game's.
+fn sgb_border_for(root: &Path, choice: u8, two: bool) -> (Vec<u8>, bool) {
+    let mut borders = sgb_own_borders(root, two);
+    let mut own = |n: u8| borders.get_mut(usize::from(n) - 1).and_then(Option::take);
+    let gravy = if two {
+        SGB2_BORDER_GRAVY
+    } else {
+        SGB_BORDER_GRAVY
+    };
+    match choice {
+        1 => (gravy.to_vec(), true),
+        // No border: every tile blank, every colour black.
+        2 => (vec![0; gravy.len()], true),
+        n @ 11..=18 => (own(n - 10).unwrap_or_else(|| gravy.to_vec()), true),
+        _ => (own(1).unwrap_or_else(|| gravy.to_vec()), false),
+    }
+}
+
+/// Put the chosen border where mGBA reads it, and the option that makes it take it: the
+/// option changes each time (`turn`) so a choice made while playing shows at once.
+pub fn set_sgb_border(root: &Path, choice: u8, two: bool, turn: u32) -> (&'static str, String) {
+    let (border, lock) = sgb_border_for(root, choice, two);
+    let at = root::bios_dir(root).join("slot_sgb_border.bin");
+    if std::fs::read(&at).ok().as_deref() != Some(&border[..]) {
+        if let Err(e) = std::fs::write(&at, &border) {
+            eprintln!("slot: sgb: could not write {}: {e}", at.display());
+        }
+    }
+    // And every border slot. could have put in before, which a saved state may bring back:
+    // mGBA swaps one of those for this one, and keeps a game's own.
+    let mut ours = [SGB_BORDER_GRAVY, SGB2_BORDER_GRAVY].concat();
+    ours.extend(vec![0; SGB_BORDER_GRAVY.len()]);
+    for two in [false, true] {
+        for b in sgb_own_borders(root, two).into_iter().flatten() {
+            ours.extend(b);
+        }
+    }
+    let at = root::bios_dir(root).join("slot_sgb_ours.bin");
+    if std::fs::read(&at).ok().as_deref() != Some(&ours[..]) {
+        if let Err(e) = std::fs::write(&at, &ours) {
+            eprintln!("slot: sgb: could not write {}: {e}", at.display());
+        }
+    }
+    let mode = if lock { "lock" } else { "auto" };
+    ("mgba_slot_sgb_border", format!("{mode}:{turn}"))
+}
+
+/// mGBA as a Super Game Boy, drawing on the SNES's screen: its borders, and the SGB's own
+/// colours for the games that set none. The Super Game Boy 2 has a secret: a Game Boy Color
+/// game plays in its own colours inside the border (`gbc`), as mGBA's Super Game Boy Color.
+pub fn sgb_options(root: &Path, core: &mut dyn RetroCore, choice: u8, two: bool, gbc: bool) {
+    let (w, h) = Platform::Snes.canvas();
+    core.set_canvas(w, h);
+    let model = if gbc {
+        "Super Game Boy Color"
+    } else {
+        "Super Game Boy"
+    };
+    core.set_option("mgba_gb_model", model);
+    core.set_option("mgba_sgb_borders", "ON");
+    core.set_option("mgba_gb_colors_preset", "0");
+    core.set_option("mgba_gb_colors", "SGB 1-A");
+    let (key, value) = set_sgb_border(root, choice, two, 0);
+    core.set_option(key, &value);
 }
 
 pub fn apply_core_options(
@@ -324,8 +541,9 @@ pub fn apply_core_options(
 ) {
     core.set_option(&format!("{}_frameskip", which.as_str()), "auto");
     if which == Core::Mgba {
-        let (key, value) = lcd_ghosting_option(which, true);
-        core.set_option(key, value);
+        if let Some((key, value)) = lcd_ghosting_option(which, platform, true) {
+            core.set_option(key, value);
+        }
         core.set_option("mgba_sgb_borders", "OFF");
         core.set_option("mgba_force_gbp", "ON");
         match palette {
@@ -345,8 +563,9 @@ pub fn apply_core_options(
         }
     }
     if which == Core::Gpsp {
-        let (key, value) = lcd_ghosting_option(which, true);
-        core.set_option(key, value);
+        if let Some((key, value)) = lcd_ghosting_option(which, platform, true) {
+            core.set_option(key, value);
+        }
         core.set_option("gpsp_serial", serial);
         core.set_option("gpsp_rtc_time_source", "system");
         if bios {
@@ -357,9 +576,15 @@ pub fn apply_core_options(
         }
     }
     if which == Core::Gambatte {
-        let (key, value) = lcd_ghosting_option(which, true);
-        core.set_option(key, value);
-        core.set_option("gambatte_gb_hwmode", "Auto");
+        if let Some((key, value)) = lcd_ghosting_option(which, platform, true) {
+            core.set_option(key, value);
+        }
+        // A palette means a Game Boy: run the cart as one, so the palette always takes.
+        let model = match (palette, platform) {
+            (Some(_), Platform::Gb) => "GB",
+            _ => "Auto",
+        };
+        core.set_option("gambatte_gb_hwmode", model);
         core.set_option("gambatte_gb_bootloader", "enabled");
         core.set_option("gambatte_gbc_color_correction_mode", "accurate");
         core.set_option("gambatte_gbc_frontlight_position", "central");
@@ -376,6 +601,21 @@ pub fn apply_core_options(
         if let Some((key, value)) = colour_option(which, platform, colour) {
             core.set_option(key, value);
         }
+    }
+    if which == Core::Fceumm {
+        // A TV's tube hid the picture's edges, where games leave rubbish (Super Mario Bros.
+        // 3's scroll seams). Cut as much off the sides as off the top and bottom, so the
+        // NES's own pixel shape holds when the rest fills the 4:3 screen.
+        core.set_option("fceumm_overscan_v_top", "16");
+        core.set_option("fceumm_overscan_v_bottom", "16");
+        core.set_option("fceumm_overscan_h_left", "8");
+        core.set_option("fceumm_overscan_h_right", "8");
+    }
+    if which == Core::Snes9x {
+        core.set_option("snes9x_overscan", "disabled");
+        // High-resolution screens blend to 256 wide, as a TV's blur showed them.
+        core.set_option("snes9x_hires_blend", "merge");
+        core.set_option("snes9x_audio_interpolation", "gaussian");
     }
 }
 

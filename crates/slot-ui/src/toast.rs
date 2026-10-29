@@ -27,11 +27,17 @@ pub enum Toast {
     CardUnwritable,
     ScreenshotSaved,
     GameReset,
+    LabelsReady,
+    LabelDownloaded,
+    NoLabelFound,
+    LabelFailed,
+    TurnOnWifi,
+    NoConnection,
     Palette(GbPalette),
 }
 
 impl Toast {
-    const FIXED: [Toast; 19] = [
+    const FIXED: [Toast; 25] = [
         Toast::StateSaved,
         Toast::StateLoaded,
         Toast::NeedsGpsp,
@@ -51,6 +57,12 @@ impl Toast {
         Toast::ShaderGbcLcd,
         Toast::EffectsOn,
         Toast::EffectsOff,
+        Toast::LabelsReady,
+        Toast::LabelDownloaded,
+        Toast::NoLabelFound,
+        Toast::LabelFailed,
+        Toast::TurnOnWifi,
+        Toast::NoConnection,
     ];
 
     pub fn all() -> Vec<Toast> {
@@ -99,6 +111,12 @@ impl Toast {
             Toast::CardUnwritable => "Can't write to SD card",
             Toast::ScreenshotSaved => "Screenshot Saved",
             Toast::GameReset => "Game Reset",
+            Toast::LabelsReady => "Labels Ready",
+            Toast::LabelDownloaded => "Label Downloaded",
+            Toast::NoLabelFound => "No Label Found",
+            Toast::LabelFailed => "Download Failed",
+            Toast::TurnOnWifi => "Turn On Home Wi-Fi",
+            Toast::NoConnection => "No Connection",
             Toast::Palette(p) => p.label(),
         }
     }

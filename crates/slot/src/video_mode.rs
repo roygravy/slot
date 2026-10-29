@@ -1,9 +1,5 @@
-use std::path::Path;
-
 use slot_gfx::{SRC_H, SRC_W, WHOLE_TEXTURE};
-use slot_store::{ini, Platform};
-
-pub const VIDEO_MODE_FILE: &str = "Config/video_mode.txt";
+use slot_store::Platform;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum VideoMode {
@@ -27,17 +23,6 @@ impl VideoMode {
             _ => None,
         }
     }
-}
-
-pub fn video_mode_for(root: &Path, stem: &str) -> VideoMode {
-    ini::value(root, VIDEO_MODE_FILE, stem)
-        .as_deref()
-        .and_then(VideoMode::parse)
-        .unwrap_or_default()
-}
-
-pub fn write_video_mode(root: &Path, stem: &str, mode: VideoMode) -> std::io::Result<()> {
-    ini::write(root, VIDEO_MODE_FILE, stem, mode.as_str())
 }
 
 pub fn source_rect(platform: Platform, mode: VideoMode) -> [f32; 4] {

@@ -9,12 +9,74 @@ pub enum Mould {
     Gba,
     Notched,
     Rounded,
+    /// The NES's grey toaster cart.
+    Nes,
+    /// The American SNES cart, ridged sides and a raised middle.
+    SnesNtsc,
+    /// The European SNES and Super Famicom cart: smaller, rounded ends, an inset label.
+    SnesPal,
+    /// The American Super Game Boy: the ridged SNES cart, taller, a Game Boy bay in its top.
+    SgbNtsc,
+    /// The European and Japanese Super Game Boy, and the Super Game Boy 2.
+    SgbPal,
+}
+
+impl Mould {
+    pub const ALL: [Mould; 8] = [
+        Mould::Gba,
+        Mould::Notched,
+        Mould::Rounded,
+        Mould::Nes,
+        Mould::SnesNtsc,
+        Mould::SnesPal,
+        Mould::SgbNtsc,
+        Mould::SgbPal,
+    ];
+
+    pub fn index(self) -> usize {
+        self as usize
+    }
+
+    /// The cart's box on the shelf, in pixels. Not to scale between consoles: an SNES cart
+    /// stands a little wider than a Game Boy pak rather than twice as wide.
+    pub fn size(self) -> (u32, u32) {
+        match self {
+            Mould::Gba => (GBA_CART_W, GBA_CART_H),
+            Mould::Notched | Mould::Rounded | Mould::Nes => (GB_CART_W, GB_CART_H),
+            Mould::SnesNtsc => (SNES_CART_W, SNES_CART_H),
+            Mould::SnesPal => (SNES_PAL_CART_W, SNES_PAL_CART_H),
+            Mould::SgbNtsc => (SGB_CART_W, SGB_CART_H),
+            Mould::SgbPal => (SGB_PAL_CART_W, SGB_PAL_CART_H),
+        }
+    }
+
+    /// A TV console's cart: its art comes as a full set of cart, neutral, clear, interior
+    /// and board, all the cart's own size.
+    pub fn tv(self) -> bool {
+        matches!(
+            self,
+            Mould::Nes | Mould::SnesNtsc | Mould::SnesPal | Mould::SgbNtsc | Mould::SgbPal
+        )
+    }
+
+    /// A Super Game Boy: its art is finished, sticker and plastic, one picture per model.
+    pub fn sgb(self) -> bool {
+        matches!(self, Mould::SgbNtsc | Mould::SgbPal)
+    }
 }
 
 pub const GBA_CART_W: u32 = 360;
 pub const GBA_CART_H: u32 = 212;
 pub const GB_CART_W: u32 = 312;
 pub const GB_CART_H: u32 = 337;
+pub const SNES_CART_W: u32 = 360;
+pub const SNES_CART_H: u32 = 231;
+pub const SNES_PAL_CART_W: u32 = 336;
+pub const SNES_PAL_CART_H: u32 = 228;
+pub const SGB_CART_W: u32 = 360;
+pub const SGB_CART_H: u32 = 315;
+pub const SGB_PAL_CART_W: u32 = 336;
+pub const SGB_PAL_CART_H: u32 = 319;
 pub const BOARD_W: u32 = GBA_CART_W;
 pub const BOARD_H: u32 = GBA_CART_H;
 pub const SOCKET_W: u32 = 64;
@@ -23,14 +85,14 @@ pub const CHIP_W: u32 = 59;
 pub const CHIP_H: u32 = 41;
 pub const SLOT_W: u32 = OUT_W;
 pub const SLOT_H: u32 = 58;
+/// The band while the Super Game Boy is in: its top stands above the console's.
+pub const SGB_BAND_H: u32 = 87;
 pub const PORT_W: u32 = OUT_W;
 pub const PORT_H: u32 = SLOT_H;
 pub const PLUG_W: u32 = 92;
 pub const PLUG_H: u32 = 244;
 pub const ADAPTER_W: u32 = 290;
 pub const ADAPTER_H: u32 = 180;
-pub const STICKER_W: u32 = 660;
-pub const STICKER_H: u32 = 228;
 
 const GBA_CART_PNG: &[u8] = include_bytes!("../../../assets/gba_cart.png");
 const GB_CART_PNG: &[u8] = include_bytes!("../../../assets/gb_cart.png");
@@ -50,12 +112,46 @@ const SLOT_BACK_GB_DARK_PNG: &[u8] = include_bytes!("../../../assets/slot_back_g
 const SLOT_FRONT_GB_DARK_PNG: &[u8] = include_bytes!("../../../assets/slot_front_gb_dark.png");
 const SLOT_BACK_GB_LIGHT_PNG: &[u8] = include_bytes!("../../../assets/slot_back_gb_light.png");
 const SLOT_FRONT_GB_LIGHT_PNG: &[u8] = include_bytes!("../../../assets/slot_front_gb_light.png");
+const SLOT_BACK_NES_DARK_PNG: &[u8] = include_bytes!("../../../assets/slot_back_nes_dark.png");
+const SLOT_FRONT_NES_DARK_PNG: &[u8] = include_bytes!("../../../assets/slot_front_nes_dark.png");
+const SLOT_BACK_NES_LIGHT_PNG: &[u8] = include_bytes!("../../../assets/slot_back_nes_light.png");
+const SLOT_FRONT_NES_LIGHT_PNG: &[u8] = include_bytes!("../../../assets/slot_front_nes_light.png");
+const SLOT_BACK_SNES_DARK_PNG: &[u8] = include_bytes!("../../../assets/slot_back_snes_dark.png");
+const SLOT_FRONT_SNES_DARK_PNG: &[u8] = include_bytes!("../../../assets/slot_front_snes_dark.png");
+const SLOT_BACK_SNES_LIGHT_PNG: &[u8] = include_bytes!("../../../assets/slot_back_snes_light.png");
+const SLOT_FRONT_SNES_LIGHT_PNG: &[u8] =
+    include_bytes!("../../../assets/slot_front_snes_light.png");
+const NES_LID_DARK_PNG: &[u8] = include_bytes!("../../../assets/nes_lid_dark.png");
+const NES_LID_LIGHT_PNG: &[u8] = include_bytes!("../../../assets/nes_lid_light.png");
+const NES_LID_ORIG_PNG: &[u8] = include_bytes!("../../../assets/nes_lid_orig.png");
+/// The Originals housings, back and front: GBA, GB, GBC, NES, SNES.
+const SLOT_ORIG_PNG: [[&[u8]; 2]; 5] = [
+    [
+        include_bytes!("../../../assets/slot_back_orig.png"),
+        include_bytes!("../../../assets/slot_front_orig.png"),
+    ],
+    [
+        include_bytes!("../../../assets/slot_back_gb_orig.png"),
+        include_bytes!("../../../assets/slot_front_gb_orig.png"),
+    ],
+    [
+        include_bytes!("../../../assets/slot_back_gb_orig_gbc.png"),
+        include_bytes!("../../../assets/slot_front_gb_orig_gbc.png"),
+    ],
+    [
+        include_bytes!("../../../assets/slot_back_nes_orig.png"),
+        include_bytes!("../../../assets/slot_front_nes_orig.png"),
+    ],
+    [
+        include_bytes!("../../../assets/slot_back_snes_orig.png"),
+        include_bytes!("../../../assets/slot_front_snes_orig.png"),
+    ],
+];
 const PORT_DARK_PNG: &[u8] = include_bytes!("../../../assets/link_port_dark.png");
 const PORT_LIGHT_PNG: &[u8] = include_bytes!("../../../assets/link_port_light.png");
 const PLUG_HOST_PNG: &[u8] = include_bytes!("../../../assets/link_plug_host.png");
 const PLUG_JOIN_PNG: &[u8] = include_bytes!("../../../assets/link_plug_join.png");
 const ADAPTER_PNG: &[u8] = include_bytes!("../../../assets/link_adapter.png");
-const STICKER_PNG: &[u8] = include_bytes!("../../../assets/sticker.png");
 
 fn load(bytes: &'static [u8], w: u32, h: u32, slot: &'static OnceLock<Vec<u8>>) -> &'static [u8] {
     slot.get_or_init(|| {
@@ -213,6 +309,49 @@ pub fn slot_front_gb(light: bool) -> &'static [u8] {
     }
 }
 
+/// The NES band (`nes`) or the SNES one, behind (`front` false) or in front of the cart, in the
+/// dark or the light housing. The NES back has its lid shut; the front leaves the lid's mouth open.
+pub fn slot_tv(nes: bool, front: bool, light: bool) -> &'static [u8] {
+    static P: [OnceLock<Vec<u8>>; 8] = [const { OnceLock::new() }; 8];
+    let bytes = match (nes, front, light) {
+        (true, false, false) => SLOT_BACK_NES_DARK_PNG,
+        (true, true, false) => SLOT_FRONT_NES_DARK_PNG,
+        (true, false, true) => SLOT_BACK_NES_LIGHT_PNG,
+        (true, true, true) => SLOT_FRONT_NES_LIGHT_PNG,
+        (false, false, false) => SLOT_BACK_SNES_DARK_PNG,
+        (false, true, false) => SLOT_FRONT_SNES_DARK_PNG,
+        (false, false, true) => SLOT_BACK_SNES_LIGHT_PNG,
+        (false, true, true) => SLOT_FRONT_SNES_LIGHT_PNG,
+    };
+    let i = usize::from(nes) * 4 + usize::from(front) * 2 + usize::from(light);
+    load(bytes, SLOT_W, SLOT_H, &P[i])
+}
+
+pub const NES_LID_W: u32 = 256;
+
+/// The NES lid, shut: the band's own plastic, as wide as the mouth and as deep as the band.
+pub fn nes_lid(light: bool) -> &'static [u8] {
+    static D: OnceLock<Vec<u8>> = OnceLock::new();
+    static L: OnceLock<Vec<u8>> = OnceLock::new();
+    match light {
+        false => load(NES_LID_DARK_PNG, NES_LID_W, SLOT_H, &D),
+        true => load(NES_LID_LIGHT_PNG, NES_LID_W, SLOT_H, &L),
+    }
+}
+
+/// A slot in its console's own housing (Originals): `kind` 0 GBA, 1 GB, 2 GBC, 3 NES, 4 SNES.
+pub fn slot_orig(kind: usize, front: bool) -> &'static [u8] {
+    static P: [OnceLock<Vec<u8>>; 10] = [const { OnceLock::new() }; 10];
+    let i = kind * 2 + usize::from(front);
+    load(SLOT_ORIG_PNG[kind][usize::from(front)], SLOT_W, SLOT_H, &P[i])
+}
+
+/// The NES's lid in its own light grey (Originals).
+pub fn nes_lid_orig() -> &'static [u8] {
+    static P: OnceLock<Vec<u8>> = OnceLock::new();
+    load(NES_LID_ORIG_PNG, NES_LID_W, SLOT_H, &P)
+}
+
 pub fn slot_front_light() -> &'static [u8] {
     static P: OnceLock<Vec<u8>> = OnceLock::new();
     load(SLOT_FRONT_LIGHT_PNG, SLOT_W, SLOT_H, &P)
@@ -243,11 +382,6 @@ pub fn link_adapter() -> &'static [u8] {
     load(ADAPTER_PNG, ADAPTER_W, ADAPTER_H, &P)
 }
 
-pub fn sticker() -> &'static [u8] {
-    static P: OnceLock<Vec<u8>> = OnceLock::new();
-    load(STICKER_PNG, STICKER_W, STICKER_H, &P)
-}
-
 // Shells are hand drawn. There is no Game Boy clear file yet, so a clear Game Boy pak uses
 // the neutral shell at 80%.
 const GBA_SHELL_PNG: &[u8] = include_bytes!("../../../assets/gba_neutral.png");
@@ -260,6 +394,16 @@ const GBC_CLEAR_PNG: &[u8] = include_bytes!("../../../assets/gbc_clear.png");
 /// The neutral shell asset for a mould, opaque or the separate clear one. The game's colour is
 /// blended onto it by the caller.
 pub fn shell_asset(mould: Mould, clear: bool) -> &'static [u8] {
+    if mould.tv() {
+        return tv_art(
+            mould,
+            if clear {
+                TvPart::Clear
+            } else {
+                TvPart::Neutral
+            },
+        );
+    }
     static GBA: OnceLock<Vec<u8>> = OnceLock::new();
     static GB: OnceLock<Vec<u8>> = OnceLock::new();
     static GBC: OnceLock<Vec<u8>> = OnceLock::new();
@@ -273,6 +417,132 @@ pub fn shell_asset(mould: Mould, clear: bool) -> &'static [u8] {
         (Mould::Gba, true) => (GBA_CLEAR_PNG, GBA_CART_W, GBA_CART_H, &GBA_CLEAR),
         (Mould::Notched, true) => (GB_CLEAR_PNG, GB_CART_W, GB_CART_H, &GB_CLEAR),
         (Mould::Rounded, true) => (GBC_CLEAR_PNG, GB_CART_W, GB_CART_H, &GBC_CLEAR),
+        _ => unreachable!("a TV cart's shell is its own art"),
     };
     load(bytes, w, h, slot)
+}
+
+/// The layers of a TV console's cart, rendered from photos by `tools/carts`.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum TvPart {
+    /// White where the cart is: its silhouette.
+    Cart,
+    Neutral,
+    Clear,
+    Interior,
+    Board,
+}
+
+const NES_PNGS: [&[u8]; 5] = [
+    include_bytes!("../../../assets/nes_cart.png"),
+    include_bytes!("../../../assets/nes_neutral.png"),
+    include_bytes!("../../../assets/nes_clear.png"),
+    include_bytes!("../../../assets/nes_interior.png"),
+    include_bytes!("../../../assets/nes_board.png"),
+];
+const SNES_PNGS: [&[u8]; 5] = [
+    include_bytes!("../../../assets/snes_cart.png"),
+    include_bytes!("../../../assets/snes_neutral.png"),
+    include_bytes!("../../../assets/snes_clear.png"),
+    include_bytes!("../../../assets/snes_interior.png"),
+    include_bytes!("../../../assets/snes_board.png"),
+];
+const SNES_PAL_PNGS: [&[u8]; 5] = [
+    include_bytes!("../../../assets/snes_pal_cart.png"),
+    include_bytes!("../../../assets/snes_pal_neutral.png"),
+    include_bytes!("../../../assets/snes_pal_clear.png"),
+    include_bytes!("../../../assets/snes_pal_interior.png"),
+    include_bytes!("../../../assets/snes_pal_board.png"),
+];
+
+// The Super Game Boys have no plain plastic of their own to dye: every part is the finished
+// cart, and only the silhouette is its own.
+const SGB_PNGS: [&[u8]; 5] = [
+    include_bytes!("../../../assets/sgb_ntsc_cart.png"),
+    include_bytes!("../../../assets/sgb_face_ntsc.png"),
+    include_bytes!("../../../assets/sgb_face_ntsc.png"),
+    include_bytes!("../../../assets/sgb_face_ntsc.png"),
+    include_bytes!("../../../assets/sgb_face_ntsc.png"),
+];
+const SGB_PAL_PNGS: [&[u8]; 5] = [
+    include_bytes!("../../../assets/sgb_pal_cart.png"),
+    include_bytes!("../../../assets/sgb_face_pal.png"),
+    include_bytes!("../../../assets/sgb_face_pal.png"),
+    include_bytes!("../../../assets/sgb_face_pal.png"),
+    include_bytes!("../../../assets/sgb_face_pal.png"),
+];
+
+/// The Super Game Boy models, each its own finished cart.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum SgbModel {
+    /// The American one: ridged, grey, the red and blue sticker.
+    Ntsc,
+    /// The European one: light grey, the Super NES dots on its sticker.
+    Pal,
+    /// The Japanese one: as the European, the Super Famicom seal on its sticker.
+    Sfc,
+    /// The Super Game Boy 2: clear blue, its own purple sticker and the link port.
+    Sgb2,
+}
+
+impl SgbModel {
+    pub const ALL: [SgbModel; 4] = [SgbModel::Ntsc, SgbModel::Pal, SgbModel::Sfc, SgbModel::Sgb2];
+
+    pub fn mould(self) -> Mould {
+        match self {
+            SgbModel::Ntsc => Mould::SgbNtsc,
+            _ => Mould::SgbPal,
+        }
+    }
+}
+
+pub fn sgb_face(model: SgbModel) -> &'static [u8] {
+    static SLOTS: [OnceLock<Vec<u8>>; 4] = [const { OnceLock::new() }; 4];
+    let bytes: &[u8] = match model {
+        SgbModel::Ntsc => include_bytes!("../../../assets/sgb_face_ntsc.png"),
+        SgbModel::Pal => include_bytes!("../../../assets/sgb_face_pal.png"),
+        SgbModel::Sfc => include_bytes!("../../../assets/sgb_face_sfc.png"),
+        SgbModel::Sgb2 => include_bytes!("../../../assets/sgb_face_sgb2.png"),
+    };
+    let (w, h) = model.mould().size();
+    load(bytes, w, h, &SLOTS[model as usize])
+}
+
+/// The slot band while the Super Game Boy is in: its top around the Game Boy cart, behind
+/// (`front` false) or in front of it.
+pub fn sgb_band(model: SgbModel, front: bool) -> &'static [u8] {
+    static SLOTS: [[OnceLock<Vec<u8>>; 2]; 4] = [const { [const { OnceLock::new() }; 2] }; 4];
+    let bytes: [&[u8]; 2] = match model {
+        SgbModel::Ntsc => [
+            include_bytes!("../../../assets/sgb_band_ntsc_back.png"),
+            include_bytes!("../../../assets/sgb_band_ntsc_front.png"),
+        ],
+        SgbModel::Pal => [
+            include_bytes!("../../../assets/sgb_band_pal_back.png"),
+            include_bytes!("../../../assets/sgb_band_pal_front.png"),
+        ],
+        SgbModel::Sfc => [
+            include_bytes!("../../../assets/sgb_band_sfc_back.png"),
+            include_bytes!("../../../assets/sgb_band_sfc_front.png"),
+        ],
+        SgbModel::Sgb2 => [
+            include_bytes!("../../../assets/sgb_band_sgb2_back.png"),
+            include_bytes!("../../../assets/sgb_band_sgb2_front.png"),
+        ],
+    };
+    load(bytes[usize::from(front)], SLOT_W, SGB_BAND_H, &SLOTS[model as usize][usize::from(front)])
+}
+
+pub fn tv_art(mould: Mould, part: TvPart) -> &'static [u8] {
+    static SLOTS: [[OnceLock<Vec<u8>>; 5]; 5] = [const { [const { OnceLock::new() }; 5] }; 5];
+    let (row, pngs) = match mould {
+        Mould::Nes => (0, NES_PNGS),
+        Mould::SnesNtsc => (1, SNES_PNGS),
+        Mould::SnesPal => (2, SNES_PAL_PNGS),
+        Mould::SgbNtsc => (3, SGB_PNGS),
+        Mould::SgbPal => (4, SGB_PAL_PNGS),
+        _ => unreachable!("only a TV cart has TV art"),
+    };
+    let (w, h) = mould.size();
+    load(pngs[part as usize], w, h, &SLOTS[row][part as usize])
 }

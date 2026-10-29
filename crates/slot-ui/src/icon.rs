@@ -24,10 +24,11 @@ pub enum Icon {
     /// A robber's masked face: cheats are on.
     Cheats,
     Power,
+    Wifi,
 }
 
 impl Icon {
-    pub const ALL: [Icon; 14] = [
+    pub const ALL: [Icon; 15] = [
         Icon::Volume,
         Icon::VolumeZero,
         Icon::VolumeMuted,
@@ -42,6 +43,7 @@ impl Icon {
         Icon::HeadphonesMuted,
         Icon::Cheats,
         Icon::Power,
+        Icon::Wifi,
     ];
 
     pub fn index(self) -> usize {
@@ -64,6 +66,7 @@ impl Icon {
             Icon::HeadphonesMuted => '\u{f07ce}',
             Icon::Cheats => '\u{f1058}',
             Icon::Power => '\u{f011}',
+            Icon::Wifi => '\u{f1eb}',
         }
     }
 }
@@ -177,7 +180,6 @@ impl Badge {
     }
 }
 
-
 /// A spotlight for a favourite cart, added over the cart as light: a soft warm pool centred
 /// on the cart's upper half that lights the cart itself and fades out over the ground around it,
 /// with no edge and no beam. `cw` x `ch` is the cart; the face is `margin` px larger all round,
@@ -208,6 +210,38 @@ pub fn glow_face(cw: u32, ch: u32, margin: u32, colour: [u8; 3], peak: f32) -> C
     CartFace { rgba, w, h }
 }
 
+/// A highlight for a favourite cart, added as light on the ground behind it: a soft warm pool
+/// centred on the cart that shows round its edges and fades out over the ground, with no edge
+/// and no beam. `cw` x `ch` is the cart; the face is `margin` px larger all round,
+/// built at half resolution.
+pub fn halo_face(cw: u32, ch: u32, margin: u32, colour: [u8; 3], peak: f32) -> CartFace {
+    let (fw, fh) = (cw + 2 * margin, ch + 2 * margin);
+    let (w, h) = (fw.div_ceil(2), fh.div_ceil(2));
+    let (cx, cy) = (fw as f32 / 2.0, fh as f32 / 2.0);
+    // Full just inside the cart's edges, so it shows right round them.
+    let (hw, hh) = (cw as f32 / 2.0 - 12.0, ch as f32 / 2.0 - 12.0);
+    // Close round the cart and soft (Roy): well inside the face's own edge.
+    let reach = margin as f32 * 0.6 + 12.0;
+    let mut rgba = vec![0u8; (w * h * 4) as usize];
+    for py in 0..h {
+        for px in 0..w {
+            let (x, y) = ((px as f32 + 0.5) * 2.0 - cx, (py as f32 + 0.5) * 2.0 - cy);
+            let (qx, qy) = (x.abs() - hw, y.abs() - hh);
+            let out = (qx.max(0.0).powi(2) + qy.max(0.0).powi(2)).sqrt();
+            let t = (out / reach).min(1.0);
+            let a = (1.0 - t).powf(2.6) * peak;
+            let o = ((py * w + px) * 4) as usize;
+            rgba[o..o + 4].copy_from_slice(&[
+                colour[0],
+                colour[1],
+                colour[2],
+                (a * 255.0).round().min(255.0) as u8,
+            ]);
+        }
+    }
+    CartFace { rgba, w, h }
+}
+
 /// A soft drop shadow for a cart: a black rounded box `cw` x `ch` blurred over `margin` px,
 /// built at half resolution and smoothed when stretched.
 pub fn drop_shadow_face(cw: u32, ch: u32, margin: u32) -> CartFace {
@@ -215,7 +249,10 @@ pub fn drop_shadow_face(cw: u32, ch: u32, margin: u32) -> CartFace {
     let (w, h) = (fw.div_ceil(2), fh.div_ceil(2));
     let (m, radius) = (margin as f32, 14.0_f32);
     let (cx, cy) = (fw as f32 / 2.0, fh as f32 / 2.0);
-    let (hw, hh) = (cw as f32 / 2.0 - radius - 4.0, ch as f32 / 2.0 - radius - 4.0);
+    let (hw, hh) = (
+        cw as f32 / 2.0 - radius - 4.0,
+        ch as f32 / 2.0 - radius - 4.0,
+    );
     let mut rgba = vec![0u8; (w * h * 4) as usize];
     for py in 0..h {
         for px in 0..w {
@@ -386,7 +423,11 @@ fn power_symbol(f: &Frame, px: f32) -> Raster {
             cov[(y * f.w + x) as usize] = (a * 255.0) as u8;
         }
     }
-    Raster { cov, w: f.w, h: f.h }
+    Raster {
+        cov,
+        w: f.w,
+        h: f.h,
+    }
 }
 
 struct Frame {

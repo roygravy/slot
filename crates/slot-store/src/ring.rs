@@ -86,6 +86,11 @@ impl StateRing {
         atomic_write(&self.path(RESUME, STATE_EXT), state)
     }
 
+    /// Where the resume state is kept, whether or not there is one.
+    pub fn resume_path(&self) -> PathBuf {
+        self.path(RESUME, STATE_EXT)
+    }
+
     pub fn read_resume(&self) -> std::io::Result<Option<Vec<u8>>> {
         match std::fs::read(self.path(RESUME, STATE_EXT)) {
             Ok(b) => Ok(Some(b)),

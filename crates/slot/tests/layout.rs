@@ -17,6 +17,7 @@ fn app_with_carts(stems: &[&str], panel: (u32, u32)) -> App {
                 label: None,
                 code: String::new(),
                 shell: None,
+                marker: None,
                 title: stem.to_uppercase(),
             })
             .collect(),

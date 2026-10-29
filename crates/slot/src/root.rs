@@ -1,25 +1,33 @@
 use std::path::{Path, PathBuf};
 
-pub const DIRS: [&str; 21] = [
+pub const DIRS: [&str; 29] = [
     "BIOS",
     "Config",
     "Games",
     "Games/GBA",
     "Games/GB",
     "Games/GBC",
+    "Games/NES",
+    "Games/SNES",
     "Labels",
     "Labels/GBA",
     "Labels/GB",
     "Labels/GBC",
+    "Labels/NES",
+    "Labels/SNES",
     "Logs",
     "Saves",
     "Saves/GBA",
     "Saves/GB",
     "Saves/GBC",
+    "Saves/NES",
+    "Saves/SNES",
     "States",
     "States/GBA",
     "States/GB",
     "States/GBC",
+    "States/NES",
+    "States/SNES",
     "System",
     "Wallpapers",
 ];
@@ -30,6 +38,12 @@ pub fn ensure(root: &Path) {
     }
     if let Err(e) = slot_store::move_config(root) {
         eprintln!("slot: config: {e}");
+    }
+}
+
+pub fn sweep_temps(root: &Path) {
+    for sub in ["Config", "Saves", "States"] {
+        slot_store::sweep_temps(&root.join(sub));
     }
 }
 

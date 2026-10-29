@@ -15,6 +15,7 @@ fn shelf_with(n: usize) -> Shelf {
                 label: None,
                 code: String::new(),
                 shell: None,
+                marker: None,
                 title: format!("GAME {i}"),
             })
             .collect(),
@@ -485,6 +486,7 @@ fn the_gauge_is_white_in_dark_mode_and_black_in_light_mode() {
             Printed { face: None, w: 30 },
             None,
             Printed { face: None, w: 40 },
+            None,
             footer_ink(light),
             &mut out,
         );
@@ -511,6 +513,7 @@ fn the_gauge_starts_at_the_case_margin() {
         Printed { face: None, w: 30 },
         Some(TexId::from_raw(1)),
         Printed { face: None, w: 40 },
+        None,
         [255, 255, 255],
         &mut out,
     );
@@ -536,6 +539,7 @@ fn the_band_prints_the_charge_at_one_margin_and_the_clock_at_the_other() {
         Printed { face: None, w: 30 },
         Some(TexId::from_raw(1)),
         Printed { face: None, w: 40 },
+        None,
         [255, 255, 255],
         &mut out,
     );
@@ -585,6 +589,7 @@ fn the_footer_does_not_move_the_gauge_when_the_charge_state_changes() {
         Printed { face: None, w: 30 },
         None,
         Printed { face: None, w: 40 },
+        None,
         [255, 255, 255],
         &mut idle,
     );
@@ -598,6 +603,7 @@ fn the_footer_does_not_move_the_gauge_when_the_charge_state_changes() {
         Printed { face: None, w: 30 },
         Some(TexId::from_raw(2)),
         Printed { face: None, w: 40 },
+        None,
         [255, 255, 255],
         &mut charging,
     );
@@ -618,6 +624,7 @@ fn the_clock_stays_at_the_right_margin() {
         Printed::default(),
         None,
         Printed { face: None, w: 40 },
+        None,
         [255, 255, 255],
         &mut out,
     );
@@ -640,6 +647,7 @@ fn a_band_with_no_gauge_still_draws_its_clock() {
         Printed::default(),
         None,
         Printed { face: None, w: 40 },
+        None,
         [255, 255, 255],
         &mut out,
     );
@@ -817,6 +825,7 @@ fn gb_shelf_with(n: usize) -> Shelf {
                 label: None,
                 code: String::new(),
                 shell: None,
+                marker: None,
                 title: format!("PAK {i}"),
             })
             .collect(),
@@ -894,6 +903,7 @@ fn a_colour_pak_and_a_grey_one_are_backed_by_their_own_shells() {
                 label: None,
                 code: String::new(),
                 shell: None,
+                marker: None,
                 title: (*stem).to_uppercase(),
             }
         })
@@ -957,6 +967,7 @@ fn a_cart_pushed_onto_the_row_draws_rather_than_stopping_the_device() {
         label: None,
         code: String::new(),
         shell: None,
+        marker: None,
         title: "PUSHED".into(),
     });
     settle(&mut s);
@@ -976,6 +987,7 @@ fn a_clear_cart_is_drawn_over_its_board_and_a_solid_one_is_not() {
         label: None,
         code: code.into(),
         shell: None,
+        marker: None,
         title: stem.to_uppercase(),
     };
     let board = TexId::from_raw(80);
@@ -1007,6 +1019,7 @@ fn a_clear_cart_draws_its_interior_then_the_board_then_the_plastic() {
         label: None,
         code: "BPEE".into(),
         shell: None,
+        marker: None,
         title: "GAME".into(),
     }]);
     settle(&mut s);
@@ -1055,6 +1068,7 @@ fn a_clear_pak_draws_its_interior_then_the_board_then_the_plastic() {
             colour: [0xff; 3],
             finish: ShellFinish::Clear,
         }),
+        marker: None,
         title: "PAK".into(),
     }]);
     settle(&mut s);
@@ -1085,6 +1099,7 @@ fn only_a_clear_cart_has_anything_behind_its_plastic() {
         label: None,
         code: code.into(),
         shell: None,
+        marker: None,
         title: stem.to_uppercase(),
     };
     let (interior, board) = (TexId::from_raw(81), TexId::from_raw(80));
@@ -1116,6 +1131,7 @@ fn a_pak_is_classed_when_it_is_drawn_not_when_the_shelf_is_built() {
             label: None,
             code: String::new(),
             shell: None,
+            marker: None,
             title: stem.to_uppercase(),
         })
         .collect();
@@ -1154,6 +1170,7 @@ fn mixed_shelf(platforms: &[Platform]) -> Shelf {
                 label: None,
                 code: String::new(),
                 shell: None,
+                marker: None,
                 title: format!("MIXED {i}"),
             })
             .collect(),
@@ -1271,7 +1288,16 @@ fn only_a_starred_cart_glows_behind_its_face() {
     assert_eq!(halos.len(), 1, "{out:?}");
     let (at, x, w) = halos[0];
     let margin = slot_ui::GLOW_MARGIN as f32;
-    assert!((w - (CART_W as f32 + 2.0 * margin)).abs() < 0.5, "halo width {w}");
-    assert!((x + w / 2.0 - Canvas::FRAMED.w / 2.0).abs() < 0.5, "halo off centre at {x}");
-    assert!(at < out.len() - 1, "the glow must sit behind the cart's face");
+    assert!(
+        (w - (CART_W as f32 + 2.0 * margin)).abs() < 0.5,
+        "halo width {w}"
+    );
+    assert!(
+        (x + w / 2.0 - Canvas::FRAMED.w / 2.0).abs() < 0.5,
+        "halo off centre at {x}"
+    );
+    assert!(
+        at < out.len() - 1,
+        "the glow must sit behind the cart's face"
+    );
 }

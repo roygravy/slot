@@ -250,6 +250,19 @@ fn a_linked_game_never_takes_a_named_palette() {
         );
     }
     assert_eq!(slot::core::palette_for(None, gb, &rom, None), None);
+    let cgb = d.path().join("cgb flagged.gb");
+    let mut flagged = vec![0u8; 0x150];
+    flagged[0x143] = 0xC0;
+    std::fs::write(&cgb, flagged).unwrap();
+    assert_eq!(
+        slot::core::palette_for(Some(p), gb, &cgb, None),
+        Some(p),
+        "a cart on the GB shelf is a Game Boy, whatever its header says"
+    );
+    assert_eq!(
+        slot::core::palette_for(Some(p), slot_store::Platform::Gbc, &cgb, None),
+        None
+    );
     assert_eq!(
         slot::core::palette_for(Some(p), slot_store::Platform::Gba, &rom, None),
         None
