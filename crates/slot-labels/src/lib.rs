@@ -58,7 +58,7 @@ pub fn label_size(platform: Platform) -> (u32, u32) {
         // The NES label is tall; the SNES one is the NTSC sticker, which the shelf crops to the
         // flatter PAL sticker when the cart takes that mould.
         Platform::Nes => (141, 228),
-        Platform::Snes => (221, 99),
+        Platform::Snes => (224, 102),
         Platform::Gbc => (223, 199),
     }
 }

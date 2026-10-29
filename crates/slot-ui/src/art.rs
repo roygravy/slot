@@ -5,12 +5,11 @@ pub fn cover(path: &Path, w: u32, h: u32) -> Option<Vec<u8>> {
     cover_rgba(&src, sw, sh, w, h)
 }
 
-/// An American SNES label cut before its well was measured again (221x109, a little too
-/// tall) is drawn whole in the new well, which undoes the stretch it was cut with; any other
-/// picture covers the well.
+/// An American SNES label cut for an earlier well (221x109, then 221x99) is drawn whole in
+/// the new one, so nothing of the sticker is cut off; any other picture covers the well.
 pub fn cover_label(path: &Path, w: u32, h: u32) -> Option<Vec<u8>> {
     let (src, sw, sh) = decode(path)?;
-    if (sw, sh) == (221, 109) && (w, h) == (221, 99) {
+    if matches!((sw, sh), (221, 109) | (221, 99)) && (w, h) == (224, 102) {
         return Some(stretch_rgba(&src, sw, sh, w, h));
     }
     cover_rgba(&src, sw, sh, w, h)

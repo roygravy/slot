@@ -31,7 +31,10 @@ pub const LABEL_WELL: [u8; 3] = [0x8d, 0x8d, 0x90];
 const GBA_LABEL_RADIUS: f32 = 11.0;
 const GB_LABEL_RADIUS: f32 = 5.0;
 const NES_LABEL_RADIUS: f32 = 4.0;
-const SNES_LABEL_RADIUS: f32 = 9.0;
+/// Roy's photos (2026-10-29): the American sticker's corners are about 2% of its width, the
+/// European one's under 3%; rounder than that read as a toy.
+const SNES_LABEL_RADIUS: f32 = 5.0;
+const SNES_PAL_LABEL_RADIUS: f32 = 7.0;
 
 pub const LABEL_X: u32 = label_panel(CART_W, CART_H).0;
 pub const LABEL_Y: u32 = label_panel(CART_W, CART_H).1;
@@ -86,9 +89,9 @@ struct Spec {
 /// The NES label well, in `assets/nes_neutral.png`: x 126..267, y 0..228 of 312x337. The
 /// sticker runs over the top edge.
 const NES_LABEL: (u32, u32, u32, u32) = (126, 0, 141, 228);
-/// The American SNES label well, x 70..291, y 0..99 of 360x231, over the top edge too: as
-/// wide to tall (2.23) as the stickers on LaunchBox's photos of American carts.
-const SNES_LABEL: (u32, u32, u32, u32) = (70, 0, 221, 99);
+/// The American SNES label well, x 68..292, y 0..102 of 360x231, over the top edge too:
+/// measured on Roy's photo of an American cart (Dracula X), 2.2 wide to tall.
+const SNES_LABEL: (u32, u32, u32, u32) = (68, 0, 224, 102);
 /// The European and Japanese SNES label sits inset, with plastic above it: x 29..306,
 /// y 13..110 of 336x228.
 const SNES_PAL_LABEL: (u32, u32, u32, u32) = (29, 13, 277, 97);
@@ -175,13 +178,12 @@ fn spec(mould: Mould) -> Spec {
         h,
         label,
         square_top,
-        // The PAL/SFC sticker sits in a deep well with big round corners (Roy's photo).
         radius: match mould {
             Mould::Gba => GBA_LABEL_RADIUS,
             Mould::Notched | Mould::Rounded => GB_LABEL_RADIUS,
             Mould::Nes => NES_LABEL_RADIUS,
             Mould::SnesNtsc => SNES_LABEL_RADIUS,
-            Mould::SnesPal => 10.0,
+            Mould::SnesPal => SNES_PAL_LABEL_RADIUS,
             Mould::SgbNtsc | Mould::SgbPal => 0.0,
         },
         mask: mould_mask(mould),

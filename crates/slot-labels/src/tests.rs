@@ -210,7 +210,7 @@ fn tv_scan(size: (u32, u32), sticker: (u32, u32, u32, u32)) -> Vec<u8> {
 fn nes_and_snes_stickers_are_found_on_any_scan() {
     for (platform, size, sticker, want) in [
         (Platform::Nes, (800, 900), (320, 0, 370, 600), (141, 228)),
-        (Platform::Snes, (811, 518), (160, 10, 494, 220), (221, 99)),
+        (Platform::Snes, (811, 518), (160, 10, 494, 220), (224, 102)),
         (Platform::Snes, (811, 560), (83, 34, 640, 227), (277, 97)),
     ] {
         let png = artwork::prepare(&tv_scan(size, sticker), platform).unwrap();
