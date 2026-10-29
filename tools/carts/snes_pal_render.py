@@ -24,7 +24,7 @@ def light(height, gain=1.5, blur=0.9):
     return (1 + (lam / lz - 1) * gain) * (1 - occ)
 rng = np.random.default_rng(5)
 def grain(s):
-    g = nd.gaussian_filter(rng.normal(0, 1, (h, w)).astype(np.float32), 1.0 * SS)  # coarse enough to survive the shelf's scale (Roy)
+    g = nd.gaussian_filter(rng.normal(0, 1, (h, w)).astype(np.float32), 0.6 * SS)  # the PAL Super Game Boy's fine grain (Roy 2026-10-29)
     return g / g.std() * s
 def down(a):
     return np.asarray(Image.fromarray(a.astype(np.float32), 'F').resize((W, H), Image.Resampling.BOX))
@@ -103,7 +103,7 @@ for v in VENTS:
 vd = nd.distance_transform_edt(np.pad(vent, 1))[1:-1, 1:-1]
 height -= nd.gaussian_filter(vent.astype(np.float32), 0.5 * SS) * 1.1  # shallower (Roy 2026-10-23)
 # the label recess: deep, with big rounded corners
-label = rect(0.0818, 0.0504, 0.9152, 0.4891, 0.0342)  # the sticker's rect + 1.5px all round, radius r10 + 1.5: concentric (Roy)
+label = rect(0.0818, 0.0504, 0.9152, 0.4891, 0.0253)  # the sticker's rect + 1.5px all round, radius r7 + 1.5: concentric (Roy)
 height -= label * 2.0
 # the middle plate below the label and the side pieces either side; a fine seam marks the plate's
 # edges all the way up to the top rim (no step across the side pieces: Roy)
@@ -113,23 +113,24 @@ for u in (0.161, 0.841):
 
 # the grip: a long pill-shaped well inside a soft, slightly raised flat lip that rounds over
 # into it; four ribs run along its floor, the middle segment a step deeper (Roy's photo)
-slot = rect(0.209, 0.634, 0.814, 0.696, 0.024)
-rim = rect(0.199, 0.621, 0.824, 0.709, 0.033)
+# measured on Roy's Super Mario All-Stars photo (2026-10-29): a little narrower and taller
+slot = rect(0.225, 0.636, 0.775, 0.700, 0.0217)
+rim = rect(0.215, 0.619, 0.785, 0.718, 0.0335)
 rim_d = nd.distance_transform_edt(np.pad(rim, 1))[1:-1, 1:-1]
 height += np.sin(np.clip(rim_d / (2.0 * SS), 0, 1) * np.pi / 2) * 0.5
 slot_in = nd.distance_transform_edt(np.pad(slot, 1))[1:-1, 1:-1]
 height -= np.sin(np.clip(slot_in / (2.2 * SS), 0, 1) * np.pi / 2) * 4.6  # deeper (Roy)
 mid = rect(0.397, 0.62, 0.596, 0.72) & slot
 height -= mid * 0.6
-period = V(0.696 - 0.634) / 4.5
-ribs = 0.5 + 0.5 * np.cos((yy - V(0.634)) / period * 2 * np.pi)
+period = V(0.700 - 0.636) / 4.5
+ribs = 0.5 + 0.5 * np.cos((yy - V(0.636)) / period * 2 * np.pi)
 height += slot * ribs * 0.9 * np.clip(slot_in / (1.5 * SS), 0, 1)
 # screws: a deep round well with the screw head, its hole off to the upper right
 # real carts: a small screw head sitting in a shallow countersink
 gaps = gamebit(0.063, 0.929, height) | gamebit(0.937, 0.929, height)
 height *= cart
 # the flat face sits at the Game Boy carts' level, so the same colour reads the same (Roy)
-grey = 119 * crisp(height) + grain(2.8)
+grey = 119 * crisp(height) + grain(1.3)
 # the recess and the wells catch less light than the open plastic
 grey *= 1 - 0.06 * nd.gaussian_filter(label.astype(np.float32), SS)
 grey *= 1 - 0.65 * nd.gaussian_filter(gaps.astype(np.float32), 0.5 * SS)
