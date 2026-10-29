@@ -5,7 +5,7 @@ mod bitmaps;
 mod buttons_help;
 mod cheat_page;
 pub use bitmaps::{
-    link_port, link_port_light, nes_lid, slot_back, slot_back_gb, slot_back_light, slot_front, slot_front_gb, slot_front_light, slot_tv, Mould,
+    link_port, link_port_light, nes_lid, nes_lid_orig, slot_back, slot_back_gb, slot_back_light, slot_front, slot_front_gb, slot_front_light, slot_orig, slot_tv, Mould,
     SgbModel, sgb_band,
     NES_LID_W, SGB_BAND_H, SLOT_H, SLOT_W,
 };

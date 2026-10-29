@@ -196,8 +196,8 @@ struct Clocks {
 }
 
 struct ShelfLook {
-    slot: [(TexId, TexId); 12],
-    nes_lids: [TexId; 2],
+    slot: [(TexId, TexId); 17],
+    nes_lids: [TexId; 3],
     bolt: [TexId; 2],
     wifi: [TexId; 2],
     port: [Option<TexId>; 2],
@@ -440,11 +440,19 @@ impl Frontend {
                     upload(slot_ui::sgb_band(SgbModel::Sgb2, false)),
                     upload(slot_ui::sgb_band(SgbModel::Sgb2, true)),
                 ),
+                (upload(slot_ui::slot_orig(0, false)), upload(slot_ui::slot_orig(0, true))),
+                (upload(slot_ui::slot_orig(1, false)), upload(slot_ui::slot_orig(1, true))),
+                (upload(slot_ui::slot_orig(2, false)), upload(slot_ui::slot_orig(2, true))),
+                (upload(slot_ui::slot_orig(3, false)), upload(slot_ui::slot_orig(3, true))),
+                (upload(slot_ui::slot_orig(4, false)), upload(slot_ui::slot_orig(4, true))),
             ]
         };
-        let nes_lids = [false, true].map(|light| {
-            compositor.create_texture(slot_ui::NES_LID_W, slot_ui::SLOT_H, slot_ui::nes_lid(light))
-        });
+        let nes_lids = [
+            slot_ui::nes_lid(false),
+            slot_ui::nes_lid(true),
+            slot_ui::nes_lid_orig(),
+        ]
+        .map(|lid| compositor.create_texture(slot_ui::NES_LID_W, slot_ui::SLOT_H, lid));
         let dark_bolt = icon_face(Icon::Charging, BOLT_PX, footer_ink(false));
         let light_bolt = icon_face(Icon::Charging, BOLT_PX, footer_ink(true));
         let bolt = [
@@ -482,7 +490,8 @@ impl Frontend {
     }
 
     fn apply_look(&mut self) {
-        let light = self.session.app().light();
+        // The footer's icons sit on the slot: their ink follows its housing.
+        let light = self.session.app().slot_light();
         let ready = self.look.as_ref().map(|look| {
             let i = usize::from(light);
             let legend_ready = !look.legend[i].is_empty();

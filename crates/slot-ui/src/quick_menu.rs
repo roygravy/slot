@@ -587,7 +587,7 @@ impl QuickRow {
             QuickRow::InGameMenu => "Tap MENU in a game to pause and open a menu.",
             QuickRow::EjectSave => "Save your place when you eject a cart.",
             QuickRow::Wallpaper => "Dark, Light, or your own from the Wallpapers folder.",
-            QuickRow::Theme => "Dark or light housing, shelves and menus.",
+            QuickRow::Theme => "Dark, light or each console's own colour round the slot.",
             QuickRow::Recents => "A shelf with the last 10 games you played.",
             QuickRow::FavoriteMark => "How favorites stand out. Press Y on a cart to mark it.",
             QuickRow::ShowTitles => "Show the selected game's name under the shelf.",
@@ -685,6 +685,7 @@ pub enum QuickValue {
     Frames1,
     Dark,
     Light,
+    Originals,
     Show,
     Hide,
     Low,
@@ -733,7 +734,7 @@ pub enum QuickValue {
 }
 
 impl QuickValue {
-    pub const ALL: [QuickValue; 57] = [
+    pub const ALL: [QuickValue; 58] = [
         QuickValue::Speed2,
         QuickValue::Speed3,
         QuickValue::Speed4,
@@ -748,6 +749,7 @@ impl QuickValue {
         QuickValue::Frames1,
         QuickValue::Dark,
         QuickValue::Light,
+        QuickValue::Originals,
         QuickValue::Show,
         QuickValue::Hide,
         QuickValue::Low,
@@ -813,6 +815,7 @@ impl QuickValue {
             QuickValue::Frames1 => "1 Frame",
             QuickValue::Dark => "Dark",
             QuickValue::Light => "Light",
+            QuickValue::Originals => "Originals",
             QuickValue::Show => "On",
             QuickValue::Hide => "Off",
             QuickValue::Low => "25%",

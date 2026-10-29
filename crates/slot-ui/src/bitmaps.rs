@@ -123,6 +123,30 @@ const SLOT_FRONT_SNES_LIGHT_PNG: &[u8] =
     include_bytes!("../../../assets/slot_front_snes_light.png");
 const NES_LID_DARK_PNG: &[u8] = include_bytes!("../../../assets/nes_lid_dark.png");
 const NES_LID_LIGHT_PNG: &[u8] = include_bytes!("../../../assets/nes_lid_light.png");
+const NES_LID_ORIG_PNG: &[u8] = include_bytes!("../../../assets/nes_lid_orig.png");
+/// The Originals housings, back and front: GBA, GB, GBC, NES, SNES.
+const SLOT_ORIG_PNG: [[&[u8]; 2]; 5] = [
+    [
+        include_bytes!("../../../assets/slot_back_orig.png"),
+        include_bytes!("../../../assets/slot_front_orig.png"),
+    ],
+    [
+        include_bytes!("../../../assets/slot_back_gb_orig.png"),
+        include_bytes!("../../../assets/slot_front_gb_orig.png"),
+    ],
+    [
+        include_bytes!("../../../assets/slot_back_gb_orig_gbc.png"),
+        include_bytes!("../../../assets/slot_front_gb_orig_gbc.png"),
+    ],
+    [
+        include_bytes!("../../../assets/slot_back_nes_orig.png"),
+        include_bytes!("../../../assets/slot_front_nes_orig.png"),
+    ],
+    [
+        include_bytes!("../../../assets/slot_back_snes_orig.png"),
+        include_bytes!("../../../assets/slot_front_snes_orig.png"),
+    ],
+];
 const PORT_DARK_PNG: &[u8] = include_bytes!("../../../assets/link_port_dark.png");
 const PORT_LIGHT_PNG: &[u8] = include_bytes!("../../../assets/link_port_light.png");
 const PLUG_HOST_PNG: &[u8] = include_bytes!("../../../assets/link_plug_host.png");
@@ -313,6 +337,19 @@ pub fn nes_lid(light: bool) -> &'static [u8] {
         false => load(NES_LID_DARK_PNG, NES_LID_W, SLOT_H, &D),
         true => load(NES_LID_LIGHT_PNG, NES_LID_W, SLOT_H, &L),
     }
+}
+
+/// A slot in its console's own housing (Originals): `kind` 0 GBA, 1 GB, 2 GBC, 3 NES, 4 SNES.
+pub fn slot_orig(kind: usize, front: bool) -> &'static [u8] {
+    static P: [OnceLock<Vec<u8>>; 10] = [const { OnceLock::new() }; 10];
+    let i = kind * 2 + usize::from(front);
+    load(SLOT_ORIG_PNG[kind][usize::from(front)], SLOT_W, SLOT_H, &P[i])
+}
+
+/// The NES's lid in its own light grey (Originals).
+pub fn nes_lid_orig() -> &'static [u8] {
+    static P: OnceLock<Vec<u8>> = OnceLock::new();
+    load(NES_LID_ORIG_PNG, NES_LID_W, SLOT_H, &P)
 }
 
 pub fn slot_front_light() -> &'static [u8] {

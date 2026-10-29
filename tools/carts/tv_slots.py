@@ -27,9 +27,16 @@ def plain(front, w):
     return out
 
 
-for theme in ('dark', 'light'):
-    gb = Image.open(f'{A}slot_front_gb_{theme}.png').convert('RGBA')
-    back_gb = Image.open(f'{A}slot_back_gb_{theme}.png').convert('RGBA')
+def strips(name):
+    return (Image.open(f'{A}slot_front_gb_{name}.png').convert('RGBA'),
+            Image.open(f'{A}slot_back_gb_{name}.png').convert('RGBA'))
+
+
+# Each theme's NES and SNES bands, cut from that theme's Game Boy housing; Originals has one
+# housing for each console (tools/slot_art.py).
+for theme, nes_from, snes_from in [('dark', 'dark', 'dark'), ('light', 'light', 'light'),
+                                   ('orig', 'orig_nes', 'orig_snes')]:
+    gb, back_gb = strips(nes_from)
     left_edge = gb.crop((L_END - EDGE, 0, L_END, H))       # a piece's right-hand edge
     right_edge = gb.crop((R_START, 0, R_START + EDGE, H))  # a piece's left-hand edge
     base = gb.getpixel((120, 30))[:3]
@@ -54,10 +61,14 @@ for theme in ('dark', 'light'):
     lid.save(f'{A}nes_lid_{theme}.png', optimize=True)
 
     # ---- SNES ----
+    gb, back_gb = strips(snes_from)
+    left_edge = gb.crop((L_END - EDGE, 0, L_END, H))
+    right_edge = gb.crop((R_START, 0, R_START + EDGE, H))
+    base = gb.getpixel((120, 30))[:3]
     band = gb.copy()
     band.paste(plain(gb, R_START + EDGE - (L_END - EDGE) + 20), (L_END - EDGE - 10, 0))
     d = ImageDraw.Draw(band)
-    light = theme == 'light'
+    light = sum(base) > 300
     dark = tuple(round(v * (0.55 if light else 0.45)) for v in base)
     lit = tuple(min(255, round(v * 1.12 + 10)) for v in base)
     gx = C - 120 - 2 - 3                                   # just outside the 240 wide cart, 2px play
@@ -67,3 +78,9 @@ for theme in ('dark', 'light'):
         d.line((x, 0, x + 2, 0), fill=dark)
     band.save(f'{A}slot_front_snes_{theme}.png', optimize=True)
     band.save(f'{A}slot_back_snes_{theme}.png', optimize=True)
+
+# The NES and SNES greys' Game Boy housings were only the stuff the bands are cut from.
+import os
+for name in ('orig_nes', 'orig_snes'):
+    for part in ('front', 'back'):
+        os.remove(f'{A}slot_{part}_gb_{name}.png')

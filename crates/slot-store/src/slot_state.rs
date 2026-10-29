@@ -34,6 +34,9 @@ pub enum Appearance {
     #[default]
     Dark,
     Light,
+    /// Each console's own housing round its slot: the DMG's grey, the GBC's Grape, the GBA's
+    /// Indigo, the NES's and SNES's light greys. Menus stay dark.
+    Originals,
 }
 
 impl Appearance {
@@ -45,6 +48,7 @@ impl Appearance {
         match self {
             Appearance::Dark => "dark",
             Appearance::Light => "light",
+            Appearance::Originals => "originals",
         }
     }
 
@@ -53,15 +57,15 @@ impl Appearance {
             "dark" => Some(Appearance::Dark),
             // A card set to the DMG theme of a test build reads as light.
             "light" | "dmg" => Some(Appearance::Light),
+            "originals" => Some(Appearance::Originals),
             _ => None,
         }
     }
 
-    pub fn toggle(self) -> Appearance {
-        match self {
-            Appearance::Dark => Appearance::Light,
-            Appearance::Light => Appearance::Dark,
-        }
+    pub fn step(self, right: bool) -> Appearance {
+        const ALL: [Appearance; 3] = [Appearance::Dark, Appearance::Light, Appearance::Originals];
+        let at = ALL.iter().position(|a| *a == self).unwrap_or(0);
+        ALL[(at + if right { 1 } else { ALL.len() - 1 }) % ALL.len()]
     }
 }
 

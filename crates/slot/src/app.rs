@@ -459,8 +459,8 @@ pub struct App {
     hud_wifi: Option<TexId>,
     hud_bolt: Option<TexId>,
     /// GBA dark, GBA light, Game Boy dark, Game Boy light.
-    slot_sets: Option<[(TexId, TexId); 12]>,
-    nes_lids: Option<[TexId; 2]>,
+    slot_sets: Option<[(TexId, TexId); 17]>,
+    nes_lids: Option<[TexId; 3]>,
     shelf_platform: slot_ui::Printed,
     shelf_title: slot_ui::Printed,
     name_pending: bool,
@@ -1178,6 +1178,7 @@ impl App {
             QuickRow::Theme => Some(match self.state.appearance {
                 slot_store::Appearance::Dark => QuickValue::Dark,
                 slot_store::Appearance::Light => QuickValue::Light,
+                slot_store::Appearance::Originals => QuickValue::Originals,
             }),
             QuickRow::DateTime
             | QuickRow::TimeZone
@@ -1616,7 +1617,7 @@ impl App {
         self.hud_bolt = Some(bolt);
     }
 
-    pub fn set_slot_sets(&mut self, sets: [(TexId, TexId); 12], nes_lids: [TexId; 2]) {
+    pub fn set_slot_sets(&mut self, sets: [(TexId, TexId); 17], nes_lids: [TexId; 3]) {
         self.slot_sets = Some(sets);
         self.nes_lids = Some(nes_lids);
     }
@@ -1976,7 +1977,7 @@ impl App {
             self.bolt,
             self.shelf_clock,
             self.wifi_shown(self.wifi),
-            footer_ink(self.light()),
+            footer_ink(self.slot_light()),
             out,
         );
     }
@@ -2017,7 +2018,10 @@ impl App {
         }
         // The SNES around it, the SGB standing in its slot, the clock: all under the camera.
         slot_ui::set_sgb_band(false);
-        let snes = Some(sets[3 * 2 + usize::from(self.light())]);
+        let snes = Some(match self.originals() {
+            true => sets[12 + orig_kind(Platform::Snes)],
+            false => sets[3 * 2 + usize::from(self.light())],
+        });
         let from = out.len();
         slot_ui::draw_slot_part(canvas, snes, false, out);
         let face = self
@@ -2356,6 +2360,9 @@ impl App {
                 return Some(sets[8 + model as usize]);
             }
         }
+        if self.originals() {
+            return Some(sets[12 + orig_kind(self.slot_platform())]);
+        }
         let kind = match self.slot_platform() {
             Platform::Gba => 0,
             Platform::Gb | Platform::Gbc => 1,
@@ -2363,6 +2370,23 @@ impl App {
             Platform::Snes => 3,
         };
         Some(sets[kind * 2 + usize::from(self.light())])
+    }
+
+    fn originals(&self) -> bool {
+        self.state.appearance == slot_store::Appearance::Originals
+    }
+
+    /// Whether the housing round the slot showing is a light one, so the footer on it inks
+    /// dark: the theme's, or with Originals the console's own (the GBC's and GBA's purples
+    /// are dark).
+    pub fn slot_light(&self) -> bool {
+        match self.originals() {
+            true => matches!(
+                self.slot_platform(),
+                Platform::Gb | Platform::Nes | Platform::Snes
+            ),
+            false => self.light(),
+        }
     }
 
     /// How many seconds an NES or SNES insert takes for each second of the slot's own: they go
@@ -2389,7 +2413,7 @@ impl App {
     pub fn status_ink(&self) -> [u8; 3] {
         match self.phase {
             Phase::Playing { .. } | Phase::Polaroids { .. } => footer_ink(false),
-            _ => footer_ink(self.light()),
+            _ => footer_ink(self.slot_light()),
         }
     }
 
@@ -3336,7 +3360,7 @@ impl App {
             QuickRow::Turbo => s.turbo = !s.turbo,
             QuickRow::Rewind => s.rewind = !s.rewind,
 
-            QuickRow::Theme => s.appearance = s.appearance.toggle(),
+            QuickRow::Theme => s.appearance = s.appearance.step(right),
             QuickRow::WallpaperTint => s.wallpaper_tint = s.wallpaper_tint.step(right),
             QuickRow::Wallpaper
             | QuickRow::Recents
@@ -4496,7 +4520,7 @@ impl App {
                         self.bolt,
                         self.shelf_clock,
                         self.wifi_shown(self.wifi),
-                        footer_ink(self.light()),
+                        footer_ink(self.slot_light()),
                         out,
                     );
                 }
@@ -4749,8 +4773,8 @@ impl App {
             lid: self
                 .nes_lids
                 .filter(|_| cart.platform == Platform::Nes)
-                .map(|l| l[usize::from(self.light())]),
-            light: self.light(),
+                .map(|l| l[if self.originals() { 2 } else { usize::from(self.light()) }]),
+            light: self.slot_light(),
             ejecting: matches!(self.phase, Phase::Ejecting { .. }) && self.refused_from.is_none(),
         }
         .draw(out);
@@ -7263,5 +7287,16 @@ fn zoom_draw(d: &mut Draw, k: f32, dx: f32, dy: f32, alpha: f32) {
             *a *= alpha;
         }
         _ => {}
+    }
+}
+
+/// Where a console's own housing sits among the Originals slots (after the twelve themed ones).
+fn orig_kind(platform: Platform) -> usize {
+    match platform {
+        Platform::Gba => 0,
+        Platform::Gb => 1,
+        Platform::Gbc => 2,
+        Platform::Nes => 3,
+        Platform::Snes => 4,
     }
 }
