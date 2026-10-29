@@ -2099,7 +2099,7 @@ impl App {
         // once the band covers it, so the two clear plastics never show through each other.
         let clear = model == slot_ui::SgbModel::Sgb2;
         let sharp = match clear {
-            true => ease(((u - 0.72) / 0.2).clamp(0.0, 1.0)),
+            true => ease(((u - 0.72) / 0.28).clamp(0.0, 1.0)),
             false => ease(((u - 0.35) / 0.55).clamp(0.0, 1.0)),
         };
         // The face goes out exactly as the band comes in: while the band is not yet whole, the
