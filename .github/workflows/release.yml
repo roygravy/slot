@@ -4,6 +4,10 @@ on:
   push:
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      version:
+        description: Version in the zip's name
+        default: v1.1
 
 permissions:
   contents: read
@@ -61,10 +65,14 @@ jobs:
 
       - name: Package
         id: package
+        env:
+          VERSION: ${{ inputs.version || github.ref_name }}
         run: |
           set -eu
-          out="slot-${BUILD_NAME}"
-          zip="$out-h700.zip"
+          # The zip and its folder carry the GRAVY name: slot-x-gravy-v1.1.zip holds slot-x-gravy-v1.1/.
+          out="slot-x-gravy-$(printf %s "$VERSION" | tr / -)"
+          mv "slot-${BUILD_NAME}" "$out"
+          zip="$out.zip"
           zip -qry "$zip" "$out"
           echo "zip=$zip" >> "$GITHUB_OUTPUT"
 
@@ -93,7 +101,7 @@ jobs:
         run: |
           set -eu
           cat > notes.md <<NOTES
-          Unzip and copy the contents of \`slot-${GITHUB_REF_NAME}/\` onto SD2.
+          Unzip and copy the contents of \`slot-x-gravy-${GITHUB_REF_NAME}/\` onto SD2.
 
           Emulation by mGBA (MPL-2.0), gpSP (GPL-2.0), Gambatte (GPL-2.0), FCEUmm (GPL-2.0) and Snes9x (non-commercial licence). Their licences, patches and sources are in \`System/licenses/\`.
           NOTES
