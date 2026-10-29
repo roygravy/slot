@@ -33,6 +33,7 @@ impl Labels {
         if let Err(e) = thread::Builder::new()
             .name("slot-labels".into())
             .spawn(move || {
+                crate::label_cache::yield_to_play();
                 let mut downloader = slot_labels::Downloader::default();
                 run(carts, stopped, out, |cart| {
                     let got = downloader.prepare(&root, cart);

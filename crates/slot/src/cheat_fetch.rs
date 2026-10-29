@@ -31,7 +31,10 @@ impl CheatFetch {
         let (stop, stopped) = mpsc::channel();
         if let Err(e) = thread::Builder::new()
             .name("slot-cheats".into())
-            .spawn(move || run(&root, carts, &stopped, &Cheats::default()))
+            .spawn(move || {
+                crate::label_cache::yield_to_play();
+                run(&root, carts, &stopped, &Cheats::default())
+            })
         {
             eprintln!("slot: cheats: worker failed to start: {e}");
         }

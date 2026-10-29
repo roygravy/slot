@@ -76,6 +76,14 @@ pub fn cache_path(root: &Path, cart: &Cart) -> PathBuf {
         .join(format!("{}.rgba", cart.stem))
 }
 
+/// A background worker's thread gives way to the game and the menus: lowest priority.
+pub(crate) fn yield_to_play() {
+    // On Linux, PRIO_PROCESS with 0 sets only the calling thread.
+    unsafe {
+        libc::setpriority(libc::PRIO_PROCESS, 0, 19);
+    }
+}
+
 pub struct Rebuild {
     done: Arc<AtomicUsize>,
     paused: Arc<AtomicBool>,
@@ -103,15 +111,19 @@ impl Rebuild {
             );
             let spawned = thread::Builder::new()
                 .name(format!("slot-labels-{n}"))
-                .spawn(move || loop {
-                    while paused.load(Ordering::Relaxed) {
-                        thread::sleep(Duration::from_millis(100));
+                .spawn(move || {
+                    yield_to_play();
+                    loop {
+                        // In a game only the first keeps going, at the lowest priority.
+                        while n > 0 && paused.load(Ordering::Relaxed) {
+                            thread::sleep(Duration::from_millis(100));
+                        }
+                        let Some(cart) = carts.get(next.fetch_add(1, Ordering::Relaxed)) else {
+                            return;
+                        };
+                        let _ = label_art(&root, cart);
+                        done.fetch_add(1, Ordering::Release);
                     }
-                    let Some(cart) = carts.get(next.fetch_add(1, Ordering::Relaxed)) else {
-                        return;
-                    };
-                    let _ = label_art(&root, cart);
-                    done.fetch_add(1, Ordering::Release);
                 });
             if let Err(e) = spawned {
                 eprintln!("slot: label cache: rebuild thread failed to start: {e}");
@@ -125,7 +137,7 @@ impl Rebuild {
         }
     }
 
-    /// A game is being played: the workers wait between labels so it has the cores.
+    /// A game is being played: all but one worker wait between labels so it has the cores.
     pub fn set_paused(&self, paused: bool) {
         self.paused.store(paused, Ordering::Relaxed);
     }
