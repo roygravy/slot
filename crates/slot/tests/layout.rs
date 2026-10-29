@@ -91,22 +91,20 @@ fn the_shelf_menu_over_the_shelf_stays_native() {
 }
 
 #[test]
-fn every_screen_is_the_framed_canvas_on_a_720_panel() {
+fn every_screen_spans_a_720_panel_and_a_gba_game_fills_it() {
+    const WIDE: Canvas = Canvas { w: 720.0, h: 480.0 };
     let mut a = app_with_carts(&["Emerald", "Zzz"], (720, 480));
-    assert_eq!(a.canvas(), Canvas::FRAMED);
+    assert_eq!(a.canvas(), WIDE);
     a.apply(Action::QuickMenu);
-    assert_eq!(a.canvas(), Canvas::FRAMED);
+    assert_eq!(a.canvas(), WIDE);
     let mut a = playing((720, 480));
-    assert_eq!(a.canvas(), Canvas::FRAMED);
+    assert!(a.game_fills());
+    assert_eq!(a.canvas(), WIDE);
     a.apply(Action::QuickMenu);
     for _ in 0..30 {
         tick(&mut a);
     }
-    assert_eq!(
-        a.canvas(),
-        Canvas::FRAMED,
-        "the in-game menu on a 720 panel"
-    );
+    assert_eq!(a.canvas(), WIDE, "the in-game menu on a 720 panel");
 }
 
 #[test]
@@ -192,22 +190,16 @@ fn the_framed_area_is_black_behind_the_game_as_it_powers_on_a_4_by_3_panel() {
 }
 
 #[test]
-fn the_shelf_still_shows_behind_the_power_on_on_a_720_panel() {
+fn a_gba_game_powers_on_across_a_720_panel() {
     let mut a = app_with_carts(&["Emerald", "Zzz"], (720, 480));
-    a.set_ground(slot_gfx::TexId::from_raw(900));
     a.apply(Action::Insert);
     a.on_core_ready();
     while !matches!(a.phase(), Phase::Playing { .. }) {
         tick(&mut a);
+        assert_eq!(a.layout(), Layout::Native, "the 720 power-on left the full width");
     }
     tick(&mut a);
-    let mut out = Vec::new();
-    a.draw(&mut out);
-    assert!(
-        out.iter()
-            .any(|d| matches!(d, Draw::Part { tex, .. } if *tex == slot_gfx::TexId::from_raw(900))),
-        "the 720 power-on lost the wallpaper behind it"
-    );
+    assert_eq!(a.layout(), Layout::Native, "the game left the full width");
 }
 
 fn eject_until_shelf(a: &mut App, mut each: impl FnMut(&App)) {

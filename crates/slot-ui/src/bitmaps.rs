@@ -83,7 +83,8 @@ pub const SOCKET_W: u32 = 64;
 pub const SOCKET_H: u32 = 46;
 pub const CHIP_W: u32 = 59;
 pub const CHIP_H: u32 = 41;
-pub const SLOT_W: u32 = OUT_W;
+/// The slot strips are drawn 720 wide: a 4:3 canvas shows their middle, a 3:2 one all of it.
+pub const SLOT_W: u32 = 720;
 pub const SLOT_H: u32 = 58;
 /// The band while the Super Game Boy is in: its top stands above the console's.
 pub const SGB_BAND_H: u32 = 87;

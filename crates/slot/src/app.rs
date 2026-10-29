@@ -1399,7 +1399,7 @@ impl App {
     }
 
     pub fn sp_frame(&self) -> bool {
-        self.resolved_bezel(self.playing_platform()) == BezelPick::Ags102
+        !self.game_fills() && self.resolved_bezel(self.playing_platform()) == BezelPick::Ags102
     }
 
     pub fn set_game_bezel(&mut self, tex: Option<TexId>) {
@@ -1407,7 +1407,7 @@ impl App {
     }
 
     pub fn shown_game_bezel(&self) -> Option<TexId> {
-        if self.video_mode() == VideoMode::Stretch {
+        if self.video_mode() == VideoMode::Stretch || self.game_fills() {
             return None;
         }
         self.game_bezel
@@ -4002,7 +4002,17 @@ impl App {
         self.panel = panel;
     }
 
+    /// Whether a game's picture fills the panel: a GBA game on a 3:2 panel (720x480 is its
+    /// picture at 3x), drawn on the full-width canvas with no bezel.
+    pub fn game_fills(&self) -> bool {
+        slot_gfx::framed(self.panel) && self.playing_platform() == Platform::Gba
+    }
+
     pub fn layout(&self) -> Layout {
+        // The screenshot viewer is laid out for the 4:3 picture: it keeps it, in the middle.
+        if self.game_fills() && !matches!(self.phase, Phase::Polaroids { .. }) {
+            return Layout::Native;
+        }
         if matches!(self.phase, Phase::Playing { .. }) && self.in_game_menu_shown().is_some() {
             return IN_GAME_MENU;
         }
@@ -4038,7 +4048,7 @@ impl App {
         out.push(Draw::Rect {
             x: 0.0,
             y: 0.0,
-            w: OUT_W as f32,
+            w: self.canvas().w,
             h: OUT_H as f32,
             colour: [0.0, 0.0, 0.0, 1.0],
         });
@@ -4427,7 +4437,7 @@ impl App {
                 out.push(Draw::Tex {
                     x: 0.0,
                     y: 0.0,
-                    w: OUT_W as f32,
+                    w: self.canvas().w,
                     h: OUT_H as f32,
                     tex,
                     alpha: 1.0,
@@ -5127,7 +5137,7 @@ impl App {
         };
         let scale = 0.56;
         let target = Placed {
-            x: (OUT_W as f32 - cart_w as f32 * scale) / 2.0,
+            x: self.canvas().centred(cart_w as f32 * scale),
             y: 30.0,
             w: cart_w as f32 * scale,
             h: cart_h as f32 * scale,
@@ -5142,7 +5152,7 @@ impl App {
         out.push(Draw::Rect {
             x: 0.0,
             y: 0.0,
-            w: OUT_W as f32,
+            w: self.canvas().w,
             h: OUT_H as f32,
             colour: [0.0, 0.0, 0.0, 0.32 * movement],
         });
@@ -5224,7 +5234,7 @@ impl App {
             let seen = |w: u32| w.saturating_sub(HINT_EDGE) as f32;
             for (tex, w, x) in [
                 (cancel.0, cancel.1, board_x),
-                (swap.0, swap.1, (OUT_W as f32 - seen(swap.1)) / 2.0),
+                (swap.0, swap.1, self.canvas().centred(seen(swap.1))),
                 (choose.0, choose.1, right - seen(choose.1)),
             ] {
                 out.push(Draw::Tex {
@@ -5253,7 +5263,7 @@ impl App {
         out.push(Draw::Rect {
             x: 0.0,
             y: 0.0,
-            w: OUT_W as f32,
+            w: self.canvas().w,
             h: OUT_H as f32,
             colour: LINK_SCRIM,
         });
