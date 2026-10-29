@@ -34,6 +34,17 @@ const SLEEP_LOG: &str = "deep-sleep.log";
 const BATTERY_LOOK: Duration = Duration::from_secs(3600);
 
 /// The green light going out: three slow blinks, each a little shorter on.
+/// Into the light sleep: the light goes out this long, once.
+const LIGHT_SLEEP_BLINK_MS: u64 = 250;
+
+/// The light led.sh last chose, green unless the battery is low.
+fn awake_led_at(psy: &Path) {
+    let low = fs::read_to_string(Path::new(RUN_DIR).join("slot-led.state"))
+        .is_ok_and(|s| s.trim() == "red");
+    let _ = fs::write(psy.join("work_led"), if low { "0" } else { "1" });
+    let _ = fs::write(psy.join("lowpwr_led"), if low { "1" } else { "0" });
+}
+
 const SLEEP_BLINKS: [(bool, u64); 6] = [
     (false, 300),
     (true, 500),
@@ -215,13 +226,9 @@ impl DevicePlatform {
 
     /// Awake again: the light led.sh last chose, green unless the battery is low.
     fn awake_led(&self) {
-        let Some(psy) = &self.battery else {
-            return;
-        };
-        let low = fs::read_to_string(Path::new(RUN_DIR).join("slot-led.state"))
-            .is_ok_and(|s| s.trim() == "red");
-        let _ = fs::write(psy.join("work_led"), if low { "0" } else { "1" });
-        let _ = fs::write(psy.join("lowpwr_led"), if low { "1" } else { "0" });
+        if let Some(psy) = &self.battery {
+            awake_led_at(psy);
+        }
     }
 
     /// Percent and voltage, for the sleep log: a percent alone hides an overnight drain.
@@ -685,6 +692,21 @@ impl Platform for DevicePlatform {
                 let _ = fs::write(dir.join("brightness"), format!("{value}\n"));
             }
         }
+    }
+
+    fn blink_led(&mut self) {
+        let Some(psy) = self.battery.clone() else {
+            return;
+        };
+        // On its own thread: the menu loop goes on meanwhile.
+        let _ = std::thread::Builder::new()
+            .name("slot-blink".into())
+            .spawn(move || {
+                let _ = fs::write(psy.join("work_led"), "0");
+                let _ = fs::write(psy.join("lowpwr_led"), "0");
+                std::thread::sleep(Duration::from_millis(LIGHT_SLEEP_BLINK_MS));
+                awake_led_at(&psy);
+            });
     }
 
     fn deep_sleep(&mut self, low: u8) -> Option<Woke> {

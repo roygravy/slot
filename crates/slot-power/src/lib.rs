@@ -83,6 +83,9 @@ pub trait Platform: Send {
         Vec::new()
     }
 
+    /// One short blink of the light: the console has gone into its light sleep.
+    fn blink_led(&mut self) {}
+
     /// Suspend to RAM until POWER wakes the console, or until the battery is down to
     /// `low` percent; None when this console cannot sleep that deep.
     fn deep_sleep(&mut self, _low: u8) -> Option<Woke> {

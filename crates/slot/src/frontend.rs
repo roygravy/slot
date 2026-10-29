@@ -1280,6 +1280,11 @@ impl Frontend {
         self.session.app().ready_to_power_off()
     }
 
+    /// The light sleep: the screen is off and nothing needs drawing.
+    pub fn dozing(&self) -> bool {
+        matches!(self.session.app().phase(), Phase::Doze { .. })
+    }
+
     pub fn restarting(&self) -> bool {
         self.session.app().ready_to_restart()
     }

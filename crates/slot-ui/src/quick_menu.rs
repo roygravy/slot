@@ -57,6 +57,7 @@ pub enum QuickRow {
     ScreenGbc,
     ScreenGb,
     AutoSleep,
+    DeepSleep,
     PixelTransparency,
     LcdGhosting,
     InGameMenu,
@@ -94,7 +95,7 @@ pub enum QuickRow {
 }
 
 impl QuickRow {
-    pub const ALL: [QuickRow; 83] = [
+    pub const ALL: [QuickRow; 84] = [
         QuickRow::FastForward,
         QuickRow::FastForwardSound,
         QuickRow::Screen,
@@ -144,6 +145,7 @@ impl QuickRow {
         QuickRow::ScreenGbc,
         QuickRow::ScreenGb,
         QuickRow::AutoSleep,
+        QuickRow::DeepSleep,
         QuickRow::PixelTransparency,
         QuickRow::LcdGhosting,
         QuickRow::InGameMenu,
@@ -193,7 +195,7 @@ impl QuickRow {
         QuickRow::About,
     ];
 
-    pub const GENERAL: [QuickRow; 12] = [
+    pub const GENERAL: [QuickRow; 13] = [
         QuickRow::Wallpaper,
         QuickRow::Theme,
         QuickRow::Recents,
@@ -204,6 +206,7 @@ impl QuickRow {
         QuickRow::Clock24,
         QuickRow::DateTime,
         QuickRow::AutoSleep,
+        QuickRow::DeepSleep,
         QuickRow::RememberPosition,
         QuickRow::ResumeGame,
     ];
@@ -349,6 +352,7 @@ impl QuickRow {
             | QuickRow::FavoriteMark
             | QuickRow::ShowTitles
             | QuickRow::AutoSleep
+            | QuickRow::DeepSleep
             | QuickRow::RememberPosition
             | QuickRow::ResumeGame
             | QuickRow::BootPicture => &QuickRow::GENERAL,
@@ -477,7 +481,8 @@ impl QuickRow {
             QuickRow::FavoriteMark => "Favorites",
             QuickRow::ShowTitles => "Game Titles",
             QuickRow::WallpaperTint => "Wallpaper Tint",
-            QuickRow::AutoSleep => "Auto Sleep",
+            QuickRow::AutoSleep => "Light Sleep",
+            QuickRow::DeepSleep => "Deep Sleep",
             QuickRow::PixelTransparency
             | QuickRow::GbTransparency
             | QuickRow::GbcTransparency
@@ -593,7 +598,12 @@ impl QuickRow {
             QuickRow::HomeWifi => "Join the networks in Config/wifi.toml. Sets the clock too.",
             QuickRow::Network => "Home Wi-Fi and the network you are on.",
             QuickRow::ConnectedTo => "The home network this device is on now.",
-            QuickRow::AutoSleep => "Sleep after this long without a button press.",
+            QuickRow::AutoSleep => {
+                "Screen off after this long without a button press. Wi-Fi stays on."
+            }
+            QuickRow::DeepSleep => {
+                "From Light Sleep to Deep Sleep after this long. Saves the most battery."
+            }
             QuickRow::RememberPosition => "Start where you left off on the shelf.",
             QuickRow::ResumeGame => {
                 "Power on straight back into the game, its picture as boot screen."
@@ -683,6 +693,9 @@ pub enum QuickValue {
     Sleep30s,
     Sleep1m,
     Sleep5m,
+    SleepNow,
+    Sleep10m,
+    Sleep30m,
     GoldGlow,
     WhiteGlow,
     StarMark,
@@ -720,7 +733,7 @@ pub enum QuickValue {
 }
 
 impl QuickValue {
-    pub const ALL: [QuickValue; 54] = [
+    pub const ALL: [QuickValue; 57] = [
         QuickValue::Speed2,
         QuickValue::Speed3,
         QuickValue::Speed4,
@@ -743,6 +756,9 @@ impl QuickValue {
         QuickValue::Sleep30s,
         QuickValue::Sleep1m,
         QuickValue::Sleep5m,
+        QuickValue::SleepNow,
+        QuickValue::Sleep10m,
+        QuickValue::Sleep30m,
         QuickValue::GoldGlow,
         QuickValue::WhiteGlow,
         QuickValue::StarMark,
@@ -805,6 +821,9 @@ impl QuickValue {
             QuickValue::Sleep30s => "30 sec",
             QuickValue::Sleep1m => "1 min",
             QuickValue::Sleep5m => "5 min",
+            QuickValue::SleepNow => "Direct",
+            QuickValue::Sleep10m => "10 min",
+            QuickValue::Sleep30m => "30 min",
             QuickValue::GoldGlow => "Spotlight",
             QuickValue::WhiteGlow => "White Glow",
             QuickValue::StarMark => "Star",

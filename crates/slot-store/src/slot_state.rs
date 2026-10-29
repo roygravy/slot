@@ -18,6 +18,9 @@ pub const FF_SPEED_DEFAULT: u8 = 6;
 pub const RECENTS_MAX: usize = 10;
 pub const AUTO_SLEEP_OPTIONS_SECS: [u16; 4] = [0, 30, 60, 300];
 pub const AUTO_SLEEP_DEFAULT_SECS: u16 = 60;
+/// From the light sleep into the deep one: 0 straight away.
+pub const DEEP_SLEEP_OPTIONS_MINS: [u16; 4] = [0, 5, 10, 30];
+pub const DEEP_SLEEP_DEFAULT_MINS: u16 = 5;
 const AUTHENTIC_LCD_PROFILE: &str = "lcd_profile=authentic-v4";
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -297,6 +300,8 @@ pub struct SlotState {
     pub shelf: Option<String>,
     pub shelf_cart: Option<Recent>,
     pub auto_sleep_secs: u16,
+    /// Minutes in the light sleep before the deep one.
+    pub deep_sleep_mins: u16,
     /// Pale pixels let the panel through, for each system on its own: GB, GBC, GBA.
     pub pixel_transparency_gb: bool,
     pub pixel_transparency_gbc: bool,
@@ -538,6 +543,7 @@ impl Default for SlotState {
             shelf: None,
             shelf_cart: None,
             auto_sleep_secs: AUTO_SLEEP_DEFAULT_SECS,
+            deep_sleep_mins: DEEP_SLEEP_DEFAULT_MINS,
             pixel_transparency_gb: true,
             pixel_transparency_gbc: true,
             pixel_transparency_gba: true,
@@ -666,6 +672,7 @@ pub fn write_slot_state(root: &Path, s: &SlotState) -> std::io::Result<()> {
     text.push_str(&format!("wallpaper_tint={}\n", s.wallpaper_tint.key()));
     text.push_str(&format!("favorite_mark={}\n", s.favorite_mark.key()));
     text.push_str(&format!("auto_sleep_secs={}\n", s.auto_sleep_secs));
+    text.push_str(&format!("deep_sleep_mins={}\n", s.deep_sleep_mins));
     text.push_str(&format!("home_wifi_enabled={}\n", s.home_wifi_enabled as u8));
     text.push_str(&format!("auto_time={}\n", s.auto_time as u8));
     text.push_str(&format!("clock_24h={}\n", s.clock_24h as u8));
@@ -775,6 +782,7 @@ fn parse(text: &str) -> Option<SlotState> {
     let mut shelf = None;
     let mut shelf_cart = None;
     let mut auto_sleep_secs = None;
+    let mut deep_sleep_mins = None;
     let mut pixel_transparency = None;
     let mut pixel_transparency_gb = None;
     let mut pixel_transparency_gbc = None;
@@ -847,6 +855,12 @@ fn parse(text: &str) -> Option<SlotState> {
             "shelf" => shelf = Some(value.to_string()).filter(|v| !v.is_empty()),
             "shelf_cart" => shelf_cart = recent_value(value),
             "auto_sleep_secs" => auto_sleep_secs = auto_sleep_value(value),
+            "deep_sleep_mins" => {
+                deep_sleep_mins = value
+                    .parse()
+                    .ok()
+                    .filter(|mins| DEEP_SLEEP_OPTIONS_MINS.contains(mins))
+            }
             "pixel_transparency" => pixel_transparency = flag(value),
             "pixel_transparency_gb" => pixel_transparency_gb = flag(value),
             "pixel_transparency_gbc" => pixel_transparency_gbc = flag(value),
@@ -928,6 +942,7 @@ fn parse(text: &str) -> Option<SlotState> {
         shelf,
         shelf_cart,
         auto_sleep_secs: auto_sleep_secs.unwrap_or(fallback.auto_sleep_secs),
+        deep_sleep_mins: deep_sleep_mins.unwrap_or(fallback.deep_sleep_mins),
         // A card from before the screen settings went per system: the one switch, for all.
         pixel_transparency_gb: pixel_transparency_gb
             .or(pixel_transparency)

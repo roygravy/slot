@@ -42,7 +42,7 @@ pub use ring::{StateEntry, StateRing, RING_MAX};
 pub use scan::{initial, is_hidden, listing, scan, sort_key, Cart, StoreError, SGB_STEM};
 pub use slot_state::{
     read_slot_state, write_slot_state, Appearance, BezelPick, FavoriteMark, NesColors, Recent, Shader, SlotState, TvCable,
-    WallpaperPick, WallpaperTint, AUTO_SLEEP_DEFAULT_SECS, AUTO_SLEEP_OPTIONS_SECS, BLUE_LIGHT_MAX,
+    WallpaperPick, WallpaperTint, AUTO_SLEEP_DEFAULT_SECS, AUTO_SLEEP_OPTIONS_SECS, DEEP_SLEEP_DEFAULT_MINS, DEEP_SLEEP_OPTIONS_MINS, BLUE_LIGHT_MAX,
     BRIGHTNESS_MAX, FF_SPEEDS, FF_SPEED_DEFAULT, RECENTS_MAX, UTC_OFFSET_MAX,
     UTC_OFFSET_MIN, VOLUME_MAX,
 };

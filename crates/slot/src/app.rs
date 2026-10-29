@@ -10,7 +10,7 @@ use slot_store::{
     format_stamp, read_slot_state, scan, write_slot_state, BezelPick, Cart, Core, FavoriteMark,
     GbPalette, NesColors, Platform, Recent, Shader, SlotState, StateEntry, StateRing, TvCable,
     WallpaperPick, WallpaperTint, AUTO_SLEEP_OPTIONS_SECS, BLUE_LIGHT_MAX, BRIGHTNESS_MAX,
-    FF_SPEEDS, VOLUME_MAX,
+    DEEP_SLEEP_OPTIONS_MINS, FF_SPEEDS, VOLUME_MAX,
 };
 use slot_ui::{
     board_from, board_x, board_zoom, cart_box, draw_empty_slot, draw_footer, draw_ground,
@@ -1209,6 +1209,7 @@ impl App {
             | QuickRow::Restart
             | QuickRow::PowerOff => None,
             QuickRow::AutoSleep => Some(auto_sleep_value(self.state.auto_sleep_secs)),
+            QuickRow::DeepSleep => Some(deep_sleep_value(self.state.deep_sleep_mins)),
             QuickRow::InGameMenu => Some(if self.state.in_game_menu {
                 QuickValue::Show
             } else {
@@ -3158,6 +3159,7 @@ impl App {
             | QuickRow::GbcGhosting
             | QuickRow::GbaGhosting
             | QuickRow::AutoSleep
+            | QuickRow::DeepSleep
             | QuickRow::InGameMenu
             | QuickRow::RememberPosition
             | QuickRow::ResumeGame
@@ -3414,6 +3416,15 @@ impl App {
                     (at + AUTO_SLEEP_OPTIONS_SECS.len() - 1) % AUTO_SLEEP_OPTIONS_SECS.len()
                 };
                 s.auto_sleep_secs = AUTO_SLEEP_OPTIONS_SECS[next];
+            }
+            QuickRow::DeepSleep => {
+                let n = DEEP_SLEEP_OPTIONS_MINS.len();
+                let at = DEEP_SLEEP_OPTIONS_MINS
+                    .iter()
+                    .position(|mins| *mins == s.deep_sleep_mins)
+                    .unwrap_or(0);
+                let next = if right { (at + 1) % n } else { (at + n - 1) % n };
+                s.deep_sleep_mins = DEEP_SLEEP_OPTIONS_MINS[next];
             }
             QuickRow::InGameMenu => s.in_game_menu = !s.in_game_menu,
             QuickRow::RememberPosition => s.remember_position = !s.remember_position,
@@ -5373,6 +5384,7 @@ impl App {
         self.radio.ask(RadioJob::Cool);
         if let Some(power) = &mut self.power {
             power.on_close();
+            power.blink_led();
         }
     }
 
@@ -5394,11 +5406,17 @@ impl App {
         }
     }
 
+    /// How long the light sleep lasts before the deep one: Wi-Fi stays on meanwhile, so
+    /// downloads go on.
+    fn deep_sleep_after(&self) -> Millis {
+        (Millis::from(self.state.deep_sleep_mins) * 60_000).max(DEEP_SLEEP_AFTER_MS)
+    }
+
     fn deep_sleep_due(&self) -> bool {
         matches!(self.phase, Phase::Doze { .. })
             && !self.deep_tried
             && !self.link_active()
-            && self.now().saturating_sub(self.dozed_at) >= DEEP_SLEEP_AFTER_MS
+            && self.now().saturating_sub(self.dozed_at) >= self.deep_sleep_after()
     }
 
     /// Suspend to RAM; back from it, the console wakes straight up, or powers off when the
@@ -6668,7 +6686,9 @@ impl App {
         let (Phase::Doze { .. }, Some(power)) = (&self.phase, &self.power) else {
             return false;
         };
-        self.now().saturating_sub(self.dozed_at) >= power.timeout().as_millis() as Millis
+        // Powered off only where the deep sleep could not be had, and never before it was due.
+        let timeout = (power.timeout().as_millis() as Millis).max(self.deep_sleep_after());
+        self.deep_tried && self.now().saturating_sub(self.dozed_at) >= timeout
     }
 
     /// Something is going on that is not a press: Auto Sleep starts counting again.
@@ -7032,6 +7052,15 @@ fn tint_alpha(tint: WallpaperTint) -> f32 {
         WallpaperTint::Low => 0.25,
         WallpaperTint::Medium => 0.45,
         WallpaperTint::High => 0.65,
+    }
+}
+
+fn deep_sleep_value(mins: u16) -> QuickValue {
+    match mins {
+        5 => QuickValue::Sleep5m,
+        10 => QuickValue::Sleep10m,
+        30 => QuickValue::Sleep30m,
+        _ => QuickValue::SleepNow,
     }
 }
 

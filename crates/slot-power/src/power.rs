@@ -63,6 +63,10 @@ impl Power {
         self.platform.relink_adb()
     }
 
+    pub fn blink_led(&mut self) {
+        self.platform.blink_led();
+    }
+
     pub fn deep_sleep(&mut self, low: u8) -> Option<Woke> {
         self.platform.deep_sleep(low)
     }

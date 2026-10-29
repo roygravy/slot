@@ -12,6 +12,8 @@ const CARD: &str = "/mnt/sdcard";
 const MIN_FRAME: Duration = Duration::from_millis(12);
 
 const STEP_TIMEOUT: Duration = Duration::from_millis(12);
+/// How often the light sleep looks at the buttons and its timers, the screen off.
+const DOZE_POLL: Duration = Duration::from_millis(50);
 
 const MARGIN: Duration = Duration::from_micros(1500);
 
@@ -159,6 +161,11 @@ pub fn run() {
             eprintln!("slot: told to stop, saving first");
             frontend.stop();
             return;
+        }
+        // The light sleep draws nothing: the screen is dark, and the downloads go on.
+        if frontend.dozing() {
+            std::thread::sleep(DOZE_POLL);
+            continue;
         }
         frontend.step_emulator(pacer.period, STEP_TIMEOUT);
         frontend.render(&mut compositor, window);
