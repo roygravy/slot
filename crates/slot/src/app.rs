@@ -4738,6 +4738,7 @@ impl App {
                 .filter(|_| cart.platform == Platform::Nes)
                 .map(|l| l[usize::from(self.light())]),
             light: self.light(),
+            ejecting: matches!(self.phase, Phase::Ejecting { .. }) && self.refused_from.is_none(),
         }
         .draw(out);
     }

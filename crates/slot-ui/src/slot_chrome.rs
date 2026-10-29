@@ -101,6 +101,9 @@ pub struct SlotChrome<'a> {
     pub lid: Option<TexId>,
     /// The light housing, for the NES lid's tab.
     pub light: bool,
+    /// On its way out: an NES cart then comes straight out, without the insert's push and
+    /// the lid's bounce played backwards.
+    pub ejecting: bool,
 }
 
 /// The Game Boy slot seats a pak this much higher, so its top lines up with the housing's top
@@ -142,7 +145,7 @@ impl SlotChrome<'_> {
         let (sw, sh) = seated_box(mould);
         let (sw, sh) = (sw as f32, sh as f32);
         let foot0 = foot_y(ch);
-        let (x, y, cw, ch, lid) = match tv_pose(mould, seat, canvas.w / 2.0, (sw, sh)) {
+        let (x, y, cw, ch, lid) = match tv_pose(mould, seat, self.ejecting, canvas.w / 2.0, (sw, sh)) {
             Some(pose) => {
                 // Off the shelf it shrinks to its seated size on the way to the slot.
                 let k = pose.leave;
@@ -288,7 +291,7 @@ pub fn sgb_band_rect(model: crate::SgbModel, canvas: Canvas) -> (f32, f32, f32, 
 pub fn sgb_seated_rect(mould: Mould, canvas: Canvas) -> (f32, f32, f32, f32) {
     let (sw, sh) = seated_box(mould);
     let (sw, sh) = (sw as f32, sh as f32);
-    match tv_pose(mould, 1.0, canvas.w / 2.0, (sw, sh)) {
+    match tv_pose(mould, 1.0, false, canvas.w / 2.0, (sw, sh)) {
         Some(pose) => (pose.x, pose.y, sw, sh),
         None => (canvas.w / 2.0 - sw / 2.0, BAND_Y - sh, sw, sh),
     }
@@ -534,10 +537,27 @@ struct TvPose {
     lid: Option<f32>,
 }
 
-fn tv_pose(mould: Mould, seat: f32, cx: f32, (sw, sh): (f32, f32)) -> Option<TvPose> {
+fn tv_pose(
+    mould: Mould,
+    seat: f32,
+    ejecting: bool,
+    cx: f32,
+    (sw, sh): (f32, f32),
+) -> Option<TvPose> {
     let x = cx - sw / 2.0;
     let lerp = |a: f32, b: f32, u: f32| a + (b - a) * u;
     match mould {
+        Mould::Nes if ejecting => {
+            // Out in one go: the lid swings open, the cart rises out of the mouth and heads
+            // back to the shelf while the lid falls shut behind it.
+            let e = 1.0 - seat;
+            let wait = BAND_Y - 6.0 - sh;
+            let home = BAND_Y + 6.0;
+            let lid = 90.0 * smooth(e / 0.30) * (1.0 - smooth((e - 0.70) / 0.30));
+            let y = lerp(home, wait, smooth((e - 0.15) / 0.50));
+            let leave = 1.0 - smooth((e - 0.60) / 0.40);
+            Some(TvPose { x, y, leave, lid: Some(lid) })
+        }
         Mould::Nes => {
             let t = seat * NES_STORY;
             let wait = BAND_Y - 6.0 - sh;
