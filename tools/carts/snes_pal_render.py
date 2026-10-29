@@ -103,7 +103,7 @@ for v in VENTS:
 vd = nd.distance_transform_edt(np.pad(vent, 1))[1:-1, 1:-1]
 height -= nd.gaussian_filter(vent.astype(np.float32), 0.5 * SS) * 1.1  # shallower (Roy 2026-10-23)
 # the label recess: deep, with big rounded corners
-label = rect(0.0818, 0.0504, 0.9152, 0.4891, 0.0253)  # the sticker's rect + 1.5px all round, radius r7 + 1.5: concentric (Roy)
+label = rect(0.0818, 0.0504, 0.9152, 0.4891, 0.0313)  # the sticker's rect + 1.5px all round, radius r9 + 1.5: concentric (Roy)
 height -= label * 2.0
 # the middle plate below the label and the side pieces either side; a fine seam marks the plate's
 # edges all the way up to the top rim (no step across the side pieces: Roy)
