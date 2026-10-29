@@ -180,24 +180,26 @@ impl Badge {
     }
 }
 
-/// A spotlight for a favourite cart, added over the cart as light: a soft warm pool centred
-/// on the cart's upper half that lights the cart itself and fades out over the ground around it,
-/// with no edge and no beam. `cw` x `ch` is the cart; the face is `margin` px larger all round,
+/// A spotlight for a favourite cart, added as light on the ground behind it: a soft warm pool
+/// centred on the cart that shows round its edges and fades out over the ground, with no edge
+/// and no beam. `cw` x `ch` is the cart; the face is `margin` px larger all round,
 /// built at half resolution.
 pub fn glow_face(cw: u32, ch: u32, margin: u32, colour: [u8; 3], peak: f32) -> CartFace {
     let (fw, fh) = (cw + 2 * margin, ch + 2 * margin);
     let (w, h) = (fw.div_ceil(2), fh.div_ceil(2));
-    let (cx, cy) = (fw as f32 / 2.0, fh as f32 / 2.0 - ch as f32 * 0.12);
-    let (sx, sy) = (cw as f32 * 0.46, ch as f32 * 0.46);
+    let (cx, cy) = (fw as f32 / 2.0, fh as f32 / 2.0);
+    // Full just inside the cart's edges, so it shows right round them, and gone a hair inside
+    // the face's own edge, so that never shows however the cart is scaled.
+    let (hw, hh) = (cw as f32 / 2.0 - 12.0, ch as f32 / 2.0 - 12.0);
+    let reach = margin as f32 + 12.0 - 4.0;
     let mut rgba = vec![0u8; (w * h * 4) as usize];
     for py in 0..h {
         for px in 0..w {
             let (x, y) = ((px as f32 + 0.5) * 2.0 - cx, (py as f32 + 0.5) * 2.0 - cy);
-            let r2 = (x / sx).powi(2) + (y / sy).powi(2);
-            // A soft bell that reaches exactly nothing well inside the face, so no edge of
-            // the face ever shows, however the cart is scaled.
-            const REACH2: f32 = 1.6 * 1.6;
-            let a = (1.0 - r2 / REACH2).max(0.0).powi(3) * peak;
+            let (qx, qy) = (x.abs() - hw, y.abs() - hh);
+            let out = (qx.max(0.0).powi(2) + qy.max(0.0).powi(2)).sqrt();
+            let t = (out / reach).min(1.0);
+            let a = (1.0 - t).powf(2.6) * peak;
             let o = ((py * w + px) * 4) as usize;
             rgba[o..o + 4].copy_from_slice(&[
                 colour[0],

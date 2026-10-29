@@ -373,8 +373,8 @@ impl Frontend {
                 compositor.create_texture(halo.w, halo.h, &halo.rgba)
             })
         };
-        let gold = halos(slot_ui::GLOW_GOLD, 0.38);
-        let white = halos(slot_ui::GLOW_GOLD, 0.38);
+        let gold = halos(slot_ui::GLOW_GOLD, 0.55);
+        let white = halos(slot_ui::GLOW_GOLD, 0.55);
         let star = slot_ui::star_mark_face(slot_ui::STAR_PX);
         let star_id = compositor.create_texture(star.w, star.h, &star.rgba);
         self.session

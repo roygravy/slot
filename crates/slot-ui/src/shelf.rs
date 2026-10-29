@@ -509,6 +509,9 @@ impl Shelf {
         let recede = recede.clamp(0.0, 1.0);
         let dim = dim.clamp(0.0, 1.0);
         let target = self.scroll_target();
+        // The lights go behind every cart: gathered on the way, laid down before the first.
+        let behind = out.len();
+        let mut lights = Vec::new();
         for slot in -SLOTS..=SLOTS {
             let Some(i) = self.cart_at_offset(slot) else {
                 continue;
@@ -629,11 +632,11 @@ impl Shelf {
                     }
                 }
             });
-            // The spotlight falls on the cart: added over it, after its face.
+            // The spotlight lights the ground behind the cart.
             if self.starred.get(i) == Some(&true) && self.mark != FavoriteMark::Star {
                 if let Some(tex) = self.glow_for(i) {
                     let m = GLOW_MARGIN as f32 * scale;
-                    out.push(Draw::Light {
+                    lights.push(Draw::Light {
                         x: x - m,
                         y: y - m,
                         w: w + 2.0 * m,
@@ -666,7 +669,7 @@ impl Shelf {
                 let m = GLOW_MARGIN as f32 * CAROUSEL;
                 let x = canvas.w / 2.0 - w / 2.0;
                 let y = foot_y(ch as f32) - h - LIFT * CAROUSEL;
-                out.push(Draw::Light {
+                lights.push(Draw::Light {
                     x: x - m,
                     y: y - m,
                     w: w + 2.0 * m,
@@ -676,6 +679,7 @@ impl Shelf {
                 });
             }
         }
+        out.splice(behind..behind, lights);
     }
 }
 
