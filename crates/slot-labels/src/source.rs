@@ -19,6 +19,11 @@ fn selector(s: &str) -> Selector {
 }
 
 pub fn title(stem: &str) -> String {
+    normalize(&words(stem))
+}
+
+/// A file name's title as written, tags and a trailing ", The" left out.
+fn words(stem: &str) -> String {
     let mut depth = 0u32;
     let clean: String = stem
         .chars()
@@ -34,7 +39,11 @@ pub fn title(stem: &str) -> String {
             _ => depth == 0,
         })
         .collect();
-    normalize(&clean.replace(", The", ""))
+    clean
+        .replace(", The", "")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 pub fn normalize(value: &str) -> String {
@@ -269,6 +278,25 @@ fn regions(stem: &str, code: &str) -> &'static [&'static str] {
     }
 }
 
+/// LaunchBox's names of European countries, whose labels are Europe's.
+const EUROPE: &[&str] = &[
+    "United Kingdom",
+    "Germany",
+    "France",
+    "Italy",
+    "Spain",
+    "Netherlands",
+    "Sweden",
+    "Denmark",
+    "Finland",
+    "Norway",
+    "Portugal",
+    "Greece",
+    "Poland",
+    "Russia",
+    "The Netherlands",
+];
+
 pub const PHOTO: &str = "Cart - Front";
 pub const RENDER: &str = "Fanart - Cart - Front";
 
@@ -298,15 +326,20 @@ fn rank_all<T: Clone>(
                 RENDER => true,
                 _ => return None,
             };
-            let away = !own.contains(region);
+            // LaunchBox files many European labels under their country (Super Mario
+            // All-Stars has Italy, France, Germany and Spain, no Europe): they are Europe's.
+            let european = EUROPE.contains(region);
+            let away = !own.contains(region) && !(european && own.contains(&"Europe"));
             // Another region's label: Europe's first, then America's, then the rest, and
-            // Japan's last of all (Roy).
+            // Japan's last of all (Roy). Europe itself before one of its countries.
             let far = match *region {
-                _ if !away => 0,
-                "Europe" => 1,
-                "North America" | "United States" => 2,
-                "Japan" => 4,
-                _ => 3,
+                _ if !away && !european => 0,
+                _ if !away => 1,
+                "Europe" => 2,
+                _ if european => 3,
+                "North America" | "United States" => 4,
+                "Japan" => 6,
+                _ => 5,
             };
             // Within a region the render comes first: the real label on a clean shell,
             // where a photo has glare, wear and a crop to guess.
@@ -407,8 +440,24 @@ fn gallery(
     {
         Some(id) => id,
         None => {
-            let page = http.get(&format!("{BASE}/games/results?id={}", encode(&title)))?;
-            game_id(&String::from_utf8_lossy(&page), &title, cart.platform)?
+            // The name as written first: the source's search ranks by its own spelling, and
+            // "super mario all stars" never lists the SNES "Super Mario All-Stars" that
+            // "Super Mario All-Stars" puts second. The plain words after, as before.
+            let written = canonical_title
+                .map(str::to_owned)
+                .unwrap_or_else(|| words(&cart.stem));
+            let mut found = Err(unavailable("no unique title match"));
+            for query in [written, title.clone()] {
+                if query.trim().is_empty() {
+                    continue;
+                }
+                let page = http.get(&format!("{BASE}/games/results?id={}", encode(&query)))?;
+                found = game_id(&String::from_utf8_lossy(&page), &title, cart.platform);
+                if found.is_ok() || query == title {
+                    break;
+                }
+            }
+            found?
         }
     };
     let page = http.get(&format!("{BASE}/games/images/{id}"))?;

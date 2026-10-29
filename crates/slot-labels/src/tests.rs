@@ -219,9 +219,21 @@ fn nes_and_snes_stickers_are_found_on_any_scan() {
         assert_eq!(im.get_pixel(want.0 / 2, 1), &Rgb([220, 30, 30]));
         assert_eq!(im.get_pixel(want.0 / 2, want.1 - 2), &Rgb([30, 30, 220]));
     }
+    // LaunchBox's stock renders keep their sticker where the recess is, however dark the cart.
+    let black = RgbImage::from_pixel(811, 560, Rgb([12, 12, 12]));
+    let mut out = Cursor::new(Vec::new());
+    black.write_to(&mut out, ImageFormat::Png).unwrap();
+    let png = artwork::prepare(&out.into_inner(), Platform::Snes).unwrap();
+    assert_eq!(
+        image::load_from_memory(&png)
+            .unwrap()
+            .to_rgb8()
+            .dimensions(),
+        (277, 97)
+    );
     // A Famicom cart's wide sticker is no NES label, and a bare shell has none.
     assert!(artwork::prepare(&tv_scan((800, 525), (55, 54, 694, 337)), Platform::Nes).is_err());
-    assert!(artwork::prepare(&tv_scan((811, 518), (0, 0, 0, 0)), Platform::Snes).is_err());
+    assert!(artwork::prepare(&tv_scan((800, 520), (0, 0, 0, 0)), Platform::Snes).is_err());
 }
 
 struct Fake {

@@ -350,7 +350,8 @@ fn tv_label(image: &DynamicImage, platform: Platform) -> Result<RgbImage, Error>
     } else {
         &SNES_SPEC
     };
-    let found = find_sticker(image, spec)
+    let found = snes_render(image, platform)
+        .or_else(|| find_sticker(image, spec))
         .ok_or_else(|| Error::Image("no sticker on this cartridge scan".into()))?;
     let (l, t, r, b) = found;
     // The SNES sticker keeps its own shape: a wide PAL/SFC one or a taller NTSC one. The shelf
@@ -360,6 +361,22 @@ fn tv_label(image: &DynamicImage, platform: Platform) -> Result<RgbImage, Error>
         _ => crate::label_size(platform),
     };
     Ok(cut(image, found, size))
+}
+
+/// LaunchBox's SNES cart renders come on two stock shells, always framed alike: the European
+/// and Japanese one at 811x560, the American one at 811x518. Their sticker is where the
+/// recess is, measured, rather than found: a black cart under a dark sticker (Killer Instinct)
+/// shows no edge to find, and a sticker's grey margin (Tiny Toon's PAL one) melts into a grey
+/// shell, which cut it narrower and sent its label to the American cart.
+fn snes_render(image: &DynamicImage, platform: Platform) -> Option<(u32, u32, u32, u32)> {
+    if platform != Platform::Snes {
+        return None;
+    }
+    match (image.width(), image.height()) {
+        (811, 560) => Some((83, 34, 723, 260)),
+        (811, 518) => Some((158, 9, 654, 230)),
+        _ => None,
+    }
 }
 
 /// A Game Boy pak photo's sticker, found rather than measured: carts are shot with different

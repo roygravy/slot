@@ -381,7 +381,9 @@ fn deep_sleep_lets_go_of_home_and_joins_afresh_after_it() {
     // Asleep, nothing is started again behind the suspend's back.
     std::thread::sleep(Duration::from_secs(1));
     assert!(!r.dir.path().join("run/wlan0.wpa.pid").exists());
-    assert!(r.call(&["service", "status"]).contains("home_connected=false"));
+    assert!(r
+        .call(&["service", "status"])
+        .contains("home_connected=false"));
     r.call(&["home", "wake"]);
     r.wait_connected();
     assert_ne!(r.record("wlan0.wpa.pid"), before);
