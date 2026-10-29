@@ -4015,8 +4015,7 @@ impl App {
     }
 
     pub fn layout(&self) -> Layout {
-        // The screenshot viewer is laid out for the 4:3 picture: it keeps it, in the middle.
-        if self.game_fills() && !matches!(self.phase, Phase::Polaroids { .. }) {
+        if self.game_fills() {
             return Layout::Native;
         }
         if matches!(self.phase, Phase::Playing { .. }) && self.in_game_menu_shown().is_some() {
@@ -4686,6 +4685,7 @@ impl App {
                 self.push_game(out);
                 if let Some(p) = &self.polaroids {
                     p.draw(
+                        self.canvas(),
                         self.battery,
                         self.battery_percent,
                         self.hud_bolt,
