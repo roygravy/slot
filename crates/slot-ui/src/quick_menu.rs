@@ -474,13 +474,13 @@ impl QuickRow {
             QuickRow::Turbo => "Turbo Buttons",
             QuickRow::Rewind => "Rewind",
             QuickRow::GbPalettes => "Palette",
-            QuickRow::Theme => "Theme",
-            QuickRow::Wallpaper => "Wallpaper",
+            QuickRow::Theme => "Slot Color",
+            QuickRow::Wallpaper => "Theme",
             QuickRow::General => "General",
             QuickRow::Recents => "Recents",
             QuickRow::FavoriteMark => "Favorites",
             QuickRow::ShowTitles => "Game Titles",
-            QuickRow::WallpaperTint => "Wallpaper Tint",
+            QuickRow::WallpaperTint => "Theme Tint",
             QuickRow::AutoSleep => "Light Sleep",
             QuickRow::DeepSleep => "Deep Sleep",
             QuickRow::PixelTransparency
@@ -530,7 +530,7 @@ impl QuickRow {
     /// One plain line under the menu saying what the selected row does.
     pub fn help(self) -> Option<&'static str> {
         Some(match self {
-            QuickRow::General => "Wallpaper, theme, shelves and sleep.",
+            QuickRow::General => "Theme, slot color, shelves and sleep.",
             QuickRow::Screen => "How the game picture looks.",
             QuickRow::Game => "Speed, rewind, turbo and saving.",
             QuickRow::Buttons => "Every button and shortcut, explained.",
