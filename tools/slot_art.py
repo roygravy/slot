@@ -31,10 +31,10 @@ RIB_TOP = 9.0
 SCOOP = (263.0, 44.5)           # the scoop: where its arc leaves the floor, and its deepest y
 METAL_TOP = 33.0                # below this the slot's back is the metal plate, not plastic
 
-# Dark: the charcoal of the original GBA slot. Light: a tint lighter than a Game Boy cart.
+# Dark: the charcoal of the original GBA slot. Light: a warm grey toward the DMG's (Roy).
 LOOKS = {
     "dark": np.array([42, 42, 45], np.float32),
-    "light": np.array([184, 181, 175], np.float32),
+    "light": np.array([178, 173, 163], np.float32),
 }
 
 
