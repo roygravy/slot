@@ -575,3 +575,12 @@ fn a_game_picked_from_a_search_gives_its_versions_and_an_empty_search_asks_nothi
         "https://gamesdb.launchbox-app.com/games/images/2367"
     );
 }
+
+#[test]
+fn a_search_puts_the_names_typed_first_accents_and_all() {
+    use crate::source::likeness;
+    assert_eq!(likeness("Pokémon Gold", "pokemon gold"), 0);
+    assert_eq!(likeness("Pokémon Gold Version", "Pokemon Gold"), 1);
+    assert_eq!(likeness("Pokémon Fool's Gold", "pokemon gold"), 2);
+    assert_eq!(likeness("Kou Dai Bao Shi: Jin", "pokemon gold"), 3);
+}

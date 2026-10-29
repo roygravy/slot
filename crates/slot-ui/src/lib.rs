@@ -77,12 +77,14 @@ pub use hud::{
     HUD_ICON_PX, HUD_INK, HUD_MS, LINK_HOST_INK, LINK_JOIN_INK, PLATE_H,
 };
 pub use icon::{
-    badge_face, drop_shadow_face, glow_face, icon_box, icon_face, icon_glyph_box, icon_glyph_face,
+    badge_face, drop_shadow_face, glow_face, halo_face, icon_box, icon_face, icon_glyph_box,
+    icon_glyph_face,
     star_mark_face, warm_fonts, Badge, Icon,
 };
 pub use keyboard::{
-    draw_label_search, key_rows, search_heading_face, search_row_faces, search_status_face,
-    search_typed_face, Cap, Key, KeyboardFaces, SearchScreen, SearchTexts, SearchView, Shape, Up,
+    accents, draw_label_search, key_rows, search_heading_face, search_row_faces,
+    search_status_face, search_typed_face, Cap, Key, KeyboardFaces, SearchScreen, SearchTexts,
+    SearchView, Shape, Up,
 };
 pub use link_art::{
     link_art, LinkArt, ADAPTER_BASE_X, ADAPTER_BASE_Y, ADAPTER_H, ADAPTER_W, ARCS, ARROW_H,

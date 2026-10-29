@@ -188,7 +188,29 @@ pub(crate) fn search(
         return Err(unavailable("nothing to search for"));
     }
     let page = http.get(&format!("{BASE}/games/results?id={}", encode(&query)))?;
-    Ok(games(&String::from_utf8_lossy(&page), platform))
+    let mut found = games(&String::from_utf8_lossy(&page), platform);
+    // The source finds "Pokémon" for "pokemon" but ranks it lower: the names that are what was
+    // typed, accents and capitals aside, come first.
+    found.sort_by_key(|g| likeness(&g.name, &query));
+    Ok(found)
+}
+
+/// How near a game's name is to the words typed, nearest 0: the same, starting with them,
+/// holding every one of them, or none of that.
+pub(crate) fn likeness(name: &str, typed: &str) -> u8 {
+    let (name, typed) = (normalize(name), normalize(typed));
+    if name == typed {
+        0
+    } else if name.starts_with(&typed) {
+        1
+    } else if typed
+        .split_whitespace()
+        .all(|w| name.split_whitespace().any(|n| n == w))
+    {
+        2
+    } else {
+        3
+    }
 }
 
 /// The games listed under this title and platform, each with its count of votes.

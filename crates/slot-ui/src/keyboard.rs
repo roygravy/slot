@@ -68,6 +68,22 @@ pub fn key_rows(numbers: bool) -> [Vec<Cap>; 4] {
     }
 }
 
+/// The letters a key also types, as a phone offers them when the key is held: X shows them.
+pub fn accents(c: char) -> &'static [char] {
+    match c {
+        'a' => &['à', 'á', 'â', 'ä', 'ã', 'å', 'æ'],
+        'c' => &['ç'],
+        'e' => &['è', 'é', 'ê', 'ë'],
+        'i' => &['ì', 'í', 'î', 'ï'],
+        'n' => &['ñ'],
+        'o' => &['ò', 'ó', 'ô', 'ö', 'õ', 'ø', 'œ'],
+        's' => &['ß'],
+        'u' => &['ù', 'ú', 'û', 'ü'],
+        'y' => &['ý', 'ÿ'],
+        _ => &[],
+    }
+}
+
 // ---- where it all goes on the 640 x 480 screen ----
 const HEADING_Y: f32 = 18.0;
 const FIELD: (f32, f32, f32, f32) = (40.0, 56.0, 560.0, 46.0);
@@ -79,14 +95,14 @@ const KEY_H: f32 = 50.0;
 const MARGIN: f32 = 6.0;
 const GAP: f32 = 7.0;
 const RADIUS: f32 = 8.0;
-/// The letter chosen grows up out of its key, as a phone shows the key under the thumb.
-const BALLOON_RISE: f32 = 50.0;
-const BALLOON_WIDEN: f32 = 10.0;
 const RING_OUT: f32 = 4.0;
+/// The accents of the key chosen, in a row of keys between the field and the keyboard.
+const STRIP_Y: f32 = 108.0;
+const STRIP_KEY: (f32, f32) = (48.0, 36.0);
+const STRIP_GAP: f32 = 6.0;
 const LEGEND_Y: f32 = 438.0;
 const KEYS_LEGEND_GAP: f32 = 22.0;
 const KEY_PX: f32 = 25.0;
-const BIG_PX: f32 = 38.0;
 const WORD_PX: f32 = 19.0;
 const FIELD_PX: f32 = 23.0;
 const ICON: u32 = 26;
@@ -108,13 +124,25 @@ fn key_box(row: usize, cap: &Cap) -> (f32, f32, f32, f32) {
     (x, ROW_Y + row as f32 * ROW_PITCH, w, KEY_H)
 }
 
-fn balloon_box(row: usize, cap: &Cap) -> (f32, f32, f32, f32) {
-    let (x, y, w, h) = key_box(row, cap);
+/// The accents' keys, `n` of them, centred under the key they belong to and kept on screen.
+fn strip_boxes(row: usize, cap: &Cap, n: usize) -> Vec<(f32, f32, f32, f32)> {
+    let (kx, _, kw, _) = key_box(row, cap);
+    let (w, h) = STRIP_KEY;
+    let total = n as f32 * w + (n as f32 - 1.0) * STRIP_GAP;
+    let x0 = (kx + kw / 2.0 - total / 2.0)
+        .clamp(MARGIN, OUT_W as f32 - MARGIN - total)
+        .round();
+    (0..n)
+        .map(|i| (x0 + i as f32 * (w + STRIP_GAP), STRIP_Y, w, h))
+        .collect()
+}
+
+fn strip_ring(b: (f32, f32, f32, f32)) -> (f32, f32, f32, f32) {
     (
-        x - BALLOON_WIDEN,
-        y - BALLOON_RISE,
-        w + 2.0 * BALLOON_WIDEN,
-        h + BALLOON_RISE,
+        b.0 - RING_OUT,
+        b.1 - RING_OUT,
+        b.2 + 2.0 * RING_OUT,
+        b.3 + 2.0 * RING_OUT,
     )
 }
 
@@ -156,13 +184,13 @@ fn shapes() -> Vec<Shape> {
         for (r, row) in key_rows(numbers).iter().enumerate() {
             for cap in row {
                 add(shape_of(key_box(r, cap), false));
-                match cap.key {
-                    Key::Char(_) => add(shape_of(balloon_box(r, cap), false)),
-                    _ => add(shape_of(ring_box(r, cap), true)),
-                }
+                add(shape_of(ring_box(r, cap), true));
             }
         }
     }
+    let strip = (0.0, 0.0, STRIP_KEY.0, STRIP_KEY.1);
+    add(shape_of(strip, false));
+    add(shape_of(strip_ring(strip), true));
     add(Shape {
         w: FIELD.2 as u32,
         h: FIELD.3 as u32,
@@ -324,8 +352,6 @@ pub type Up = (TexId, u32, u32);
 pub struct KeyboardFaces<T> {
     /// Each key's letter, lower and upper case, and its numbers and marks.
     pub glyphs: Vec<(char, T)>,
-    /// The same, larger, for the balloon over the key chosen.
-    pub big: Vec<(char, T)>,
     /// space, search, 123, ABC.
     pub words: [T; 4],
     pub shapes: Vec<(Shape, T)>,
@@ -337,6 +363,10 @@ pub struct KeyboardFaces<T> {
     /// Under "nothing found": what to try.
     pub try_again: T,
     pub legend_typing: Vec<T>,
+    /// On a letter with accents: X shows them.
+    pub legend_accents: Vec<T>,
+    /// While the accents show.
+    pub legend_strip: Vec<T>,
     /// While nothing is typed, B closes.
     pub legend_empty: Vec<T>,
     pub legend_results: Vec<T>,
@@ -353,6 +383,7 @@ impl KeyboardFaces<UndoFace> {
                 Key::Char(c) => Some(c),
                 _ => None,
             })
+            .flat_map(|c| std::iter::once(c).chain(accents(c).iter().copied()))
             .collect();
         let all: Vec<char> = set
             .chars()
@@ -368,10 +399,6 @@ impl KeyboardFaces<UndoFace> {
                 .iter()
                 .map(|&c| (c, plain(&c.to_string(), KEY_PX, 0.0, false)))
                 .collect(),
-            big: all
-                .iter()
-                .map(|&c| (c, plain(&c.to_string(), BIG_PX, 0.0, false)))
-                .collect(),
             words: ["space", "search", "123", "ABC"].map(|w| plain(w, WORD_PX, 0.0, false)),
             shapes: shapes().into_iter().map(|s| (s, rounded(s))).collect(),
             icons: icons(),
@@ -386,6 +413,14 @@ impl KeyboardFaces<UndoFace> {
                 hint("START", "Search"),
                 hint("MENU", "Exit"),
             ],
+            legend_accents: vec![
+                hint("B", "Delete"),
+                hint("X", "Accents"),
+                hint("SELECT", "Shift"),
+                hint("START", "Search"),
+                hint("MENU", "Exit"),
+            ],
+            legend_strip: vec![hint("A", "Type"), hint("B", "Close"), hint("MENU", "Exit")],
             legend_empty: vec![
                 hint("B", "Close"),
                 hint("Y", "Space"),
@@ -401,12 +436,13 @@ impl KeyboardFaces<UndoFace> {
     pub fn map<T>(self, mut up: impl FnMut(UndoFace) -> T) -> KeyboardFaces<T> {
         let mut many = |v: Vec<UndoFace>| v.into_iter().map(&mut up).collect::<Vec<T>>();
         let legend_typing = many(self.legend_typing);
+        let legend_accents = many(self.legend_accents);
+        let legend_strip = many(self.legend_strip);
         let legend_empty = many(self.legend_empty);
         let legend_results = many(self.legend_results);
         let legend_back = many(self.legend_back);
         KeyboardFaces {
             glyphs: self.glyphs.into_iter().map(|(c, f)| (c, up(f))).collect(),
-            big: self.big.into_iter().map(|(c, f)| (c, up(f))).collect(),
             words: self.words.map(&mut up),
             shapes: self.shapes.into_iter().map(|(s, f)| (s, up(f))).collect(),
             icons: self.icons.map(&mut up),
@@ -414,6 +450,8 @@ impl KeyboardFaces<UndoFace> {
             searching: up(self.searching),
             try_again: up(self.try_again),
             legend_typing,
+            legend_accents,
+            legend_strip,
             legend_empty,
             legend_results,
             legend_back,
@@ -509,6 +547,8 @@ pub enum SearchScreen {
         shift: bool,
         /// The caret, which blinks.
         caret: bool,
+        /// The chosen key's accents are showing, this one of them chosen.
+        accent: Option<usize>,
     },
     Searching,
     Results {
@@ -650,6 +690,7 @@ pub fn draw_label_search(canvas: Canvas, v: &SearchView, out: &mut Vec<Draw>) {
             numbers,
             shift,
             caret,
+            accent,
         } => {
             heading(v.texts.heading, HEADING_Y, faded(v.ink.dim, a), out);
             // The field: a pill with the magnifier, what is typed and its caret, and the clear
@@ -718,12 +759,14 @@ pub fn draw_label_search(canvas: Canvas, v: &SearchView, out: &mut Vec<Draw>) {
                 colour: k.panel,
             });
             let rows = key_rows(numbers);
-            let mut balloon = None;
+            let mut strip = None;
             for (r, caps) in rows.iter().enumerate() {
                 for (c, cap) in caps.iter().enumerate() {
                     let b = key_box(r, cap);
                     let chosen = r == row && c == col;
                     let (fill, glyph) = match cap.key {
+                        // The key chosen lights up where it is: nothing floats over the others.
+                        Key::Char(_) if chosen => (k.balloon, k.glyph),
                         Key::Char(_) => (k.key, k.glyph),
                         Key::Space => (k.key, k.glyph),
                         Key::Search => (faded(v.ink.bar, a), faded(v.ink.on_bar, a)),
@@ -733,10 +776,10 @@ pub fn draw_label_search(canvas: Canvas, v: &SearchView, out: &mut Vec<Draw>) {
                     shape(b, false, fill, out);
                     let face = match cap.key {
                         Key::Char(ch) => {
-                            let ch = if shift { ch.to_ascii_uppercase() } else { ch };
                             if chosen {
-                                balloon = Some((r, *cap, ch));
+                                strip = accent.map(|at| (r, *cap, ch, at));
                             }
+                            let ch = if shift { ch.to_ascii_uppercase() } else { ch };
                             v.faces
                                 .glyphs
                                 .iter()
@@ -752,23 +795,44 @@ pub fn draw_label_search(canvas: Canvas, v: &SearchView, out: &mut Vec<Draw>) {
                     if let Some(f) = face {
                         centred_in(f, at(b), glyph, out);
                     }
-                    if chosen && !matches!(cap.key, Key::Char(_)) {
-                        shape(ring_box(r, cap), true, faded(v.ink.text, a), out);
+                    if chosen {
+                        let ring = if accent.is_some() {
+                            v.ink.dim
+                        } else {
+                            v.ink.text
+                        };
+                        shape(ring_box(r, cap), true, faded(ring, a), out);
                     }
                 }
             }
-            if let Some((r, cap, ch)) = balloon {
-                let b = balloon_box(r, &cap);
-                // A soft shadow under it, then the balloon and its letter, large.
-                shape(b, false, [0.0, 0.0, 0.0, 0.25 * a], out);
-                shape((b.0, b.1 - 1.0, b.2, b.3), false, k.balloon, out);
-                if let Some((_, f)) = v.faces.big.iter().find(|(g, _)| *g == ch) {
-                    centred_in(*f, at((b.0, b.1, b.2, BALLOON_RISE + 6.0)), k.glyph, out);
+            if let Some((r, cap, ch, chosen)) = strip {
+                let marks = accents(ch);
+                for (i, b) in strip_boxes(r, &cap, marks.len()).into_iter().enumerate() {
+                    let on = i == chosen;
+                    shape(b, false, if on { k.balloon } else { k.key }, out);
+                    let mark = if shift {
+                        marks[i].to_uppercase().next().unwrap_or(marks[i])
+                    } else {
+                        marks[i]
+                    };
+                    if let Some((_, f)) = v.faces.glyphs.iter().find(|(g, _)| *g == mark) {
+                        centred_in(*f, at(b), k.glyph, out);
+                    }
+                    if on {
+                        shape(strip_ring(b), true, faded(v.ink.text, a), out);
+                    }
                 }
             }
-            let typed = v.texts.typed.is_some();
+            let on_accents = match rows[row].get(col).map(|c| c.key) {
+                Some(Key::Char(c)) => !accents(c).is_empty(),
+                _ => false,
+            };
             legend(
-                if typed {
+                if accent.is_some() {
+                    &v.faces.legend_strip
+                } else if on_accents {
+                    &v.faces.legend_accents
+                } else if v.texts.typed.is_some() {
                     &v.faces.legend_typing
                 } else {
                     &v.faces.legend_empty

@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use slot_input::Millis;
 use slot_labels::Game;
 use slot_store::Platform;
-use slot_ui::{key_rows, Key, SearchScreen};
+use slot_ui::{accents, key_rows, Key, SearchScreen};
 
 const OPEN_MS: f32 = 160.0;
 const CLOSE_MS: f32 = 120.0;
@@ -23,7 +23,7 @@ pub enum Press {
     Choose,
     /// B: delete, or go back.
     Back,
-    /// X: clear.
+    /// X: the chosen letter's accents, or clear.
     Clear,
     /// Y: a space.
     Space,
@@ -61,6 +61,8 @@ pub struct LabelSearch {
     col: usize,
     numbers: bool,
     shift: bool,
+    /// The chosen letter's accents are showing, this one chosen.
+    accent: Option<usize>,
     stage: Stage,
     games: Vec<Game>,
     /// The search last asked for; an answer to an older one is let go.
@@ -111,6 +113,7 @@ impl LabelSearch {
             col: 2,
             numbers: false,
             shift: false,
+            accent: None,
             stage: Stage::Typing,
             games: Vec::new(),
             asked: 0,
@@ -145,6 +148,7 @@ impl LabelSearch {
                 numbers: self.numbers,
                 shift: self.shift,
                 caret: (now.saturating_sub(self.typed_at) / BLINK_MS) % 2 == 0,
+                accent: self.accent,
             },
             Stage::Searching => SearchScreen::Searching,
             Stage::Results(at) => SearchScreen::Results { at },
@@ -304,7 +308,38 @@ impl LabelSearch {
         }
     }
 
+    /// The chosen key's accents, when it is a letter that has any.
+    fn marks(&self) -> &'static [char] {
+        match key_rows(self.numbers)[self.row][self.col].key {
+            Key::Char(c) => accents(c),
+            _ => &[],
+        }
+    }
+
+    /// The accents showing: left and right choose, A types one, anything else puts them away.
+    fn picking(&mut self, at: usize, press: Press, now: Millis) -> Step {
+        let n = self.marks().len();
+        match press {
+            Press::Left => self.accent = Some((at + n - 1) % n),
+            Press::Right => self.accent = Some((at + 1) % n),
+            Press::Choose => {
+                let c = self.marks()[at];
+                self.accent = None;
+                self.type_char(c, now);
+            }
+            Press::Search => {
+                self.accent = None;
+                return self.search();
+            }
+            _ => self.accent = None,
+        }
+        Step::None
+    }
+
     fn typing(&mut self, press: Press, now: Millis) -> Step {
+        if let Some(at) = self.accent {
+            return self.picking(at, press, now);
+        }
         match press {
             Press::Left | Press::Right => {
                 let n = key_rows(self.numbers)[self.row].len();
@@ -323,6 +358,7 @@ impl LabelSearch {
                 }
                 self.delete(now);
             }
+            Press::Clear if !self.marks().is_empty() => self.accent = Some(0),
             Press::Clear => {
                 if !self.text.is_empty() {
                     self.text.clear();
@@ -397,9 +433,27 @@ mod tests {
         s.press(Press::Space, 0);
         assert_eq!(s.text(), "Oo ");
         s.press(Press::Back, 0);
+        // X clears from a key without accents: "p".
+        s.press(Press::Right, 0);
         s.press(Press::Clear, 0);
         assert_eq!(s.text(), "");
         assert!(matches!(s.press(Press::Back, 0), Step::Close));
+    }
+
+    #[test]
+    fn x_shows_a_letters_accents_and_a_types_the_one_chosen() {
+        let mut s = search("");
+        s.text.clear();
+        (s.row, s.col) = (0, 2); // e
+        s.press(Press::Clear, 0);
+        s.press(Press::Right, 0);
+        s.press(Press::Choose, 0);
+        assert_eq!(s.text(), "é");
+        assert_eq!(s.accent, None);
+        // On a key without accents X still clears.
+        (s.row, s.col) = (0, 4); // t
+        s.press(Press::Clear, 0);
+        assert_eq!(s.text(), "");
     }
 
     #[test]
@@ -414,7 +468,8 @@ mod tests {
                 col: 0,
                 numbers: true,
                 shift: false,
-                caret: true
+                caret: true,
+                accent: None,
             }
         );
     }
