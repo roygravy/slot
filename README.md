@@ -36,6 +36,8 @@ Rather have it clean? **SELECT + B** turns it all off, and back on.
 
 <img src=".github/resources/gravy/gameplay.png" width="100%" alt="Goodboy Galaxy on the GBA screen and Hauntsfield in Game Boy green">
 
+<img src=".github/resources/gravy/zelda.png" width="100%" alt="Link's Awakening DX on the Game Boy Color screen and The Minish Cap on the GBA screen">
+
 ### A slot for every cartridge
 
 Game Boy games go into a Game Boy slot, GBA games into a GBA SP slot, both redrawn in moulded plastic, down to the ribs on the back wall. Two new wallpapers come along, and either one goes with the Dark or the Light theme. The slot itself comes in Dark, Light or Originals, the colours of the real consoles.
@@ -48,19 +50,25 @@ Game Boy games go into a Game Boy slot, GBA games into a GBA SP slot, both redra
 
 New in v1.1: an NES and a Super Nintendo shelf, each with its own slot, the NES with the two black blocks beside the lid of the real thing. Carts come in the NTSC and PAL moulds, and the picture goes through a CRT: an NES in Authentic or Trinitron colours, a Super Nintendo on a flat Trinitron, both through a composite signal.
 
-<img src=".github/resources/gravy/tv.png" width="100%" alt="The NES shelf with the Originals slot and the Super Nintendo shelf">
+<img src=".github/resources/gravy/tv.png" width="100%" alt="The NES shelf and the Super Nintendo shelf">
+
+<img src=".github/resources/gravy/tv-games.png" width="100%" alt="The Legend of Zelda on the NES and A Link to the Past on the Super Nintendo, through the CRT">
 
 ### A Super Game Boy
 
 Put the Super Game Boy cart in the SNES slot and the camera zooms in onto the Game Boy shelf inside it. Game Boy games then play in their Super Game Boy colours with a border around them: the game's own, one of the eight real borders read from your `SGB1.sfc` or `SGB2.sfc`, or the slot. x GRAVY border.
 
+<img src=".github/resources/gravy/sgb-zoom.gif" width="640" alt="The Super Game Boy pushed into the SNES slot, and the camera zooming in onto the Game Boy shelf inside it">
+
 <img src=".github/resources/gravy/sgb.png" width="100%" alt="The Game Boy shelf on the Super Game Boy, and Hauntsfield in Super Game Boy colours with the slot. x GRAVY border">
+
+<img src=".github/resources/gravy/sgb-games.png" width="100%" alt="Pokémon Blue with its own Super Game Boy border, and the Super Game Boy in the cartridge studio">
 
 ### A cartridge of your own
 
 Press **SELECT** on a cart to open the cartridge studio: pick its shell colour and finish (solid, clear, glitter), fetch its label with **Y**, or give a blank cart a title in black, white or gold marker. Every system, NES and SNES included.
 
-<img src=".github/resources/gravy/studio.png" width="100%" alt="The cartridge studio for an NES cart and for a Super Nintendo cart">
+<img src=".github/resources/gravy/studio.png" width="100%" alt="The cartridge studio: picking a label photo and a shell colour">
 
 ### Menus of their own
 
@@ -90,6 +98,8 @@ Switch a game's cheats on and off while you play. The whole RetroArch cheat coll
 
 Star a cart with **Y** and it stands a little taller under a warm spotlight. Prefer a glow, a highlight behind the cart or a plain star? That's a setting.
 
+<img src=".github/resources/gravy/highlight.png" width="100%" alt="A favorite in the highlight, and the Screenshots page">
+
 <img src=".github/resources/gravy/favorites.png" width="100%" alt="The Favorites shelf in dark and light">
 
 ### Home Wi-Fi
@@ -103,9 +113,15 @@ Put your networks in `Config/wifi.toml` (copy `wifi.toml.example`) and turn **Ho
 
 More in [network/README.md](network/README.md).
 
+### Light sleep, deep sleep
+
+Tap **POWER** and the console drops into a light sleep: Wi-Fi stays on and any button wakes it. After a few minutes (you pick: right away, 5, 10 or 30) it goes into a real deep sleep, suspended to RAM, that only POWER wakes, using about half a percent of battery an hour. Pick up right where you left off.
+
+<img src=".github/resources/gravy/sleep.png" width="100%" alt="The General page with the Retro Vibes theme and the Originals slot colour, and the sleep settings">
+
 ### And a handful of smaller things
 
-- Tap **POWER** to sleep: a light sleep first, which any button wakes, and after a few minutes a real deep sleep (suspend to RAM) that POWER wakes, about half a percent of battery an hour. Hold POWER and a bar counts down to power off
+- Hold **POWER** and a bar counts down to power off
 - **START + SELECT** resets the game
 - **Resume Game** powers straight back into your game, its picture as the boot screen
 - Carts without label art get their title written on by hand
