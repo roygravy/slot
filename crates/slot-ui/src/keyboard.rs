@@ -415,9 +415,9 @@ impl KeyboardFaces<UndoFace> {
             ],
             legend_accents: vec![
                 hint("B", "Delete"),
+                // START's hint makes room; the search key still shows it.
                 hint("X", "Accents"),
                 hint("SELECT", "Shift"),
-                hint("START", "Search"),
                 hint("MENU", "Exit"),
             ],
             legend_strip: vec![hint("A", "Type"), hint("B", "Close"), hint("MENU", "Exit")],
