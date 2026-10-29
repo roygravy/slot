@@ -2102,10 +2102,19 @@ impl App {
             true => ease(((u - 0.72) / 0.2).clamp(0.0, 1.0)),
             false => ease(((u - 0.35) / 0.55).clamp(0.0, 1.0)),
         };
-        let face_alpha = match clear {
-            true => 1.0 - ease(((u - 0.88) / 0.1).clamp(0.0, 1.0)),
-            false => 1.0,
-        };
+        // The face goes out exactly as the band comes in: while the band is not yet whole, the
+        // two clear plastics would add up to a flash if the face stayed (Roy).
+        let face_alpha = if clear { 1.0 - sharp } else { 1.0 };
+        // Under the clear face a dark backing keeps the cart from going see-through (Roy).
+        if clear && face.is_some() {
+            out.push(Draw::Rect {
+                x: a.0,
+                y: a.1,
+                w: a.2,
+                h: a.3,
+                colour: [0.0, 0.0, 0.0, 0.3 * face_alpha],
+            });
+        }
         if let Some(tex) = face {
             out.push(Draw::Tex {
                 x: a.0,
