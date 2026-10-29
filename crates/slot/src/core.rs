@@ -288,8 +288,6 @@ pub fn tv_options(
                     NesColors::Standard => "default",
                     NesColors::Sony => "sony-cxa2025as-us",
                     NesColors::Authentic => "composite-direct-fbx",
-                    NesColors::Nescap => "nescap",
-                    NesColors::Pvm => "pvm-style-d93-fbx",
                 },
             ),
         ],

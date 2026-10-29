@@ -413,33 +413,24 @@ impl TvCable {
     }
 }
 
-/// The colours an NES's picture came out in: as a TV's decoder made them, or the core's own.
+/// The colours an NES's picture came out in: as a Trinitron's decoder made them, or the
+/// console's own. Only those two are offered (Roy); the core's own stays for the bare picture.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum NesColors {
     Standard,
     Sony,
     /// The NES's own composite colours, as measured off the console.
     Authentic,
-    Nescap,
-    Pvm,
 }
 
 impl NesColors {
-    pub const ALL: [NesColors; 5] = [
-        NesColors::Standard,
-        NesColors::Sony,
-        NesColors::Authentic,
-        NesColors::Nescap,
-        NesColors::Pvm,
-    ];
+    pub const ALL: [NesColors; 2] = [NesColors::Authentic, NesColors::Sony];
 
     pub fn name(self) -> &'static str {
         match self {
             NesColors::Standard => "standard",
             NesColors::Sony => "sony",
             NesColors::Authentic => "authentic",
-            NesColors::Nescap => "nescap",
-            NesColors::Pvm => "pvm",
         }
     }
 

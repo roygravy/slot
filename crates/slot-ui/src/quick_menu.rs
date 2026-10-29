@@ -709,8 +709,6 @@ pub enum QuickValue {
     Rgb,
     Standard,
     Sony,
-    Nescap,
-    Pvm,
     BorderAuto,
     BorderGravy,
     /// No border: a word on the row, not a switch, since the row goes round its borders.
@@ -734,7 +732,7 @@ pub enum QuickValue {
 }
 
 impl QuickValue {
-    pub const ALL: [QuickValue; 58] = [
+    pub const ALL: [QuickValue; 56] = [
         QuickValue::Speed2,
         QuickValue::Speed3,
         QuickValue::Speed4,
@@ -773,8 +771,6 @@ impl QuickValue {
         QuickValue::Rgb,
         QuickValue::Standard,
         QuickValue::Sony,
-        QuickValue::Nescap,
-        QuickValue::Pvm,
         QuickValue::BorderAuto,
         QuickValue::BorderGravy,
         QuickValue::BorderOff,
@@ -838,10 +834,8 @@ impl QuickValue {
             QuickValue::SVideo => "S-Video",
             QuickValue::Rgb => "RGB",
             QuickValue::Standard => "Standard",
-            // A TV's own colour decoder: no maker's name on screen (Roy).
-            QuickValue::Sony => "TV",
-            QuickValue::Nescap => "NESCAP",
-            QuickValue::Pvm => "PVM",
+            // A Trinitron's own colour decoder (Roy chose the name).
+            QuickValue::Sony => "Trinitron",
             QuickValue::BorderAuto => "Auto",
             QuickValue::BorderGravy => "GRAVY",
             QuickValue::BorderOff => "Off",

@@ -1189,8 +1189,6 @@ impl App {
                 NesColors::Standard => QuickValue::Standard,
                 NesColors::Sony => QuickValue::Sony,
                 NesColors::Authentic => QuickValue::Authentic,
-                NesColors::Nescap => QuickValue::Nescap,
-                NesColors::Pvm => QuickValue::Pvm,
             }),
             QuickRow::NesScanlines => Some(QuickValue::flag(self.state.tv_scanlines_nes)),
             QuickRow::SnesScanlines => Some(QuickValue::flag(self.state.tv_scanlines_snes)),
@@ -1491,22 +1489,21 @@ impl App {
     }
 
     /// Which About back to show: the one matching the wallpaper, Dark or Light; with your own
-    /// wallpaper or none, the theme's.
+    /// wallpaper the dark one, like its menus.
     pub fn about_light(&self) -> bool {
-        match self.resolved_wallpaper() {
-            WallpaperPick::Dark => false,
-            WallpaperPick::Light => true,
-            _ => self.light(),
-        }
+        self.light_ground()
     }
 
     /// Whether the wallpaper behind the shelf and menus is a light one, so text and shadows on
-    /// it go dark. Your own wallpaper is taken to suit the theme you picked.
+    /// it go dark. Over your own wallpaper the menus are always the black ones, whatever the
+    /// Slot Color (Roy).
     fn light_ground(&self) -> bool {
         match self.resolved_wallpaper() {
-            WallpaperPick::None | WallpaperPick::Dark => false,
             WallpaperPick::Light => true,
-            _ => self.light(),
+            WallpaperPick::File(_) | WallpaperPick::Random => {
+                !self.own_wallpaper_shown() && self.light()
+            }
+            _ => false,
         }
     }
 
@@ -2097,6 +2094,13 @@ impl App {
             .filter(|(r, _)| *r == Rack::Of(Platform::Snes))
             .find_map(|(_, s)| s.find(slot_store::SGB_STEM))
             .and_then(|(_, face)| face);
+        // The clear Super Game Boy 2 shows through its band, so its face fades out as the band
+        // fades in: laid over each other, the two clear plastics would end in a jump (Roy).
+        let clear = model == slot_ui::SgbModel::Sgb2;
+        let sharp = match clear {
+            true => ease(((u - 0.2) / 0.75).clamp(0.0, 1.0)),
+            false => ease(((u - 0.35) / 0.55).clamp(0.0, 1.0)),
+        };
         if let Some(tex) = face {
             out.push(Draw::Tex {
                 x: a.0,
@@ -2104,7 +2108,7 @@ impl App {
                 w: a.2,
                 h: a.3,
                 tex,
-                alpha: 1.0,
+                alpha: if clear { 1.0 - sharp } else { 1.0 },
             });
         }
         slot_ui::draw_slot_part(canvas, snes, true, out);
@@ -2117,7 +2121,6 @@ impl App {
         // soft). The band art is matched to the face's colours (tools/sgb/sgb_band_match.py),
         // so only the sharpness changes, and slowly.
         slot_ui::set_sgb_band(true);
-        let sharp = ease(((u - 0.35) / 0.55).clamp(0.0, 1.0));
         if sharp > 0.0 {
             let band = Some(sets[8 + model as usize]);
             let k1 = b.2 / a.2;
@@ -2790,6 +2793,16 @@ impl App {
             }
             Action::PowerOff => return,
             _ => {}
+        }
+        // Any button wakes the light sleep, and is spent on waking: letting go does nothing.
+        if matches!(self.phase, Phase::Doze { .. }) {
+            if !matches!(
+                action,
+                Action::GbaUp(_) | Action::RewindStop | Action::FfStop | Action::LidClose
+            ) {
+                self.wake();
+            }
+            return;
         }
         if self.shots.is_some() {
             return self.shots_input(action);
