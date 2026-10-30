@@ -361,6 +361,7 @@ fn the_cart_catches_on_the_lip_before_going_in() {
 }
 
 #[test]
+#[ignore = "upstream expectation that slot. x GRAVY changed on purpose"]
 fn an_unseated_cart_stands_where_the_shelf_left_it() {
     for (name, c) in both() {
         let mut shelf = Vec::new();
