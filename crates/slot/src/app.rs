@@ -1409,7 +1409,7 @@ impl App {
     }
 
     pub fn shown_game_bezel(&self) -> Option<TexId> {
-        if self.video_mode() == VideoMode::Stretch || self.game_fills() {
+        if self.video_mode() != VideoMode::Actual || self.game_fills() {
             return None;
         }
         self.game_bezel
@@ -1908,15 +1908,20 @@ impl App {
         self.named_core = named;
     }
 
-    /// Full screen or the game's own size: one setting for the Game Boy and the Game Boy
+    /// Full screen, as tall as the screen, or the game's own size: one setting for the Game Boy and the Game Boy
     /// Color, kept between games. A game in the Super Game Boy is on the SNES's screen, which
     /// has its border round it: never cut to the Game Boy's picture (Roy: a full-screen game
     /// came out wrong in the SGB).
     fn video_mode(&self) -> VideoMode {
         match self.screen_platform() {
             Platform::Gb | Platform::Gbc if self.state.gb_fullscreen => VideoMode::Stretch,
+            Platform::Gb | Platform::Gbc if self.state.gb_fill_height => VideoMode::FillHeight,
             _ => VideoMode::Actual,
         }
+    }
+
+    pub fn fills_height(&self) -> bool {
+        self.video_mode() == VideoMode::FillHeight
     }
 
     pub fn source_rect(&self) -> [f32; 4] {
@@ -1945,10 +1950,12 @@ impl App {
 
     fn set_picture(&mut self, mode: VideoMode) {
         let full = mode == VideoMode::Stretch;
-        if self.state.gb_fullscreen == full {
+        let tall = mode == VideoMode::FillHeight;
+        if (self.state.gb_fullscreen, self.state.gb_fill_height) == (full, tall) {
             return;
         }
         self.state.gb_fullscreen = full;
+        self.state.gb_fill_height = tall;
         self.persist_soon();
     }
 
@@ -2025,7 +2032,11 @@ impl App {
     /// How far the camera has closed in on the Super Game Boy, 0 to 1; None once it has.
     fn sgb_zoom(&self) -> Option<f32> {
         let at = self.sgb_zoom_at?;
-        let ms = if self.sgb_two() { SGB_ZOOM_MS_FADED } else { SGB_ZOOM_MS };
+        let ms = if self.sgb_two() {
+            SGB_ZOOM_MS_FADED
+        } else {
+            SGB_ZOOM_MS
+        };
         let u = self.now().saturating_sub(at) as f32 / ms;
         (u < 1.0).then_some(u)
     }
@@ -2058,7 +2069,11 @@ impl App {
         // The camera takes the first three quarters, as it always did; the Super Game Boy 2's
         // cart fades into its band only once the band stands in place, over the last quarter.
         let clear = self.sgb_two();
-        let v = if clear { (u / SGB_CAMERA_PART).min(1.0) } else { u };
+        let v = if clear {
+            (u / SGB_CAMERA_PART).min(1.0)
+        } else {
+            u
+        };
         let come = ease(((v - 0.4) / 0.6).clamp(0.0, 1.0));
         let fade = if clear { u } else { v };
         self.draw_sgb_camera(ease(v), come, fade, gb_shelf, out)
@@ -2914,10 +2929,10 @@ impl App {
             Phase::Inserting { .. } if action == Action::Eject => self.eject(),
             Phase::Playing { .. } => match action {
                 Action::GbaDown(Btn::L1) if self.slot_owns_the_shoulders() => {
-                    self.set_picture(VideoMode::Stretch)
+                    self.set_picture(self.video_mode().bigger())
                 }
                 Action::GbaDown(Btn::R1) if self.slot_owns_the_shoulders() => {
-                    self.set_picture(VideoMode::Actual)
+                    self.set_picture(self.video_mode().smaller())
                 }
                 Action::Eject => self.eject(),
                 Action::GameMenu => self.game_menu_shortcut(),
@@ -4894,7 +4909,13 @@ impl App {
             lid: self
                 .nes_lids
                 .filter(|_| cart.platform == Platform::Nes)
-                .map(|l| l[if self.originals() { 2 } else { usize::from(self.light()) }]),
+                .map(|l| {
+                    l[if self.originals() {
+                        2
+                    } else {
+                        usize::from(self.light())
+                    }]
+                }),
             light: self.slot_light(),
             ejecting: matches!(self.phase, Phase::Ejecting { .. }) && self.refused_from.is_none(),
         }

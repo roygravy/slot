@@ -1825,7 +1825,7 @@ fn session_playing(root: &Path) -> Session {
     s
 }
 
-const GB_WINDOW: [f32; 4] = [40.0 / 240.0, 0.0, 160.0 / 240.0, 1.0];
+const GB_WINDOW: [f32; 4] = [40.0 / 240.0, 8.0 / 160.0, 160.0 / 240.0, 144.0 / 160.0];
 
 fn pad(s: &Session) -> u16 {
     s.emu().expect("no core in the slot").input().0
@@ -1842,22 +1842,35 @@ fn l_and_r_change_the_mode_on_a_game_boy_cart_and_not_on_a_gba_one() {
     );
 
     s.feed([RawEvent::Down(Btn::L1)], 100);
+    assert!(
+        s.app().fills_height(),
+        "L did not make it as tall as the screen"
+    );
+    assert_eq!(pad(&s) & ButtonMask::L, 0, "L reached the game as well");
+    s.feed([RawEvent::Up(Btn::L1)], 120);
+    s.feed([RawEvent::Down(Btn::L1)], 140);
     assert_eq!(
         s.app().source_rect(),
         GB_WINDOW,
         "L did not stretch the picture"
     );
-    assert_eq!(pad(&s) & ButtonMask::L, 0, "L reached the game as well");
-    s.feed([RawEvent::Up(Btn::L1)], 120);
+    s.feed([RawEvent::Up(Btn::L1)], 160);
 
     s.feed([RawEvent::Down(Btn::R1)], 200);
+    assert!(
+        s.app().fills_height(),
+        "R did not step back to as tall as the screen"
+    );
+    s.feed([RawEvent::Up(Btn::R1)], 210);
+    s.feed([RawEvent::Down(Btn::R1)], 220);
     assert_eq!(
         s.app().source_rect(),
         WHOLE_TEXTURE,
         "R did not give it back"
     );
+    assert!(!s.app().fills_height());
     assert_eq!(pad(&s) & ButtonMask::R, 0, "R reached the game as well");
-    s.feed([RawEvent::Up(Btn::R1)], 220);
+    s.feed([RawEvent::Up(Btn::R1)], 230);
 
     let d = common::tmp_root_with_carts(&["Emerald", "Zzz"]);
     let mut s = session_playing(d.path());
@@ -1939,9 +1952,15 @@ fn a_shoulder_still_held_when_the_cart_seats_never_reaches_a_game_boy_core() {
 fn full_screen_is_one_setting_for_every_game_boy_game_and_is_kept() {
     let d = common::tmp_root_with_gb_carts(&["Tetris", "Zzz"]);
     let mut s = session_playing(d.path());
-    assert_eq!(s.app().source_rect(), WHOLE_TEXTURE, "full screen from the start");
+    assert_eq!(
+        s.app().source_rect(),
+        WHOLE_TEXTURE,
+        "full screen from the start"
+    );
     s.feed([RawEvent::Down(Btn::L1)], 100);
     s.feed([RawEvent::Up(Btn::L1)], 120);
+    s.feed([RawEvent::Down(Btn::L1)], 140);
+    s.feed([RawEvent::Up(Btn::L1)], 160);
     assert_eq!(s.app().source_rect(), GB_WINDOW);
     s.app_mut().flush_resume();
     drop(s);
@@ -1952,6 +1971,16 @@ fn full_screen_is_one_setting_for_every_game_boy_game_and_is_kept() {
         s.app().source_rect(),
         GB_WINDOW,
         "full screen did not come back with the next game"
+    );
+    s.feed([RawEvent::Down(Btn::R1)], 100);
+    assert!(s.app().fills_height());
+    s.app_mut().flush_resume();
+    drop(s);
+    assert!(slot_store::read_slot_state(d.path()).gb_fill_height);
+    let mut s = session_playing(d.path());
+    assert!(
+        s.app().fills_height(),
+        "as tall as the screen did not come back"
     );
     s.feed([RawEvent::Down(Btn::R1)], 100);
     assert_eq!(s.app().source_rect(), WHOLE_TEXTURE);

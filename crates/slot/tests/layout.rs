@@ -196,7 +196,11 @@ fn a_gba_game_powers_on_across_a_720_panel() {
     a.on_core_ready();
     while !matches!(a.phase(), Phase::Playing { .. }) {
         tick(&mut a);
-        assert_eq!(a.layout(), Layout::Native, "the 720 power-on left the full width");
+        assert_eq!(
+            a.layout(),
+            Layout::Native,
+            "the 720 power-on left the full width"
+        );
     }
     tick(&mut a);
     assert_eq!(a.layout(), Layout::Native, "the game left the full width");

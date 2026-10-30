@@ -69,7 +69,9 @@ pub const ZONES: [Zone; 28] = [
 ];
 
 pub fn zone_named(name: &str) -> Option<&'static Zone> {
-    ZONES.iter().find(|z| z.name.eq_ignore_ascii_case(name.trim()))
+    ZONES
+        .iter()
+        .find(|z| z.name.eq_ignore_ascii_case(name.trim()))
 }
 
 impl Zone {

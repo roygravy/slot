@@ -344,7 +344,12 @@ pub fn nes_lid(light: bool) -> &'static [u8] {
 pub fn slot_orig(kind: usize, front: bool) -> &'static [u8] {
     static P: [OnceLock<Vec<u8>>; 10] = [const { OnceLock::new() }; 10];
     let i = kind * 2 + usize::from(front);
-    load(SLOT_ORIG_PNG[kind][usize::from(front)], SLOT_W, SLOT_H, &P[i])
+    load(
+        SLOT_ORIG_PNG[kind][usize::from(front)],
+        SLOT_W,
+        SLOT_H,
+        &P[i],
+    )
 }
 
 /// The NES's lid in its own light grey (Originals).
@@ -531,7 +536,12 @@ pub fn sgb_band(model: SgbModel, front: bool) -> &'static [u8] {
             include_bytes!("../../../assets/sgb_band_sgb2_front.png"),
         ],
     };
-    load(bytes[usize::from(front)], SLOT_W, SGB_BAND_H, &SLOTS[model as usize][usize::from(front)])
+    load(
+        bytes[usize::from(front)],
+        SLOT_W,
+        SGB_BAND_H,
+        &SLOTS[model as usize][usize::from(front)],
+    )
 }
 
 pub fn tv_art(mould: Mould, part: TvPart) -> &'static [u8] {

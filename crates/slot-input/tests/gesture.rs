@@ -1,7 +1,7 @@
 use slot_input::RawEvent::{Down, Up};
 use slot_input::{
-    Action::*, Btn, Btn::*, Gestures, RawEvent, MENU_HOLD_MS, POWER_HOLD_MS, POWER_TAP_MS, SELECT_CHORD_MS,
-    SELECT_TAP_MS, VOLUME_REPEAT_DELAY_MS, VOLUME_REPEAT_MS,
+    Action::*, Btn, Btn::*, Gestures, RawEvent, MENU_HOLD_MS, POWER_HOLD_MS, POWER_TAP_MS,
+    SELECT_CHORD_MS, SELECT_TAP_MS, VOLUME_REPEAT_DELAY_MS, VOLUME_REPEAT_MS,
 };
 
 #[test]
@@ -633,8 +633,14 @@ fn power_then_volume_up_takes_a_screenshot_and_nothing_else() {
     let mut g = Gestures::new();
     assert_eq!(g.feed(Down(Power), 0), vec![PowerPress]);
     assert_eq!(g.feed(Down(VolUp), 80), vec![Screenshot]);
-    assert!(g.tick(POWER_HOLD_MS + 500).is_empty(), "power hold or volume ramp fired");
-    assert!(g.feed(Up(Power), 2_000).is_empty(), "the power tap went to sleep");
+    assert!(
+        g.tick(POWER_HOLD_MS + 500).is_empty(),
+        "power hold or volume ramp fired"
+    );
+    assert!(
+        g.feed(Up(Power), 2_000).is_empty(),
+        "the power tap went to sleep"
+    );
     assert!(g.feed(Up(VolUp), 2_100).is_empty());
     assert_eq!(g.feed(Down(Power), 3_000), vec![PowerPress]);
     assert_eq!(g.feed(Up(Power), 3_050), vec![PowerTap]);
@@ -677,5 +683,8 @@ fn a_reset_with_start_first_lets_start_go_and_never_taps_select() {
     assert_eq!(g.feed(Down(Select), 40), vec![GbaUp(Start), ResetGame]);
     let mut after = g.feed(Up(Select), 200);
     after.extend(g.tick(400));
-    assert!(!after.contains(&GbaDown(Select)), "SELECT tapped the game: {after:?}");
+    assert!(
+        !after.contains(&GbaDown(Select)),
+        "SELECT tapped the game: {after:?}"
+    );
 }

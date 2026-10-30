@@ -473,7 +473,11 @@ pub fn draw_shell_picker(canvas: Canvas, v: &ShellPickerView, out: &mut Vec<Draw
                 &v.faces.models[first..first + count],
                 Some(model),
                 v.row == PickerRow::Model,
-                if v.sgb { (to.y + to.h + SGB_MODEL_GAP).round() } else { MODEL_Y + drop },
+                if v.sgb {
+                    (to.y + to.h + SGB_MODEL_GAP).round()
+                } else {
+                    MODEL_Y + drop
+                },
                 FINISH_GAP,
                 stage(2.5),
                 out,

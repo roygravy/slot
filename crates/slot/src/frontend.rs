@@ -440,11 +440,26 @@ impl Frontend {
                     upload(slot_ui::sgb_band(SgbModel::Sgb2, false)),
                     upload(slot_ui::sgb_band(SgbModel::Sgb2, true)),
                 ),
-                (upload(slot_ui::slot_orig(0, false)), upload(slot_ui::slot_orig(0, true))),
-                (upload(slot_ui::slot_orig(1, false)), upload(slot_ui::slot_orig(1, true))),
-                (upload(slot_ui::slot_orig(2, false)), upload(slot_ui::slot_orig(2, true))),
-                (upload(slot_ui::slot_orig(3, false)), upload(slot_ui::slot_orig(3, true))),
-                (upload(slot_ui::slot_orig(4, false)), upload(slot_ui::slot_orig(4, true))),
+                (
+                    upload(slot_ui::slot_orig(0, false)),
+                    upload(slot_ui::slot_orig(0, true)),
+                ),
+                (
+                    upload(slot_ui::slot_orig(1, false)),
+                    upload(slot_ui::slot_orig(1, true)),
+                ),
+                (
+                    upload(slot_ui::slot_orig(2, false)),
+                    upload(slot_ui::slot_orig(2, true)),
+                ),
+                (
+                    upload(slot_ui::slot_orig(3, false)),
+                    upload(slot_ui::slot_orig(3, true)),
+                ),
+                (
+                    upload(slot_ui::slot_orig(4, false)),
+                    upload(slot_ui::slot_orig(4, true)),
+                ),
             ]
         };
         let nes_lids = [
@@ -874,6 +889,7 @@ impl Frontend {
         compositor.set_screen_power(self.session.app().screen_power());
         compositor.set_overlay_slide(self.session.app().overlay_slide());
         compositor.set_game_source_rect(self.session.app().source_rect());
+        compositor.set_game_fills_height(self.session.app().fills_height());
         self.grab_link_shot(compositor);
         self.grab_boot_picture(compositor);
         self.grab_screenshot(compositor);

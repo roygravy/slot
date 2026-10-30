@@ -158,7 +158,10 @@ impl Gestures {
                     self.reset_formed = true;
                     self.state_pending = None;
                     out.retain(|a| {
-                        !matches!(a, Action::GbaDown(Btn::Start) | Action::GbaDown(Btn::Select))
+                        !matches!(
+                            a,
+                            Action::GbaDown(Btn::Start) | Action::GbaDown(Btn::Select)
+                        )
                     });
                     // SELECT's release is no tap for the game, and a START that went down
                     // first is let go before the reset.
@@ -213,7 +216,8 @@ impl Gestures {
             }
         }
         if let Some(d) = self.power_down_at {
-            if !self.shot_fired && !self.power_hold_fired && now.saturating_sub(d) >= POWER_HOLD_MS {
+            if !self.shot_fired && !self.power_hold_fired && now.saturating_sub(d) >= POWER_HOLD_MS
+            {
                 self.power_hold_fired = true;
                 out.push(Action::PowerHold);
             }
