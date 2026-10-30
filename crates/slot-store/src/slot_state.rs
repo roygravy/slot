@@ -410,7 +410,11 @@ impl TvCable {
         }
     }
 
+    /// RF is no longer offered: a card that picked it gets composite, its nearest.
     pub fn parse(name: &str) -> Option<TvCable> {
+        if name == "rf" {
+            return Some(TvCable::Composite);
+        }
         TvCable::ALL.into_iter().find(|c| c.name() == name)
     }
 }

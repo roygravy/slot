@@ -344,6 +344,8 @@ pub struct App {
     search_faces: Option<slot_ui::KeyboardFaces<slot_ui::Up>>,
     /// The menu's Wi-Fi and time zone lists, over the menu while one is open.
     list_page: Option<ListPage>,
+    /// The menu or page the light sleep came over, to come back to on waking.
+    doze_return: Option<Phase>,
     /// The keyboard and legends the list pages use: "join" on the go key.
     list_faces: Option<slot_ui::KeyboardFaces<slot_ui::Up>>,
     /// A network just added: its name and when to give up waiting for it.
@@ -574,6 +576,7 @@ impl App {
             search_ask: None,
             search_faces: None,
             list_page: None,
+            doze_return: None,
             list_faces: None,
             joining: None,
             wps_poll_at: 0,
@@ -2587,8 +2590,8 @@ impl App {
     fn change_tv_setting(&mut self, row: QuickRow, right: bool) -> bool {
         let s = &mut self.state;
         match row {
-            QuickRow::NesCable => s.tv_cable_nes = step_cable(s.tv_cable_nes, right, false),
-            QuickRow::SnesCable => s.tv_cable_snes = step_cable(s.tv_cable_snes, right, true),
+            QuickRow::NesCable => s.tv_cable_nes = step_cable(s.tv_cable_nes, right),
+            QuickRow::SnesCable => s.tv_cable_snes = step_cable(s.tv_cable_snes, right),
             QuickRow::NesColors => {
                 let all = NesColors::ALL;
                 let at = all.iter().position(|c| *c == s.nes_colors).unwrap_or(0);
@@ -5575,6 +5578,9 @@ impl App {
             self.in_game_menu = Some(QuickRow::States);
         }
         self.polaroids = None;
+        // A menu or page off the shelf comes back on waking, as a game does.
+        let before = std::mem::replace(&mut self.phase, Phase::Shelf);
+        self.doze_return = Some(before).filter(|p| cart.is_none() && !matches!(p, Phase::Shelf));
         self.phase = Phase::Doze { cart };
         self.dozed_at = self.now();
         self.deep_tried = false;
@@ -5596,7 +5602,7 @@ impl App {
                 self.screen = 1.0;
                 Phase::Playing { cart }
             }
-            None => Phase::Shelf,
+            None => self.doze_return.take().unwrap_or(Phase::Shelf),
         };
         if let Some(power) = &mut self.power {
             power.on_open();
@@ -7627,11 +7633,12 @@ fn cable_value(cable: TvCable) -> QuickValue {
     }
 }
 
-/// The next cable along: the SNES's core also draws an aerial's RF signal, the NES's does not.
-fn step_cable(cable: TvCable, right: bool, rf: bool) -> TvCable {
+/// The next cable along. The aerial's RF signal is not offered (Roy): off, composite,
+/// S-Video and RGB.
+fn step_cable(cable: TvCable, right: bool) -> TvCable {
     let all: Vec<TvCable> = TvCable::ALL
         .into_iter()
-        .filter(|c| rf || *c != TvCable::Rf)
+        .filter(|c| *c != TvCable::Rf)
         .collect();
     let at = all.iter().position(|c| *c == cable).unwrap_or(0);
     let n = all.len();
