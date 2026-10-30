@@ -41,13 +41,13 @@ def nes_blocks(im, x0=MX - 82, x1=MX - 6):
 
 
 DECK = (150, 149, 153)              # the SNES PAL's darker top deck, around its cartridge slot
-DECK_X, DECK_B, DECK_R, SS = (150, 570), 33, 9, 4
+DECK_X, DECK_B, DECK_R, SS = (150, 570), 33, 16, 4
 
 
 def pal_deck(band):
     """The SNES PAL's top (Roy, Originals): the dark deck in the middle, rounded where it meets
     the light front, a shadow where the deck falls away under the front's edge and a lit rim on
-    that edge. The grain stays; the grooves are cut afterwards."""
+    that edge. The grain stays; the grooves are cut afterwards, on the front only."""
     ys, xs = np.mgrid[0:H * SS, 0:W * SS].astype(np.float32)
     y, x = (ys + 0.5) / SS, (xs + 0.5) / SS
     x0, x1 = DECK_X
@@ -93,17 +93,18 @@ def pal_deck(band):
     return Image.fromarray(a.astype(np.uint8), 'RGBA')
 
 
-def grooves(band):
+def grooves(band, top=0):
     """A groove cut down the band each side, just outside the 240 wide seated cart (2px play),
-    shaded from the plastic beside it, so it reads on the light front and the dark deck alike."""
+    shaded from the plastic beside it. Originals starts it below the PAL deck (`top`)."""
     a = np.asarray(band, np.float32)
     gx = C - 120 - 2 - 3
     for x in (gx, W - gx - 3):
-        beside = a[:, x - 3, :3]
+        beside = a[top:, x - 3, :3]
         light = beside.sum(1, keepdims=True) > 300
-        a[:, x:x + 2, :3] = (beside * np.where(light, 0.55, 0.45))[:, None]
-        a[:, x + 2, :3] = np.minimum(255, beside * 1.12 + 10)
-        a[0, x:x + 3, :3] = a[0, x - 3, :3] * np.where(light[0], 0.55, 0.45)
+        a[top:, x:x + 2, :3] = (beside * np.where(light, 0.55, 0.45))[:, None]
+        a[top:, x + 2, :3] = np.minimum(255, beside * 1.12 + 10)
+        if top == 0:
+            a[0, x:x + 3, :3] = a[0, x - 3, :3] * np.where(light[0], 0.55, 0.45)
     return Image.fromarray(a.astype(np.uint8), 'RGBA')
 
 
@@ -154,7 +155,7 @@ for theme, nes_from, snes_from in [('dark', 'dark', 'dark'), ('light', 'light', 
     band.paste(plain(gb, R_START + EDGE - (L_END - EDGE) + 20), (L_END - EDGE - 10, 0))
     if theme == 'orig':
         band = pal_deck(band)
-    band = grooves(band)
+    band = grooves(band, DECK_B if theme == 'orig' else 0)
     band.save(f'{A}slot_front_snes_{theme}.png', optimize=True)
     band.save(f'{A}slot_back_snes_{theme}.png', optimize=True)
 
