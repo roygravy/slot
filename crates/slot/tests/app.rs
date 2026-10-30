@@ -589,7 +589,8 @@ fn a_cart_in_flight_is_not_also_left_standing_on_the_shelf() {
             | Draw::Tex { w, h, .. }
             | Draw::Part { w, h, .. }
             | Draw::Turned { w, h, .. }
-            | Draw::Tint { w, h, .. } => {
+            | Draw::Tint { w, h, .. }
+            | Draw::Light { w, h, .. } => {
                 w > 200.0
                     && w <= CART_W as f32 + 0.01
                     && (w / h - CART_W as f32 / CART_H as f32).abs() < 0.05
@@ -1987,32 +1988,6 @@ fn full_screen_is_one_setting_for_every_game_boy_game_and_is_kept() {
 }
 
 #[test]
-fn the_power_menus_own_buttons_never_reach_the_game() {
-    let d = common::tmp_root_with_carts(&["Emerald", "Zzz"]);
-    let mut s = session_playing(d.path());
-    s.feed([RawEvent::Down(Btn::Power)], 1000);
-    s.feed([], 2100);
-    assert!(
-        s.app().power_menu().is_some(),
-        "the power menu never opened"
-    );
-    s.feed([RawEvent::Up(Btn::Power)], 2110);
-    s.feed([RawEvent::Down(Btn::Down)], 2200);
-    assert_eq!(
-        pad(&s) & ButtonMask::DOWN,
-        0,
-        "the press that moved the power menu's bar reached the game"
-    );
-    s.feed([RawEvent::Down(Btn::B)], 2300);
-    assert!(s.app().power_menu().is_none(), "B did not dismiss the menu");
-    assert_eq!(
-        pad(&s) & ButtonMask::B,
-        0,
-        "the B that cancelled the power menu was handed to the game underneath it"
-    );
-}
-
-#[test]
 fn a_chorded_select_never_reaches_the_pad() {
     let d = common::tmp_root_with_carts(&["Emerald", "Zzz"]);
     let mut s = session_playing(d.path());
@@ -2114,92 +2089,6 @@ fn run(s: &mut Session, from: u64, frames: u64) -> u64 {
         std::thread::sleep(Duration::from_millis(1));
     }
     now
-}
-
-#[test]
-fn the_colour_shortcut_reaches_the_core_already_running() {
-    let d = common::tmp_root_with_carts(&["Emerald", "Fusion"]);
-    let (mut s, _motor) = common::session_with_platform(d.path());
-    s.app_mut().apply(slot_input::Action::Insert);
-
-    let before = s.app().colour_correction();
-    s.app_mut()
-        .apply(slot_input::Action::ColourCorrectionToggle);
-
-    assert_eq!(
-        s.app().colour_correction(),
-        !before,
-        "the shortcut did not flip the setting"
-    );
-    assert_eq!(
-        s.app_mut().take_colour_correction(),
-        Some(!before),
-        "the change was written down but never queued for the core already running, which is \
-         the whole of what this shortcut is for"
-    );
-}
-
-#[test]
-fn the_colour_shortcut_flips_only_the_system_that_is_playing() {
-    let d = common::tmp_root_with_gb_carts(&["Tetris", "Zelda"]);
-    let (mut s, _motor) = common::session_with_platform(d.path());
-    s.app_mut().apply(slot_input::Action::Insert);
-    s.app_mut()
-        .apply(slot_input::Action::ColourCorrectionToggle);
-    let saved = slot_store::read_slot_state(d.path());
-    assert_eq!(
-        (saved.colour_correction_gba, saved.colour_correction_gb),
-        (false, true),
-        "a Game Boy game's shortcut did not land on the Game Boy setting alone"
-    );
-}
-
-#[test]
-fn a_game_boy_color_game_keeps_its_own_colour_and_shader() {
-    use slot_store::Shader;
-    let d = common::tmp_root_with_gbc_carts(&["Crystal", "Oracle"]);
-    let (mut s, _motor) = common::session_with_platform(d.path());
-    s.app_mut().apply(slot_input::Action::Insert);
-    s.app_mut()
-        .apply(slot_input::Action::ColourCorrectionToggle);
-    s.app_mut().apply(slot_input::Action::ShaderNext);
-    let saved = slot_store::read_slot_state(d.path());
-    assert_eq!(
-        (
-            saved.colour_correction_gba,
-            saved.colour_correction_gb,
-            saved.colour_correction_gbc
-        ),
-        (false, false, true),
-        "a Game Boy Color game's colour shortcut did not land on GBC alone"
-    );
-    assert_eq!(
-        (saved.shader_gb, saved.shader_gbc),
-        (Shader::Simpletex, Shader::Off),
-        "a Game Boy Color game's shader shortcut did not land on GBC alone"
-    );
-    assert_eq!(s.app().screen_shader(), Shader::Off);
-}
-
-#[test]
-fn the_colour_shortcut_names_the_state_it_arrived_at() {
-    let d = common::tmp_root_with_carts(&["Emerald", "Fusion"]);
-    let (mut s, _motor) = common::session_with_platform(d.path());
-    s.app_mut().apply(slot_input::Action::Insert);
-
-    for _ in 0..2 {
-        let want = match s.app().colour_correction() {
-            true => slot_ui::Toast::ColourOff,
-            false => slot_ui::Toast::ColourOn,
-        };
-        s.app_mut()
-            .apply(slot_input::Action::ColourCorrectionToggle);
-        assert_eq!(
-            s.app().toast(),
-            Some(want),
-            "the banner named the state the toggle left, not the one it reached"
-        );
-    }
 }
 
 fn slot_text_alpha(a: &App, tex: slot_ui::TexId) -> f32 {

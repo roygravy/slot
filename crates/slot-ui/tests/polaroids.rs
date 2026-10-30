@@ -117,6 +117,7 @@ fn the_gauge_stays_clear_of_the_title_on_the_right() {
     let p = switcher();
     let mut out = Vec::new();
     p.draw(
+        slot_gfx::Canvas::FRAMED,
         Some(Battery {
             percent: 68,
             charge: Charge::Charging,
@@ -156,6 +157,7 @@ fn the_clock_stays_clear_of_the_title_on_the_left() {
     let p = switcher();
     let mut out = Vec::new();
     p.draw(
+        slot_gfx::Canvas::FRAMED,
         None,
         Printed::default(),
         None,
@@ -189,6 +191,7 @@ fn a_switcher_with_no_gauge_still_shows_its_clock() {
     let p = switcher();
     let mut out = Vec::new();
     p.draw(
+        slot_gfx::Canvas::FRAMED,
         None,
         Printed::default(),
         None,
@@ -210,6 +213,7 @@ fn nothing_on_the_plate_moves_when_the_charge_state_changes() {
     let clock = Printed { face: None, w: 40 };
     let mut idle = Vec::new();
     p.draw(
+        slot_gfx::Canvas::FRAMED,
         Some(Battery {
             percent: 68,
             charge: Charge::Discharging,
@@ -222,6 +226,7 @@ fn nothing_on_the_plate_moves_when_the_charge_state_changes() {
     );
     let mut charging = Vec::new();
     p.draw(
+        slot_gfx::Canvas::FRAMED,
         Some(Battery {
             percent: 68,
             charge: Charge::Charging,

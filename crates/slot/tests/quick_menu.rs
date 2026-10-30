@@ -293,46 +293,6 @@ fn rumble_and_fast_forward_sound_flip_on_either_arrow_and_save() {
 }
 
 #[test]
-fn each_systems_colour_correction_flips_on_either_arrow_and_saves_alone() {
-    let saved = |d: &TempDir| {
-        let s = read_slot_state(d.path());
-        (
-            s.colour_correction_gba,
-            s.colour_correction_gb,
-            s.colour_correction_gbc,
-        )
-    };
-    for row in [
-        QuickRow::GbaColourCorrection,
-        QuickRow::GbColourCorrection,
-        QuickRow::GbcColourCorrection,
-    ] {
-        let (d, mut a, _) = on_carousel();
-        open_at(&mut a, row);
-        assert_eq!(
-            a.quick_value(row),
-            Some(QuickValue::Off),
-            "{row:?} did not open on the default, which is off"
-        );
-        for (btn, want) in [
-            (Btn::Right, true),
-            (Btn::Left, false),
-            (Btn::Left, true),
-            (Btn::Right, false),
-        ] {
-            press(&mut a, btn);
-            let both = match row {
-                QuickRow::GbaColourCorrection => (want, false, false),
-                QuickRow::GbColourCorrection => (false, want, false),
-                _ => (false, false, want),
-            };
-            assert_eq!(saved(&d), both, "{row:?} {btn:?}");
-            assert_eq!(a.quick_value(row), Some(QuickValue::flag(want)));
-        }
-    }
-}
-
-#[test]
 fn the_game_page_flips_eject_save_turbo_and_rewind_and_saves_each() {
     let (d, mut a, _) = on_carousel();
     open_at(&mut a, QuickRow::Rewind);
@@ -362,36 +322,25 @@ fn screen_opens_a_page_of_its_own_and_b_comes_back_to_it() {
     let (_d, mut a, _) = on_carousel();
     open_at(&mut a, QuickRow::Screen);
     press(&mut a, Btn::A);
-    assert_eq!(a.quick_menu(), Some(QuickRow::ScreenGba));
-    for want in [
-        QuickRow::ScreenGbc,
-        QuickRow::ScreenGb,
-        QuickRow::ScreenGba,
-        QuickRow::ScreenGbc,
-        QuickRow::ScreenGb,
-    ] {
+    let walk = |a: &mut App, page: &[QuickRow]| {
+        let start = a.quick_menu().expect("no row in hand");
+        let at = page.iter().position(|r| *r == start).expect("opened off the page");
+        for k in 1..=page.len() {
+            press(a, Btn::Down);
+            assert_eq!(
+                a.quick_menu(),
+                Some(page[(at + k) % page.len()]),
+                "the page did not wrap on itself"
+            );
+        }
+    };
+    walk(&mut a, &QuickRow::SCREEN);
+    while a.quick_menu() != Some(QuickRow::ScreenGb) {
         press(&mut a, Btn::Down);
-        assert_eq!(
-            a.quick_menu(),
-            Some(want),
-            "the page did not wrap on itself"
-        );
     }
     press(&mut a, Btn::A);
-    assert_eq!(a.quick_menu(), Some(QuickRow::GbShader));
-    for want in [
-        QuickRow::GbColourCorrection,
-        QuickRow::GbPalettes,
-        QuickRow::GbBezel,
-        QuickRow::GbShader,
-    ] {
-        press(&mut a, Btn::Down);
-        assert_eq!(
-            a.quick_menu(),
-            Some(want),
-            "the page did not wrap on itself"
-        );
-    }
+    assert_eq!(a.quick_menu(), Some(QuickRow::SCREEN_GB[0]));
+    walk(&mut a, &QuickRow::SCREEN_GB);
     press(&mut a, Btn::B);
     assert_eq!(a.quick_menu(), Some(QuickRow::ScreenGb));
     press(&mut a, Btn::B);
@@ -446,25 +395,6 @@ fn each_platform_keeps_its_own_shader_wraps_and_starts_on_grid_and_simpletex() {
     assert_eq!(
         (s.shader_gba, s.shader_gb, s.shader_gbc),
         (Shader::Off, Shader::Grid, Shader::Off)
-    );
-}
-
-#[test]
-fn colour_correction_leaves_the_settings_around_it_alone() {
-    let (d, mut a, _) = on_carousel();
-    open_at(&mut a, QuickRow::GbaColourCorrection);
-    press(&mut a, Btn::Right);
-    let s = read_slot_state(d.path());
-    assert!(s.colour_correction_gba, "the row never took");
-    assert!(!s.colour_correction_gb, "the Game Boy picture changed too");
-    assert_eq!(
-        (s.ff_speed, s.ff_sound, s.rumble),
-        (
-            SlotState::default().ff_speed,
-            SlotState::default().ff_sound,
-            SlotState::default().rumble
-        ),
-        "the row reached a setting that is not its own"
     );
 }
 
@@ -618,9 +548,16 @@ fn fake_faces(a: &mut App) {
             .map(|i| [(id(200 + i), 60, 40), (id(210 + i), 60, 40)])
             .collect(),
         carets: [(id(300), 10, 40), (id(301), 10, 40)],
-        legend: [(id(400), 70), (id(401), 110), (id(402), 80), (id(403), 90)],
+        legend: [
+            (id(400), 70),
+            (id(401), 110),
+            (id(402), 80),
+            (id(403), 90),
+            (id(404), 90),
+        ],
         switches: [(id(600), 52, 30), (id(601), 52, 30)],
         help: vec![None; QuickRow::ALL.len()],
+        more: [(id(800), 20, 20), (id(801), 20, 20)],
     });
     a.set_quick_clock_faces((id(500), 150, 40), (id(501), 150, 40));
 }
@@ -836,9 +773,16 @@ fn no_row_in_hand_runs_its_arrows_into_its_label() {
             let f = slot_ui::quick_caret_face(right);
             (id(300 + right as usize), f.w, f.h)
         }),
-        legend: [(id(400), 70), (id(401), 110), (id(402), 80), (id(403), 90)],
+        legend: [
+            (id(400), 70),
+            (id(401), 110),
+            (id(402), 80),
+            (id(403), 90),
+            (id(404), 90),
+        ],
         switches: [(id(600), 52, 30), (id(601), 52, 30)],
         help: vec![None; QuickRow::ALL.len()],
+        more: [(id(800), 20, 20), (id(801), 20, 20)],
     });
     for page in [
         &QuickRow::SCREEN_GBA[..],

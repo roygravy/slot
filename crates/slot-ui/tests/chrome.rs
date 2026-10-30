@@ -1,6 +1,6 @@
 use slot_store::{Cart, Platform};
 use slot_ui::{
-    cart_box, draw_empty_slot, edge, foot_y, housing, icon_box, opening, recess, seated_box,
+    cart_box, draw_empty_slot, mould_of, edge, foot_y, housing, icon_box, opening, recess, seated_box,
     Canvas, Draw, Shelf, SlotChrome, TexId, ALERT_PX, CART_H, CART_W, GB_LABEL_H, GB_LABEL_Y,
     LABEL_H, LABEL_Y, MOUTH_H, OUT_H, OUT_W,
 };
@@ -8,7 +8,7 @@ use slot_ui::{
 const CENTRED: f32 = (OUT_W - CART_W) as f32 / 2.0;
 
 fn centred(c: &Cart) -> f32 {
-    (OUT_W - cart_box(c.platform).0) as f32 / 2.0
+    (OUT_W - cart_box(mould_of(c)).0) as f32 / 2.0
 }
 
 fn cart() -> Cart {
@@ -44,9 +44,9 @@ fn both() -> [(&'static str, Cart); 2] {
 fn label_band(c: &Cart) -> (f32, f32) {
     let (y, h) = match c.platform {
         Platform::Gba => (LABEL_Y as f32, LABEL_H as f32),
-        Platform::Gb | Platform::Gbc => (GB_LABEL_Y as f32, GB_LABEL_H as f32),
+        _ => (GB_LABEL_Y as f32, GB_LABEL_H as f32),
     };
-    let k = seated_box(c.platform).1 as f32 / cart_box(c.platform).1 as f32;
+    let k = seated_box(mould_of(c)).1 as f32 / cart_box(mould_of(c)).1 as f32;
     (y * k, h * k)
 }
 
@@ -63,7 +63,9 @@ fn quad(d: &Draw) -> Quad {
         Draw::Rect { x, y, w, h, .. }
         | Draw::Tex { x, y, w, h, .. }
         | Draw::Part { x, y, w, h, .. }
-        | Draw::Turned { x, y, w, h, .. } => Quad { x, y, w, h },
+        | Draw::Turned { x, y, w, h, .. }
+        | Draw::Tint { x, y, w, h, .. }
+        | Draw::Light { x, y, w, h, .. } => Quad { x, y, w, h },
         Draw::Game | Draw::Shot { .. } => Quad {
             x: 0.0,
             y: 0.0,
@@ -113,7 +115,11 @@ fn as_lip(d: &Draw) -> Option<Quad> {
 fn alpha(d: &Draw) -> f32 {
     match *d {
         Draw::Rect { colour, .. } => colour[3],
-        Draw::Tex { alpha, .. } | Draw::Part { alpha, .. } | Draw::Turned { alpha, .. } => alpha,
+        Draw::Tex { alpha, .. }
+        | Draw::Part { alpha, .. }
+        | Draw::Turned { alpha, .. }
+        | Draw::Light { alpha, .. } => alpha,
+        Draw::Tint { colour, .. } => colour[3],
         Draw::Game | Draw::Shot { .. } => 1.0,
     }
 }
@@ -154,6 +160,10 @@ fn chrome_into(c: &Cart, seat: f32, out: &mut Vec<Draw>) {
         behind: [None, None],
         slot: None,
         canvas: Canvas::FRAMED,
+        lift: 0.0,
+        lid: None,
+        light: false,
+        ejecting: false,
     }
     .draw(out);
 }
@@ -187,6 +197,10 @@ fn a_cart_the_row_had_not_finished_moving_slides_across_as_it_goes_in() {
             behind: [None, None],
             slot: None,
             canvas: Canvas::FRAMED,
+            lift: 0.0,
+            lid: None,
+            light: false,
+            ejecting: false,
         }
         .draw(&mut out);
         out.iter()
@@ -205,7 +219,7 @@ fn a_cart_the_row_had_not_finished_moving_slides_across_as_it_goes_in() {
         start.y + start.h
     );
     let seated = at(1.0);
-    let sw = seated_box(c.platform).0 as f32;
+    let sw = seated_box(mould_of(&c)).0 as f32;
     let mid = OUT_W as f32 / 2.0;
     assert!(
         (seated.x + seated.w / 2.0 - mid).abs() < 0.01 && (seated.w - sw).abs() < 0.01,
@@ -247,6 +261,10 @@ fn draw_powering_on(t: f32, out: &mut Vec<Draw>) {
         behind: [None, None],
         slot: None,
         canvas: Canvas::FRAMED,
+        lift: 0.0,
+        lid: None,
+        light: false,
+        ejecting: false,
     }
     .draw(out);
 }
@@ -362,8 +380,8 @@ fn an_unseated_cart_stands_where_the_shelf_left_it() {
 fn a_cart_shrinks_to_the_slot_by_the_lip() {
     let lip = OUT_H as f32 - MOUTH_H;
     for (name, c) in both() {
-        let (w, h) = cart_box(c.platform);
-        let (sw, sh) = seated_box(c.platform);
+        let (w, h) = cart_box(mould_of(&c));
+        let (sw, sh) = seated_box(mould_of(&c));
         let start = cart_quad(&c, 0.0);
         assert!(
             (start.w - w as f32).abs() < 0.01 && (start.h - h as f32).abs() < 0.01,
@@ -622,7 +640,7 @@ fn the_seated_cart_never_shows_through_the_fading_housing() {
 #[test]
 fn the_alert_fits_on_the_cart_face() {
     let (w, h) = icon_box(ALERT_PX);
-    let (cw, ch) = seated_box(Platform::Gba);
+    let (cw, ch) = seated_box(slot_ui::Mould::Gba);
     assert!(w < cw && h < ch, "a {w}x{h} alert on a {cw}x{ch} cart");
     assert!(h * 4 > ch, "a {h} px alert on a {ch} px cart is a speck");
 }
@@ -661,6 +679,10 @@ fn the_empty_slot_is_the_same_slot_the_chrome_draws() {
         behind: [None, None],
         slot: None,
         canvas: Canvas::FRAMED,
+        lift: 0.0,
+        lid: None,
+        light: false,
+        ejecting: false,
     }
     .draw(&mut seated);
 
@@ -899,6 +921,10 @@ fn a_clear_carts_board_goes_into_the_slot_and_comes_out_with_it() {
                 behind: [Some(interior), Some(board)],
                 slot: None,
                 canvas: Canvas::FRAMED,
+                lift: 0.0,
+                lid: None,
+                light: false,
+                ejecting: false,
             }
             .draw(&mut out);
             let at = |t: TexId| {

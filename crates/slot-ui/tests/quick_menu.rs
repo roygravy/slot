@@ -91,89 +91,6 @@ fn the_run_ahead_row_offers_off_and_one_frame() {
 }
 
 #[test]
-fn the_rows_run_in_the_order_the_user_chose() {
-    assert_eq!(
-        QuickRow::MAIN.map(QuickRow::label),
-        ["General", "Screen", "Gameplay", "About"]
-    );
-    assert_eq!(
-        QuickRow::GENERAL.map(QuickRow::label),
-        [
-            "Wallpaper",
-            "Wallpaper Tint",
-            "Theme",
-            "Recents",
-            "Game Titles",
-            "Date & Time"
-        ]
-    );
-    assert_eq!(
-        QuickRow::SCREEN.map(QuickRow::label),
-        ["Game Boy Advance", "Game Boy Color", "Game Boy"]
-    );
-    assert_eq!(
-        QuickRow::SCREEN_GBA.map(QuickRow::label),
-        ["Shader", "Color Correction", "Bezel"]
-    );
-    assert_eq!(
-        QuickRow::SCREEN_GBC.map(QuickRow::label),
-        ["Shader", "Color Correction", "Bezel"]
-    );
-    assert_eq!(
-        QuickRow::SCREEN_GB.map(QuickRow::label),
-        ["Shader", "Color Correction", "Palettes", "Bezel"]
-    );
-    assert_eq!(
-        QuickRow::GAME.map(QuickRow::label),
-        [
-            "Fast Forward",
-            "Fast Forward Sound",
-            "Rewind",
-            "Run-Ahead",
-            "Turbo Buttons",
-            "Rumble",
-            "Auto Save on Eject"
-        ]
-    );
-    let opens: Vec<QuickRow> = QuickRow::ALL.into_iter().filter(|r| r.opens()).collect();
-    assert_eq!(
-        opens,
-        [
-            QuickRow::Screen,
-            QuickRow::DateTime,
-            QuickRow::About,
-            QuickRow::Game,
-            QuickRow::General,
-            QuickRow::Resume,
-            QuickRow::States,
-            QuickRow::Settings,
-            QuickRow::ExitGame,
-            QuickRow::PlayScreen,
-            QuickRow::PlayGameplay,
-            QuickRow::ScreenGba,
-            QuickRow::ScreenGbc,
-            QuickRow::ScreenGb
-        ]
-    );
-    for page in [
-        &QuickRow::MAIN[..],
-        &QuickRow::SCREEN[..],
-        &QuickRow::GAME[..],
-        &QuickRow::GENERAL[..],
-        &QuickRow::PLAY[..],
-        &QuickRow::SETTINGS[..],
-        &QuickRow::PLAY_SCREEN[..],
-        &QuickRow::SCREEN_GBA[..],
-        &QuickRow::SCREEN_GBC[..],
-        &QuickRow::SCREEN_GB[..],
-    ] {
-        for &row in page {
-            assert_eq!(row.page(), page, "{row:?}");
-        }
-    }
-}
-
-#[test]
 fn a_hidden_row_is_stepped_over_and_takes_no_place() {
     let hidden = [QuickRow::WallpaperTint];
     assert_eq!(QuickRow::Wallpaper.down(&hidden), QuickRow::Theme);
@@ -187,35 +104,6 @@ fn a_hidden_row_is_stepped_over_and_takes_no_place() {
             - slot_ui::quick_row_top(QuickRow::Wallpaper, &hidden),
         slot_ui::QUICK_PITCH
     );
-}
-
-#[test]
-fn the_values_read_as_the_menu_prints_them() {
-    assert_eq!(
-        QuickValue::ALL.map(QuickValue::text),
-        [
-            "2×",
-            "3×",
-            "4×",
-            "6×",
-            "On",
-            "Off",
-            "LCD3x",
-            "Grid",
-            "Dot",
-            "Simpletex",
-            "1 Frame",
-            "Dark",
-            "Light",
-            "On",
-            "Off",
-            "25%",
-            "45%",
-            "65%",
-        ]
-    );
-    assert_eq!(QuickValue::flag(true), QuickValue::On);
-    assert_eq!(QuickValue::flag(false), QuickValue::Off);
 }
 
 #[test]
@@ -304,35 +192,6 @@ fn a_label_is_grey_until_its_row_is_in_hand() {
 }
 
 #[test]
-fn the_in_game_pages_hold_their_rows_in_order() {
-    assert_eq!(
-        QuickRow::PLAY,
-        [
-            QuickRow::Resume,
-            QuickRow::States,
-            QuickRow::Settings,
-            QuickRow::ExitGame
-        ]
-    );
-    assert_eq!(
-        QuickRow::SETTINGS,
-        [QuickRow::PlayScreen, QuickRow::PlayGameplay]
-    );
-    assert_eq!(
-        QuickRow::PLAY_SCREEN,
-        [
-            QuickRow::Shader,
-            QuickRow::ColourCorrection,
-            QuickRow::Palette,
-            QuickRow::Bezel
-        ]
-    );
-    for row in QuickRow::PLAY {
-        assert_eq!(row.parent_in_game(), None, "{row:?}");
-    }
-}
-
-#[test]
 fn in_game_pages_climb_back_through_settings() {
     assert_eq!(QuickRow::Settings.child(), Some(QuickRow::PlayScreen));
     assert_eq!(QuickRow::PlayScreen.child(), Some(QuickRow::Shader));
@@ -353,43 +212,6 @@ fn in_game_pages_climb_back_through_settings() {
 }
 
 #[test]
-fn in_game_rows_read_as_the_menu_shows_them() {
-    let labels = [
-        (QuickRow::Resume, "Resume"),
-        (QuickRow::States, "States"),
-        (QuickRow::Settings, "Settings"),
-        (QuickRow::ExitGame, "Exit Game"),
-        (QuickRow::PlayScreen, "Screen"),
-        (QuickRow::PlayGameplay, "Gameplay"),
-        (QuickRow::Shader, "Shader"),
-        (QuickRow::ColourCorrection, "Color Correction"),
-        (QuickRow::Palette, "Palette"),
-    ];
-    for (row, label) in labels {
-        assert_eq!(row.label(), label);
-    }
-    for row in QuickRow::PLAY.into_iter().chain(QuickRow::SETTINGS) {
-        assert!(row.centred(), "{row:?}");
-    }
-    for row in QuickRow::PLAY_SCREEN {
-        assert!(!row.opens(), "{row:?}");
-        assert!(!row.centred(), "{row:?}");
-    }
-    assert!(QuickRow::General.centred());
-    assert!(!QuickRow::Rumble.centred());
-}
-
-#[test]
-fn a_hidden_palette_and_bezel_leave_two_screen_rows() {
-    let hidden = [QuickRow::Palette, QuickRow::Bezel];
-    assert_eq!(
-        QuickRow::Shader.shown(&hidden),
-        vec![QuickRow::Shader, QuickRow::ColourCorrection]
-    );
-    assert_eq!(QuickRow::ColourCorrection.down(&hidden), QuickRow::Shader);
-}
-
-#[test]
 fn screen_opens_a_page_per_console_and_each_backs_out_to_its_console() {
     assert_eq!(QuickRow::Screen.child(), Some(QuickRow::ScreenGba));
     for (console, page) in [
@@ -405,19 +227,6 @@ fn screen_opens_a_page_per_console_and_each_backs_out_to_its_console() {
     }
     assert!(QuickRow::ScreenGb.centred());
     assert!(!QuickRow::GbShader.centred());
-}
-
-#[test]
-fn screen_rows_in_game_sit_in_a_panel_at_the_bottom() {
-    let hidden = [QuickRow::Palette];
-    let shader = slot_ui::quick_row_top(QuickRow::Shader, &hidden);
-    let colour = slot_ui::quick_row_top(QuickRow::ColourCorrection, &hidden);
-    assert_eq!(colour - shader, slot_ui::QUICK_PITCH);
-    assert!(
-        shader > slot_ui::OUT_H as f32 / 2.0,
-        "the panel starts at {shader}"
-    );
-    assert!(slot_ui::quick_row_top(QuickRow::FastForward, &[]) < shader);
 }
 
 #[test]

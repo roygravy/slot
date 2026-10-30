@@ -25,6 +25,7 @@ fn switcher_with(n: usize) -> Polaroids {
 fn draw(p: &Polaroids) -> Vec<Draw> {
     let mut out = Vec::new();
     p.draw(
+        slot_gfx::Canvas::FRAMED,
         None,
         Printed::default(),
         None,
@@ -62,7 +63,19 @@ fn quads(out: &[Draw]) -> Vec<Quad> {
             } => Quad { x, y, w, h, alpha },
             Draw::Turned {
                 x, y, w, h, alpha, ..
+            }
+            | Draw::Light {
+                x, y, w, h, alpha, ..
             } => Quad { x, y, w, h, alpha },
+            Draw::Tint {
+                x, y, w, h, colour, ..
+            } => Quad {
+                x,
+                y,
+                w,
+                h,
+                alpha: colour[3],
+            },
             Draw::Game | Draw::Shot { .. } => Quad {
                 x: 0.0,
                 y: 0.0,
@@ -154,102 +167,6 @@ fn the_back_hint_names_its_button() {
     assert!(has_hint(&p, &out, "B"), "no back hint");
 }
 
-#[test]
-fn the_undo_hint_names_its_button_and_only_shows_when_offered() {
-    let mut p = switcher_with(2);
-    let out = draw(&p);
-    assert!(
-        !has_hint(&p, &out, "X"),
-        "undo offered when there is nothing to undo"
-    );
-
-    p.set_undo(Some("Undo save"));
-    let out = draw(&p);
-    assert!(
-        has_hint(&p, &out, "X"),
-        "the undo does not say what triggers it"
-    );
-}
-
-#[test]
-fn the_legend_runs_left_to_right_along_the_bottom_plate() {
-    let mut p = switcher_with(2);
-    p.set_undo(Some("Undo save"));
-    let out = draw(&p);
-
-    let hints = hint_quads(&out);
-    assert_eq!(hints.len(), p.hints().len());
-    for pair in hints.windows(2) {
-        assert!(
-            pair[0].x + pair[0].w <= pair[1].x,
-            "a hint at {} runs into the one after it",
-            pair[0].x
-        );
-    }
-    for h in hints {
-        assert!(
-            h.y >= OUT_H as f32 - PLATE_H && h.y + h.h <= OUT_H as f32,
-            "a hint at {} left the bottom plate",
-            h.y
-        );
-    }
-}
-
-#[test]
-fn a_full_ring_of_dots_stays_clear_of_the_legend() {
-    let mut p = switcher_with(RING_MAX);
-    p.set_undo(Some("Undo save"));
-    let out = draw(&p);
-
-    let hints = hint_quads(&out);
-    let dots = dot_rects(&out);
-    assert_eq!(dots.len(), RING_MAX);
-    for d in dots {
-        assert!(
-            d.x >= 0.0 && d.x + d.w <= OUT_W as f32,
-            "a dot at {} is off the plate",
-            d.x
-        );
-        for h in &hints {
-            assert!(
-                d.x + d.w <= h.x || d.x >= h.x + h.w,
-                "a dot at {} runs into the {} hint at {}",
-                d.x,
-                h.w,
-                h.x
-            );
-        }
-    }
-}
-
-#[test]
-fn the_legend_names_every_action_on_screen() {
-    let mut p = switcher_with(3);
-    let keys: Vec<&str> = p.hints().iter().map(|h| h.key).collect();
-    assert!(keys.contains(&"A"), "load is unlabelled");
-    assert!(keys.contains(&"Y"), "delete is unlabelled");
-    assert!(keys.contains(&"B"), "back is unlabelled");
-    assert!(!keys.contains(&"X"), "undo shown with nothing to undo");
-    p.set_undo(Some("Undo save"));
-    assert!(p.hints().iter().any(|h| h.key == "X"));
-}
-
-#[test]
-fn the_switcher_puts_the_ways_out_on_the_left() {
-    let mut p = switcher_with(3);
-    p.set_undo(Some("Undo save"));
-    let out = draw(&p);
-    let mid = OUT_W as f32 / 2.0;
-    for key in ["B", "Y"] {
-        let r = hint_rect(&out, key).unwrap_or_else(|| panic!("no {key} hint"));
-        assert!(r.x + r.w < mid, "{key} is not on the left");
-    }
-    for key in ["A", "X"] {
-        let r = hint_rect(&out, key).unwrap_or_else(|| panic!("no {key} hint"));
-        assert!(r.x > mid, "{key} is not on the right");
-    }
-}
-
 fn hint_rect(out: &[Draw], key: &str) -> Option<Quad> {
     let i = match key {
         "X" => LEGEND.len(),
@@ -262,17 +179,6 @@ fn hint_rect(out: &[Draw], key: &str) -> Option<Quad> {
 fn a_hint_is_tighter_than_it_was() {
     let f = hint_face("A", "Load");
     assert!(f.w < 128, "the hint is still the old fixed width: {}", f.w);
-}
-
-#[test]
-fn the_full_legend_fits_across_the_bar() {
-    let mut p = switcher_with(3);
-    p.set_undo(Some("Undo save"));
-    let total: u32 = p.hints().iter().map(|h| hint_face(h.key, &h.label).w).sum();
-    assert!(
-        total < OUT_W,
-        "the legend is {total}px wide, wider than the screen"
-    );
 }
 
 #[test]

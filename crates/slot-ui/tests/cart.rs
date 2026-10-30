@@ -1,7 +1,7 @@
-use slot_store::{scan, Platform};
+use slot_store::scan;
 use slot_ui::{
     cart_face, clean_label, foot_y, gb_label_panel, gb_silhouette, label_colour, label_panel,
-    label_text, rest_y, seated_box, shell_for, silhouette, Finish, GbShell, CART_H, CART_W,
+    label_text, rest_y, seated_box, shell_for, silhouette, Finish, GbShell, Mould, CART_H, CART_W,
     GBC_LABEL_H, GBC_LABEL_W, GBC_LABEL_X, GBC_LABEL_Y, GB_CART_H, GB_CART_W, GB_LABEL_H,
     GB_LABEL_W, GB_LABEL_X, GB_LABEL_Y, LABEL_H, LABEL_W, LABEL_X, LABEL_Y, MOUTH_H, OUT_H,
     PLATE_H,
@@ -315,14 +315,14 @@ fn a_rom_with_no_header_title_is_labelled_from_its_stem() {
 
 #[test]
 fn the_game_boy_pak_body_has_the_scanned_aspect() {
-    let (sw, _) = seated_box(Platform::Gba);
+    let (sw, _) = seated_box(Mould::Gba);
     let body = |w: u32, h: u32| (w as f64 * 227.0 / 240.0) / h as f64;
     assert!(
         (body(GB_CART_W, GB_CART_H) - 0.877).abs() < 0.01,
         "the pak body is {:.3}:1, not a real pak's 0.877",
         body(GB_CART_W, GB_CART_H)
     );
-    let (gw, gh) = seated_box(Platform::Gb);
+    let (gw, gh) = seated_box(Mould::Notched);
     assert_eq!(
         gw, sw,
         "both paks are 57 mm wide, so they seat at one width"
@@ -640,7 +640,7 @@ fn a_game_boy_color_title_sits_in_its_own_well_not_the_game_boys() {
 
 #[test]
 fn the_cart_shadow_is_the_cart_in_black() {
-    let s = slot_ui::cart_shadow();
+    let s = slot_ui::cart_shadow(Mould::Gba);
     assert_eq!((s.w, s.h), (CART_W, CART_H));
     let mask = silhouette(CART_W, CART_H);
     for (px, cover) in s.rgba.chunks_exact(4).zip(&mask) {
@@ -656,7 +656,10 @@ fn the_cart_shadow_is_the_cart_in_black() {
 #[test]
 fn each_game_boy_shell_gets_a_black_shadow_of_its_own_exact_outline() {
     for shell in [GbShell::Notched, GbShell::Rounded] {
-        let s = slot_ui::gb_cart_shadow(shell);
+        let s = slot_ui::cart_shadow(match shell {
+            GbShell::Notched => Mould::Notched,
+            GbShell::Rounded => Mould::Rounded,
+        });
         assert_eq!((s.w, s.h), (GB_CART_W, GB_CART_H));
         let own = gb_silhouette(shell, GB_CART_W, GB_CART_H);
         for (i, px) in s.rgba.chunks_exact(4).enumerate() {
@@ -756,7 +759,7 @@ fn the_label_sits_inside_the_bitmap_and_the_corner_stays_clear() {
 
 #[test]
 fn a_gba_cart_is_backed_by_the_whole_picker_board() {
-    let back = slot_ui::cart_backing(None);
+    let back = slot_ui::cart_backing(Mould::Gba);
     assert_eq!((back.w, back.h), (CART_W, CART_H));
     assert_eq!((back.w, back.h), (slot_ui::BOARD_W, slot_ui::BOARD_H));
     let alpha = |x: u32, y: u32| back.rgba[((y * back.w + x) * 4) as usize + 3];
@@ -769,7 +772,7 @@ fn a_gba_cart_is_backed_by_the_whole_picker_board() {
         0,
         "the board is not a bare circuit board: its corner is painted"
     );
-    let pak = slot_ui::cart_backing(Some(GbShell::Notched));
+    let pak = slot_ui::cart_backing(Mould::Notched);
     assert_eq!((pak.w, pak.h), (GB_CART_W, GB_CART_H));
     let mid = pak.rgba[(((pak.h / 2) * pak.w + pak.w / 2) * 4 + 3) as usize];
     assert!(mid > 200, "the pak board is empty in the middle");
