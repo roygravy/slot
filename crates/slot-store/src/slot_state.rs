@@ -410,10 +410,10 @@ impl TvCable {
         }
     }
 
-    /// RF is no longer offered: a card that picked it gets composite, its nearest.
+    /// RGB is no longer offered: a card that picked it gets S-Video, its nearest.
     pub fn parse(name: &str) -> Option<TvCable> {
-        if name == "rf" {
-            return Some(TvCable::Composite);
+        if name == "rgb" {
+            return Some(TvCable::SVideo);
         }
         TvCable::ALL.into_iter().find(|c| c.name() == name)
     }

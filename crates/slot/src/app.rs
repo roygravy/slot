@@ -2590,8 +2590,8 @@ impl App {
     fn change_tv_setting(&mut self, row: QuickRow, right: bool) -> bool {
         let s = &mut self.state;
         match row {
-            QuickRow::NesCable => s.tv_cable_nes = step_cable(s.tv_cable_nes, right),
-            QuickRow::SnesCable => s.tv_cable_snes = step_cable(s.tv_cable_snes, right),
+            QuickRow::NesCable => s.tv_cable_nes = step_cable(s.tv_cable_nes, right, false),
+            QuickRow::SnesCable => s.tv_cable_snes = step_cable(s.tv_cable_snes, right, true),
             QuickRow::NesColors => {
                 let all = NesColors::ALL;
                 let at = all.iter().position(|c| *c == s.nes_colors).unwrap_or(0);
@@ -7633,12 +7633,12 @@ fn cable_value(cable: TvCable) -> QuickValue {
     }
 }
 
-/// The next cable along. The aerial's RF signal is not offered (Roy): off, composite,
-/// S-Video and RGB.
-fn step_cable(cable: TvCable, right: bool) -> TvCable {
+/// The next cable along: the SNES's core also draws an aerial's RF signal, the NES's does not.
+/// RGB is not offered (Roy).
+fn step_cable(cable: TvCable, right: bool, rf: bool) -> TvCable {
     let all: Vec<TvCable> = TvCable::ALL
         .into_iter()
-        .filter(|c| *c != TvCable::Rf)
+        .filter(|c| *c != TvCable::Rgb && (rf || *c != TvCable::Rf))
         .collect();
     let at = all.iter().position(|c| *c == cable).unwrap_or(0);
     let n = all.len();
