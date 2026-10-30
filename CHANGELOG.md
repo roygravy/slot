@@ -1,5 +1,24 @@
 # Changelog
 
+## slot. x GRAVY v1.1.1
+
+Everything since slot. x GRAVY v1.1.
+
+### New
+
+- **Wi-Fi menu**: join a network from the console itself. **Add Network** scans for networks nearby and asks the password on the on-screen keyboard, **My Networks** lists the ones you saved (Y forgets one), and **WPS** joins at the press of your router's button. No more editing `Config/wifi.toml` by hand.
+- **Time Zone** opens a list of cities, and **Date & Time** is set on scroll wheels, the time first, then the date.
+- **Three screen sizes** for Game Boy and Game Boy Color: L1 makes the picture one size bigger, R1 one size smaller: the game's own size at a whole scale, as tall as the screen in its own shape, and full screen. The size is kept between games.
+- The **Super Game Boy**'s slot lies deeper, darker under a soft shade from its rim, on the shelf and in the SNES slot.
+- The **Super Game Boy 2** zooms in and out smoothly: its clear cart and the band it becomes are the same see-through teal, and the one fades into the other with the camera standing still.
+- **Screen cables** for NES and SNES: Composite, S-Video and, on the SNES, RF. RGB is gone; a game set to it plays over S-Video.
+- Cheat names are drawn when the in-game menu opens, not as the game starts.
+
+### Fixed
+
+- A long network name is cut short with "…" instead of running into CONNECTED TO.
+- A menu open as Light Sleep comes on is still open when the console wakes.
+
 ## slot. x GRAVY v1.1
 
 Everything since slot. x GRAVY v1.0.2.
@@ -14,9 +33,6 @@ Everything since slot. x GRAVY v1.0.2.
 - **Highlight** behind the cart, next to Spotlight, Glow and Star, for Favorites.
 - **Label search**: Y in the cartridge studio searches for a label and lets you pick another, Europe first, then USA, then Japan. The on-screen keyboard has accents.
 - Your own wallpaper gets black menus, whatever the Slot Color.
-- **Three screen sizes** for Game Boy and Game Boy Color: L1 makes the picture one size bigger, R1 one size smaller: the game's own size at a whole scale, as tall as the screen in its own shape, and full screen. The size is kept between games.
-- The **Super Game Boy**'s slot lies deeper, darker under a soft shade from its rim, on the shelf and in the SNES slot.
-- Cheat names are drawn when the in-game menu opens, not as the game starts.
 - **3:2 screens** (RG34XX SP, 720x480): the shelf and menus span the whole panel, and full screen GB/GBC, GBA, save states and screenshots fill it without black bars. The GBA LCD filter keeps to the panel's own pixels.
 - **Home Wi-Fi** (ported from pvaibhav/slot): join your home network from Settings -> General -> Home Wi-Fi. Networks are listed in `Config/wifi.toml`.
 - **Network** has its own row in the menu, with Home Wi-Fi on/off and the network you are connected to.
