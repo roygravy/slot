@@ -75,13 +75,31 @@ impl Interface {
         .unwrap_or_default()
     }
     pub fn start(&mut self, n: &Network, freq: Option<u32>, ap: bool) -> Result<(), &'static str> {
+        let text = config::supplicant(n, &self.ctrl(), freq, ap);
+        self.start_with(&text)
+    }
+    /// The supplicant on this interface with no network of its own, saving what WPS gives it.
+    pub fn start_wps(&mut self) -> Result<(), &'static str> {
+        let text = format!("ctrl_interface={}\nupdate_config=1\n", self.ctrl().display());
+        self.start_with(&text)
+    }
+    pub fn conf(&self) -> PathBuf {
+        self.run.join(format!("{}.conf", self.name))
+    }
+    /// One `wpa_cli` command against this interface's supplicant.
+    pub fn cli(&self, args: &[&str]) -> Result<String, &'static str> {
+        let ctrl = self.ctrl();
+        let mut all = vec!["-p", ctrl.to_str().unwrap(), "-i", self.name];
+        all.extend_from_slice(args);
+        output("wpa_cli", &all)
+    }
+    fn start_with(&mut self, text: &str) -> Result<(), &'static str> {
         self.stop();
         let ctrl = self.ctrl();
         fs::create_dir_all(&ctrl).map_err(|_| "RUNTIME_DIRECTORY")?;
         let _ = fs::remove_file(ctrl.join(self.name));
-        let conf = self.run.join(format!("{}.conf", self.name));
-        system::private_write(&conf, &config::supplicant(n, &ctrl, freq, ap))
-            .map_err(|_| "RUNTIME_CONFIG")?;
+        let conf = self.conf();
+        system::private_write(&conf, text).map_err(|_| "RUNTIME_CONFIG")?;
         output("ip", &["link", "set", self.name, "up"])?;
         self.wpa = Some(Process::spawn(
             "wpa_supplicant",
@@ -250,6 +268,8 @@ pub struct Home {
     pub interface: Interface,
     pub enabled: bool,
     pub error: &'static str,
+    /// WPS has the radio: the profiles wait.
+    pub held: bool,
     profiles: Vec<Network>,
     next: usize,
     deadline: Instant,
@@ -266,6 +286,7 @@ impl Home {
             interface,
             enabled: false,
             error: "",
+            held: false,
             profiles: Vec::new(),
             next: 0,
             deadline: Instant::now() + Duration::from_secs(25),
@@ -342,7 +363,7 @@ impl Home {
         }
     }
     pub fn tick(&mut self, root: &Path, link_busy: bool, link_freq: Option<u32>, ours: &[u32]) {
-        if !self.enabled || self.asleep {
+        if !self.enabled || self.asleep || self.held {
             return;
         }
         let now = Instant::now();

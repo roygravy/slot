@@ -1528,7 +1528,8 @@ fn sync_clock(app: &mut App, compositor: &mut Compositor, clocks: &mut Clocks) {
         clocks.shown.clear();
         clocks.battery.clear();
     }
-    let picked = app.picker().map(|p| p.text());
+    // The wheels show one page at a time: moving onto the other page draws them again.
+    let picked = app.picker().map(|p| format!("{} {:?}", p.text(), p.cursor()));
     if picked != clocks.picked {
         clocks.picked = picked;
         if let (Some(face), Some(hint)) = (app.picker().map(|p| p.face()), clocks.hint) {
@@ -2217,15 +2218,16 @@ struct SearchTextures {
     heading: Option<TexId>,
     typed: Option<TexId>,
     status: Option<TexId>,
+    note: Option<TexId>,
     rows: Vec<(Option<TexId>, Option<TexId>)>,
 }
 
 fn sync_label_search(app: &mut App, compositor: &mut Compositor, state: &mut SearchTextures) {
-    if !app.label_search_open() {
+    if !app.search_screen_open() {
         return;
     }
     if !app.has_search_faces() {
-        let faces = slot_ui::KeyboardFaces::build()
+        let faces = slot_ui::KeyboardFaces::build_for(app.search_purpose())
             .map(|f| (compositor.create_texture(f.w, f.h, &f.rgba), f.w, f.h));
         app.set_search_faces(faces);
     }
@@ -2246,6 +2248,9 @@ fn sync_label_search(app: &mut App, compositor: &mut Compositor, state: &mut Sea
     let status = words
         .status
         .map(|t| up(&mut state.status, slot_ui::search_status_face(&t)));
+    let note = words
+        .note
+        .map(|t| up(&mut state.note, slot_ui::search_heading_face(&t)));
     if state.rows.len() < words.rows.len() {
         state.rows.resize(words.rows.len(), (None, None));
     }
@@ -2254,7 +2259,7 @@ fn sync_label_search(app: &mut App, compositor: &mut Compositor, state: &mut Sea
         .iter()
         .zip(state.rows.iter_mut())
         .map(|((name, platform), (a, b))| {
-            let (n, p) = slot_ui::search_row_faces(name, platform);
+            let (n, p) = slot_ui::list_row_faces(name, platform, words.upper);
             (up(a, n), up(b, p))
         })
         .collect();
@@ -2265,6 +2270,7 @@ fn sync_label_search(app: &mut App, compositor: &mut Compositor, state: &mut Sea
             typed,
             status,
             rows,
+            note,
         },
     );
 }

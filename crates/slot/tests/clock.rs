@@ -231,9 +231,8 @@ fn confirming_the_clock_untouched_leaves_it_where_it_is() {
 fn changing_the_minute_moves_the_clock_by_exactly_that_minute() {
     for way in [Way::FirstBoot, Way::QuickMenu] {
         let (_d, mut a, clock) = clock_screen(way);
-        for _ in 0..4 {
-            a.apply(Action::GbaDown(Btn::Right));
-        }
+        // The time's wheels come first: one step right is the minute.
+        a.apply(Action::GbaDown(Btn::Right));
         assert_eq!(a.picker().expect("on the clock").cursor(), Field::Minute);
         a.apply(Action::GbaDown(Btn::Up));
         clock.advance(OPEN_FOR);

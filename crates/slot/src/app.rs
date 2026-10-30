@@ -26,7 +26,8 @@ use crate::audio::Sfx;
 use crate::core_picker::{Chip, CorePicker, Outcome, Press};
 use crate::label_search::{self, LabelSearch};
 use crate::link_kind::{link_carried, link_kind, serial_option, LinkKind};
-use crate::link_radio::{radio_jobs, LinkRole, RadioJob, RadioJobs};
+use crate::link_radio::{radio_jobs, LinkRole, RadioJob, RadioJobs, WifiAnswer, WifiJob};
+use crate::list_page::{self, ListPage};
 use crate::link_screen::LinkSprites;
 use crate::link_start::{link_port, LinkFail, LinkProgress, LinkStarter, LinkStep};
 use crate::loading_mark::LoadingMark;
@@ -341,6 +342,14 @@ pub struct App {
     /// A search asked for: its number, the words and the shelf, for the frontend to make.
     search_ask: Option<(u64, String, Platform)>,
     search_faces: Option<slot_ui::KeyboardFaces<slot_ui::Up>>,
+    /// The menu's Wi-Fi and time zone lists, over the menu while one is open.
+    list_page: Option<ListPage>,
+    /// The keyboard and legends the list pages use: "join" on the go key.
+    list_faces: Option<slot_ui::KeyboardFaces<slot_ui::Up>>,
+    /// A network just added: its name and when to give up waiting for it.
+    joining: Option<(String, Millis)>,
+    /// WPS is asked how it is going once a second.
+    wps_poll_at: Millis,
     /// The search's words as faces, and the search's rev they were made for.
     search_texts: Option<(u64, slot_ui::SearchTexts<slot_ui::Up>)>,
     /// The versions found: where each is kept while it is looked at, its thumbnail and its
@@ -564,6 +573,10 @@ impl App {
             label_search: None,
             search_ask: None,
             search_faces: None,
+            list_page: None,
+            list_faces: None,
+            joining: None,
+            wps_poll_at: 0,
             search_texts: None,
             version_paths: Vec::new(),
             version_thumbs: Vec::new(),
@@ -1249,7 +1262,10 @@ impl App {
                 slot_store::Appearance::Light => QuickValue::Light,
                 slot_store::Appearance::Originals => QuickValue::Originals,
             }),
-            QuickRow::DateTime
+            QuickRow::AddNetwork
+            | QuickRow::SavedNetworks
+            | QuickRow::Wps
+            | QuickRow::DateTime
             | QuickRow::TimeZone
             | QuickRow::About
             | QuickRow::Screenshots
@@ -2884,6 +2900,9 @@ impl App {
                 return self.in_game_menu_input(row, action);
             }
         }
+        if self.list_page.as_ref().is_some_and(|p| !p.closing()) {
+            return self.list_page_input(action);
+        }
         let now = self.now();
         match self.phase {
             Phase::Shelf => match action {
@@ -3236,6 +3255,8 @@ impl App {
                     true,
                 );
             }
+            QuickRow::AddNetwork | QuickRow::SavedNetworks | QuickRow::Wps => self.wifi_page(row),
+            QuickRow::TimeZone => self.open_zones(),
             QuickRow::About => self.phase = Phase::About,
             QuickRow::Screenshots => self.open_shots(false),
             QuickRow::Buttons => self.phase = Phase::Buttons { page: 0 },
@@ -3267,7 +3288,6 @@ impl App {
             | QuickRow::HomeWifi
             | QuickRow::ConnectedTo
             | QuickRow::AutoTime
-            | QuickRow::TimeZone
             | QuickRow::Clock24
             | QuickRow::CheatIcon
             | QuickRow::GbcBlackBorder
@@ -3485,6 +3505,9 @@ impl App {
             | QuickRow::ShowTitles
             | QuickRow::DateTime
             | QuickRow::TimeZone
+            | QuickRow::AddNetwork
+            | QuickRow::SavedNetworks
+            | QuickRow::Wps
             | QuickRow::About
             | QuickRow::SgbBorder
             | QuickRow::Screenshots
@@ -3939,6 +3962,11 @@ impl App {
         if self.label_search.as_ref().is_some_and(|s| s.finished(now)) {
             self.label_search = None;
         }
+        if self.list_page.as_ref().is_some_and(|p| p.finished(now)) {
+            self.list_page = None;
+            self.search_texts = None;
+        }
+        self.wifi_timers(now);
         if !self.on_shelf() {
             self.shelf_mut().release_hold();
         }
@@ -4839,6 +4867,9 @@ impl App {
         }
         if let Some(search) = &self.label_search {
             self.draw_label_search(search, out);
+        }
+        if let Some(page) = &self.list_page {
+            self.draw_list_page(page, out);
         }
         if let Some(menu) = self.game_menu {
             self.draw_game_menu(menu, out);
@@ -5946,15 +5977,55 @@ impl App {
     }
 
     pub fn has_search_faces(&self) -> bool {
-        self.search_faces.is_some()
+        match self.search_purpose() {
+            slot_ui::Purpose::Search => self.search_faces.is_some(),
+            slot_ui::Purpose::Password => self.list_faces.is_some(),
+        }
+    }
+
+    /// The keyboard's faces for the screen that is open: the label search's, or the lists'.
+    pub fn search_purpose(&self) -> slot_ui::Purpose {
+        match self.list_page {
+            Some(_) => slot_ui::Purpose::Password,
+            None => slot_ui::Purpose::Search,
+        }
+    }
+
+    /// A screen on the search's keyboard and list is open.
+    pub fn search_screen_open(&self) -> bool {
+        self.label_search.is_some() || self.list_page.is_some()
     }
 
     pub fn set_search_faces(&mut self, faces: slot_ui::KeyboardFaces<slot_ui::Up>) {
-        self.search_faces = Some(faces);
+        match self.search_purpose() {
+            slot_ui::Purpose::Search => self.search_faces = Some(faces),
+            slot_ui::Purpose::Password => self.list_faces = Some(faces),
+        }
     }
 
     /// The search's words, and the rev they belong to, when its faces were made for another.
     pub fn search_words(&self) -> Option<(u64, SearchWords)> {
+        if let Some(page) = &self.list_page {
+            if self
+                .search_texts
+                .as_ref()
+                .is_some_and(|(rev, _)| *rev == page.rev())
+            {
+                return None;
+            }
+            let w = page.words();
+            return Some((
+                page.rev(),
+                SearchWords {
+                    heading: w.heading,
+                    typed: w.typed,
+                    status: w.status,
+                    rows: w.rows,
+                    note: w.note,
+                    upper: w.upper,
+                },
+            ));
+        }
         let search = self.label_search.as_ref()?;
         if self
             .search_texts
@@ -5983,6 +6054,8 @@ impl App {
                     .iter()
                     .map(|g| (g.name.clone(), g.platform.clone()))
                     .collect(),
+                note: None,
+                upper: true,
             },
         ))
     }
@@ -6005,8 +6078,211 @@ impl App {
             light,
             screen: search.screen(now),
             openness: search.openness(now),
+            legend: None,
         };
         slot_ui::draw_label_search(self.canvas(), &view, out);
+    }
+
+    fn draw_list_page(&self, page: &ListPage, out: &mut Vec<Draw>) {
+        let (Some(faces), Some((_, texts))) = (&self.list_faces, &self.search_texts) else {
+            return;
+        };
+        let light = self.light_ground();
+        let now = self.now();
+        let view = slot_ui::SearchView {
+            faces,
+            texts,
+            ink: slot_ui::theme::ink(light),
+            ground: slot_ui::theme::menu_flat(light),
+            light,
+            screen: page.screen(now),
+            openness: page.openness(now),
+            legend: page
+                .legend()
+                .and_then(|l| faces.extra.get(l as usize))
+                .map(Vec::as_slice),
+        };
+        slot_ui::draw_label_search(self.canvas(), &view, out);
+    }
+
+    fn open_list_page(&mut self, page: ListPage) {
+        self.search_texts = None;
+        self.list_page = Some(page);
+    }
+
+    /// Add Network, My Networks and WPS want Home Wi-Fi on: it is switched on for them.
+    fn wifi_page(&mut self, row: QuickRow) {
+        if !self.state.home_wifi_enabled {
+            self.state.home_wifi_enabled = true;
+            self.radio.ask(RadioJob::Home(true));
+            self.radio.ask(RadioJob::Time(self.state.auto_time));
+            self.persist();
+        }
+        let now = self.now();
+        match row {
+            QuickRow::AddNetwork => {
+                self.radio.wifi(WifiJob::Scan);
+                self.open_list_page(ListPage::nearby(now));
+            }
+            QuickRow::SavedNetworks => {
+                let names = self
+                    .root
+                    .as_deref()
+                    .map(slot_store::wifi::read)
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|n| n.ssid)
+                    .collect();
+                let current = self.radio.home_ssid();
+                self.open_list_page(ListPage::saved(names, current.as_deref(), now));
+            }
+            _ => {
+                self.radio.wifi(WifiJob::WpsStart);
+                self.wps_poll_at = now + 1000;
+                self.open_list_page(ListPage::wps(now));
+            }
+        }
+    }
+
+    fn open_zones(&mut self) {
+        let utc = self.utc_secs();
+        let here = self.time_zone().city();
+        let rows: Vec<(String, String)> = slot_store::ZONES
+            .iter()
+            .map(|z| {
+                let off = slot_ui::TimeZone::City(z).offset_at(utc);
+                let sign = if off < 0 { "−" } else { "+" };
+                let text = match off {
+                    0 => "UTC".to_owned(),
+                    m if m % 60 == 0 => format!("UTC{sign}{}", m.abs() / 60),
+                    m => format!("UTC{sign}{}:{:02}", m.abs() / 60, m.abs() % 60),
+                };
+                (z.name.to_owned(), text)
+            })
+            .collect();
+        let at = slot_store::ZONES
+            .iter()
+            .position(|z| Some(z.name) == here)
+            .unwrap_or(9);
+        let now = self.now();
+        self.open_list_page(ListPage::zones(rows, at, now));
+    }
+
+    fn list_page_input(&mut self, action: Action) {
+        use label_search::Press;
+        let press = match action {
+            Action::GbaDown(Btn::Left) | Action::ShelfLeft => Press::Left,
+            Action::GbaDown(Btn::Right) | Action::ShelfRight => Press::Right,
+            Action::GbaDown(Btn::Up) => Press::Up,
+            Action::GbaDown(Btn::Down) => Press::Down,
+            Action::GbaDown(Btn::A) => Press::Choose,
+            Action::GbaDown(Btn::B) => Press::Back,
+            Action::GbaDown(Btn::X) => Press::Clear,
+            Action::GbaDown(Btn::Y) => Press::Space,
+            Action::GbaDown(Btn::Select) => Press::Shift,
+            Action::GbaDown(Btn::Start) => Press::Search,
+            Action::QuickMenu => Press::Exit,
+            _ => return,
+        };
+        let now = self.now();
+        let Some(page) = &mut self.list_page else {
+            return;
+        };
+        match page.press(press, now) {
+            list_page::Step::None | list_page::Step::Close => {}
+            list_page::Step::Scan => self.radio.wifi(WifiJob::Scan),
+            list_page::Step::WpsStop => self.radio.wifi(WifiJob::WpsStop),
+            list_page::Step::Zone(city) => {
+                self.state.time_zone = slot_store::zone_named(&city).map(|z| z.name);
+                self.persist();
+            }
+            list_page::Step::Forget(ssid) => {
+                if let Some(root) = self.root.clone() {
+                    match slot_store::wifi::forget(&root, &ssid) {
+                        Ok(()) => {
+                            self.radio.wifi(WifiJob::Reload);
+                            self.hud.toast(Toast::WifiForgotten, now);
+                        }
+                        Err(e) => eprintln!("slot: wifi forget: {e}"),
+                    }
+                }
+            }
+            list_page::Step::Join { ssid, password } => {
+                if password
+                    .as_deref()
+                    .is_some_and(|p| !slot_store::wifi::password_ok(p))
+                {
+                    self.hud.toast(Toast::PasswordLength, now);
+                    return;
+                }
+                let Some(root) = self.root.clone() else {
+                    return;
+                };
+                let saved = slot_store::wifi::Saved {
+                    ssid: ssid.clone(),
+                    password,
+                };
+                match slot_store::wifi::add(&root, saved) {
+                    Ok(()) => {
+                        self.radio.wifi(WifiJob::Reload);
+                        self.joining = Some((ssid, now + 30_000));
+                    }
+                    Err(e) => {
+                        eprintln!("slot: wifi add: {e}");
+                        self.hud.toast(Toast::CardUnwritable, now);
+                    }
+                }
+            }
+        }
+    }
+
+    /// The service's answers, WPS asked after, and a network just added watched until it is
+    /// joined or given up on.
+    fn wifi_timers(&mut self, now: Millis) {
+        while let Some(answer) = self.radio.wifi_answer() {
+            let current = self.radio.home_ssid();
+            match answer {
+                WifiAnswer::Scanned(seen) => {
+                    if let Some(p) = &mut self.list_page {
+                        p.scanned(seen, current.as_deref());
+                    }
+                }
+                WifiAnswer::WpsWaiting(secs) => {
+                    if let Some(p) = &mut self.list_page {
+                        p.wps_waiting(secs);
+                    }
+                }
+                WifiAnswer::WpsDone(ssid) => {
+                    if let Some(p) = &mut self.list_page {
+                        p.close(now);
+                    }
+                    self.joining = Some((ssid, now + 30_000));
+                }
+                WifiAnswer::WpsFailed => {
+                    if let Some(p) = &mut self.list_page {
+                        p.close(now);
+                    }
+                    self.hud.toast(Toast::WpsFailed, now);
+                }
+            }
+        }
+        let wps_open = self
+            .list_page
+            .as_ref()
+            .is_some_and(|p| p.kind == list_page::Kind::Wps && !p.closing());
+        if wps_open && now >= self.wps_poll_at {
+            self.wps_poll_at = now + 1000;
+            self.radio.wifi(WifiJob::WpsPoll);
+        }
+        if let Some((ssid, until)) = &self.joining {
+            if self.radio.home_ssid().as_deref() == Some(ssid.as_str()) {
+                self.joining = None;
+                self.hud.toast(Toast::WifiConnected, now);
+            } else if now >= *until {
+                self.joining = None;
+                self.hud.toast(Toast::WifiFailed, now);
+            }
+        }
     }
 
     /// The versions the label tab asked for came back, each with its thumbnail and caption
@@ -7373,6 +7649,10 @@ pub struct SearchWords {
     pub status: Option<String>,
     /// Each game found: its name and its platform.
     pub rows: Vec<(String, String)>,
+    /// Under the status on a message screen.
+    pub note: Option<String>,
+    /// False keeps a network's name as it is written.
+    pub upper: bool,
 }
 
 /// A draw seen through a camera that scales by `k` and then shifts by (`dx`, `dy`), at `alpha`.

@@ -72,6 +72,9 @@ pub enum QuickRow {
     HomeWifi,
     Network,
     ConnectedTo,
+    AddNetwork,
+    SavedNetworks,
+    Wps,
     AutoTime,
     TimeZone,
     Clock24,
@@ -95,7 +98,7 @@ pub enum QuickRow {
 }
 
 impl QuickRow {
-    pub const ALL: [QuickRow; 84] = [
+    pub const ALL: [QuickRow; 87] = [
         QuickRow::FastForward,
         QuickRow::FastForwardSound,
         QuickRow::Screen,
@@ -160,6 +163,9 @@ impl QuickRow {
         QuickRow::HomeWifi,
         QuickRow::Network,
         QuickRow::ConnectedTo,
+        QuickRow::AddNetwork,
+        QuickRow::SavedNetworks,
+        QuickRow::Wps,
         QuickRow::AutoTime,
         QuickRow::TimeZone,
         QuickRow::Clock24,
@@ -212,7 +218,13 @@ impl QuickRow {
     ];
 
     /// Home Wi-Fi and what it is connected to.
-    pub const NETWORK: [QuickRow; 2] = [QuickRow::HomeWifi, QuickRow::ConnectedTo];
+    pub const NETWORK: [QuickRow; 5] = [
+        QuickRow::HomeWifi,
+        QuickRow::ConnectedTo,
+        QuickRow::AddNetwork,
+        QuickRow::SavedNetworks,
+        QuickRow::Wps,
+    ];
 
     /// Every screen setting belongs to one system: nothing here reaches across all three.
     pub const SCREEN: [QuickRow; 5] = [
@@ -356,7 +368,11 @@ impl QuickRow {
             | QuickRow::RememberPosition
             | QuickRow::ResumeGame
             | QuickRow::BootPicture => &QuickRow::GENERAL,
-            QuickRow::HomeWifi | QuickRow::ConnectedTo => &QuickRow::NETWORK,
+            QuickRow::HomeWifi
+            | QuickRow::ConnectedTo
+            | QuickRow::AddNetwork
+            | QuickRow::SavedNetworks
+            | QuickRow::Wps => &QuickRow::NETWORK,
             QuickRow::Resume
             | QuickRow::States
             | QuickRow::Cheats
@@ -516,6 +532,9 @@ impl QuickRow {
             QuickRow::HomeWifi => "Home Wi-Fi",
             QuickRow::Network => "Network",
             QuickRow::ConnectedTo => "Connected To",
+            QuickRow::AddNetwork => "Add Network",
+            QuickRow::SavedNetworks => "My Networks",
+            QuickRow::Wps => "WPS",
             QuickRow::ScreenNes => "NES",
             QuickRow::ScreenSnes => "Super Nintendo",
             QuickRow::NesCable | QuickRow::SnesCable | QuickRow::Cable => "Cable",
@@ -593,9 +612,12 @@ impl QuickRow {
             QuickRow::ShowTitles => "Show the selected game's name under the shelf.",
             QuickRow::DateTime => "Set the date and time yourself.",
             QuickRow::AutoTime => "Set by the internet over Home Wi-Fi.",
-            QuickRow::TimeZone => "Your city, for summer and winter time.",
+            QuickRow::TimeZone => "Your city, for summer and winter time. A shows them all.",
             QuickRow::Clock24 => "Off shows the time as 6:00 PM.",
-            QuickRow::HomeWifi => "Join the networks in Config/wifi.toml. Sets the clock too.",
+            QuickRow::HomeWifi => "Join your saved networks. Sets the clock too.",
+            QuickRow::AddNetwork => "Find a network nearby and type its password.",
+            QuickRow::SavedNetworks => "The device joins these by itself. Y forgets one.",
+            QuickRow::Wps => "Join by pressing the WPS button on your router.",
             QuickRow::Network => "Home Wi-Fi and the network you are on.",
             QuickRow::ConnectedTo => "The home network this device is on now.",
             QuickRow::AutoSleep => {
@@ -632,6 +654,9 @@ impl QuickRow {
         matches!(
             self,
             QuickRow::DateTime
+                | QuickRow::AddNetwork
+                | QuickRow::SavedNetworks
+                | QuickRow::Wps
                 | QuickRow::About
                 | QuickRow::Screenshots
                 | QuickRow::Screen

@@ -124,6 +124,15 @@ impl LabelSearch {
         }
     }
 
+    /// The keyboard alone, for a password: nothing typed, on the first letter.
+    pub fn password(now: Millis) -> Self {
+        let mut k = LabelSearch::open(PathBuf::new(), Platform::Gba, "", now);
+        k.text.clear();
+        k.row = 0;
+        k.col = 0;
+        k
+    }
+
     pub fn text(&self) -> &str {
         &self.text
     }

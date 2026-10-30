@@ -82,7 +82,8 @@ pub use icon::{
     star_mark_face, warm_fonts, Badge, Icon,
 };
 pub use keyboard::{
-    accents, draw_label_search, key_rows, search_heading_face, search_row_faces,
+    accents, draw_label_search, key_rows, list_row_faces, search_heading_face, search_row_faces,
+    Purpose, WifiLegend,
     search_status_face, search_typed_face, Cap, Key, KeyboardFaces, SearchScreen, SearchTexts,
     SearchView, Shape, Up,
 };

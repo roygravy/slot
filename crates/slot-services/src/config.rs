@@ -64,7 +64,7 @@ pub fn parse(text: &str) -> Result<Vec<Network>, &'static str> {
                         .get("password")
                         .and_then(|v| v.as_str())
                         .ok_or("CONFIG_PASSWORD")?;
-                    if !(8..=63).contains(&p.len()) || !p.bytes().all(|b| (32..=126).contains(&b)) {
+                    if !slot_store::wifi::password_ok(p) {
                         return Err("CONFIG_PASSWORD");
                     }
                     Some(p.to_owned())
@@ -90,6 +90,13 @@ pub fn supplicant(n: &Network, ctrl: &Path, freq: Option<u32>, ap: bool) -> Stri
         hex(&n.ssid)
     );
     match &n.password {
+        Some(p) if p.len() == 64 && p.bytes().all(|b| b.is_ascii_hexdigit()) => {
+            // What WPS hands over: the key itself, not a passphrase.
+            s.push_str(&format!(
+                "key_mgmt=WPA-PSK\nproto=RSN\npairwise=CCMP\npsk={}\n",
+                p.to_ascii_lowercase()
+            ));
+        }
         Some(p) => {
             // A raw PSK avoids supplicant's passphrase quoting ambiguities. Passwords
             // containing quotes/backslashes retain their exact TOML-decoded bytes.
