@@ -2141,17 +2141,6 @@ impl App {
         // The face goes out exactly as the band comes in: while the band is not yet whole, the
         // two clear plastics would add up to a flash if the face stayed (Roy).
         let face_alpha = if clear { 1.0 - sharp * sharp } else { 1.0 };
-        // Under the clear face a backing in the band's own teal keeps the cart from going
-        // see-through and brings it up to the band's colour (Roy: more like the band).
-        if clear && face.is_some() {
-            out.push(Draw::Rect {
-                x: a.0,
-                y: a.1,
-                w: a.2,
-                h: a.3,
-                colour: [0.09, 0.47, 0.52, 0.3 * face_alpha],
-            });
-        }
         if let Some(tex) = face {
             out.push(Draw::Tex {
                 x: a.0,
