@@ -1409,7 +1409,7 @@ impl App {
     }
 
     pub fn shown_game_bezel(&self) -> Option<TexId> {
-        if self.video_mode() == VideoMode::Stretch || self.game_fills() {
+        if self.video_mode() != VideoMode::Actual || self.game_fills() {
             return None;
         }
         self.game_bezel
@@ -1908,15 +1908,20 @@ impl App {
         self.named_core = named;
     }
 
-    /// Full screen or the game's own size: one setting for the Game Boy and the Game Boy
+    /// Full screen, as tall as the screen, or the game's own size: one setting for the Game Boy and the Game Boy
     /// Color, kept between games. A game in the Super Game Boy is on the SNES's screen, which
     /// has its border round it: never cut to the Game Boy's picture (Roy: a full-screen game
     /// came out wrong in the SGB).
     fn video_mode(&self) -> VideoMode {
         match self.screen_platform() {
             Platform::Gb | Platform::Gbc if self.state.gb_fullscreen => VideoMode::Stretch,
+            Platform::Gb | Platform::Gbc if self.state.gb_fill_height => VideoMode::FillHeight,
             _ => VideoMode::Actual,
         }
+    }
+
+    pub fn fills_height(&self) -> bool {
+        self.video_mode() == VideoMode::FillHeight
     }
 
     pub fn source_rect(&self) -> [f32; 4] {
@@ -1945,10 +1950,12 @@ impl App {
 
     fn set_picture(&mut self, mode: VideoMode) {
         let full = mode == VideoMode::Stretch;
-        if self.state.gb_fullscreen == full {
+        let tall = mode == VideoMode::FillHeight;
+        if (self.state.gb_fullscreen, self.state.gb_fill_height) == (full, tall) {
             return;
         }
         self.state.gb_fullscreen = full;
+        self.state.gb_fill_height = tall;
         self.persist_soon();
     }
 
@@ -2914,10 +2921,10 @@ impl App {
             Phase::Inserting { .. } if action == Action::Eject => self.eject(),
             Phase::Playing { .. } => match action {
                 Action::GbaDown(Btn::L1) if self.slot_owns_the_shoulders() => {
-                    self.set_picture(VideoMode::Stretch)
+                    self.set_picture(self.video_mode().bigger())
                 }
                 Action::GbaDown(Btn::R1) if self.slot_owns_the_shoulders() => {
-                    self.set_picture(VideoMode::Actual)
+                    self.set_picture(self.video_mode().smaller())
                 }
                 Action::Eject => self.eject(),
                 Action::GameMenu => self.game_menu_shortcut(),

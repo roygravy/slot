@@ -874,6 +874,7 @@ impl Frontend {
         compositor.set_screen_power(self.session.app().screen_power());
         compositor.set_overlay_slide(self.session.app().overlay_slide());
         compositor.set_game_source_rect(self.session.app().source_rect());
+        compositor.set_game_fills_height(self.session.app().fills_height());
         self.grab_link_shot(compositor);
         self.grab_boot_picture(compositor);
         self.grab_screenshot(compositor);
