@@ -353,17 +353,10 @@ fn without_wi_fi_auto_time_is_off_and_the_clock_is_set_by_hand() {
     let (d, mut a) = general_row(SlotState::default(), QuickRow::AutoTime);
     a.apply(Action::GbaDown(Btn::Right));
     a.apply(Action::QuickMenu);
-    assert!(
-        read_slot_state(d.path()).auto_time,
-        "Auto Time turned while locked"
-    );
+    assert!(read_slot_state(d.path()).auto_time, "Auto Time turned while locked");
     let (_d, mut a) = general_row(SlotState::default(), QuickRow::DateTime);
     a.apply(Action::GbaDown(Btn::A));
-    assert!(
-        matches!(a.phase(), Phase::SetClock { .. }),
-        "{:?}",
-        a.phase()
-    );
+    assert!(matches!(a.phase(), Phase::SetClock { .. }), "{:?}", a.phase());
 }
 
 #[test]

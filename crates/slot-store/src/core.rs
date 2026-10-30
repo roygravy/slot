@@ -94,10 +94,7 @@ pub fn core_for(root: &Path, stem: &str) -> Core {
 }
 
 pub fn core_for_platform(root: &Path, stem: &str, platform: Platform) -> Core {
-    if matches!(
-        platform,
-        Platform::Gb | Platform::Gbc | Platform::Nes | Platform::Snes
-    ) {
+    if matches!(platform, Platform::Gb | Platform::Gbc | Platform::Nes | Platform::Snes) {
         return Core::default_for(platform);
     }
     crate::ini::value(root, SELECTED_CORE_FILE, stem)

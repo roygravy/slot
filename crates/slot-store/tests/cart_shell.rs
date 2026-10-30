@@ -4,12 +4,7 @@ use slot_store::{Outline, ShellChoice, ShellFinish};
 #[test]
 fn a_choice_reads_back_as_itself() {
     for outline in [Outline::Auto, Outline::Notched, Outline::Rounded] {
-        for finish in [
-            ShellFinish::Solid,
-            ShellFinish::Clear,
-            ShellFinish::Glitter,
-            ShellFinish::SolidGlitter,
-        ] {
+        for finish in [ShellFinish::Solid, ShellFinish::Clear, ShellFinish::Glitter, ShellFinish::SolidGlitter] {
             for colour in [[0, 0, 0], [0xff, 0xff, 0xff], [0x86, 0xb9, 0xbf]] {
                 let c = ShellChoice {
                     outline,

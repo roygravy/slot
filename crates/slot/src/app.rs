@@ -2032,11 +2032,7 @@ impl App {
     /// How far the camera has closed in on the Super Game Boy, 0 to 1; None once it has.
     fn sgb_zoom(&self) -> Option<f32> {
         let at = self.sgb_zoom_at?;
-        let ms = if self.sgb_two() {
-            SGB_ZOOM_MS_FADED
-        } else {
-            SGB_ZOOM_MS
-        };
+        let ms = if self.sgb_two() { SGB_ZOOM_MS_FADED } else { SGB_ZOOM_MS };
         let u = self.now().saturating_sub(at) as f32 / ms;
         (u < 1.0).then_some(u)
     }
@@ -2069,11 +2065,7 @@ impl App {
         // The camera takes the first three quarters, as it always did; the Super Game Boy 2's
         // cart fades into its band only once the band stands in place, over the last quarter.
         let clear = self.sgb_two();
-        let v = if clear {
-            (u / SGB_CAMERA_PART).min(1.0)
-        } else {
-            u
-        };
+        let v = if clear { (u / SGB_CAMERA_PART).min(1.0) } else { u };
         let come = ease(((v - 0.4) / 0.6).clamp(0.0, 1.0));
         let fade = if clear { u } else { v };
         self.draw_sgb_camera(ease(v), come, fade, gb_shelf, out)
@@ -4909,13 +4901,7 @@ impl App {
             lid: self
                 .nes_lids
                 .filter(|_| cart.platform == Platform::Nes)
-                .map(|l| {
-                    l[if self.originals() {
-                        2
-                    } else {
-                        usize::from(self.light())
-                    }]
-                }),
+                .map(|l| l[if self.originals() { 2 } else { usize::from(self.light()) }]),
             light: self.slot_light(),
             ejecting: matches!(self.phase, Phase::Ejecting { .. }) && self.refused_from.is_none(),
         }

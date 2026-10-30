@@ -37,13 +37,7 @@ pub fn title(rom: &Path) -> Option<String> {
     let buf = header(rom)?;
     let text: String = buf[..TITLE_LEN]
         .iter()
-        .map(|&b| {
-            if b.is_ascii_graphic() || b == b' ' {
-                b as char
-            } else {
-                ' '
-            }
-        })
+        .map(|&b| if b.is_ascii_graphic() || b == b' ' { b as char } else { ' ' })
         .collect();
     let text = text.trim();
     (!text.is_empty()).then(|| text.to_string())
@@ -103,26 +97,11 @@ mod tests {
 
     #[test]
     fn the_name_says_which_cart() {
-        assert_eq!(
-            region_of_name("Super Mario World (USA)"),
-            Some(Region::Ntsc)
-        );
-        assert_eq!(
-            region_of_name("Super Mario World (U) [!]"),
-            Some(Region::Ntsc)
-        );
-        assert_eq!(
-            region_of_name("Super Mario Kart (Europe)"),
-            Some(Region::Pal)
-        );
-        assert_eq!(
-            region_of_name("Super Mario Kart (Japan)"),
-            Some(Region::Pal)
-        );
-        assert_eq!(
-            region_of_name("Tetris Attack (USA, Europe)"),
-            Some(Region::Ntsc)
-        );
+        assert_eq!(region_of_name("Super Mario World (USA)"), Some(Region::Ntsc));
+        assert_eq!(region_of_name("Super Mario World (U) [!]"), Some(Region::Ntsc));
+        assert_eq!(region_of_name("Super Mario Kart (Europe)"), Some(Region::Pal));
+        assert_eq!(region_of_name("Super Mario Kart (Japan)"), Some(Region::Pal));
+        assert_eq!(region_of_name("Tetris Attack (USA, Europe)"), Some(Region::Ntsc));
         assert_eq!(region_of_name("Homebrew"), None);
     }
 

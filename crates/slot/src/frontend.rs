@@ -440,26 +440,11 @@ impl Frontend {
                     upload(slot_ui::sgb_band(SgbModel::Sgb2, false)),
                     upload(slot_ui::sgb_band(SgbModel::Sgb2, true)),
                 ),
-                (
-                    upload(slot_ui::slot_orig(0, false)),
-                    upload(slot_ui::slot_orig(0, true)),
-                ),
-                (
-                    upload(slot_ui::slot_orig(1, false)),
-                    upload(slot_ui::slot_orig(1, true)),
-                ),
-                (
-                    upload(slot_ui::slot_orig(2, false)),
-                    upload(slot_ui::slot_orig(2, true)),
-                ),
-                (
-                    upload(slot_ui::slot_orig(3, false)),
-                    upload(slot_ui::slot_orig(3, true)),
-                ),
-                (
-                    upload(slot_ui::slot_orig(4, false)),
-                    upload(slot_ui::slot_orig(4, true)),
-                ),
+                (upload(slot_ui::slot_orig(0, false)), upload(slot_ui::slot_orig(0, true))),
+                (upload(slot_ui::slot_orig(1, false)), upload(slot_ui::slot_orig(1, true))),
+                (upload(slot_ui::slot_orig(2, false)), upload(slot_ui::slot_orig(2, true))),
+                (upload(slot_ui::slot_orig(3, false)), upload(slot_ui::slot_orig(3, true))),
+                (upload(slot_ui::slot_orig(4, false)), upload(slot_ui::slot_orig(4, true))),
             ]
         };
         let nes_lids = [

@@ -356,21 +356,13 @@ unsafe extern "C" fn video_refresh(
                             PixelFormat::Rgb565 => ptr::read_unaligned((src as *const u16).add(x)),
                             PixelFormat::Xrgb8888 => {
                                 let p = ptr::read_unaligned((src as *const u32).add(x));
-                                (((p >> 8) & 0xf800) | ((p >> 5) & 0x07e0) | ((p >> 3) & 0x001f))
-                                    as u16
+                                (((p >> 8) & 0xf800) | ((p >> 5) & 0x07e0) | ((p >> 3) & 0x001f)) as u16
                             }
                         };
                     }
                 });
                 let ow = crate::ntsc::out_width(width as usize);
-                draw_frame(
-                    h,
-                    ntsc.output.as_ptr() as *const c_void,
-                    ow as c_uint,
-                    height,
-                    ow * 4,
-                    PixelFormat::Xrgb8888,
-                );
+                draw_frame(h, ntsc.output.as_ptr() as *const c_void, ow as c_uint, height, ow * 4, PixelFormat::Xrgb8888);
                 h.ntsc = Some(ntsc);
             }
             ntsc => {
@@ -423,12 +415,7 @@ unsafe fn draw_frame(
                     let r = ((p >> 11) & 0x1f) as u8;
                     let g = ((p >> 5) & 0x3f) as u8;
                     let b = (p & 0x1f) as u8;
-                    [
-                        (b << 3) | (b >> 2),
-                        (g << 2) | (g >> 4),
-                        (r << 3) | (r >> 2),
-                        0,
-                    ]
+                    [(b << 3) | (b >> 2), (g << 2) | (g >> 4), (r << 3) | (r >> 2), 0]
                 }
             }
         };

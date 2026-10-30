@@ -84,10 +84,7 @@ fn fade(mut c: [f32; 4], a: f32) -> [f32; 4] {
 
 impl ShotPage<'_> {
     fn pic(&self, i: usize) -> Option<(TexId, f32)> {
-        self.pics
-            .iter()
-            .find(|(k, ..)| *k == i)
-            .map(|(_, t, w)| (*t, *w))
+        self.pics.iter().find(|(k, ..)| *k == i).map(|(_, t, w)| (*t, *w))
     }
 
     pub fn draw(&self, out: &mut Vec<Draw>) {

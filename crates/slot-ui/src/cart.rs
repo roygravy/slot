@@ -135,9 +135,7 @@ pub fn sgb_model_of(cart: &Cart) -> SgbModel {
     use slot_store::ShellFinish;
     match cart.shell {
         Some(c) if c.outline == Outline::Notched => SgbModel::Ntsc,
-        Some(c) if c.outline == Outline::Rounded && c.finish == ShellFinish::Clear => {
-            SgbModel::Sgb2
-        }
+        Some(c) if c.outline == Outline::Rounded && c.finish == ShellFinish::Clear => SgbModel::Sgb2,
         Some(c) if c.outline == Outline::Rounded && c.finish == ShellFinish::Solid => SgbModel::Sfc,
         _ => SgbModel::Pal,
     }
