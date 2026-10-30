@@ -5,6 +5,29 @@ pub fn cover(path: &Path, w: u32, h: u32) -> Option<Vec<u8>> {
     cover_rgba(&src, sw, sh, w, h)
 }
 
+/// An American SNES label cut for an earlier well (221x109, then 221x99) is drawn whole in
+/// the new one, so nothing of the sticker is cut off; any other picture covers the well.
+pub fn cover_label(path: &Path, w: u32, h: u32) -> Option<Vec<u8>> {
+    let (src, sw, sh) = decode(path)?;
+    if matches!((sw, sh), (221, 109) | (221, 99)) && (w, h) == (224, 102) {
+        return Some(stretch_rgba(&src, sw, sh, w, h));
+    }
+    cover_rgba(&src, sw, sh, w, h)
+}
+
+fn stretch_rgba(src: &[u8], sw: u32, sh: u32, w: u32, h: u32) -> Vec<u8> {
+    let (sx, sy) = (sw as f32 / w as f32, sh as f32 / h as f32);
+    let mut out = vec![0u8; (w * h * 4) as usize];
+    for y in 0..h {
+        for x in 0..w {
+            let (x0, y0) = (x as f32 * sx, y as f32 * sy);
+            let px = box_average(src, sw, sh, x0, y0, x0 + sx, y0 + sy);
+            out[((y * w + x) * 4) as usize..][..4].copy_from_slice(&px);
+        }
+    }
+    out
+}
+
 pub fn cover_bytes(bytes: &[u8], w: u32, h: u32) -> Option<Vec<u8>> {
     let (src, sw, sh) = decode_png_bytes(bytes)?;
     cover_rgba(&src, sw, sh, w, h)
@@ -55,6 +78,41 @@ fn box_average(src: &[u8], sw: u32, sh: u32, x0: f32, y0: f32, x1: f32, y1: f32)
         out[c] = ((acc[c] + n / 2) / n) as u8;
     }
     out
+}
+
+/// Whether a SNES label is the wide PAL/SFC sticker (277x97) rather than the taller NTSC one
+/// (221x99), from the PNG's header. Remembered by the file's size and time, as the studio
+/// writes a picked version over the same file.
+pub fn is_wide_snes_label(path: &Path) -> Option<bool> {
+    use std::collections::HashMap;
+    use std::io::Read;
+    use std::path::PathBuf;
+    use std::sync::{Mutex, OnceLock};
+    use std::time::SystemTime;
+    type Seen = HashMap<PathBuf, (u64, Option<SystemTime>, Option<bool>)>;
+    static SEEN: OnceLock<Mutex<Seen>> = OnceLock::new();
+    let meta = std::fs::metadata(path).ok()?;
+    let stamp = (meta.len(), meta.modified().ok());
+    let seen = SEEN.get_or_init(Default::default);
+    if let Some(&(len, time, wide)) = seen.lock().ok()?.get(path) {
+        if (len, time) == stamp {
+            return wide;
+        }
+    }
+    let mut head = [0u8; 24];
+    let wide = std::fs::File::open(path)
+        .and_then(|mut f| f.read_exact(&mut head))
+        .ok()
+        .filter(|_| &head[12..16] == b"IHDR")
+        .map(|_| {
+            let w = u32::from_be_bytes(head[16..20].try_into().unwrap());
+            let h = u32::from_be_bytes(head[20..24].try_into().unwrap()).max(1);
+            w as f32 / h as f32 > 2.45
+        });
+    seen.lock()
+        .ok()?
+        .insert(path.to_path_buf(), (stamp.0, stamp.1, wide));
+    wide
 }
 
 fn decode(path: &Path) -> Option<(Vec<u8>, u32, u32)> {

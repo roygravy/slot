@@ -1,23 +1,28 @@
 use slot_gfx::{Canvas, Draw, TexId, OUT_H};
-use slot_store::{Cart, FavoriteMark, Platform};
+use slot_store::{Cart, FavoriteMark};
 use std::sync::OnceLock;
 
+use crate::bitmaps::Mould;
 use crate::board::{board_in, Placed};
 use crate::cart::{
-    cart_box, gb_shell_of, is_clear, label_colour, label_rect, label_text, CART_H, CART_W,
+    cart_box, is_clear, label_colour, label_rect, label_text, mould_of, CART_H, CART_W,
 };
 use crate::hud::Millis;
-use crate::silhouette::GbShell;
 use crate::slot_chrome::{draw_empty_slot, MOUTH_H};
 
 const SIDE_SCALE: f32 = 0.78;
+const MOULDS: usize = Mould::ALL.len();
 /// How large the carts stand on the carousel, the middle one included.
 const CAROUSEL: f32 = 0.88;
 const SIDE_ALPHA: f32 = 1.0;
 
 pub fn rest_y(h: f32) -> f32 {
-    let y = if h > CART_H as f32 {
-        (OUT_H as f32 - MOUTH_H - h) / 2.0
+    // A tall pak (Game Boy, NES) centres in the gap; a wide cart (GBA, SNES) stands on the
+    // GBA's ground, so every wide cart sits at the same height.
+    let y = if h > TALL_H {
+        // Above a Super Game Boy the whole shelf stands as much higher as its top does, the
+        // shelf's name still just above it (Roy).
+        (OUT_H as f32 - MOUTH_H - h) / 2.0 - crate::slot_chrome::rise()
     } else {
         (OUT_H + CART_H) as f32 / 2.0 - h
     };
@@ -25,6 +30,9 @@ pub fn rest_y(h: f32) -> f32 {
     // whole pixel so the 312×337 bitmap hits the RG SP panel 1:1.
     y.round()
 }
+
+/// Taller than any wide cart, shorter than any pak.
+const TALL_H: f32 = 300.0;
 
 pub fn foot_y(h: f32) -> f32 {
     rest_y(h) + h
@@ -59,21 +67,18 @@ pub struct Shelf {
     pub scroll: f32,
     faces: Vec<Option<TexId>>,
     interiors: Vec<Option<TexId>>,
-    shadow: Option<TexId>,
-    gb_shadow: Option<TexId>,
-    gbc_shadow: Option<TexId>,
-    backing: Option<TexId>,
-    gb_backing: Option<TexId>,
-    gbc_backing: Option<TexId>,
-    shells: Vec<OnceLock<Option<GbShell>>>,
+    /// Per mould, in `Mould::ALL` order: the cart's shadow, and the board behind a clear one.
+    shadows: [Option<TexId>; MOULDS],
+    backings: [Option<TexId>; MOULDS],
+    moulds: Vec<OnceLock<Mould>>,
     clears: Vec<OnceLock<bool>>,
     starred: Vec<bool>,
-    glows: [[Option<TexId>; 3]; 2],
+    glows: [[Option<TexId>; MOULDS]; 2],
     star: Option<(TexId, f32, f32)>,
     mark: FavoriteMark,
     /// One still backlight behind the middle of the shelf, for the Favorites shelf.
     spotlight: bool,
-    drops: [Option<TexId>; 3],
+    drops: [Option<TexId>; MOULDS],
     /// Light grounds take the glow as a tint; dark ones take it as added light.
     light_ground: bool,
     ride: f32,
@@ -84,37 +89,33 @@ pub struct Shelf {
 impl Shelf {
     pub fn new(carts: Vec<Cart>) -> Self {
         Shelf {
-            shells: carts.iter().map(|_| OnceLock::new()).collect(),
+            moulds: carts.iter().map(|_| OnceLock::new()).collect(),
             clears: carts.iter().map(|_| OnceLock::new()).collect(),
             faces: vec![None; carts.len()],
             interiors: vec![None; carts.len()],
             starred: vec![false; carts.len()],
-            glows: [[None; 3]; 2],
+            glows: [[None; MOULDS]; 2],
             star: None,
             mark: FavoriteMark::default(),
             spotlight: false,
-            drops: [None; 3],
+            drops: [None; MOULDS],
             light_ground: false,
             carts,
             index: 0,
             scroll: 0.0,
-            shadow: None,
-            gb_shadow: None,
-            gbc_shadow: None,
-            backing: None,
-            gb_backing: None,
-            gbc_backing: None,
+            shadows: [None; MOULDS],
+            backings: [None; MOULDS],
             ride: 0.0,
             vel: 0.0,
             held: None,
         }
     }
 
-    fn shell(&self, i: usize) -> Option<GbShell> {
-        let (Some(cell), Some(cart)) = (self.shells.get(i), self.carts.get(i)) else {
-            return None;
+    fn mould(&self, i: usize) -> Mould {
+        let (Some(cell), Some(cart)) = (self.moulds.get(i), self.carts.get(i)) else {
+            return Mould::Gba;
         };
-        *cell.get_or_init(|| gb_shell_of(cart))
+        *cell.get_or_init(|| mould_of(cart))
     }
 
     fn clear(&self, i: usize) -> bool {
@@ -131,7 +132,7 @@ impl Shelf {
             .chain(self.interiors.drain(..))
             .flatten()
             .collect();
-        self.shells = carts.iter().map(|_| OnceLock::new()).collect();
+        self.moulds = carts.iter().map(|_| OnceLock::new()).collect();
         self.clears = carts.iter().map(|_| OnceLock::new()).collect();
         self.faces = vec![None; carts.len()];
         self.interiors = vec![None; carts.len()];
@@ -149,27 +150,17 @@ impl Shelf {
         self.vel = 0.0;
     }
 
-    pub fn set_glow(&mut self, style: FavoriteMark, shell: Option<GbShell>, face: TexId) {
-        let row = (style == FavoriteMark::WhiteGlow) as usize;
-        let col = match shell {
-            None => 0,
-            Some(GbShell::Notched) => 1,
-            Some(GbShell::Rounded) => 2,
-        };
-        self.glows[row][col] = Some(face);
+    pub fn set_glow(&mut self, style: FavoriteMark, mould: Mould, face: TexId) {
+        let row = (style == FavoriteMark::Highlight) as usize;
+        self.glows[row][mould.index()] = Some(face);
     }
 
     pub fn set_star(&mut self, face: TexId, w: u32, h: u32) {
         self.star = Some((face, w as f32, h as f32));
     }
 
-    pub fn set_drop(&mut self, shell: Option<GbShell>, face: TexId) {
-        let col = match shell {
-            None => 0,
-            Some(GbShell::Notched) => 1,
-            Some(GbShell::Rounded) => 2,
-        };
-        self.drops[col] = Some(face);
+    pub fn set_drop(&mut self, mould: Mould, face: TexId) {
+        self.drops[mould.index()] = Some(face);
     }
 
     pub fn set_light_ground(&mut self, light: bool) {
@@ -181,13 +172,8 @@ impl Shelf {
     }
 
     fn glow_for(&self, i: usize) -> Option<TexId> {
-        let row = (self.mark == FavoriteMark::WhiteGlow) as usize;
-        let col = match self.shell(i) {
-            None => 0,
-            Some(GbShell::Notched) => 1,
-            Some(GbShell::Rounded) => 2,
-        };
-        self.glows[row][col]
+        let row = (self.mark == FavoriteMark::Highlight) as usize;
+        self.glows[row][self.mould(i).index()]
     }
 
     pub fn set_mark(&mut self, mark: FavoriteMark) {
@@ -198,26 +184,12 @@ impl Shelf {
         self.starred = self.carts.iter().map(starred).collect();
     }
 
-    pub fn set_shadow(&mut self, face: TexId) {
-        self.shadow = Some(face);
+    pub fn set_shadow(&mut self, mould: Mould, face: TexId) {
+        self.shadows[mould.index()] = Some(face);
     }
 
-    pub fn set_gb_shadow(&mut self, shell: GbShell, face: TexId) {
-        match shell {
-            GbShell::Notched => self.gb_shadow = Some(face),
-            GbShell::Rounded => self.gbc_shadow = Some(face),
-        }
-    }
-
-    pub fn set_backing(&mut self, face: TexId) {
-        self.backing = Some(face);
-    }
-
-    pub fn set_gb_backing(&mut self, shell: GbShell, face: TexId) {
-        match shell {
-            GbShell::Notched => self.gb_backing = Some(face),
-            GbShell::Rounded => self.gbc_backing = Some(face),
-        }
+    pub fn set_backing(&mut self, mould: Mould, face: TexId) {
+        self.backings[mould.index()] = Some(face);
     }
 
     pub fn set_faces(&mut self, faces: Vec<TexId>) {
@@ -241,6 +213,17 @@ impl Shelf {
 
     pub fn take_interior(&mut self, i: usize) -> Option<TexId> {
         self.interiors.get_mut(i).and_then(Option::take)
+    }
+
+    /// A cart drawn again in another shell: its mould and see-through plastic are worked out
+    /// afresh, so a cart turned clear shows its board on the shelf and in the slot.
+    pub fn restyled(&mut self, i: usize) {
+        if let Some(cell) = self.moulds.get_mut(i) {
+            *cell = OnceLock::new();
+        }
+        if let Some(cell) = self.clears.get_mut(i) {
+            *cell = OnceLock::new();
+        }
     }
 
     pub fn take_face(&mut self, i: usize) -> Option<TexId> {
@@ -275,12 +258,39 @@ impl Shelf {
         if !self.clear(i) || self.face(i).is_none() {
             return [None, None];
         }
-        let board = match self.shell(i) {
-            None => self.backing,
-            Some(GbShell::Notched) => self.gb_backing,
-            Some(GbShell::Rounded) => self.gbc_backing,
-        };
+        let board = self.backings[self.mould(i).index()];
         [self.interiors.get(i).copied().flatten(), board]
+    }
+
+    /// The shadow a cart standing at `at` throws on the shelf, as a raised favourite's does
+    /// when `rise` lifts it off; `fade` takes it away as the cart leaves the shelf.
+    pub fn draw_drop(
+        &self,
+        stem: &str,
+        at: Placed,
+        scale: f32,
+        rise: f32,
+        fade: f32,
+        out: &mut Vec<Draw>,
+    ) {
+        let Some(i) = self.carts.iter().position(|c| c.stem == stem) else {
+            return;
+        };
+        let Some(tex) = self.drops[self.mould(i).index()] else {
+            return;
+        };
+        let m = DROP_MARGIN as f32 * scale;
+        out.push(Draw::Tex {
+            x: at.x - m,
+            y: at.y - m + DROP_FALL * scale + rise * 0.5,
+            w: at.w + 2.0 * m,
+            h: at.h + 2.0 * m,
+            tex,
+            alpha: DROP_ALPHA
+                * fade
+                * (1.0 + rise / LIFT * 0.3).min(1.6)
+                * if self.light_ground { 0.55 } else { 1.0 },
+        });
     }
 
     pub fn find(&self, stem: &str) -> Option<(&Cart, Option<TexId>)> {
@@ -358,6 +368,8 @@ impl Shelf {
         };
         self.index = target;
         self.ride += delta as f32;
+        let to = self.scroll_target();
+        self.scroll = to - (to - self.scroll).clamp(-1.0, 1.0);
     }
 
     pub fn hold_left(&mut self, now: Millis) {
@@ -439,9 +451,9 @@ impl Shelf {
     }
 
     fn slot_width(&self, slot: i32) -> (f32, bool) {
-        match self.cart_at_offset(slot).map(|i| self.carts[i].platform) {
-            Some(Platform::Gba) | None => (CART_W as f32, true),
-            Some(p) => (cart_box(p).0 as f32, false),
+        match self.cart_at_offset(slot).map(|i| self.mould(i)) {
+            Some(Mould::Gba) | None => (CART_W as f32, true),
+            Some(m) => (cart_box(m).0 as f32, false),
         }
     }
 
@@ -497,6 +509,9 @@ impl Shelf {
         let recede = recede.clamp(0.0, 1.0);
         let dim = dim.clamp(0.0, 1.0);
         let target = self.scroll_target();
+        // The lights go behind every cart: gathered on the way, laid down before the first.
+        let behind = out.len();
+        let mut lights = Vec::new();
         for slot in -SLOTS..=SLOTS {
             let Some(i) = self.cart_at_offset(slot) else {
                 continue;
@@ -509,7 +524,8 @@ impl Shelf {
             let t = offset.abs().min(1.0);
             let scale = shrink(offset);
             let alpha = (1.0 + (SIDE_ALPHA - 1.0) * t) * (1.0 - recede);
-            let (cw, ch) = cart_box(cart.platform);
+            let mould = self.mould(i);
+            let (cw, ch) = cart_box(mould);
             let (w, h) = (cw as f32 * scale, ch as f32 * scale);
             let away = offset.signum() * (1.0 + offset.abs());
             let x = self.centre(canvas, slot) - w / 2.0 + away * PART * recede;
@@ -528,12 +544,7 @@ impl Shelf {
             let ground = foot_y(ch as f32) - h;
             let y = ground - lift;
             if alpha < 1.0 {
-                let backing = match self.shell(i) {
-                    None => self.shadow,
-                    Some(GbShell::Notched) => self.gb_shadow,
-                    Some(GbShell::Rounded) => self.gbc_shadow,
-                };
-                if let Some(tex) = backing {
+                if let Some(tex) = self.shadows[mould.index()] {
                     out.push(Draw::Tex {
                         x,
                         y,
@@ -544,12 +555,7 @@ impl Shelf {
                     });
                 }
             }
-            let col = match self.shell(i) {
-                None => 0,
-                Some(GbShell::Notched) => 1,
-                Some(GbShell::Rounded) => 2,
-            };
-            if let Some(tex) = self.drops[col] {
+            if let Some(tex) = self.drops[mould.index()] {
                 let m = DROP_MARGIN as f32 * scale;
                 out.push(Draw::Tex {
                     x: x - m,
@@ -565,12 +571,8 @@ impl Shelf {
                 });
             }
             if self.clear(i) && self.face(i).is_some() {
-                let board = match self.shell(i) {
-                    None => self.backing,
-                    Some(GbShell::Notched) => self.gb_backing,
-                    Some(GbShell::Rounded) => self.gbc_backing,
-                };
-                let gba = self.shell(i).is_none();
+                let board = self.backings[mould.index()];
+                let gba = mould == Mould::Gba;
                 // A GBA cart's board and back shell fill the cart's box, exactly where the
                 // picker lifts them from; a Game Boy pak's backing fills its box.
                 let Placed {
@@ -630,11 +632,17 @@ impl Shelf {
                     }
                 }
             });
-            // The spotlight falls on the cart: added over it, after its face.
+            // The spotlight falls on the cart, over its face; the highlight lights the ground
+            // behind it.
             if self.starred.get(i) == Some(&true) && self.mark != FavoriteMark::Star {
                 if let Some(tex) = self.glow_for(i) {
                     let m = GLOW_MARGIN as f32 * scale;
-                    out.push(Draw::Light {
+                    let to = if self.mark == FavoriteMark::Highlight {
+                        &mut lights
+                    } else {
+                        &mut *out
+                    };
+                    to.push(Draw::Light {
                         x: x - m,
                         y: y - m,
                         w: w + 2.0 * m,
@@ -647,7 +655,7 @@ impl Shelf {
             if let (FavoriteMark::Star, Some(true), Some((tex, sw, sh))) =
                 (self.mark, self.starred.get(i).copied(), self.star)
             {
-                let (lx, ly, lw, _) = label_rect(self.shell(i));
+                let (lx, ly, lw, _) = label_rect(mould);
                 out.push(Draw::Tex {
                     x: (x + (lx + lw) * w - sw - STAR_INSET).round(),
                     y: (y + ly * h + STAR_INSET).round(),
@@ -662,12 +670,17 @@ impl Shelf {
             // Still, over the middle: the carts slide through the light rather than carry it.
             let i = self.index.min(self.carts.len() - 1);
             if let Some(tex) = self.glow_for(i) {
-                let (cw, ch) = cart_box(self.carts[i].platform);
+                let (cw, ch) = cart_box(self.mould(i));
                 let (w, h) = (cw as f32 * CAROUSEL, ch as f32 * CAROUSEL);
                 let m = GLOW_MARGIN as f32 * CAROUSEL;
                 let x = canvas.w / 2.0 - w / 2.0;
                 let y = foot_y(ch as f32) - h - LIFT * CAROUSEL;
-                out.push(Draw::Light {
+                let to = if self.mark == FavoriteMark::Highlight {
+                    &mut lights
+                } else {
+                    &mut *out
+                };
+                to.push(Draw::Light {
                     x: x - m,
                     y: y - m,
                     w: w + 2.0 * m,
@@ -677,6 +690,7 @@ impl Shelf {
                 });
             }
         }
+        out.splice(behind..behind, lights);
     }
 }
 

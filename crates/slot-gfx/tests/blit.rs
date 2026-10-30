@@ -34,7 +34,7 @@ fn the_shake_is_symmetric_about_the_centred_rect() {
 
 #[test]
 fn no_shake_is_the_plain_centred_rect() {
-    assert_eq!(blit_rect((1500, 1000), 0.0), slot_gfx::fit_rect(1500, 1000));
+    assert_eq!(blit_rect((1300, 1000), 0.0), slot_gfx::fit_rect(1300, 1000));
 }
 
 #[test]

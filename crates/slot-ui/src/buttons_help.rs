@@ -41,6 +41,7 @@ pub const BUTTON_PAGES: [(&str, &[(&str, &str)]); 7] = [
             ("Hold A", "Start the game fresh"),
             ("Y", "Favorite or unfavorite"),
             ("START", "Emulator choice (GBA)"),
+            ("SELECT", "Cart color and label"),
         ],
     ),
     (
@@ -60,7 +61,7 @@ pub const BUTTON_PAGES: [(&str, &[(&str, &str)]); 7] = [
             ("SELECT + L1", "Load the newest state"),
             ("SELECT + B", "Screen effects on / off"),
             ("SELECT + L2 / R2", "Game Boy palette"),
-            ("L1 / R1", "Stretch or not (GB)"),
+            ("L1 / R1", "Full screen (GB / GBC)"),
         ],
     ),
     (
@@ -128,7 +129,10 @@ pub fn buttons_tab_face(page: usize) -> UndoFace {
 
 /// Whether two pages share a tab: In Game runs over two.
 fn same_tab(a: usize, b: usize) -> bool {
-    BUTTON_PAGES.get(a).zip(BUTTON_PAGES.get(b)).is_some_and(|(a, b)| a.0 == b.0)
+    BUTTON_PAGES
+        .get(a)
+        .zip(BUTTON_PAGES.get(b))
+        .is_some_and(|(a, b)| a.0 == b.0)
 }
 
 fn pitch(rows: usize) -> f32 {
@@ -196,7 +200,9 @@ impl ButtonsHelp<'_> {
         let shown = || faces.tabs.iter().enumerate().filter(|(i, _)| first(*i));
         let words: f32 = shown().map(|(_, t)| t.1 as f32).sum();
         let n = shown().count().max(1) as f32;
-        let gap = ((self.canvas.w - 2.0 * TAB_EDGE - words) / (2.0 * n)).clamp(4.0, TAB_GAP).floor();
+        let gap = ((self.canvas.w - 2.0 * TAB_EDGE - words) / (2.0 * n))
+            .clamp(4.0, TAB_GAP)
+            .floor();
         let total = words + gap * 2.0 * n;
         let mut x = self.canvas.centred(total).round();
         for (i, &(tex, w, h)) in shown() {

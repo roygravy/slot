@@ -38,6 +38,8 @@ pub struct Compositor {
     bezel: Option<gl::types::GLuint>,
     game_bezel: Option<TexId>,
     sp_frame: bool,
+    /// The game's picture takes the whole panel, not its 4:3 middle (a GBA game on 3:2).
+    game_fills: bool,
     turn: Option<Turn>,
 }
 
@@ -106,6 +108,7 @@ impl Compositor {
                 bezel: None,
                 game_bezel: None,
                 sp_frame: true,
+                game_fills: false,
                 turn: None,
             })
         }
@@ -184,6 +187,14 @@ impl Compositor {
         self.game.set_effect(effect);
     }
 
+    pub fn set_tv_lines(&mut self, scanlines: bool, mask: bool) {
+        self.game.set_tv_lines(scanlines, mask);
+    }
+
+    pub fn set_afterglow(&mut self, keep: u32) {
+        self.game.set_afterglow(keep);
+    }
+
     pub fn set_picture(&mut self, rect: [f32; 4]) {
         self.game.set_picture(rect);
     }
@@ -194,6 +205,10 @@ impl Compositor {
 
     pub fn set_sp_frame(&mut self, on: bool) {
         self.sp_frame = on;
+    }
+
+    pub fn set_game_fills(&mut self, on: bool) {
+        self.game_fills = on;
     }
 
     fn draw_game_bezel(&mut self) {
@@ -263,7 +278,13 @@ impl Compositor {
 
     pub fn fit(&mut self, window: (u32, u32)) {
         self.window = window;
-        self.resize(canvas_size(window));
+        // As begin_frame sizes it, so a native frame is not cut back and grown every frame.
+        let size = if self.native() {
+            window
+        } else {
+            canvas_size(window)
+        };
+        self.resize(size);
     }
 
     fn native(&self) -> bool {
@@ -309,6 +330,10 @@ impl Compositor {
 
     pub fn set_game_fills_frame(&mut self, on: bool) {
         self.game.set_fills_frame(on);
+    }
+
+    pub fn set_game_canvas(&mut self, w: u32, h: u32) {
+        self.game.set_canvas(w, h);
     }
 
     pub fn set_game_source_rect(&mut self, rect: [f32; 4]) {
@@ -521,7 +546,7 @@ impl Compositor {
 
 impl Compositor {
     fn in_game_rect(&mut self, draw: impl FnOnce(&mut Self)) {
-        if !self.native() {
+        if !self.native() || self.game_fills {
             return draw(self);
         }
         let (w, h) = canvas_size(self.window);
@@ -531,8 +556,10 @@ impl Compositor {
             true => self.size.1 - h,
             false => (self.size.1 - h) / 2,
         };
-        self.game.set_origin(0.0, y as f32);
-        unsafe { gl::Viewport(0, y as i32, w as i32, h as i32) };
+        // On a panel wider than 4:3 the game's picture stands in its middle.
+        let x = (self.size.0.saturating_sub(w)) / 2;
+        self.game.set_origin(x as f32, y as f32);
+        unsafe { gl::Viewport(x as i32, y as i32, w as i32, h as i32) };
         draw(self);
         self.game.set_origin(0.0, 0.0);
         self.game.set_fbo_scale(

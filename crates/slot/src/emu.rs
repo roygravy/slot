@@ -1,15 +1,14 @@
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU16, AtomicU32, AtomicU64, AtomicU8, Ordering};
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use crate::cable::{self, Cable};
 use slot_retro::{
-    ButtonMask, CoreError, Link, LinkChannel, RetroCore, Rumble, GBA_H, GBA_W, NETPACKET_RELIABLE,
+    ButtonMask, Link, LinkChannel, RetroCore, Rumble, GBA_H, GBA_W, NETPACKET_RELIABLE,
 };
-use slot_store::RUN_AHEAD_MAX;
 
 use crate::audio::Ring;
 use crate::drc::{drc_ratio, drc_target};
@@ -39,6 +38,10 @@ const TRACE_EVERY: u64 = 300;
 
 const MAX_LINK_PACKETS_PER_PRESENT: u32 = 256;
 
+const ANSWER_WAIT: Duration = Duration::from_secs(2);
+
+const STOP_WAIT: Duration = Duration::from_secs(10);
+
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum Speed {
     Paused,
@@ -63,6 +66,10 @@ pub enum CoreState {
     Failed,
 }
 
+/// How many times a refresh redraws the paused frame: enough for the cores' Ghosting
+/// blend to settle on a still picture.
+const REFRESH_FRAMES: usize = 12;
+
 pub struct EmuHandle {
     frames: Arc<Frames>,
     shared: Arc<Shared>,
@@ -83,7 +90,11 @@ enum Cmd {
     EndLink,
     BeginCable(u8, Box<dyn LinkChannel>),
     SetOption(String, String),
-    Refresh,
+    /// Settle a core after a colour or Ghosting change; `show` also puts the paused picture
+    /// back on screen, for when the game is held behind a menu.
+    Refresh {
+        show: bool,
+    },
 }
 
 struct Shared {
@@ -94,12 +105,13 @@ struct Shared {
     rewind: AtomicBool,
     rewind_fill: AtomicU8,
     turbo: AtomicBool,
+    /// X and Y go to the game as they are (a SNES pad has them), not as turbo A and B.
+    native_xy: AtomicBool,
     recording: AtomicBool,
     stop: AtomicBool,
     volume: AtomicU8,
     fast_steps: AtomicU32,
     ff_sound: AtomicBool,
-    runahead: AtomicU8,
     published: AtomicU64,
     resume_refused: AtomicBool,
     sav_refused: AtomicBool,
@@ -129,7 +141,17 @@ impl EmuHandle {
         sav: Option<Vec<u8>>,
         resume: Option<Vec<u8>>,
     ) -> Self {
-        Self::spawn_as(core, rom, ring, sav, resume, None)
+        let (rumble, link) = (core.rumble(), core.net());
+        Self::spawn_as(
+            Box::new(move || core),
+            rumble,
+            link,
+            rom,
+            ring,
+            sav,
+            resume,
+            None,
+        )
     }
 
     pub fn spawn_linked(
@@ -140,19 +162,59 @@ impl EmuHandle {
         resume: Option<Vec<u8>>,
         player: u8,
     ) -> Self {
-        Self::spawn_as(core, rom, ring, sav, resume, Some(player))
+        let (rumble, link) = (core.rumble(), core.net());
+        Self::spawn_as(
+            Box::new(move || core),
+            rumble,
+            link,
+            rom,
+            ring,
+            sav,
+            resume,
+            Some(player),
+        )
     }
 
-    fn spawn_as(
-        core: Box<dyn RetroCore>,
+    /// As `spawn`, with the core opened on the emulator's own thread: reading a core in and
+    /// starting it takes the device a few frames, which held up the cart's insert (Roy: the
+    /// SNES cart stuttered going in).
+    pub fn spawn_opening(
+        open: Box<dyn FnOnce() -> Box<dyn RetroCore> + Send>,
         rom: PathBuf,
         ring: Arc<Ring>,
         sav: Option<Vec<u8>>,
         resume: Option<Vec<u8>>,
         player: Option<u8>,
     ) -> Self {
-        let rumble = core.rumble();
-        let link = core.net();
+        let (rumble, link) = (Rumble::default(), Link::default());
+        let (r, l) = (rumble.clone(), link.clone());
+        let open = Box::new(move || {
+            let mut core = open();
+            core.share(r, l);
+            core
+        });
+        Self::spawn_as(open, rumble, link, rom, ring, sav, resume, player)
+    }
+
+    pub fn refuse_save_ram(&self) {
+        self.shared.sav_refused.store(true, Ordering::Release);
+    }
+
+    pub fn refuse_resume(&self) {
+        self.shared.resume_refused.store(true, Ordering::Release);
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn spawn_as(
+        open: Box<dyn FnOnce() -> Box<dyn RetroCore> + Send>,
+        rumble: Rumble,
+        link: Link,
+        rom: PathBuf,
+        ring: Arc<Ring>,
+        sav: Option<Vec<u8>>,
+        resume: Option<Vec<u8>>,
+        player: Option<u8>,
+    ) -> Self {
         let frames = Frames::new((GBA_W * GBA_H * 4) as usize);
         let shared = Arc::new(Shared {
             input: AtomicU16::new(0),
@@ -162,12 +224,12 @@ impl EmuHandle {
             rewind: AtomicBool::new(false),
             rewind_fill: AtomicU8::new(0),
             turbo: AtomicBool::new(true),
+            native_xy: AtomicBool::new(false),
             recording: AtomicBool::new(true),
             stop: AtomicBool::new(false),
             volume: AtomicU8::new(100),
             fast_steps: AtomicU32::new(FAST_STEPS),
             ff_sound: AtomicBool::new(false),
-            runahead: AtomicU8::new(0),
             published: AtomicU64::new(0),
             resume_refused: AtomicBool::new(false),
             sav_refused: AtomicBool::new(false),
@@ -192,7 +254,7 @@ impl EmuHandle {
         let worker_link = link.clone();
         let join = std::thread::Builder::new()
             .name("slot-emu".into())
-            .spawn(move || worker.run(core, rom, ring, sav, resume, worker_link))
+            .spawn(move || worker.run(open(), rom, ring, sav, resume, worker_link))
             .ok();
         if join.is_none() {
             shared
@@ -364,22 +426,16 @@ impl EmuHandle {
         self.shared.ff_sound.load(Ordering::Relaxed)
     }
 
-    pub fn set_runahead(&self, frames: u8) {
-        self.shared
-            .runahead
-            .store(frames.min(RUN_AHEAD_MAX), Ordering::Relaxed);
-    }
-
-    pub fn runahead(&self) -> u8 {
-        self.shared.runahead.load(Ordering::Relaxed)
-    }
-
     pub fn set_rewinding(&self, on: bool) {
         self.shared.rewind.store(on, Ordering::Relaxed);
     }
 
     pub fn set_turbo(&self, on: bool) {
         self.shared.turbo.store(on, Ordering::Relaxed);
+    }
+
+    pub fn set_native_xy(&self, on: bool) {
+        self.shared.native_xy.store(on, Ordering::Relaxed);
     }
 
     pub fn set_rewind_recording(&self, on: bool) {
@@ -404,8 +460,8 @@ impl EmuHandle {
         rx
     }
 
-    pub fn refresh(&self) {
-        request(&self.cmds, &self.shared, Cmd::Refresh);
+    pub fn refresh(&self, show: bool) {
+        request(&self.cmds, &self.shared, Cmd::Refresh { show });
     }
 
     pub fn request_load(&self, state: Vec<u8>) {
@@ -430,19 +486,19 @@ impl Snapshot for EmuSnapshot {
     fn state(&self) -> Option<Vec<u8>> {
         let (tx, rx) = channel();
         request(&self.cmds, &self.shared, Cmd::Save(tx)).then_some(())?;
-        rx.recv().ok()
+        answer(rx, "state")
     }
 
     fn save_ram(&self) -> Option<Vec<u8>> {
         let (tx, rx) = channel();
         request(&self.cmds, &self.shared, Cmd::Sav(tx)).then_some(())?;
-        rx.recv().ok().flatten()
+        answer(rx, "save ram").flatten()
     }
 
     fn thumb(&self) -> Option<Vec<u8>> {
         let (tx, rx) = channel();
         request(&self.cmds, &self.shared, Cmd::Thumb(tx)).then_some(())?;
-        rx.recv().ok().flatten()
+        answer(rx, "thumbnail").flatten()
     }
 
     fn load(&self, state: Vec<u8>) {
@@ -455,6 +511,20 @@ impl Snapshot for EmuSnapshot {
 
     fn save_ram_trusted(&self) -> bool {
         !self.shared.sav_refused.load(Ordering::Acquire)
+    }
+}
+
+fn answer<T>(rx: Receiver<T>, what: &str) -> Option<T> {
+    match rx.recv_timeout(ANSWER_WAIT) {
+        Ok(v) => Some(v),
+        Err(RecvTimeoutError::Timeout) => {
+            eprintln!(
+                "slot: emu: no {what} after {} s, the core is not answering",
+                ANSWER_WAIT.as_secs()
+            );
+            None
+        }
+        Err(RecvTimeoutError::Disconnected) => None,
     }
 }
 
@@ -479,6 +549,20 @@ impl Drop for EmuHandle {
         eprintln!("slot: emu: stopping at {:.1} ms", crate::boot_time::ms());
         self.shared.stop.store(true, Ordering::Relaxed);
         if let Some(join) = self.join.take() {
+            let deadline = Instant::now() + STOP_WAIT;
+            while !join.is_finished() && Instant::now() < deadline {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            if !join.is_finished() {
+                eprintln!(
+                    "slot: emu: the core has not stopped after {} s",
+                    STOP_WAIT.as_secs()
+                );
+                #[cfg(feature = "device")]
+                unsafe {
+                    libc::_exit(75)
+                };
+            }
             let _ = join.join();
         }
         eprintln!("slot: emu: stopped at {:.1} ms", crate::boot_time::ms());
@@ -588,7 +672,6 @@ impl Worker {
         let mut cable_core = Duration::ZERO;
         let mut cable_wait = Duration::ZERO;
         let mut ff = (0u32, 0u32, Duration::ZERO, Instant::now());
-        let mut runahead = RunAhead::default();
         while !self.shared.stop.load(Ordering::Relaxed) {
             for cmd in self.cmds.try_iter() {
                 self.apply(cmd, core.as_mut(), &mut transport, &mut cable, &link);
@@ -612,6 +695,8 @@ impl Worker {
                                         "slot: cable: restored {} bytes, running the host's game",
                                         state.len()
                                     );
+                                        self.shared.sav_refused.store(true, Ordering::Release);
+                                        self.shared.resume_refused.store(true, Ordering::Release);
                                         c.prime();
                                         t.send(NETPACKET_RELIABLE, &cable::ready_packet());
                                     }
@@ -655,13 +740,6 @@ impl Worker {
                 rate.restart(deadline, self.current_tick());
                 self.shared.clocked.notify_all();
             }
-            let ahead =
-                if speed == Speed::Normal && !rewinding && transport.is_none() && !runahead.refused
-                {
-                    u32::from(self.shared.runahead.load(Ordering::Relaxed))
-                } else {
-                    0
-                };
             let input = ButtonMask(self.shared.input.load(Ordering::Relaxed));
             crate::latency::emu_frame(input.0);
             let mut span = 1u32;
@@ -694,13 +772,16 @@ impl Worker {
                 let began = Instant::now();
                 let mut ran = 0u32;
                 let (mut skipped, mut drawn) = (None::<Duration>, Duration::ZERO);
-                let mut shown = false;
                 loop {
                     ran += 1;
                     let last = ran >= ceiling || cost.last(began.elapsed(), budget);
-                    let input = match self.shared.turbo.load(Ordering::Relaxed) {
-                        true => input.turbo(turbo_frame),
-                        false => input.without_turbo(),
+                    let input = match (
+                        self.shared.native_xy.load(Ordering::Relaxed),
+                        self.shared.turbo.load(Ordering::Relaxed),
+                    ) {
+                        (true, _) => input,
+                        (false, true) => input.turbo(turbo_frame),
+                        (false, false) => input.without_turbo(),
                     };
                     turbo_frame = turbo_frame.wrapping_add(1);
                     core.set_frame_skip(!last);
@@ -743,13 +824,6 @@ impl Worker {
                                 }
                             }
                         }
-                        None if ahead > 0 => match runahead.run(core.as_mut(), input, ahead) {
-                            Ok(()) => shown = true,
-                            Err(e) => {
-                                eprintln!("slot: run-ahead: {e}, off for this game");
-                                runahead.refused = true;
-                            }
-                        },
                         None => core.run_frame(input),
                     }
                     let took = frame_began.elapsed();
@@ -763,9 +837,7 @@ impl Worker {
                     }
                 }
                 let core_time = began.elapsed();
-                if ahead == 0 {
-                    cost.measured(skipped, drawn);
-                }
+                cost.measured(skipped, drawn);
                 if cable.is_some() {
                     cable_presents += 1;
                     cable_core += core_time;
@@ -806,11 +878,7 @@ impl Worker {
                     }
                 }
                 flush_outbound(&mut transport, &link);
-                self.publish(if shown {
-                    &runahead.video
-                } else {
-                    core.video_xrgb8888()
-                });
+                self.publish(core.video_xrgb8888());
                 self.frame_done(served);
 
                 since_snapshot += 1;
@@ -822,11 +890,7 @@ impl Worker {
                 }
                 if since_snapshot >= SNAPSHOT_EVERY {
                     since_snapshot = 0;
-                    let state = match shown {
-                        true => Ok(std::mem::take(&mut runahead.state)),
-                        false => core.serialize(),
-                    };
-                    if let Ok(state) = state {
+                    if let Ok(state) = core.serialize() {
                         rewind.push(state);
                         self.shared
                             .rewind_fill
@@ -834,11 +898,7 @@ impl Worker {
                     }
                 }
 
-                let audio = if shown {
-                    std::mem::take(&mut runahead.audio)
-                } else {
-                    core.take_audio()
-                };
+                let audio = core.take_audio();
                 if speed == Speed::Normal || ff_sound {
                     let target = drc_target(ring.capacity_frames());
                     let queued = ring.queued_frames();
@@ -937,13 +997,20 @@ impl Worker {
                     eprintln!("slot: {e}");
                 }
             }
-            Cmd::Refresh => match core.serialize() {
+            Cmd::Refresh { show } => match core.serialize() {
                 Ok(state) => {
-                    core.set_frame_skip(true);
-                    core.run_frame(ButtonMask(0));
-                    core.set_frame_skip(false);
-                    core.run_frame(ButtonMask(0));
-                    self.publish(core.video_xrgb8888());
+                    // Run a few frames rather than one, then go back to the paused state: a
+                    // core's frame blending (Ghosting) starts over when it is switched on or its
+                    // colours change, and a single frame of it shows the game half dark or half
+                    // in the old colours. A few frames on, it has settled. Going back to the state
+                    // between them would start the blending over again, so they run straight on;
+                    // the picture is a fifth of a second ahead, and the game picks up from the state.
+                    for _ in 0..REFRESH_FRAMES {
+                        core.run_frame(ButtonMask(0));
+                    }
+                    if show {
+                        self.publish(core.video_xrgb8888());
+                    }
                     let _ = core.take_audio();
                     if let Err(e) = core.unserialize(&state) {
                         eprintln!("slot: refresh: {e}");
@@ -1142,36 +1209,6 @@ impl FrameCost {
     }
 }
 
-#[derive(Default)]
-struct RunAhead {
-    state: Vec<u8>,
-    video: Vec<u8>,
-    audio: Vec<i16>,
-    refused: bool,
-}
-
-impl RunAhead {
-    fn run(
-        &mut self,
-        core: &mut dyn RetroCore,
-        input: ButtonMask,
-        frames: u32,
-    ) -> Result<(), CoreError> {
-        core.set_frame_skip(true);
-        core.run_frame(input);
-        self.state = core.serialize()?;
-        for left in (0..frames).rev() {
-            let _ = core.take_audio();
-            core.set_frame_skip(left > 0);
-            core.run_frame(input);
-        }
-        self.audio = core.take_audio();
-        self.video.clear();
-        self.video.extend_from_slice(core.video_xrgb8888());
-        core.unserialize(&self.state)
-    }
-}
-
 struct TickRate {
     began: Instant,
     start_tick: u64,
@@ -1219,7 +1256,7 @@ fn drain_transport(transport: &mut dyn LinkChannel, link: &Link, cap: u32) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use slot_retro::{LoopbackLink, MockCore};
+    use slot_retro::LoopbackLink;
 
     const PANEL: Duration = Duration::from_micros(16_760);
 
@@ -1252,38 +1289,6 @@ mod tests {
             seeded: false,
         };
         assert_eq!(cost.span(ms(11.9), 6), 1);
-    }
-
-    #[test]
-    fn run_ahead_keeps_the_picture_and_sound_it_shows_and_puts_the_game_back() {
-        for frames in 1..=u32::from(RUN_AHEAD_MAX) {
-            let mut core = MockCore::new();
-            let mut runahead = RunAhead::default();
-            for real in 1..=3u64 {
-                runahead
-                    .run(&mut core, ButtonMask(0), frames)
-                    .expect("the mock always saves and loads");
-                let shown = real + u64::from(frames);
-                let mut reference = MockCore::new();
-                reference
-                    .unserialize(&(shown - 1).to_le_bytes())
-                    .expect("the reference refused its frame");
-                reference.run_frame(ButtonMask(0));
-                assert_eq!(
-                    core.serialize().expect("the mock always saves"),
-                    real.to_le_bytes(),
-                    "at {frames} the game is not back on frame {real}"
-                );
-                assert!(
-                    runahead.video == reference.video_xrgb8888(),
-                    "at {frames} the picture kept is not frame {shown}"
-                );
-                assert!(
-                    runahead.audio == reference.take_audio(),
-                    "at {frames} the sound kept is not frame {shown}'s alone"
-                );
-            }
-        }
     }
 
     fn ms(ms: f64) -> Duration {

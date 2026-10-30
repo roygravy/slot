@@ -228,7 +228,7 @@ fn the_date_and_time_read_as_a_month_a_day_and_the_carousels_24_hour_clock() {
 #[test]
 fn a_picker_for_a_set_clock_starts_at_the_local_time_and_its_offset() {
     let utc = parse_stamp("2026-09-15_21-35-42").expect("a stamp");
-    let p = ClockPicker::local(utc, -300);
+    let p = ClockPicker::local(utc, slot_ui::TimeZone::Fixed(-300));
     assert_eq!(p.offset_min(), -300);
     assert_eq!(
         p.secs(),

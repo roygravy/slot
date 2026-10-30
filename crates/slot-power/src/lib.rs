@@ -1,3 +1,10 @@
+macro_rules! eprintln {
+    ($($arg:tt)*) => {{
+        use std::io::Write as _;
+        let _ = writeln!(std::io::stderr(), $($arg)*);
+    }};
+}
+
 mod device;
 mod motor;
 mod power;
@@ -26,6 +33,13 @@ pub enum Charge {
 pub struct Battery {
     pub percent: u8,
     pub charge: Charge,
+}
+
+/// What ended a deep sleep.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum Woke {
+    Button,
+    LowBattery,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -67,6 +81,15 @@ pub trait Platform: Send {
 
     fn card_kernel_lines(&self) -> Vec<String> {
         Vec::new()
+    }
+
+    /// One short blink of the light: the console has gone into its light sleep.
+    fn blink_led(&mut self) {}
+
+    /// Suspend to RAM until POWER wakes the console, or until the battery is down to
+    /// `low` percent; None when this console cannot sleep that deep.
+    fn deep_sleep(&mut self, _low: u8) -> Option<Woke> {
+        None
     }
 }
 

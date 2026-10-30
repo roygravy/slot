@@ -320,3 +320,50 @@ fn exit_game_is_offered_with_two_carts() {
     let (_d, a) = playing();
     assert!(!a.in_game_hidden().contains(&QuickRow::ExitGame));
 }
+
+#[test]
+fn select_b_switches_only_the_chosen_effects_off_and_back_on() {
+    let (_d, mut a) = playing();
+    let value = |a: &App, row| a.quick_value(row).and_then(slot_ui::QuickValue::switch);
+    go_to(&mut a, QuickRow::PixelTransparency);
+    press(&mut a, Btn::Right);
+    assert_eq!(value(&a, QuickRow::PixelTransparency), Some(false));
+    a.apply(Action::QuickMenu);
+    assert!(a.in_game_menu().is_none());
+    a.apply(Action::ShaderPrev);
+    for row in [
+        QuickRow::Shader,
+        QuickRow::PixelTransparency,
+        QuickRow::LcdGhosting,
+    ] {
+        assert_eq!(value(&a, row), Some(false), "{row:?} stayed on");
+    }
+    a.apply(Action::ShaderPrev);
+    assert_eq!(value(&a, QuickRow::Shader), Some(true));
+    assert_eq!(value(&a, QuickRow::LcdGhosting), Some(true));
+    assert_eq!(
+        value(&a, QuickRow::PixelTransparency),
+        Some(false),
+        "an effect switched off by hand came back"
+    );
+}
+
+#[test]
+fn select_b_with_every_effect_off_brings_the_standard_look() {
+    let (_d, mut a) = playing();
+    let value = |a: &App, row| a.quick_value(row).and_then(slot_ui::QuickValue::switch);
+    for row in [
+        QuickRow::Shader,
+        QuickRow::PixelTransparency,
+        QuickRow::LcdGhosting,
+    ] {
+        go_to(&mut a, row);
+        press(&mut a, Btn::Right);
+        a.apply(Action::QuickMenu);
+        assert_eq!(value(&a, row), Some(false));
+    }
+    a.apply(Action::ShaderPrev);
+    assert_eq!(value(&a, QuickRow::Shader), Some(true));
+    assert_eq!(value(&a, QuickRow::PixelTransparency), Some(false));
+    assert_eq!(value(&a, QuickRow::LcdGhosting), Some(false));
+}

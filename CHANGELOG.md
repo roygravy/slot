@@ -1,5 +1,67 @@
 # Changelog
 
+## slot. x GRAVY v1.1
+
+Everything since slot. x GRAVY v1.0.2.
+
+### New
+
+- **Deep sleep**: a tap on POWER now really puts the console to sleep (suspend to RAM). The green light blinks out as it falls asleep, POWER wakes it straight back into your game. Overnight it uses about half a percent of battery an hour.
+- **NES and SNES**: their own shelves and slots, on FCEUmm and Snes9x, with NTSC and PAL cart moulds. The picture goes through a CRT shader and Blargg's NTSC composite filter. NES colours: Authentic or Trinitron.
+- **Super Game Boy**: put the SGB cart in the SNES slot and the camera zooms onto the Game Boy shelf inside it. Games play in SGB colours with their own border, one of the eight real borders read from `SGB1.sfc` / `SGB2.sfc` in `BIOS/`, or the slot. x GRAVY border.
+- **Light Sleep** before the deep sleep: Wi-Fi stays on, any button wakes it; after Direct / 5 / 10 / 30 minutes (5 by default) it goes into deep sleep, which only POWER wakes.
+- **Slot Color**: Dark, Light or Originals, the colours of the real consoles. The NES Originals slot has the two black blocks beside the lid.
+- **Highlight** behind the cart, next to Spotlight, Glow and Star, for Favorites.
+- **Label search**: Y in the cartridge studio searches for a label and lets you pick another, Europe first, then USA, then Japan. The on-screen keyboard has accents.
+- Your own wallpaper gets black menus, whatever the Slot Color.
+- **3:2 screens** (RG34XX SP, 720x480): the shelf and menus span the whole panel, and full screen GB/GBC, GBA, save states and screenshots fill it without black bars. The GBA LCD filter keeps to the panel's own pixels.
+- **Home Wi-Fi** (ported from pvaibhav/slot): join your home network from Settings -> General -> Home Wi-Fi. Networks are listed in `Config/wifi.toml`.
+- **Network** has its own row in the menu, with Home Wi-Fi on/off and the network you are connected to.
+- **Link over the home network**: with Home Wi-Fi connected, two consoles running the same game find each other on the network. Without it the direct link works as before. The link screen shows a HOME WI-FI or DIRECT LINK plate.
+- **Clock**: Auto Time sets the clock over Home Wi-Fi (on by default). The time zone is picked as a city, with that city's own summer time. 24-Hour Time off shows 6:00 PM in the status bar, the menu and the clock screen. The clock screen uses the menu's background and ink.
+- **Phone-style status bar**: clock on the left, Wi-Fi and battery on the right, set larger and drawn the way a phone draws them.
+- **Labels fetched in the background**: missing cart labels are looked up in `Labels/Artwork.pack` or on LaunchBox, only with Home Wi-Fi on or an artwork pack on the card. A label already on the card is never replaced.
+- **Labels cached in the background**: the Caching New Labels screen at boot is gone. The shelf is usable right away while a CACHING LABELS bar runs along the top.
+- **Cartridge studio**: SELECT on a cart picks its shell colour and finish (solid, clear, glitter). A COLOR and a MARKER tab, and Y fetches the label.
+- **Marker ink** (black, white, gold) for blank carts that have no label online.
+- Labels have rounded corners and sit in a recess in the cart's own plastic.
+- The studio opens and closes like the core picker: the neighbours part, the cart hops up and the rows slide in under it.
+- **Cheats fetched automatically**: with Home Wi-Fi on, each game gets its cheat file from the libretro database, so the card doesn't need the whole database.
+- **SELECT + B** turns only the screen effects you chose for that system off and back on. With nothing chosen it brings the standard look: Dot Matrix with the DMG palette for GB, the LCD filter for GBC and GBA.
+- Carts on the GB shelf always run as a Game Boy in the chosen palette, even when their header says GBC only.
+- Screenshots sits above Buttons in the menu, and the Buttons page lists L1 / R1 for full screen on GB and GBC.
+- About: the dark back is easier to read, the letters catch light on their edges and keep the housing colour. The credits add pvaibhav's Home Wi-Fi, link and label work, LaunchBox labels, libretro cheats and shaders, and Liberation Sans.
+
+### Fixed
+
+- Favorites and recents are kept when a slot. card first boots into GRAVY.
+- Auto Sleep waits while a button is held or fast forward or rewind runs.
+- Resetting with START then SELECT no longer lets the game see either button.
+- A card without GB games starts on the first shelf that has carts, instead of a bare GB shelf.
+- Resetting during the GB / GBC boot logo no longer leaves a game that never starts.
+- No dark picture after a Ghosting change, and the screen colour follows a palette switch at once.
+- The shelf stays drawn while a held letter jump outruns the scroll.
+- Smaller fixes in the labels, the cartridge studio and Wi-Fi: the Wi-Fi status was polled with Home Wi-Fi off, `cart_shell.txt` could get duplicate names, and the caching bar drew over the pickers.
+
+### From upstream slot v1.9.0 (robustness)
+
+- A core that does not answer (stuck in a frame) no longer stalls a save, eject, or shutdown: timeouts are 2 seconds for state/save/thumbnail, 10 seconds for stopping the core.
+- A label whose decoder panics no longer stalls the label cache rebuild; the bad label is skipped silently.
+- The SD card is synced after each save and after each log write (every second), so long outages don't lose recent logs or game saves.
+- **Crash recovery**: if a cart crashes while slot is loading it, the console starts on the shelf without trying to play that cart again, and the crashed state is retired.
+
+### From upstream slot v1.8.0 and v1.8.1
+
+- MBC2 games no longer crash on their first save RAM read. (#137)
+- mGBA asks for the state size once per game, and again once the game settles on its save chip. (#126)
+- Loading a state while a game writes its 128 KB flash no longer puts the save in the wrong half of the chip. (#104)
+- **Run-Ahead is removed**: it scrambled saves in games with 128 KB flash, such as Super Mario Advance 4. Your other settings are kept. (#104)
+- The lowest brightness step is as bright as the old second step. (#100)
+- Wi-Fi is unloaded before Power Off, as Restart already did. (#117)
+- **Safer SD card** through crashes, power offs and failed reads: no full memory dump on a crash (the last 5 crash logs are kept), the card is synced before power off, the resume state is not rewritten when nothing changed, half-written files from a power cut are swept at boot, the boot partition stays read-only unless the boot logo changes, and a save the card failed to read is no longer written over.
+- Not taken: the BaseOS startup sound. slot claims the speaker at boot, so it stays silent.
+
+
 ## [1.7.0](https://github.com/BrandonKowalski/slot/releases/tag/v1.7.0)
 
 - The slot, carts and shelf now have a skeuomorphic effect, with light and dark themes and bundled wallpapers. Huge thanks to Markus for this amazing work! (#74, @MarkusMaribu)

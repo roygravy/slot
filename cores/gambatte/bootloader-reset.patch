@@ -1,0 +1,16 @@
+diff --git a/libgambatte/src/bootloader.cpp b/libgambatte/src/bootloader.cpp
+index da9abc2..45a2f33 100644
+--- a/libgambatte/src/bootloader.cpp
++++ b/libgambatte/src/bootloader.cpp
+@@ -65,6 +65,11 @@ void Bootloader::load(bool isgbc, bool isgba) {
+ }
+ 
+ void Bootloader::reset() {
++   /* A reset while the boot ROM still runs: put the cartridge's own bytes
++    * back first, or the next load() backs up the boot ROM as the game and
++    * the cartridge never starts again. */
++   if (using_bootloader && !has_called_FF50 && addrspace_start)
++      std::memcpy((uint8_t*)addrspace_start, rombackup, bootloadersize);
+    bootloadersize = 0;
+    has_called_FF50 = false;
+    addrspace_start = NULL;

@@ -24,7 +24,6 @@ fn y_deletes_the_selected_state_and_nothing_else() {
     );
 }
 
-
 #[test]
 fn deleting_the_last_state_closes_the_switcher() {
     let d = tmp_root_with_carts(&["Emerald"]);
@@ -59,4 +58,3 @@ fn the_deleted_state_leaves_the_switcher_with_it() {
         "the switcher closed with states still in it"
     );
 }
-

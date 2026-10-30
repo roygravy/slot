@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use slot_input::{Action, Gestures, Millis, RawEvent};
+use slot_input::{Action, Btn, Gestures, Millis, RawEvent};
 use slot_retro::Rumble;
 use slot_store::Platform;
 use slot_ui::FfState;
@@ -13,7 +13,7 @@ fn gambatte_boot_rom_status(root: &std::path::Path, platform: Platform) -> Optio
     let (name, expected_size, expected_crc) = match platform {
         Platform::Gb => ("gb_bios.bin", 0x100usize, 0x59C8_598E),
         Platform::Gbc => ("gbc_bios.bin", 0x900usize, 0x4188_4E46),
-        Platform::Gba => return None,
+        Platform::Gba | Platform::Nes | Platform::Snes => return None,
     };
     let path = root.join("BIOS").join(name);
     let bytes = match std::fs::read(&path) {
@@ -66,11 +66,16 @@ pub struct Session {
     pad: Pad,
     rewinding: bool,
     fast: bool,
+    /// The buttons down right now, lid and POWER aside: holding one is not being idle.
+    held: Vec<Btn>,
     motor: u16,
     pulse: Option<(Millis, u16)>,
     prefetch: Prefetch,
     reloading: bool,
     driven: bool,
+    sgb_turn: u32,
+    /// The Game Boy's game shows in the core's own grey: every screen effect is off.
+    grey: bool,
 }
 
 impl Session {
@@ -79,6 +84,7 @@ impl Session {
     }
 
     pub fn boot_with(root: PathBuf, sink: Box<dyn AudioSink>) -> Self {
+        crate::core::warm_cores(&root);
         let mut session = Session {
             app: App::boot(&root),
             root,
@@ -88,11 +94,14 @@ impl Session {
             pad: Pad::default(),
             rewinding: false,
             fast: false,
+            held: Vec::new(),
             motor: 0,
             pulse: None,
             prefetch: Prefetch::default(),
             reloading: false,
             driven: false,
+            sgb_turn: 0,
+            grey: false,
         };
         // A game left running comes straight back. Its core loads on its own thread, so start it
         // now and let the card read overlap the rest of the boot. Waiting for the first update
@@ -202,6 +211,12 @@ impl Session {
         let mut actions = Vec::new();
         let latched = self.gestures.ff_latched();
         for ev in events {
+            match ev {
+                RawEvent::Down(Btn::Lid | Btn::Power) | RawEvent::Up(Btn::Lid | Btn::Power) => {}
+                RawEvent::Down(b) if !self.held.contains(&b) => self.held.push(b),
+                RawEvent::Up(b) => self.held.retain(|h| *h != b),
+                _ => {}
+            }
             actions.extend(self.gestures.feed(ev, now));
         }
         actions.extend(self.gestures.tick(now));
@@ -272,6 +287,10 @@ impl Session {
     }
 
     pub fn update(&mut self, dt: f32) {
+        // A button held down, or fast forward or rewind running, keeps Auto Sleep away.
+        if !self.held.is_empty() || self.fast || self.rewinding {
+            self.app.keep_awake();
+        }
         self.bridge_link(|app| app.update(dt));
         if let Some(emu) = &self.emu {
             emu.set_volume(self.app.output_volume());
@@ -297,6 +316,8 @@ impl Session {
         }
         let mut recoloured = false;
         if let Some(p) = self.app.take_gb_palette() {
+            // A palette set over the grey: the grey goes on again below while effects are off.
+            self.grey = false;
             if let Some(emu) = &self.emu {
                 let options = match p {
                     Some(p) => crate::core::gb_palette_options(self.app.core(), p),
@@ -308,16 +329,59 @@ impl Session {
                 }
             }
         }
-        if let Some(on) = self.app.take_lcd_ghosting() {
-            let (key, value) = crate::core::lcd_ghosting_option(self.app.core(), on);
+        // Effects off is the bare emulator: a Game Boy game in the core's own grey, not the
+        // chosen palette (Roy). Back on, the palette returns.
+        let grey = self.app.screen_bare() && self.app.palette_live();
+        if grey != self.grey {
             if let Some(emu) = &self.emu {
+                let options = match (grey, self.app.gb_palette()) {
+                    (true, _) => crate::core::gb_grey_options(self.app.core()),
+                    (false, Some(p)) => crate::core::gb_palette_options(self.app.core(), p),
+                    (false, None) => Vec::new(),
+                };
+                for (key, value) in options {
+                    emu.set_option(key, &value);
+                    recoloured = true;
+                }
+                self.grey = grey;
+            }
+        }
+        if self.app.take_sgb_border_changed() && self.app.sgb_playing() {
+            self.sgb_turn += 1;
+            let (key, value) = crate::core::set_sgb_border(
+                &self.root,
+                self.app.sgb_border(),
+                self.app.sgb_two(),
+                self.sgb_turn,
+            );
+            if let Some(emu) = &self.emu {
+                emu.set_option(key, &value);
+                // Behind the menu too: the new border shows at once.
+                recoloured = true;
+            }
+        }
+        if self.app.take_tv_changed() {
+            if let Some(emu) = &self.emu {
+                let look = self.app.tv_look(self.app.playing_platform());
+                for (key, value) in crate::core::tv_options(self.app.core(), look) {
+                    emu.set_option(key, value);
+                    recoloured = true;
+                }
+            }
+        }
+        if let Some(on) = self.app.take_lcd_ghosting() {
+            let option =
+                crate::core::lcd_ghosting_option(self.app.core(), self.app.playing_platform(), on);
+            if let (Some((key, value)), Some(emu)) = (option, &self.emu) {
                 emu.set_option(key, value);
                 recoloured = true;
             }
         }
+        // Behind a menu the game is still: redraw its picture in the new colours. In play the
+        // next frames show the change, Ghosting fading the old colours out like a real LCD.
         if recoloured && self.held() && !self.app.link_active() {
             if let Some(emu) = &self.emu {
-                emu.refresh();
+                emu.refresh(true);
             }
         }
         if let Some((stem, serial)) = self.app.take_link_reload() {
@@ -432,9 +496,7 @@ impl Session {
     }
 
     fn held(&self) -> bool {
-        self.app.game_menu_open()
-            || self.app.in_game_menu().is_some()
-            || self.app.shutting_down()
+        self.app.game_menu_open() || self.app.in_game_menu().is_some() || self.app.shutting_down()
     }
 
     fn dozing(&self) -> bool {
@@ -449,7 +511,6 @@ impl Session {
         if let Some(emu) = &self.emu {
             emu.set_fast_steps(u32::from(self.app.ff_speed()));
             emu.set_ff_sound(self.app.ff_sound());
-            emu.set_runahead(self.app.runahead_in_play());
             emu.set_speed(
                 if self.inserting()
                     || self.ejecting()
@@ -466,6 +527,9 @@ impl Session {
             );
             emu.set_rewinding(self.actually_rewinding());
             emu.set_turbo(self.app.turbo());
+            // Only an SNES game's own pad has X and Y: a Game Boy game in the Super Game Boy
+            // keeps them as turbo A and B.
+            emu.set_native_xy(self.app.core() == slot_store::Core::Snes9x);
             emu.set_rewind_recording(self.app.records_rewind());
         }
     }
@@ -486,6 +550,11 @@ impl Session {
             Phase::Inserting { cart, .. } => cart.clone(),
             _ => return,
         };
+        // The Super Game Boy has no game of its own to run.
+        if self.app.sgb_seated() {
+            self.emu = None;
+            return;
+        }
         if self.emu.is_none() {
             let (_, serial) = self.app.link_mode(&stem);
             self.spawn_core(&stem, serial);
@@ -520,16 +589,27 @@ impl Session {
         else {
             return;
         };
-        let core = slot_store::core_for_platform(&self.root, stem, platform);
+        // A Game Boy game in the Super Game Boy plays on mGBA, the core that does the SGB.
+        let sgb = self.app.sgb_playing();
+        let core = match sgb {
+            true => slot_store::Core::Mgba,
+            false => slot_store::core_for_platform(&self.root, stem, platform),
+        };
         launch(&format!("opening {stem} on {}", core.as_str()));
+        // The core opens in the chosen palette: the grey, if wanted, follows once it runs.
+        self.grey = false;
         self.app.set_core(core);
         self.app.set_platform(platform);
-        self.app
-            .set_video_mode(crate::video_mode::video_mode_for(&self.root, stem));
         self.app.set_link_loaded(serial);
-        let resume = (!self.app.starting_clean())
-            .then(|| persist::read_resume(&self.root, platform, core, stem))
-            .flatten();
+        let resume = match self.app.starting_clean() {
+            true => Ok(None),
+            false => persist::read_resume(&self.root, platform, core, stem),
+        };
+        // A read the card failed is not an empty file: the game runs, but nothing of it is
+        // written back over the save or resume state that could not be read.
+        let resume = self.app.card_read("resume", resume);
+        let resume_unread = resume.is_none();
+        let resume = resume.flatten();
         if core == slot_store::Core::Gambatte {
             if let Some(status) = gambatte_boot_rom_status(&self.root, platform) {
                 eprintln!("slot: Gambatte boot ROM: {status}");
@@ -540,33 +620,71 @@ impl Session {
         }
         launch("resume state read");
         let player = self.app.link_player();
-        let palette = crate::core::palette_for(self.app.gb_palette(), platform, &rom, player);
+        // The Super Game Boy has its own colours, SGB 1-A or the game's: no Game Boy palette,
+        // which mGBA would otherwise bring back as the picture's at a reset.
+        let palette = crate::core::palette_for(self.app.gb_palette(), platform, &rom, player)
+            .filter(|_| !sgb);
         self.app.set_palette_live(palette.is_some());
         self.app.set_palette_capable(
-            crate::core::palette_for(Some(slot_store::GbPalette::DEFAULT), platform, &rom, player).is_some(),
+            !sgb && crate::core::palette_for(
+                Some(slot_store::GbPalette::DEFAULT),
+                platform,
+                &rom,
+                player,
+            )
+            .is_some(),
         );
-        let mut opened = open_core(
-            &self.root,
-            core,
-            platform,
-            serial,
-            // slot.'s own screen looks take the place of the cores' colour correction.
-            false,
-            palette,
-            player,
-        );
-        let (ghosting_key, ghosting_value) =
-            crate::core::lcd_ghosting_option(core, self.app.lcd_ghosting_for(platform));
-        opened.core.set_option(ghosting_key, ghosting_value);
-        self.app.set_named_core(opened.named);
+        // The core opens on the emulator's thread, so the cart's insert keeps moving meanwhile.
+        let root = self.root.clone();
+        let ghosting =
+            crate::core::lcd_ghosting_option(core, platform, self.app.lcd_ghosting_for(platform));
+        // The Super Game Boy's picture takes the SNES's look.
+        let tv = crate::core::tv_options(core, self.app.tv_look(self.app.playing_platform()));
+        let sgb_setup = sgb.then(|| {
+            (
+                self.app.sgb_border(),
+                self.app.sgb_two(),
+                // A colour game made for the SGB too plays as on the real thing, in SGB
+                // colours with its own border; only the rest keep their colour inside slot.'s.
+                platform == Platform::Gbc && !crate::core::sgb_aware(&rom),
+            )
+        });
+        let open = Box::new(move || {
+            let mut opened = open_core(
+                &root, core, platform, serial,
+                // slot.'s own screen looks take the place of the cores' colour correction.
+                false, palette, player,
+            );
+            if let Some((key, value)) = ghosting {
+                opened.core.set_option(key, value);
+            }
+            for (key, value) in tv {
+                opened.core.set_option(key, value);
+            }
+            if let Some((border, two, gbc)) = sgb_setup {
+                crate::core::sgb_options(&root, opened.core.as_mut(), border, two, gbc);
+            }
+            opened.core
+        });
+        self.app
+            .set_named_core(crate::core::core_found(&self.root, core));
         launch("core opened");
-        let sav = persist::read_sav(&self.root, platform, stem);
+        let sav = self
+            .app
+            .card_read("save", persist::read_sav(&self.root, platform, stem));
+        let sav_unread = sav.is_none();
+        let sav = sav.flatten();
         launch("save read");
         let ring = self.sink.ring();
-        let emu = match player.filter(|_| platform == Platform::Gba) {
-            Some(p) => EmuHandle::spawn_linked(opened.core, rom, ring, sav, resume, p),
-            None => EmuHandle::spawn(opened.core, rom, ring, sav, resume),
-        };
+        let linked = player.filter(|_| platform == Platform::Gba);
+        let emu = EmuHandle::spawn_opening(open, rom, ring, sav, resume, linked);
+        if sav_unread {
+            emu.refuse_save_ram();
+        }
+        if resume_unread {
+            emu.refuse_resume();
+        }
+        self.app.set_resume_unread(resume_unread);
         emu.set_volume(self.app.output_volume());
         emu.set_driven(self.driven);
         self.app.set_snapshot(Box::new(emu.snapshot()));

@@ -22,7 +22,7 @@ const LEGEND_Y: f32 = 427.0;
 const EMPTY_Y: f32 = 170.0;
 
 /// The robber's height in the menu corner (a pixel taller than the battery) and in play.
-pub const BADGE_MENU_H: u32 = 16;
+pub const BADGE_MENU_H: u32 = 15;
 pub const BADGE_GAME_H: u32 = 22;
 /// In play the robber mirrors the fast-forward badge: this far in from the bottom left.
 const BADGE_GAME_X: f32 = 14.0;
@@ -128,11 +128,23 @@ impl CheatPage<'_> {
         let rows_bottom = page_top + PITCH * (last - first) as f32;
         if first > 0 {
             let f = faces.more[0];
-            tint(out, f, self.canvas.centred(f.1 as f32), page_top - MORE_GAP - f.2 as f32, ink.dim);
+            tint(
+                out,
+                f,
+                self.canvas.centred(f.1 as f32),
+                page_top - MORE_GAP - f.2 as f32,
+                ink.dim,
+            );
         }
         if last < count {
             let f = faces.more[1];
-            tint(out, f, self.canvas.centred(f.1 as f32), rows_bottom + MORE_GAP, ink.dim);
+            tint(
+                out,
+                f,
+                self.canvas.centred(f.1 as f32),
+                rows_bottom + MORE_GAP,
+                ink.dim,
+            );
         }
         if let Some(h) = faces.help {
             tint(out, h, self.canvas.centred(h.1 as f32), HELP_Y, ink.dim);
@@ -180,9 +192,9 @@ pub fn draw_cheat_badge_in_game(canvas: Canvas, face: (TexId, u32, u32), out: &m
     });
 }
 
-/// The robber in the menu's corner, right after the battery's percentage.
+/// The robber in the menu's corner, right after the clock.
 pub fn draw_cheat_badge_in_menu(x: f32, face: (TexId, u32, u32), out: &mut Vec<Draw>) {
-    // The battery gauge is 12 px tall and sits centred in the 40 px plate.
+    // On the clock's digits, which run from 14 to 27 in the 40 px plate.
     let centre = 20.0;
     out.push(Draw::Tex {
         x: x.round(),

@@ -14,6 +14,7 @@ fn cart(stem: &str, code: &str) -> Cart {
         label: None,
         code: code.into(),
         shell: None,
+        marker: None,
         title: stem.to_uppercase(),
     }
 }

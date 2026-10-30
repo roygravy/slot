@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use crate::{Battery, Charge, LedState, LidPolicy, Platform};
+use crate::{Battery, Charge, LedState, LidPolicy, Platform, Woke};
 
 pub struct Power {
     platform: Box<dyn Platform>,
@@ -61,6 +61,14 @@ impl Power {
 
     pub fn relink_adb(&mut self) -> bool {
         self.platform.relink_adb()
+    }
+
+    pub fn blink_led(&mut self) {
+        self.platform.blink_led();
+    }
+
+    pub fn deep_sleep(&mut self, low: u8) -> Option<Woke> {
+        self.platform.deep_sleep(low)
     }
 
     pub fn poweroff(&mut self) -> ! {

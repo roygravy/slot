@@ -13,6 +13,7 @@ fn carts(stems: &[&str]) -> Vec<Cart> {
             label: None,
             code: String::new(),
             shell: None,
+            marker: None,
             title: stem.to_uppercase(),
         })
         .collect()

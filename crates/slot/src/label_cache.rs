@@ -1,13 +1,13 @@
 use std::collections::HashMap;
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::thread;
-use std::time::UNIX_EPOCH;
+use std::time::{Duration, Instant, UNIX_EPOCH};
 
 use slot_store::Cart;
-use slot_ui::{cover, label_size};
+use slot_ui::{cover_label, label_size};
 
 const DIR: &str = "System/Cache/Labels";
 const HEAD: usize = 24;
@@ -20,7 +20,7 @@ pub fn label_art(root: &Path, cart: &Cart) -> Option<Vec<u8>> {
     if let Some(art) = read(&cached, stamp, w, h) {
         return art;
     }
-    let art = cover(src, w, h);
+    let art = cover_label(src, w, h);
     if let Some(dir) = cached.parent() {
         let _ = std::fs::create_dir_all(dir);
     }
@@ -31,7 +31,7 @@ pub fn label_art(root: &Path, cart: &Cart) -> Option<Vec<u8>> {
     bytes.extend_from_slice(&cw.to_le_bytes());
     bytes.extend_from_slice(&ch.to_le_bytes());
     bytes.extend_from_slice(art.as_deref().unwrap_or_default());
-    if let Err(e) = std::fs::write(&cached, &bytes) {
+    if let Err(e) = slot_store::atomic_write(&cached, &bytes) {
         eprintln!("slot: label cache: {}: {e}", cached.display());
     }
     art
@@ -76,8 +76,18 @@ pub fn cache_path(root: &Path, cart: &Cart) -> PathBuf {
         .join(format!("{}.rgba", cart.stem))
 }
 
+/// A background worker's thread gives way to the game and the menus: lowest priority.
+pub(crate) fn yield_to_play() {
+    // On Linux, PRIO_PROCESS with 0 sets only the calling thread.
+    unsafe {
+        libc::setpriority(libc::PRIO_PROCESS, 0, 19);
+    }
+}
+
 pub struct Rebuild {
     done: Arc<AtomicUsize>,
+    paused: Arc<AtomicBool>,
+    started: Instant,
     total: usize,
 }
 
@@ -86,29 +96,57 @@ impl Rebuild {
         let total = carts.len();
         let done = Arc::new(AtomicUsize::new(0));
         let next = Arc::new(AtomicUsize::new(0));
+        let paused = Arc::new(AtomicBool::new(false));
         let carts = Arc::new(carts);
-        let threads = thread::available_parallelism().map_or(1, |n| n.get());
+        // The shelf is in use while they are cached: one core is left to it.
+        let threads =
+            thread::available_parallelism().map_or(1, |n| n.get().saturating_sub(1).max(1));
         for n in 0..threads.min(total) {
-            let (root, carts, next, done) = (
+            let (root, carts, next, done, paused) = (
                 root.to_path_buf(),
                 carts.clone(),
                 next.clone(),
                 done.clone(),
+                paused.clone(),
             );
             let spawned = thread::Builder::new()
                 .name(format!("slot-labels-{n}"))
-                .spawn(move || loop {
-                    let Some(cart) = carts.get(next.fetch_add(1, Ordering::Relaxed)) else {
-                        return;
-                    };
-                    let _ = label_art(&root, cart);
-                    done.fetch_add(1, Ordering::Release);
+                .spawn(move || {
+                    yield_to_play();
+                    loop {
+                        // In a game only the first keeps going, at the lowest priority.
+                        while n > 0 && paused.load(Ordering::Relaxed) {
+                            thread::sleep(Duration::from_millis(100));
+                        }
+                        let Some(cart) = carts.get(next.fetch_add(1, Ordering::Relaxed)) else {
+                            return;
+                        };
+                        // A label that takes its decoder down is skipped, not the rebuild.
+                        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                            label_art(&root, cart)
+                        }));
+                        done.fetch_add(1, Ordering::Release);
+                    }
                 });
             if let Err(e) = spawned {
                 eprintln!("slot: label cache: rebuild thread failed to start: {e}");
             }
         }
-        Rebuild { done, total }
+        Rebuild {
+            done,
+            paused,
+            started: Instant::now(),
+            total,
+        }
+    }
+
+    /// A game is being played: all but one worker wait between labels so it has the cores.
+    pub fn set_paused(&self, paused: bool) {
+        self.paused.store(paused, Ordering::Relaxed);
+    }
+
+    pub fn started(&self) -> Instant {
+        self.started
     }
 
     pub fn done(&self) -> usize {

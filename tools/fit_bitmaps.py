@@ -396,34 +396,6 @@ def fit_slot() -> None:
     save(front, "slot_front.png")
 
 
-def fit_sticker() -> None:
-    w, h = 660, 228
-    body = raster_path(SVG / "sticker.svg", 0, w, h, samples=2500)
-    panel = raster_path(SVG / "sticker.svg", 1, w, h, samples=1200)
-    paper = cover(Image.open(SRC / "sticker_src.jpg").convert("RGBA"), w, h)
-    housing = cover(Image.open(SRC / "housing_src.jpg").convert("RGB"), w, h)
-    out = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-    bp, pp, hp, paper_px = body.load(), panel.load(), housing.load(), paper.load()
-    dest = out.load()
-    for y in range(h):
-        for x in range(w):
-            if bp[x, y] == 0:
-                continue
-            if pp[x, y] > 128:
-                r, g, b, _a = paper_px[x, y]
-                dest[x, y] = (r, g, b, bp[x, y])
-            else:
-                r, g, b = hp[x, y]
-                # Keep the body dark enough for the white plate type.
-                dest[x, y] = (
-                    (0x23 * 3 + r // 5) // 4,
-                    (0x1F * 3 + g // 5) // 4,
-                    (0x20 * 3 + b // 5) // 4,
-                    bp[x, y],
-                )
-    save(out, "sticker.png")
-
-
 def main() -> None:
     raise SystemExit(
         "the live pictures are in assets/. This script does not write them:\n"
@@ -440,7 +412,6 @@ def main() -> None:
     fit_port()
     fit_adapter()
     fit_slot()
-    fit_sticker()
 
     host = Image.open(OUT / "link_plug_host.png")
     join = Image.open(OUT / "link_plug_join.png")

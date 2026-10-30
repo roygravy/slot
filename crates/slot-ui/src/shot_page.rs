@@ -2,7 +2,7 @@
 //! one in a white frame between its neighbours, and A to see it fill the screen. Deleting asks
 //! first: A deletes, B cancels.
 
-use crate::draw::{Canvas, Draw, TexId, OUT_H, OUT_W};
+use crate::draw::{Canvas, Draw, TexId, OUT_H};
 use crate::hud::{PLATE, PLATE_H};
 use crate::plate::{centred_hints, HINT_H, LEGEND_GAP};
 use crate::theme::Ink;
@@ -49,7 +49,9 @@ pub struct ShotPage<'a> {
     /// Where the carousel is, easing towards `sel` after a flick.
     pub pos: f32,
     /// The pictures loaded so far, by index.
-    pub pics: &'a [(usize, TexId)],
+    /// The pictures loaded: index, texture and the picture's width (640, or 720 off a 3:2
+    /// panel), all 480 high.
+    pub pics: &'a [(usize, TexId, f32)],
     pub full: bool,
     /// How much of the full-screen hint plate shows.
     pub hints: f32,
@@ -81,8 +83,8 @@ fn fade(mut c: [f32; 4], a: f32) -> [f32; 4] {
 }
 
 impl ShotPage<'_> {
-    fn pic(&self, i: usize) -> Option<TexId> {
-        self.pics.iter().find(|(k, _)| *k == i).map(|(_, t)| *t)
+    fn pic(&self, i: usize) -> Option<(TexId, f32)> {
+        self.pics.iter().find(|(k, ..)| *k == i).map(|(_, t, w)| (*t, *w))
     }
 
     pub fn draw(&self, out: &mut Vec<Draw>) {
@@ -96,7 +98,13 @@ impl ShotPage<'_> {
         };
         let ink = self.ink;
         if self.count == 0 {
-            tint(out, faces.empty, self.canvas.centred(faces.empty.1 as f32), EMPTY_Y, ink.dim);
+            tint(
+                out,
+                faces.empty,
+                self.canvas.centred(faces.empty.1 as f32),
+                EMPTY_Y,
+                ink.dim,
+            );
             let h = faces.empty_help;
             tint(out, h, self.canvas.centred(h.1 as f32), LINE_Y, ink.dim);
             self.legend(&faces.legend_empty, out);
@@ -111,17 +119,24 @@ impl ShotPage<'_> {
                 continue;
             }
             let off = (i as f32 - self.pos).abs().min(1.0);
-            let (fx, fy, fw, fh) = (x - FRAME, SHOT_TOP - FRAME, SHOT_W + 2.0 * FRAME, SHOT_H + 2.0 * FRAME);
+            let (fx, fy, fw, fh) = (
+                x - FRAME,
+                SHOT_TOP - FRAME,
+                SHOT_W + 2.0 * FRAME,
+                SHOT_H + 2.0 * FRAME,
+            );
             rect(out, fx, fy, fw, fh, fade(ink.dim, 0.3));
             rect(out, fx, fy, fw, fh, fade(ink.bar, 1.0 - off));
             match self.pic(i) {
-                Some(tex) => out.push(Draw::Tex {
+                // A wider picture shows its 4:3 middle in the frame.
+                Some((tex, pw)) => out.push(Draw::Part {
                     x: x.round(),
                     y: SHOT_TOP,
                     w: SHOT_W,
                     h: SHOT_H,
                     tex,
                     alpha: 1.0,
+                    uv: Canvas::FRAMED.window(pw),
                 }),
                 None => rect(out, x, SHOT_TOP, SHOT_W, SHOT_H, fade(ink.dim, 0.2)),
             }
@@ -131,7 +146,13 @@ impl ShotPage<'_> {
         }
         self.dots(DOTS_Y, ink.text, out);
         if let Some(t) = faces.title {
-            tint(out, t, self.canvas.centred(t.1 as f32), (PLATE_H - t.2 as f32) / 2.0, ink.text);
+            tint(
+                out,
+                t,
+                self.canvas.centred(t.1 as f32),
+                (PLATE_H - t.2 as f32) / 2.0,
+                ink.text,
+            );
         }
         if self.confirm {
             let c = faces.confirm;
@@ -163,10 +184,7 @@ impl ShotPage<'_> {
             return;
         }
         let shown = self.count.min(DOTS_MAX);
-        let first = self
-            .sel
-            .saturating_sub(shown / 2)
-            .min(self.count - shown);
+        let first = self.sel.saturating_sub(shown / 2).min(self.count - shown);
         let row = shown as f32 * DOT + (shown as f32 - 1.0) * DOT_GAP;
         let mut x = self.canvas.centred(row).round();
         for i in first..first + shown {
@@ -179,14 +197,17 @@ impl ShotPage<'_> {
     fn draw_full(&self, out: &mut Vec<Draw>) {
         let w = self.canvas.w;
         rect(out, 0.0, 0.0, w, OUT_H as f32, [0.0, 0.0, 0.0, 1.0]);
-        if let Some(tex) = self.pic(self.sel) {
-            out.push(Draw::Tex {
-                x: self.canvas.centred(OUT_W as f32),
+        if let Some((tex, pw)) = self.pic(self.sel) {
+            // As wide as it was taken, its middle where the canvas is narrower.
+            let w = pw.min(self.canvas.w);
+            out.push(Draw::Part {
+                x: self.canvas.centred(w),
                 y: 0.0,
-                w: OUT_W as f32,
+                w,
                 h: OUT_H as f32,
                 tex,
                 alpha: 1.0,
+                uv: Canvas { w, h: OUT_H as f32 }.window(pw),
             });
         }
         let a = if self.confirm { 1.0 } else { self.hints };
@@ -206,8 +227,8 @@ impl ShotPage<'_> {
             tint(out, (tex, hw, HINT_H), x, y, white);
             x += hw as f32 + PLATE_GAP;
         }
-        let right_w: f32 =
-            right.iter().map(|&(_, hw)| hw as f32).sum::<f32>() + PLATE_GAP * right.len().saturating_sub(1) as f32;
+        let right_w: f32 = right.iter().map(|&(_, hw)| hw as f32).sum::<f32>()
+            + PLATE_GAP * right.len().saturating_sub(1) as f32;
         let mut x = w - MARGIN - right_w;
         for &(tex, hw) in right {
             tint(out, (tex, hw, HINT_H), x, y, white);
@@ -215,7 +236,13 @@ impl ShotPage<'_> {
         }
         if self.confirm {
             let c = faces.confirm;
-            tint(out, c, self.canvas.centred(c.1 as f32), top + (PLATE_H - c.2 as f32) / 2.0, white);
+            tint(
+                out,
+                c,
+                self.canvas.centred(c.1 as f32),
+                top + (PLATE_H - c.2 as f32) / 2.0,
+                white,
+            );
         } else {
             self.dots(top + (PLATE_H - DOT) / 2.0, white, out);
         }

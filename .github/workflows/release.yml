@@ -4,6 +4,10 @@ on:
   push:
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      version:
+        description: Version in the zip's name
+        default: v1.1
 
 permissions:
   contents: read
@@ -21,21 +25,28 @@ jobs:
       - name: Install zip, cmake and Task
         run: |
           set -eu
+          # A test build from a branch: its name's slashes cannot stand in a folder or zip name.
+          echo "BUILD_NAME=$(printf %s "$GITHUB_REF_NAME" | tr / -)" >> "$GITHUB_ENV"
           sed -i '/bullseye-security/d' /etc/apt/sources.list
           apt-get -o Acquire::Check-Valid-Until=false update
           apt-get install -y --no-install-recommends zip cmake
           curl -fsSL https://taskfile.dev/install.sh | sh -s -- -b /usr/local/bin
 
       - name: Build the tree
-        run: task dist:device OUT="slot-${GITHUB_REF_NAME}"
+        run: task dist:device OUT="slot-${BUILD_NAME}"
 
       - name: Check what is about to ship
         run: |
           set -eu
-          out="slot-${GITHUB_REF_NAME}"
+          out="slot-${BUILD_NAME}"
           file "$out/System/slot" | grep -q aarch64
+          file "$out/System/slot-services" | grep -q aarch64
+          file "$out/System/slot-net/iw" | grep -q aarch64
+          test -f "$out/Config/wifi.toml.example"
           file "$out/System/mgba_libretro.so" | grep -q aarch64
           file "$out/System/gpsp_libretro.so" | grep -q aarch64
+          file "$out/System/fceumm_libretro.so" | grep -q aarch64
+          file "$out/System/snes9x_libretro.so" | grep -q aarch64
           test -x "$out/System/slot"
           gpsp_src_sha="$(cat vendor/gpsp-src.sha)"
           test -f "$out/System/licenses/gpsp-${gpsp_src_sha}.tar.gz"
@@ -48,13 +59,20 @@ jobs:
           for p in cores/mgba/*.patch; do
             test -f "$out/System/licenses/mgba-$(basename "$p")"
           done
+          for p in cores/gambatte/*.patch; do
+            test -f "$out/System/licenses/gambatte-$(basename "$p")"
+          done
 
       - name: Package
         id: package
+        env:
+          VERSION: ${{ inputs.version || github.ref_name }}
         run: |
           set -eu
-          out="slot-${GITHUB_REF_NAME}"
-          zip="$out-h700.zip"
+          # The zip and its folder carry the GRAVY name: slot-x-gravy-v1.1.zip holds slot-x-gravy-v1.1/.
+          out="slot-x-gravy-$(printf %s "$VERSION" | tr / -)"
+          mv "slot-${BUILD_NAME}" "$out"
+          zip="$out.zip"
           zip -qry "$zip" "$out"
           echo "zip=$zip" >> "$GITHUB_OUTPUT"
 
@@ -83,9 +101,14 @@ jobs:
         run: |
           set -eu
           cat > notes.md <<NOTES
-          Unzip and copy the contents of \`slot-${GITHUB_REF_NAME}/\` onto SD2.
+          Unzip and copy the contents of \`slot-x-gravy-${GITHUB_REF_NAME}/\` onto SD2.
 
-          Emulation by mGBA (MPL-2.0) and gpSP (GPL-2.0). Their licences, patches and gpSP's source are in \`System/licenses/\`.
+          Emulation by mGBA (MPL-2.0), gpSP (GPL-2.0), Gambatte (GPL-2.0), FCEUmm (GPL-2.0) and Snes9x (non-commercial licence). Their licences, patches and sources are in \`System/licenses/\`.
           NOTES
-          gh release create "$GITHUB_REF_NAME" "$ZIP" --repo "$GITHUB_REPOSITORY" \
-            --title "$GITHUB_REF_NAME" --notes-file notes.md
+          # A release already made by hand for this tag just gets the zip; otherwise one is made.
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "$ZIP" --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "$ZIP" --repo "$GITHUB_REPOSITORY" \
+              --title "$GITHUB_REF_NAME" --notes-file notes.md
+          fi

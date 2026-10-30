@@ -27,7 +27,9 @@ fn write(path: &std::path::Path, rgba: &[u8], w: u32, h: u32) -> std::io::Result
         enc.set_color(png::ColorType::Rgb);
         enc.set_depth(png::BitDepth::Eight);
         let mut writer = enc.write_header().map_err(std::io::Error::other)?;
-        writer.write_image_data(&rgb).map_err(std::io::Error::other)?;
+        writer
+            .write_image_data(&rgb)
+            .map_err(std::io::Error::other)?;
     }
     slot_store::atomic_write(path, &bytes)
 }

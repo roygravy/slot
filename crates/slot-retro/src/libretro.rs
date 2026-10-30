@@ -14,6 +14,10 @@ use crate::rumble::Rumble;
 
 const VIDEO_BYTES: usize = (GBA_W * GBA_H * 4) as usize;
 
+/// The frontend's own option: the NTSC filter slot. runs on the picture, off / rf / composite /
+/// svideo / rgb.
+pub const SLOT_NTSC: &str = "slot_ntsc";
+
 static LIVE: AtomicBool = AtomicBool::new(false);
 
 #[derive(Copy, Clone, PartialEq, Eq)]
@@ -24,6 +28,8 @@ enum PixelFormat {
 
 struct Host {
     video: Vec<u8>,
+    /// The frame the picture is drawn into, centred: the GBA's 240x160 unless told otherwise.
+    canvas: (u32, u32),
     format: PixelFormat,
     audio: Vec<i16>,
     inputs: [u16; 2],
@@ -35,9 +41,13 @@ struct Host {
     net: Link,
     net_peer: Option<u16>,
     audio_status: Option<AudioBufferStatusFn>,
+    /// The frame being run is skipped: its picture is never shown.
+    skip_video: bool,
     options: std::collections::HashMap<String, std::ffi::CString>,
     options_dirty: bool,
     declared: std::collections::HashMap<String, Vec<String>>,
+    /// The NTSC filter slot. runs on the picture itself (`slot_ntsc`), for a core without one.
+    ntsc: Option<crate::ntsc::Ntsc>,
 }
 
 thread_local! {
@@ -194,6 +204,19 @@ unsafe extern "C" fn environment(cmd: c_uint, data: *mut c_void) -> bool {
             (*(data as *mut LogCallback)).log = log_noop as *const c_void;
             true
         }
+        // A core that skips its drawing when asked (Snes9x) has no frameskip of its own.
+        GET_AUDIO_VIDEO_ENABLE => {
+            if data.is_null() {
+                return false;
+            }
+            with_host(|h| {
+                *(data as *mut c_int) = match h.skip_video {
+                    true => AV_ENABLE_AUDIO,
+                    false => AV_ENABLE_VIDEO | AV_ENABLE_AUDIO,
+                };
+            })
+            .is_some()
+        }
         SET_AUDIO_BUFFER_STATUS_CALLBACK => {
             if data.is_null() {
                 return with_host(|h| h.audio_status = None).is_some();
@@ -318,36 +341,121 @@ unsafe extern "C" fn video_refresh(
         return;
     }
     with_host(|h| {
-        let cols = width.min(GBA_W) as usize;
-        let rows = height.min(GBA_H) as usize;
-        let ox = (GBA_W as usize - cols) / 2;
-        let oy = (GBA_H as usize - rows) / 2;
-        if cols != GBA_W as usize || rows != GBA_H as usize {
-            h.video.fill(0);
+        // A skipped frame is never shown: not worth filtering or copying.
+        if h.skip_video {
+            return;
         }
-        for y in 0..rows {
-            let src = (data as *const u8).add(y * pitch);
-            let row = ((y + oy) * GBA_W as usize + ox) * 4;
-            match h.format {
-                PixelFormat::Xrgb8888 => {
-                    ptr::copy_nonoverlapping(src, h.video.as_mut_ptr().add(row), cols * 4);
-                }
-                PixelFormat::Rgb565 => {
-                    for x in 0..cols {
-                        let p = ptr::read_unaligned((src as *const u16).add(x));
-                        let r = ((p >> 11) & 0x1f) as u8;
-                        let g = ((p >> 5) & 0x3f) as u8;
-                        let b = (p & 0x1f) as u8;
-                        let o = row + x * 4;
-                        h.video[o] = (b << 3) | (b >> 2);
-                        h.video[o + 1] = (g << 2) | (g >> 4);
-                        h.video[o + 2] = (r << 3) | (r >> 2);
-                        h.video[o + 3] = 0;
+        // A picture slot. filters itself goes down its cable first, then on as the cores'.
+        match h.ntsc.take() {
+            Some(mut ntsc) if (width as usize) <= 3 * 256 / 2 => {
+                let format = h.format;
+                ntsc.run(width as usize, height as usize, |y, line| {
+                    let src = (data as *const u8).add(y * pitch);
+                    for (x, px) in line.iter_mut().enumerate() {
+                        *px = match format {
+                            PixelFormat::Rgb565 => ptr::read_unaligned((src as *const u16).add(x)),
+                            PixelFormat::Xrgb8888 => {
+                                let p = ptr::read_unaligned((src as *const u32).add(x));
+                                (((p >> 8) & 0xf800) | ((p >> 5) & 0x07e0) | ((p >> 3) & 0x001f)) as u16
+                            }
+                        };
                     }
-                }
+                });
+                let ow = crate::ntsc::out_width(width as usize);
+                draw_frame(h, ntsc.output.as_ptr() as *const c_void, ow as c_uint, height, ow * 4, PixelFormat::Xrgb8888);
+                h.ntsc = Some(ntsc);
+            }
+            ntsc => {
+                h.ntsc = ntsc;
+                let format = h.format;
+                draw_frame(h, data, width, height, pitch, format);
             }
         }
     });
+}
+
+unsafe fn draw_frame(
+    h: &mut Host,
+    data: *const c_void,
+    width: c_uint,
+    height: c_uint,
+    pitch: usize,
+    format: PixelFormat,
+) {
+    {
+        let (cw, ch) = (h.canvas.0 as usize, h.canvas.1 as usize);
+        // A picture twice the canvas (the SNES's high-resolution and interlaced screens)
+        // halves: pairs of columns blend, as a TV's blur blended them, and every other line
+        // is drawn.
+        let xstep = if width as usize >= cw * 2 { 2 } else { 1 };
+        let ystep = if height as usize >= ch * 2 { 2 } else { 1 };
+        let (fw, fh) = (width as usize / xstep, height as usize / ystep);
+        let cols = fw.min(cw);
+        let rows = fh.min(ch);
+        // A TV console's frame fills its canvas side to side: without the NTSC filter its 256
+        // columns are drawn as wide as the filter's 602.
+        let tv = h.canvas != (GBA_W, GBA_H);
+        let stretch = tv && cols < cw;
+        // And top to bottom: a frame cut shorter for a TV's overscan fills it as the TV did.
+        let tall = tv && rows < ch;
+        let ox = if stretch { 0 } else { (cw - cols) / 2 };
+        let oy = if tall { 0 } else { (ch - rows) / 2 };
+        let (sx, sy) = ((fw - cols) / 2, (fh - rows) / 2);
+        if (cols != cw && !stretch) || (rows != ch && !tall) {
+            h.video.fill(0);
+        }
+        let read = |src: *const u8, x: usize| -> [u8; 4] {
+            match format {
+                PixelFormat::Xrgb8888 => {
+                    let p = ptr::read_unaligned((src as *const u32).add(x));
+                    [p as u8, (p >> 8) as u8, (p >> 16) as u8, 0]
+                }
+                PixelFormat::Rgb565 => {
+                    let p = ptr::read_unaligned((src as *const u16).add(x));
+                    let r = ((p >> 11) & 0x1f) as u8;
+                    let g = ((p >> 5) & 0x3f) as u8;
+                    let b = (p & 0x1f) as u8;
+                    [(b << 3) | (b >> 2), (g << 2) | (g >> 4), (r << 3) | (r >> 2), 0]
+                }
+            }
+        };
+        let mut line = vec![0u8; cols * 4];
+        for y in 0..rows {
+            let src = (data as *const u8).add((y + sy) * ystep * pitch);
+            if xstep == 1 && format == PixelFormat::Xrgb8888 {
+                ptr::copy_nonoverlapping(src.add(sx * 4), line.as_mut_ptr(), cols * 4);
+            } else {
+                for x in 0..cols {
+                    let at = (x + sx) * xstep;
+                    let px = match xstep {
+                        1 => read(src, at),
+                        _ => {
+                            let (a, b) = (read(src, at), read(src, at + 1));
+                            [0, 1, 2, 3].map(|i| ((a[i] as u16 + b[i] as u16) / 2) as u8)
+                        }
+                    };
+                    line[x * 4..x * 4 + 4].copy_from_slice(&px);
+                }
+            }
+            let (first, last) = if tall {
+                (y * ch / rows, (y + 1) * ch / rows)
+            } else {
+                (y + oy, y + oy + 1)
+            };
+            for out_y in first..last {
+                let row = (out_y * cw + ox) * 4;
+                if stretch {
+                    let out = &mut h.video[row..row + cw * 4];
+                    for (x, px) in out.chunks_exact_mut(4).enumerate() {
+                        let at = x * cols / cw;
+                        px.copy_from_slice(&line[at * 4..at * 4 + 4]);
+                    }
+                } else {
+                    h.video[row..row + cols * 4].copy_from_slice(&line);
+                }
+            }
+        }
+    }
 }
 
 unsafe extern "C" fn audio_sample(left: i16, right: i16) {
@@ -390,6 +498,7 @@ pub struct LibretroCore {
     rom_path: Option<CString>,
     av: AvInfo,
     loaded: bool,
+    state_size: Option<(usize, usize)>,
     _lib: Library,
 }
 
@@ -434,6 +543,15 @@ impl LibretroCore {
     }
 
     pub fn set_option(&mut self, key: &str, value: &str) {
+        // slot.'s own: the NTSC filter it runs on the core's picture, for the TV look of a
+        // core that has none (the Super Game Boy's mGBA).
+        if key == SLOT_NTSC {
+            let cable = crate::ntsc::Cable::parse(value);
+            if self.host.ntsc.as_ref().map(|n| n.cable) != cable {
+                self.host.ntsc = cable.and_then(crate::ntsc::Ntsc::new);
+            }
+            return;
+        }
         if !self.host.declared.is_empty() {
             match self.host.declared.get(key) {
                 None => eprintln!("slot-retro: core declares no option {key:?}, setting it anyway"),
@@ -490,6 +608,7 @@ impl LibretroCore {
         }
         let mut host = Box::new(Host {
             video: vec![0; VIDEO_BYTES],
+            canvas: (GBA_W, GBA_H),
             format: PixelFormat::Xrgb8888,
             audio: Vec::new(),
             inputs: [0; 2],
@@ -501,9 +620,11 @@ impl LibretroCore {
             net: Link::default(),
             net_peer: None,
             audio_status: None,
+            skip_video: false,
             options,
             options_dirty: false,
             declared: std::collections::HashMap::new(),
+            ntsc: None,
         });
         unsafe {
             let _a = Active::bind(&mut host);
@@ -525,6 +646,7 @@ impl LibretroCore {
                 sample_rate: 0.0,
             },
             loaded: false,
+            state_size: None,
             _lib: lib,
         })
     }
@@ -536,6 +658,15 @@ impl LibretroCore {
         let _a = Active::bind(&mut self.host);
         unsafe { (self.api.unload_game)() };
         self.loaded = false;
+    }
+
+    fn serialize_at(&mut self, size: usize) -> Option<Vec<u8>> {
+        let mut buf = vec![0u8; size];
+        let ok = {
+            let _a = Active::bind(&mut self.host);
+            unsafe { (self.api.serialize)(buf.as_mut_ptr() as *mut c_void, size) }
+        };
+        ok.then_some(buf)
     }
 
     fn memory(&self, id: c_uint) -> Option<&[u8]> {
@@ -591,6 +722,7 @@ impl RetroCore for LibretroCore {
 
     fn load(&mut self, rom: &Path) -> Result<(), CoreError> {
         self.unload();
+        self.state_size = None;
         self.rom = std::fs::read(rom)?;
         self.rom_path = Some(
             CString::new(rom.as_os_str().as_encoded_bytes())
@@ -636,6 +768,7 @@ impl RetroCore for LibretroCore {
     }
 
     fn set_frame_skip(&mut self, skip: bool) {
+        self.host.skip_video = skip;
         let _a = Active::bind(&mut self.host);
         unsafe { report_audio_status(skip) };
     }
@@ -644,28 +777,37 @@ impl RetroCore for LibretroCore {
         &self.host.video
     }
 
+    fn set_canvas(&mut self, w: u32, h: u32) {
+        self.host.canvas = (w, h);
+        self.host.video = vec![0; (w * h * 4) as usize];
+    }
+
     fn take_audio(&mut self) -> Vec<i16> {
         std::mem::take(&mut self.host.audio)
     }
 
     fn serialize(&mut self) -> Result<Vec<u8>, CoreError> {
+        let chip = unsafe { (self.api.get_memory_size)(MEMORY_SAVE_RAM) };
+        if let Some(buf) = self
+            .state_size
+            .filter(|&(_, at)| at == chip)
+            .and_then(|(size, _)| self.serialize_at(size))
+        {
+            return Ok(buf);
+        }
         let size = unsafe { (self.api.serialize_size)() };
+        self.state_size = (size > 0).then_some((size, chip));
         if size == 0 {
             return Err(CoreError::State("core reports no state".into()));
         }
-        let mut buf = vec![0u8; size];
-        let ok = {
-            let _a = Active::bind(&mut self.host);
-            unsafe { (self.api.serialize)(buf.as_mut_ptr() as *mut c_void, size) }
-        };
-        if ok {
-            Ok(buf)
-        } else {
-            Err(CoreError::State("serialize refused".into()))
-        }
+        self.serialize_at(size)
+            .ok_or_else(|| CoreError::State("serialize refused".into()))
     }
 
     fn unserialize(&mut self, data: &[u8]) -> Result<(), CoreError> {
+        if data.is_empty() {
+            return Err(CoreError::State("empty state".into()));
+        }
         let ok = {
             let _a = Active::bind(&mut self.host);
             unsafe { (self.api.unserialize)(data.as_ptr() as *const c_void, data.len()) }
@@ -707,6 +849,11 @@ impl RetroCore for LibretroCore {
         self.host.rumble.clone()
     }
 
+    fn share(&mut self, rumble: Rumble, link: Link) {
+        self.host.rumble = rumble;
+        self.host.net = link;
+    }
+
     fn net(&self) -> Link {
         self.host.net.clone()
     }
@@ -737,6 +884,7 @@ mod tests {
     fn host_with(options: HashMap<String, CString>, options_dirty: bool) -> Box<Host> {
         Box::new(Host {
             video: vec![0; VIDEO_BYTES],
+            canvas: (GBA_W, GBA_H),
             format: PixelFormat::Xrgb8888,
             audio: Vec::new(),
             inputs: [0; 2],
@@ -748,9 +896,11 @@ mod tests {
             net: Link::default(),
             net_peer: None,
             audio_status: None,
+            skip_video: false,
             options,
             options_dirty,
             declared: HashMap::new(),
+            ntsc: None,
         })
     }
 
@@ -952,6 +1102,23 @@ mod tests {
                 "the skip and the draw did not read as an underrun and a healthy buffer"
             );
         });
+    }
+
+    #[test]
+    fn a_skipped_frame_asks_the_core_to_leave_its_picture_undrawn() {
+        let mut host = host_with(HashMap::new(), false);
+        let mut asked = |skip: bool| {
+            host.skip_video = skip;
+            let mut av: c_int = -1;
+            let ok = {
+                let _active = Active::bind(&mut host);
+                unsafe { environment(GET_AUDIO_VIDEO_ENABLE, &mut av as *mut c_int as *mut c_void) }
+            };
+            assert!(ok, "Snes9x draws every frame when this goes unanswered");
+            av
+        };
+        assert_eq!(asked(true), AV_ENABLE_AUDIO);
+        assert_eq!(asked(false), AV_ENABLE_VIDEO | AV_ENABLE_AUDIO);
     }
 
     #[test]

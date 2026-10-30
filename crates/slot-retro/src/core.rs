@@ -82,12 +82,18 @@ pub trait RetroCore: Send {
         self.run_frame(p1);
     }
     fn set_option(&mut self, _key: &str, _value: &str) {}
+    /// Take these as the core's rumble motors and link line: handed out before a core opened
+    /// on another thread exists.
+    fn share(&mut self, _rumble: crate::Rumble, _link: crate::Link) {}
     /// Replace the core's cheats with these codes, all switched on. An empty list clears them.
     fn set_cheats(&mut self, _codes: &[String]) {}
     /// Back to power on, as the console's own reset would.
     fn reset(&mut self) {}
     fn set_frame_skip(&mut self, _skip: bool) {}
     fn video_xrgb8888(&self) -> &[u8];
+    /// The size of the frame `video_xrgb8888` holds, for a system whose picture is not the
+    /// GBA's 240x160.
+    fn set_canvas(&mut self, _w: u32, _h: u32) {}
     fn take_audio(&mut self) -> Vec<i16>;
     fn serialize(&mut self) -> Result<Vec<u8>, CoreError>;
     fn unserialize(&mut self, data: &[u8]) -> Result<(), CoreError>;

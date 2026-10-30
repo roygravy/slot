@@ -200,5 +200,22 @@ fn a_line_naming_a_core_the_platform_cannot_run_is_dropped() {
 
 #[test]
 fn all_supported_cores_have_identity_values() {
-    assert_eq!(Core::ALL.len(), 3);
+    assert_eq!(Core::ALL.len(), 5);
+    for core in Core::ALL {
+        assert_eq!(Core::parse(core.as_str()), Some(core));
+    }
+}
+
+#[test]
+fn the_tv_consoles_run_on_their_own_cores() {
+    let d = tempfile::tempdir().unwrap();
+    write_selected_core(d.path(), "Super Mario World", Core::Mgba).unwrap();
+    assert_eq!(
+        core_for_platform(d.path(), "Super Mario World", Platform::Snes),
+        Core::Snes9x
+    );
+    assert_eq!(
+        core_for_platform(d.path(), "Kirby", Platform::Nes),
+        Core::Fceumm
+    );
 }

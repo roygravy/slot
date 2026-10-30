@@ -1,5 +1,5 @@
 use slot_power::{Battery, Charge};
-use slot_ui::{draw_gauge, Draw, Printed, TexId, GAUGE_W, HUD_INK, WALL};
+use slot_ui::{battery_face, draw_gauge, Draw, Printed, TexId, HUD_INK};
 
 fn percent_face() -> Printed {
     Printed { face: None, w: 30 }
@@ -50,98 +50,36 @@ fn nothing_moves_when_the_charge_state_changes() {
 }
 
 #[test]
-fn the_bolt_never_reaches_the_capsule() {
-    let mut out = Vec::new();
-    draw_gauge(
-        24.0,
-        400.0,
-        at(68, Charge::Charging),
-        percent_face(),
-        Some(TexId::from_raw(7)),
-        HUD_INK,
-        &mut out,
-    );
-    let bolt_right = out
-        .iter()
-        .find_map(|d| match *d {
-            Draw::Tex { x, w, tex, .. } if tex == TexId::from_raw(7) => Some(x + w),
-            _ => None,
-        })
-        .expect("the bolt did not draw while charging");
-    let capsule_left = out
-        .iter()
-        .filter_map(|d| match *d {
-            Draw::Rect { x, .. } => Some(x),
-            _ => None,
-        })
-        .fold(f32::MAX, f32::min);
-    assert!(
-        bolt_right <= capsule_left,
-        "the bolt's right edge ({bolt_right}) reaches past the capsule's left wall ({capsule_left})"
+fn the_face_shows_a_bolt_only_while_charging() {
+    let ink = [0xff, 0xff, 0xff];
+    assert_ne!(
+        battery_face(68, true, ink).rgba,
+        battery_face(68, false, ink).rgba,
+        "charging looked the same as not charging"
     );
 }
 
 #[test]
-fn the_bolt_is_only_drawn_while_charging() {
-    let bolt = |charge| {
-        let mut out = Vec::new();
-        draw_gauge(
-            24.0,
-            400.0,
-            at(68, charge),
-            percent_face(),
-            Some(TexId::from_raw(7)),
-            HUD_INK,
-            &mut out,
-        );
-        out.iter()
-            .any(|d| matches!(d, Draw::Tex { tex: t, .. } if *t == TexId::from_raw(7)))
+fn the_fill_tracks_the_percent_in_one_ink() {
+    let ink = [0xf6, 0xf4, 0xef];
+    // Row 2 runs above the number, so only the fill changes along it.
+    let lit = |percent| {
+        let f = battery_face(percent, false, ink);
+        let row = 2 * f.w as usize * 4;
+        (0..f.w as usize)
+            .map(|x| u32::from(f.rgba[row + x * 4 + 3]))
+            .sum::<u32>()
     };
-    assert!(bolt(Charge::Charging));
-    assert!(!bolt(Charge::Discharging));
-    assert!(!bolt(Charge::Full));
-    assert!(!bolt(Charge::Unknown));
-}
-
-#[test]
-fn the_fill_tracks_the_percent_and_never_leaves_the_capsule() {
-    let mut widths = Vec::new();
-    for percent in [0u8, 1, 50, 99, 100] {
-        let mut out = Vec::new();
-        draw_gauge(
-            24.0,
-            400.0,
-            at(percent, Charge::Discharging),
-            percent_face(),
-            None,
-            HUD_INK,
-            &mut out,
-        );
-        let capsule_left = out
-            .iter()
-            .filter_map(|d| match *d {
-                Draw::Rect { x, .. } => Some(x),
-                _ => None,
-            })
-            .fold(f32::MAX, f32::min);
-        let inner_right = capsule_left + GAUGE_W - 2.0 * WALL;
-        let fill = out.iter().find_map(|d| match *d {
-            Draw::Rect { x, w, .. } if (x - (capsule_left + 2.0 * WALL)).abs() < 0.01 => Some(w),
-            _ => None,
-        });
-        if let Some(w) = fill {
-            assert!(
-                capsule_left + 2.0 * WALL + w <= inner_right + 0.01,
-                "a {percent}% fill burst through the capsule's own wall"
-            );
-        }
-        widths.push(fill.unwrap_or(0.0));
-    }
+    let widths: Vec<u32> = [10u8, 50, 90].into_iter().map(lit).collect();
     for pair in widths.windows(2) {
         assert!(
             pair[1] > pair[0],
-            "the fill must grow strictly with the percent, got {widths:?}"
+            "the fill must grow with the percent, got {widths:?}"
         );
+    }
+    let low = battery_face(5, false, ink);
+    for px in low.rgba.chunks(4).filter(|p| p[3] > 0) {
+        assert_eq!(&px[..3], &ink[..], "a low battery took on a colour");
     }
 }
 

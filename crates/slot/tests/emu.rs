@@ -1109,10 +1109,26 @@ fn a_refresh_redraws_a_paused_core_without_moving_it() {
     std::thread::sleep(Duration::from_millis(100));
     let held = frame_count(&emu);
     let shown = emu.published_count();
-    emu.refresh();
+    emu.refresh(true);
     assert!(
         wait_for(|| emu.published_count() > shown),
         "the refresh never published a frame"
     );
     assert_eq!(frame_count(&emu), held, "the refresh moved the game on");
+}
+
+#[test]
+fn a_core_stuck_in_a_frame_does_not_hold_the_caller_past_two_seconds() {
+    let (emu, _) = spawn_probe(Duration::from_secs(4));
+    emu.set_speed(Speed::Normal);
+    std::thread::sleep(Duration::from_millis(200));
+    let snapshot = emu.snapshot();
+    let asked = Instant::now();
+    let state = snapshot.state();
+    let waited = asked.elapsed();
+    assert!(state.is_none(), "a state came back from a core that was stuck");
+    assert!(
+        waited < Duration::from_secs(3),
+        "the caller waited {waited:?} on a stuck core"
+    );
 }

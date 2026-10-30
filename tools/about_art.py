@@ -27,16 +27,21 @@ BIG = [
     "MODEL NO.  DMG-01",
     "© 2026  MADE ALL OVER THE WORLD",
 ]
+BIG_PX, BIG_STEP = 19, 28
 SMALL = (
-    "THE EXQUISITE SKEUOMORPHIC ARTWORK MADE BY MARKUS. EMULATION POWERED BY MGBA, GPSP "
-    "AND GAMBATTE. UNDERLYING OS IS BASEOS BY PVAIBHAV. TYPE IS OPEN SANS, PERMANENT MARKER "
-    "BY FONT DINER AND NERD FONTS SYMBOLS BY RYAN L MCINTYRE."
+    "THE EXQUISITE SKEUOMORPHIC ARTWORK MADE BY MARKUS. EMULATION POWERED BY MGBA, GPSP, "
+    "GAMBATTE, FCEUMM AND SNES9X, NTSC FILTER BY BLARGG. UNDERLYING OS IS BASEOS, HOME WI-FI, "
+    "LINK AND LABEL SCRAPING BY PVAIBHAV. LABEL SCANS SHARED BY THE COMMUNITY, CHEATS FROM THE "
+    "LIBRETRO DATABASE, SCREEN SHADERS AFTER THE LIBRETRO COLLECTION. TYPE IS OPEN SANS, "
+    "LIBERATION SANS, PERMANENT MARKER BY FONT DINER AND NERD FONTS SYMBOLS BY RYAN L MCINTYRE."
 )
-SMALL_PX, SMALL_W = 12, 378
+SMALL_PX, SMALL_STEP, SMALL_W = 12, 15, 372
 
+# The plastic, how steep the moulding reads, and how brightly the edges turned to the light
+# catch it: on the dark housing the raised letters need that sheen, or they sink into the grey.
 LOOKS = {
-    "light": np.array([184, 181, 175], np.float32),
-    "dark": np.array([62, 62, 67], np.float32),
+    "light": (np.array([184, 181, 175], np.float32), 2.6, 0.0),
+    "dark": (np.array([62, 62, 67], np.float32), 3.4, 105.0),
 }
 
 
@@ -83,7 +88,7 @@ def metal(yy, xx):
     return np.dstack([g * 0.985, g * 0.995, g * 1.01])
 
 
-def render(plastic):
+def render(plastic, relief, sheen):
     panel = mask(lambda d: d.rounded_rectangle(sc(PANEL), radius=6 * SS, fill=255))
     label = mask(lambda d: d.rounded_rectangle(sc(LABEL), radius=2 * SS, fill=255))
     sticker = sticker_mask()
@@ -102,13 +107,13 @@ def render(plastic):
         x = (PANEL[0] + 24) * SS
         y = (PANEL[1] + 20) * SS
         for s in BIG:
-            d.text((x, y), s, font=font(20), fill=255)
-            y += int(31 * SS)
-        y += 4 * SS
+            d.text((x, y), s, font=font(BIG_PX), fill=255)
+            y += int(BIG_STEP * SS)
+        y += 6 * SS
         small = font(SMALL_PX)
         for s in wrap(SMALL, small, SMALL_W):
             d.text((x, y), s, font=small, fill=255)
-            y += int(16 * SS)
+            y += int(SMALL_STEP * SS)
         # The slot. badge, bottom right in the panel.
         bx1, by1 = PANEL[2] - 20, PANEL[3] - 20
         bx0, by0 = bx1 - 90, by1 - 86
@@ -123,7 +128,7 @@ def render(plastic):
     height = (-blur(panel, 1.2 * SS) - 1.4 * blur(label, 1.0 * SS)
               + 1.3 * blur(text, 0.9 * SS) + 0.9 * blur(sticker, 0.5 * SS))
     gy, gx = np.gradient(height)
-    n = np.dstack([-gx * 2.6, -gy * 2.6, np.ones_like(height)])
+    n = np.dstack([-gx * relief, -gy * relief, np.ones_like(height)])
     n /= np.linalg.norm(n, axis=2, keepdims=True)
     light = np.array([-0.45, -0.7, 0.55])
     light /= np.linalg.norm(light)
@@ -133,6 +138,7 @@ def render(plastic):
     vignette = 1.04 - 0.10 * (((xx - W * SS / 2) / (W * SS / 2)) ** 2
                               + ((yy - H * SS * 0.45) / (H * SS / 2)) ** 2)
     c = plastic[None, None, :] * (shade * vignette)[..., None]
+    c += (sheen * np.clip(lam - light[2], 0, 1) ** 0.8)[..., None]
     # The recess floor sits in shadow, deepest under the sticker's lower right edge.
     floor = blur(label, 0.4 * SS)
     cast = blur(np.roll(np.roll(sticker, int(1.5 * SS), 0), int(1.0 * SS), 1), 1.2 * SS)
@@ -144,6 +150,6 @@ def render(plastic):
     return Image.fromarray(np.clip(c, 0, 255).astype(np.uint8), "RGB")
 
 
-for look, plastic in LOOKS.items():
-    render(plastic).save(ROOT / "assets" / f"about_{look}.png", optimize=True)
+for look, (plastic, relief, sheen) in LOOKS.items():
+    render(plastic, relief, sheen).save(ROOT / "assets" / f"about_{look}.png", optimize=True)
     print("wrote", f"about_{look}.png")

@@ -146,7 +146,9 @@ fn run(a: &Args) -> Result<(), Box<dyn Error>> {
         core.take_audio();
         let t = Instant::now();
         for _ in 0..presents {
-            for _ in 0..a.steps {
+            for step in 0..a.steps {
+                // As slot. fast-forwards: only a present's last frame is drawn.
+                core.set_frame_skip(a.frameskip && step + 1 < a.steps);
                 core.run_frame(idle);
             }
             core.take_audio();

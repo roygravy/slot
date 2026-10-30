@@ -56,15 +56,15 @@ fn the_backlight_steps_span_whatever_range_the_kernel_reports() {
     assert_eq!(brightness(&d), 255);
     p.set_backlight(5);
     let mid = brightness(&d);
-    assert!((40..=80).contains(&mid), "step 5 of 9 wrote {mid} of 255");
+    assert!((40..=90).contains(&mid), "step 5 of 9 wrote {mid} of 255");
 }
 
 #[test]
-fn step_one_is_the_dimmest_lit_value() {
+fn step_one_is_the_dimmest_value_the_rg34xx_lights() {
     let d = sysfs("255", "87");
     let mut p = platform(&d);
     p.set_backlight(1);
-    assert_eq!(brightness(&d), 1);
+    assert_eq!(brightness(&d), 8);
 }
 
 #[test]
@@ -77,7 +77,7 @@ fn the_steps_follow_the_curve_from_the_floor_to_full() {
             brightness(&d)
         })
         .collect();
-    assert_eq!(wrote, [0, 1, 8, 23, 47, 77, 113, 155, 202, 255]);
+    assert_eq!(wrote, [0, 8, 14, 30, 52, 81, 117, 157, 204, 255]);
 }
 
 #[test]

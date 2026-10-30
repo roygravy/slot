@@ -13,6 +13,7 @@ fn app_playing(stem: &str) -> App {
         label: None,
         code: String::new(),
         shell: None,
+        marker: None,
         title: stem.to_uppercase(),
     }]);
     a.apply(Action::Insert);

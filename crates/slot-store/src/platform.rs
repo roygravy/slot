@@ -6,16 +6,30 @@ pub enum Platform {
     Gba,
     Gb,
     Gbc,
+    Nes,
+    Snes,
 }
 
+/// A TV console's frame: its 256 columns as the composite signal smears them, which the
+/// core's NTSC filter draws 602 wide.
+pub const TV_CANVAS: (u32, u32) = (602, 224);
+
 impl Platform {
-    pub const ALL: [Platform; 3] = [Platform::Gb, Platform::Gbc, Platform::Gba];
+    pub const ALL: [Platform; 5] = [
+        Platform::Gb,
+        Platform::Gbc,
+        Platform::Gba,
+        Platform::Nes,
+        Platform::Snes,
+    ];
 
     pub fn name(self) -> &'static str {
         match self {
             Platform::Gba => "Game Boy Advance",
             Platform::Gb => "Game Boy",
             Platform::Gbc => "Game Boy Color",
+            Platform::Nes => "NES",
+            Platform::Snes => "Super Nintendo",
         }
     }
 
@@ -24,6 +38,8 @@ impl Platform {
             Platform::Gba => "GBA",
             Platform::Gb => "GB",
             Platform::Gbc => "GBC",
+            Platform::Nes => "NES",
+            Platform::Snes => "SNES",
         }
     }
 
@@ -31,6 +47,8 @@ impl Platform {
         match self {
             Platform::Gba => &["gba"],
             Platform::Gb | Platform::Gbc => &["gb", "gbc"],
+            Platform::Nes => &["nes"],
+            Platform::Snes => &["sfc", "smc"],
         }
     }
 
@@ -38,7 +56,22 @@ impl Platform {
         match self {
             Platform::Gba => (240, 160),
             Platform::Gb | Platform::Gbc => (160, 144),
+            Platform::Nes | Platform::Snes => TV_CANVAS,
         }
+    }
+
+    /// The frame every picture is drawn into: the Game Boys share the GBA's, centred in it;
+    /// the TV consoles have their own, a 4:3 picture that fills the screen.
+    pub fn canvas(self) -> (u32, u32) {
+        match self {
+            Platform::Gba | Platform::Gb | Platform::Gbc => (240, 160),
+            Platform::Nes | Platform::Snes => TV_CANVAS,
+        }
+    }
+
+    /// A TV console: its picture fills the screen, with no handheld's LCD around it.
+    pub fn tv(self) -> bool {
+        matches!(self, Platform::Nes | Platform::Snes)
     }
 
     pub fn accepts(self, path: &Path) -> bool {

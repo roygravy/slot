@@ -22,6 +22,10 @@ pub(crate) fn sync_dir(path: &Path) {
     if let Some(dir) = path.parent() {
         if let Ok(d) = File::open(dir) {
             let _ = d.sync_all();
+            #[cfg(target_os = "linux")]
+            unsafe {
+                libc::syncfs(std::os::fd::AsRawFd::as_raw_fd(&d));
+            }
         }
     }
 }
@@ -49,4 +53,34 @@ fn temp_path(path: &Path) -> PathBuf {
         Some(dir) => dir.join(tmp),
         None => PathBuf::from(tmp),
     }
+}
+
+pub fn sweep_temps(dir: &Path) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        match entry.file_type() {
+            Ok(t) if t.is_dir() => sweep_temps(&path),
+            Ok(t) if t.is_file() && left_by_another_run(&entry.file_name().to_string_lossy()) => {
+                if let Err(e) = std::fs::remove_file(&path) {
+                    eprintln!("slot: temp sweep: {}: {e}", path.display());
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+fn left_by_another_run(name: &str) -> bool {
+    let Some(rest) = name.strip_prefix('.').and_then(|n| n.strip_suffix(".tmp")) else {
+        return false;
+    };
+    let mut parts = rest.rsplitn(3, '.');
+    let (Some(seq), Some(pid), Some(_)) = (parts.next(), parts.next(), parts.next()) else {
+        return false;
+    };
+    let digits = |s: &str| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit());
+    digits(seq) && digits(pid) && pid != std::process::id().to_string()
 }

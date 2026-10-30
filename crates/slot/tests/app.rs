@@ -8,7 +8,6 @@ use slot::app::{App, Phase, EJECT_S, INSERT_S, SEATED_AT};
 use slot::audio::Sfx;
 use slot::emu::{EmuHandle, Speed};
 use slot::session::Session;
-use slot::video_mode::{video_mode_for, VideoMode, VIDEO_MODE_FILE};
 use slot_gfx::WHOLE_TEXTURE;
 use slot_input::{Action, Btn, RawEvent};
 use slot_retro::ButtonMask;
@@ -35,6 +34,7 @@ fn app_with_carts(stems: &[&str]) -> App {
                 label: None,
                 code: String::new(),
                 shell: None,
+                marker: None,
                 title: stem.to_uppercase(),
             })
             .collect(),
@@ -317,6 +317,7 @@ fn app_with_platforms(carts: &[(Platform, &str)]) -> App {
                 label: None,
                 code: String::new(),
                 shell: None,
+                marker: None,
                 title: stem.to_uppercase(),
             })
             .collect(),
@@ -1935,45 +1936,25 @@ fn a_shoulder_still_held_when_the_cart_seats_never_reaches_a_game_boy_core() {
 }
 
 #[test]
-fn the_picture_mode_is_remembered_per_cart() {
+fn full_screen_is_one_setting_for_every_game_boy_game_and_is_kept() {
     let d = common::tmp_root_with_gb_carts(&["Tetris", "Zzz"]);
     let mut s = session_playing(d.path());
+    assert_eq!(s.app().source_rect(), WHOLE_TEXTURE, "full screen from the start");
     s.feed([RawEvent::Down(Btn::L1)], 100);
     s.feed([RawEvent::Up(Btn::L1)], 120);
-    assert_eq!(video_mode_for(d.path(), "Tetris"), VideoMode::Stretch);
-    assert_eq!(
-        video_mode_for(d.path(), "Zzz"),
-        VideoMode::Actual,
-        "the press was recorded against another cart as well"
-    );
+    assert_eq!(s.app().source_rect(), GB_WINDOW);
+    s.app_mut().flush_resume();
     drop(s);
+    assert!(slot_store::read_slot_state(d.path()).gb_fullscreen);
 
     let mut s = session_playing(d.path());
     assert_eq!(
         s.app().source_rect(),
         GB_WINDOW,
-        "the cart did not come back stretched"
+        "full screen did not come back with the next game"
     );
     s.feed([RawEvent::Down(Btn::R1)], 100);
-    assert_eq!(video_mode_for(d.path(), "Tetris"), VideoMode::Actual);
     assert_eq!(s.app().source_rect(), WHOLE_TEXTURE);
-}
-
-#[test]
-fn a_cart_with_no_line_reads_as_actual_size() {
-    let d = common::tmp_root_with_gb_carts(&["Tetris", "Zzz"]);
-    assert!(
-        !d.path().join(VIDEO_MODE_FILE).exists(),
-        "the fixture already wrote the file"
-    );
-    assert_eq!(video_mode_for(d.path(), "Tetris"), VideoMode::Actual);
-
-    let s = session_playing(d.path());
-    assert_eq!(
-        s.app().source_rect(),
-        WHOLE_TEXTURE,
-        "a cart with no line did not open at actual size"
-    );
 }
 
 #[test]

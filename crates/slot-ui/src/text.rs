@@ -36,7 +36,9 @@ pub fn marker_font() -> Option<&'static Font> {
 /// to the right and nudged off centre, as a hand writes. Returns coverage per pixel.
 pub fn marker_coverage(dst_w: u32, dst_h: u32, layout: &Layout, seed: u64) -> Vec<u8> {
     let mut out = vec![0u8; (dst_w * dst_h) as usize];
-    let Some(font) = marker_font() else { return out };
+    let Some(font) = marker_font() else {
+        return out;
+    };
     let Some(vm) = font.horizontal_line_metrics(layout.px) else {
         return out;
     };
@@ -150,7 +152,10 @@ pub fn draw_centred_in(
     layout: &Layout,
     colour: [u8; 3],
 ) {
-    for (i, a) in coverage_in(font, dst_w, dst_h, layout).into_iter().enumerate() {
+    for (i, a) in coverage_in(font, dst_w, dst_h, layout)
+        .into_iter()
+        .enumerate()
+    {
         if a > 0 {
             blend(&mut dst[i * 4..i * 4 + 4], a as u32, colour);
         }

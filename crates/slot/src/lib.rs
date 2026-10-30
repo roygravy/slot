@@ -1,3 +1,10 @@
+macro_rules! eprintln {
+    ($($arg:tt)*) => {{
+        use std::io::Write as _;
+        let _ = writeln!(std::io::stderr(), $($arg)*);
+    }};
+}
+
 pub mod app;
 pub mod audio;
 pub mod bezel;
@@ -7,6 +14,7 @@ pub mod build_info;
 pub mod cable;
 pub mod card_log;
 pub mod cart_faces;
+mod cheat_fetch;
 pub mod cheats;
 pub mod core;
 pub mod core_picker;
@@ -23,23 +31,30 @@ pub mod frames;
 pub mod frontend;
 pub mod input;
 pub mod label_cache;
+pub mod label_search;
+mod labels;
 pub mod latency;
 pub mod link_art_builder;
 pub mod link_kind;
+pub mod link_lan;
+pub mod link_mdns;
 pub mod link_net;
 pub mod link_radio;
 pub mod link_screen;
 pub mod link_start;
 pub mod link_state;
+pub mod loading_mark;
 pub mod panel_turn;
 pub mod persist;
 pub mod prefetch;
 pub mod resample;
 pub mod rewind;
-pub mod screenshot;
-pub mod shots;
 pub mod root;
+pub mod screenshot;
 pub mod session;
+pub mod sgb_rom;
+pub mod shell_picker;
+pub mod shots;
 pub mod state_writer;
 pub mod thumb;
 pub mod video_mode;

@@ -44,9 +44,9 @@ impl InputSource for Scripted {
     }
 }
 
-fn write_png(path: &str, rgba: &[u8]) {
+fn write_png(path: &str, rgba: &[u8], (w, h): (u32, u32)) {
     let file = std::fs::File::create(path).expect("create png");
-    let mut enc = png::Encoder::new(std::io::BufWriter::new(file), OUT_W, OUT_H);
+    let mut enc = png::Encoder::new(std::io::BufWriter::new(file), w, h);
     enc.set_color(png::ColorType::Rgba);
     enc.set_depth(png::BitDepth::Eight);
     let mut w = enc.write_header().unwrap();
@@ -70,7 +70,16 @@ fn main() {
     let surface = HeadlessSurface::new().expect("headless GL");
     let mut compositor = Compositor::new(&surface).expect("compositor");
     let mut frontend = Frontend::boot(Box::new(SimPlatform::at(root.into()).stopped_at(CLOCK)));
+    // SLOT_WINDOW=720x480 shoots as a panel of that size would show (default 640x480).
+    let window: (u32, u32) = std::env::var("SLOT_WINDOW")
+        .ok()
+        .and_then(|v| {
+            let (w, h) = v.split_once('x')?;
+            Some((w.parse().ok()?, h.parse().ok()?))
+        })
+        .unwrap_or((OUT_W, OUT_H));
     frontend.upload_faces(&mut compositor);
+    frontend.upload_bezel(&mut compositor, window);
     frontend.drive_emulator();
 
     let mut input = Scripted::default();
@@ -92,8 +101,8 @@ fn main() {
             eprintln!("poweroff");
         }
         frontend.step_emulator(present, Duration::from_secs(1));
-        frontend.compose(&mut compositor);
-        compositor.read_frame()
+        frontend.render(&mut compositor, window);
+        compositor.read_window(window)
     };
     #[allow(unused_assignments)]
     let mut last: Vec<u8>;
@@ -121,7 +130,7 @@ fn main() {
             ["up", b] => input.0.push(RawEvent::Up(btn(b))),
             ["snap", name] => {
                 last = run(&mut input, &mut frame);
-                write_png(&format!("{out}/{name}.png"), &last);
+                write_png(&format!("{out}/{name}.png"), &last, window);
                 eprintln!("snap {name}");
             }
             _ => panic!("cannot read {line:?}"),

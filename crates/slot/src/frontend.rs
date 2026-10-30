@@ -2,6 +2,10 @@ use std::time::{Duration, Instant};
 
 use slot_gfx::{Compositor, Draw, ScreenEffect, TexId, OUT_H, OUT_W};
 
+/// Labels cached quicker than this are done before the banner would show them.
+/// The studio's Model row words: the SNES's, the Game Boy's, then the Super Game Boy's.
+const MODEL_WORDS: [&str; 7] = ["PAL", "NTSC", "GB", "GBC", "Europe", "USA", "SGB 2"];
+const REBUILD_BANNER_AFTER: Duration = Duration::from_millis(600);
 const PAPER: &[u8] = include_bytes!("../assets/paper.png");
 const GBA_LCD_OVERLAY: &[u8] = include_bytes!("../assets/gba_lcd_overlay.png");
 use slot_input::{InputSource, Millis};
@@ -9,14 +13,13 @@ use slot_power::{Platform, Power};
 use slot_store::{format_stamp, BezelPick, Platform as Console};
 use slot_ui::{
     arrows_hint_coloured, arrows_hint_face, badge_face, bezel_face, cart_shadow, chip_face,
-    chip_shadow_face, date_time_text, default_game_bezel_face, footer_ink, game_bezel_face,
-    gb_cart_shadow, hhmm, hint_coloured, hint_face, icon_face, menu_face, photo_face,
-    quick_caret_face, quick_label_face, quick_legend_faces, quick_pointer_face, quick_value_face,
-    rebuild_count_face, rebuild_title_face, set_clock_hint_face, slot_back, slot_back_light,
-    slot_front, slot_front_light, socket_face, title_face, toast_face,
-    wallpaper_face, word_ink, CartFace, GbShell, Icon, LinkBadge, QuickMenuFaces,
-    QuickRow, QuickValue, RebuildScreen, Toast, UndoFace, ALERT_PX, BOLT_PX,
-    HUD_ICON_PX, HUD_INK, LEGEND,
+    chip_shadow_face, clock_text, date_time_text_in, default_game_bezel_face, footer_ink,
+    game_bezel_face, hint_coloured, hint_face, icon_face, menu_face, photo_face, quick_caret_face,
+    quick_label_face, quick_legend_faces, quick_pointer_face, quick_value_face,
+    rebuild_banner_face, set_clock_hint_face, slot_back, slot_back_light, slot_front,
+    slot_front_light, socket_face, title_face, toast_face, wallpaper_face, word_ink, CartFace,
+    Icon, LinkBadge, Mould, QuickMenuFaces, QuickRow, QuickValue, RebuildBanner, Toast, UndoFace,
+    ALERT_PX, BOLT_PX, HUD_ICON_PX, HUD_INK, LEGEND,
 };
 
 use crate::app::{App, LinkRow, Phase};
@@ -28,12 +31,18 @@ use crate::link_art_builder::LinkArtBuilder;
 use crate::link_screen::{LinkSprites, Sprite};
 use crate::link_start::{LinkFail, LinkStep};
 use crate::session::Session;
+use slot_ui::SgbModel;
 
 const DOZE_TIMEOUT: Duration = Duration::from_secs(300);
 
 const ALERT_INK: [u8; 3] = [0xf0, 0xb4, 0x3c];
 
 pub struct Frontend {
+    labels: crate::labels::Labels,
+    // Started once Home Wi-Fi is connected, not at boot: the network is not up yet then.
+    cheat_fetch: Option<crate::cheat_fetch::CheatFetch>,
+    /// The label worker has run with Home Wi-Fi connected.
+    was_online: bool,
     session: Session,
     start: Instant,
     last: Instant,
@@ -44,6 +53,13 @@ pub struct Frontend {
     cart_faces: CartFaces,
     rebuild: Option<Rebuild>,
     stale_check: Option<std::sync::mpsc::Receiver<Vec<slot_store::Cart>>>,
+    label_fetch: Option<std::sync::mpsc::Receiver<(slot_store::Cart, LabelFetched)>>,
+    versions_fetch:
+        Option<std::sync::mpsc::Receiver<(std::path::PathBuf, Option<Vec<VersionFile>>)>>,
+    search_fetch: Option<std::sync::mpsc::Receiver<(u64, Option<Vec<slot_labels::Game>>)>>,
+    search_tex: SearchTextures,
+    /// Each version's thumbnail and caption, reused from one cart to the next.
+    version_tex: Vec<(Option<TexId>, Option<TexId>)>,
     ui_faces: Option<std::sync::mpsc::Receiver<UiFaces>>,
     rebuild_faces: RebuildFaces,
     link_art: LinkArtBuilder,
@@ -60,6 +76,8 @@ pub struct Frontend {
     capture_pending: bool,
     shot_pending: bool,
     quick_clock: QuickClock,
+    quick_network: QuickClock,
+    quick_zone: QuickClock,
     quick_palette: QuickPalette,
     wallpaper: WallpaperSync,
     game_bezel: BezelSync,
@@ -69,11 +87,29 @@ pub struct Frontend {
     link_shot_shown: bool,
 }
 
+/// A version of a cart's label, kept on the card while the studio shows it.
+struct VersionFile {
+    path: std::path::PathBuf,
+    caption: String,
+    thumb: Vec<u8>,
+    w: u32,
+    h: u32,
+}
+
+/// Where the label tab keeps the versions it shows.
+const VERSIONS_DIR: &str = "System/Cache/Labels/Versions";
+/// A version's thumbnail is drawn this tall; it is made at twice that.
+const THUMB_H: u32 = 84;
+
+enum LabelFetched {
+    Found(std::path::PathBuf),
+    Missing,
+    Failed,
+}
+
 #[derive(Default)]
 struct RebuildFaces {
-    title: Option<(TexId, u32, u32)>,
-    count: Option<TexId>,
-    count_size: (u32, u32),
+    line: Option<TexId>,
     shown: Option<usize>,
 }
 
@@ -133,8 +169,8 @@ struct ShotTextures {
     fixed: [Option<TexId>; 3],
     hints: [Option<TexId>; 7],
     state_line: Option<TexId>,
-    /// Up to five pictures: (path, texture), least recently used first.
-    pics: Vec<(std::path::PathBuf, TexId)>,
+    /// Up to five pictures: (path, texture, width at 480 high), least recently used first.
+    pics: Vec<(std::path::PathBuf, TexId, f32)>,
 }
 
 #[derive(Default)]
@@ -160,8 +196,10 @@ struct Clocks {
 }
 
 struct ShelfLook {
-    slot: [(TexId, TexId); 4],
+    slot: [(TexId, TexId); 17],
+    nes_lids: [TexId; 3],
     bolt: [TexId; 2],
+    wifi: [TexId; 2],
     port: [Option<TexId>; 2],
     legend: [Vec<(TexId, u32)>; 2],
     applied: Option<(bool, bool, bool)>,
@@ -183,12 +221,29 @@ impl Frontend {
         let cart_faces = CartFaces::spawn(platform.root().to_path_buf());
         let mut session = Session::boot_with(platform.root().to_path_buf(), sink);
         crate::boot_time::mark("session");
+        // Missing labels come from the artwork pack or, with Home Wi-Fi on, from LaunchBox.
+        // With neither there is nothing to fetch them from, so no ROM is read for it.
+        let fetch = session.app().home_wifi_on()
+            || platform
+                .root()
+                .join("Labels")
+                .join(slot_labels::build::PACK)
+                .is_file();
+        let labels = crate::labels::Labels::spawn(
+            platform.root().to_path_buf(),
+            if fetch {
+                session.app().carts().cloned().collect()
+            } else {
+                Vec::new()
+            },
+        );
         let stale_check =
             Self::check_labels(platform.root(), session.app().carts().cloned().collect());
         session
             .app_mut()
             .set_power(Power::new(platform, DOZE_TIMEOUT));
         Frontend {
+            labels,
             session,
             start: now,
             last: now,
@@ -199,6 +254,13 @@ impl Frontend {
             cart_faces,
             rebuild: None,
             stale_check,
+            label_fetch: None,
+            versions_fetch: None,
+            search_fetch: None,
+            search_tex: SearchTextures::default(),
+            version_tex: Vec::new(),
+            cheat_fetch: None,
+            was_online: false,
             ui_faces: None,
             rebuild_faces: RebuildFaces::default(),
             link_art: LinkArtBuilder::spawn(),
@@ -214,6 +276,8 @@ impl Frontend {
             capture_pending: false,
             shot_pending: false,
             quick_clock: QuickClock::default(),
+            quick_network: QuickClock::default(),
+            quick_zone: QuickClock::default(),
             quick_palette: QuickPalette::default(),
             wallpaper: WallpaperSync::default(),
             game_bezel: BezelSync::default(),
@@ -296,47 +360,43 @@ impl Frontend {
         self.session.app_mut().set_legend_faces(legend);
         let hint = set_clock_hint_face();
         self.clocks.hint = Some(compositor.create_texture(hint.w, hint.h, &hint.rgba));
-        let drops = [Console::Gba, Console::Gb, Console::Gbc].map(|p| {
-            let (cw, ch) = slot_ui::cart_box(p);
+        let drops = Mould::ALL.map(|m| {
+            let (cw, ch) = slot_ui::cart_box(m);
             let f = slot_ui::drop_shadow_face(cw, ch, slot_ui::DROP_MARGIN);
             compositor.create_texture(f.w, f.h, &f.rgba)
         });
         self.session.app_mut().set_drop_shadows(drops);
-        let mut halos = |colour: [u8; 3], peak: f32| {
-            [Console::Gba, Console::Gb, Console::Gbc].map(|p| {
-                let (cw, ch) = slot_ui::cart_box(p);
-                let halo = slot_ui::glow_face(cw, ch, slot_ui::GLOW_MARGIN, colour, peak);
+        let mut halos = |face: fn(u32, u32, u32, [u8; 3], f32) -> slot_ui::CartFace, peak: f32| {
+            Mould::ALL.map(|m| {
+                let (cw, ch) = slot_ui::cart_box(m);
+                let halo = face(cw, ch, slot_ui::GLOW_MARGIN, slot_ui::GLOW_GOLD, peak);
                 compositor.create_texture(halo.w, halo.h, &halo.rgba)
             })
         };
-        let gold = halos(slot_ui::GLOW_GOLD, 0.38);
-        let white = halos(slot_ui::GLOW_GOLD, 0.38);
+        let gold = halos(slot_ui::glow_face, 0.38);
+        let white = halos(slot_ui::halo_face, 0.45);
         let star = slot_ui::star_mark_face(slot_ui::STAR_PX);
         let star_id = compositor.create_texture(star.w, star.h, &star.rgba);
         self.session
             .app_mut()
             .set_mark_faces(gold, white, (star_id, star.w, star.h));
-        let shadow = cart_shadow();
-        let id = compositor.create_texture(shadow.w, shadow.h, &shadow.rgba);
-        self.session.app_mut().set_cart_shadow(id);
-        let notched = gb_cart_shadow(GbShell::Notched);
-        let notched = compositor.create_texture(notched.w, notched.h, &notched.rgba);
-        let rounded = gb_cart_shadow(GbShell::Rounded);
-        let rounded = compositor.create_texture(rounded.w, rounded.h, &rounded.rgba);
-        self.session.app_mut().set_gb_cart_shadows(notched, rounded);
-        let board = slot_ui::cart_backing(None);
-        let board = compositor.create_texture(board.w, board.h, &board.rgba);
-        self.session.app_mut().set_cart_backing(board);
-        let notched = slot_ui::cart_backing(Some(GbShell::Notched));
-        let notched = compositor.create_texture(notched.w, notched.h, &notched.rgba);
-        let rounded = slot_ui::cart_backing(Some(GbShell::Rounded));
-        let rounded = compositor.create_texture(rounded.w, rounded.h, &rounded.rgba);
-        self.session
-            .app_mut()
-            .set_gb_cart_backings(notched, rounded);
+        let shadows = Mould::ALL.map(|m| {
+            let shadow = cart_shadow(m);
+            compositor.create_texture(shadow.w, shadow.h, &shadow.rgba)
+        });
+        self.session.app_mut().set_cart_shadows(shadows);
+        let boards = Mould::ALL.map(|m| {
+            let board = slot_ui::cart_backing(m);
+            compositor.create_texture(board.w, board.h, &board.rgba)
+        });
+        self.session.app_mut().set_cart_backings(boards);
         let slot = {
-            let mut upload =
-                |bytes: &[u8]| compositor.create_texture(slot_ui::SLOT_W, slot_ui::SLOT_H, bytes);
+            let mut upload = |bytes: &[u8]| {
+                // The Super Game Boy's band stands taller than the console's.
+                let h = bytes.len() as u32 / (slot_ui::SLOT_W * 4);
+                debug_assert!(h == slot_ui::SLOT_H || h == slot_ui::SGB_BAND_H);
+                compositor.create_texture(slot_ui::SLOT_W, h, bytes)
+            };
             [
                 (upload(slot_back()), upload(slot_front())),
                 (upload(slot_back_light()), upload(slot_front_light())),
@@ -348,17 +408,66 @@ impl Frontend {
                     upload(slot_ui::slot_back_gb(true)),
                     upload(slot_ui::slot_front_gb(true)),
                 ),
+                (
+                    upload(slot_ui::slot_tv(true, false, false)),
+                    upload(slot_ui::slot_tv(true, true, false)),
+                ),
+                (
+                    upload(slot_ui::slot_tv(true, false, true)),
+                    upload(slot_ui::slot_tv(true, true, true)),
+                ),
+                (
+                    upload(slot_ui::slot_tv(false, false, false)),
+                    upload(slot_ui::slot_tv(false, true, false)),
+                ),
+                (
+                    upload(slot_ui::slot_tv(false, false, true)),
+                    upload(slot_ui::slot_tv(false, true, true)),
+                ),
+                (
+                    upload(slot_ui::sgb_band(SgbModel::Ntsc, false)),
+                    upload(slot_ui::sgb_band(SgbModel::Ntsc, true)),
+                ),
+                (
+                    upload(slot_ui::sgb_band(SgbModel::Pal, false)),
+                    upload(slot_ui::sgb_band(SgbModel::Pal, true)),
+                ),
+                (
+                    upload(slot_ui::sgb_band(SgbModel::Sfc, false)),
+                    upload(slot_ui::sgb_band(SgbModel::Sfc, true)),
+                ),
+                (
+                    upload(slot_ui::sgb_band(SgbModel::Sgb2, false)),
+                    upload(slot_ui::sgb_band(SgbModel::Sgb2, true)),
+                ),
+                (upload(slot_ui::slot_orig(0, false)), upload(slot_ui::slot_orig(0, true))),
+                (upload(slot_ui::slot_orig(1, false)), upload(slot_ui::slot_orig(1, true))),
+                (upload(slot_ui::slot_orig(2, false)), upload(slot_ui::slot_orig(2, true))),
+                (upload(slot_ui::slot_orig(3, false)), upload(slot_ui::slot_orig(3, true))),
+                (upload(slot_ui::slot_orig(4, false)), upload(slot_ui::slot_orig(4, true))),
             ]
         };
+        let nes_lids = [
+            slot_ui::nes_lid(false),
+            slot_ui::nes_lid(true),
+            slot_ui::nes_lid_orig(),
+        ]
+        .map(|lid| compositor.create_texture(slot_ui::NES_LID_W, slot_ui::SLOT_H, lid));
         let dark_bolt = icon_face(Icon::Charging, BOLT_PX, footer_ink(false));
         let light_bolt = icon_face(Icon::Charging, BOLT_PX, footer_ink(true));
         let bolt = [
             compositor.create_texture(dark_bolt.w, dark_bolt.h, &dark_bolt.rgba),
             compositor.create_texture(light_bolt.w, light_bolt.h, &light_bolt.rgba),
         ];
+        let wifi = [false, true].map(|light| {
+            let f = slot_ui::wifi_face(footer_ink(light));
+            compositor.create_texture(f.w, f.h, &f.rgba)
+        });
         self.look = Some(ShelfLook {
             slot,
+            nes_lids,
             bolt,
+            wifi,
             port: [None, None],
             legend: [Vec::new(), Vec::new()],
             applied: None,
@@ -381,15 +490,17 @@ impl Frontend {
     }
 
     fn apply_look(&mut self) {
-        let light = self.session.app().light();
+        // The footer's icons sit on the slot: their ink follows its housing.
+        let light = self.session.app().slot_light();
         let ready = self.look.as_ref().map(|look| {
             let i = usize::from(light);
             let legend_ready = !look.legend[i].is_empty();
             let port_ready = look.port[i].is_some();
             (
                 look.applied == Some((light, legend_ready, port_ready)),
-                look.slot,
+                (look.slot, look.nes_lids),
                 look.bolt[i],
+                (look.wifi[i], look.wifi[0]),
                 look.bolt[0],
                 look.port[i],
                 look.legend[i].clone(),
@@ -397,15 +508,17 @@ impl Frontend {
                 port_ready,
             )
         });
-        let Some((done, slot, bolt, hud_bolt, port, legend, legend_ready, port_ready)) = ready
+        let Some((done, slot, bolt, wifi, hud_bolt, port, legend, legend_ready, port_ready)) =
+            ready
         else {
             return;
         };
         if done {
             return;
         }
-        self.session.app_mut().set_slot_sets(slot);
+        self.session.app_mut().set_slot_sets(slot.0, slot.1);
         self.session.app_mut().set_bolt_face(bolt);
+        self.session.app_mut().set_wifi_face(wifi.0, wifi.1);
         self.session.app_mut().set_hud_bolt_face(hud_bolt);
         if let Some(tex) = port {
             self.session.app_mut().set_link_port(tex);
@@ -481,6 +594,47 @@ impl Frontend {
                 (tex, w)
             })
             .collect();
+        let [disc, ring, original] = faces.shell_shapes.map(|f| up(f).0);
+        let mut words: Vec<(TexId, u32)> = faces
+            .shell_words
+            .into_iter()
+            .map(|f| {
+                let (tex, w, _) = up(f);
+                (tex, w)
+            })
+            .collect();
+        let inks = words.split_off(words.len() - crate::shell_picker::MARKERS.len());
+        let found = words.split_off(words.len() - 2);
+        let tabs = words.split_off(words.len() - 3);
+        let models = words.split_off(words.len() - MODEL_WORDS.len());
+        let finishes = words.split_off(words.len() - crate::shell_picker::FINISH_NAMES.len());
+        let mut shell_legend: Vec<(TexId, u32)> = faces
+            .shell_legend
+            .into_iter()
+            .map(|f| {
+                let (tex, w, _) = up(f);
+                (tex, w)
+            })
+            .collect();
+        let search_hint = shell_legend.pop().expect("the search hint");
+        let remove_hint = shell_legend.pop().expect("the remove hint");
+        let confirm = shell_legend.split_off(shell_legend.len() - 2);
+        let shell_faces = slot_ui::ShellPickerFaces {
+            disc,
+            ring,
+            original,
+            names: words,
+            finishes,
+            models,
+            tabs: [tabs[0], tabs[1], tabs[2]],
+            looking: found[0],
+            none_found: found[1],
+            inks,
+            legend: shell_legend,
+            remove: remove_hint,
+            confirm,
+            search: search_hint,
+        };
         let roles = faces.link_roles.into_iter().map(&mut up).collect();
         let linked = up(faces.linked);
         let mut pack = |faces: Vec<UndoFace>| -> Vec<(TexId, u32)> {
@@ -520,6 +674,7 @@ impl Frontend {
         });
         app.set_core_part_faces(sockets, chips, blank, shadow);
         app.set_core_legend_faces(core_legend);
+        app.set_shell_picker_faces(shell_faces);
         app.set_link_menu_faces(roles);
         app.set_link_linked_face(linked);
         app.set_link_legend_faces(link_legend);
@@ -636,8 +791,11 @@ impl Frontend {
             .map(|r| r.to_path_buf())
             .and_then(|root| crate::bootlogo::take_picture(&root))
             .map(|bmp| {
-                let rgba: Vec<u8> =
-                    bmp.rgb.iter().flat_map(|p| [p[0], p[1], p[2], 255]).collect();
+                let rgba: Vec<u8> = bmp
+                    .rgb
+                    .iter()
+                    .flat_map(|p| [p[0], p[1], p[2], 255])
+                    .collect();
                 compositor.create_texture(bmp.width as u32, bmp.height as u32, &rgba)
             });
         app.set_resume_picture(tex);
@@ -646,6 +804,8 @@ impl Frontend {
     pub fn compose(&mut self, compositor: &mut Compositor) {
         compositor.set_blue_light(self.session.app().blue_light());
         compositor.set_picture(self.session.app().picture_rect());
+        let (cw, ch) = self.session.app().platform().canvas();
+        compositor.set_game_canvas(cw, ch);
         let platform = self.session.app().playing_platform();
         // A Game Boy game in its own Game Boy Color colors (Color Palettes off) is drawn as
         // the GBC draws it: the GBC's panel, LCD lines and saturation.
@@ -653,7 +813,9 @@ impl Frontend {
         let gb = platform == slot_store::Platform::Gb && !colour;
         let gbc = platform == slot_store::Platform::Gbc
             || (platform == slot_store::Platform::Gb && colour);
-        compositor.set_picture_appearance(gb, if gb { 0.03 } else { 0.0 });
+        // Effects off is the emulator's own picture: no dimming, saturation or panel tone.
+        let bare = self.session.app().screen_bare();
+        compositor.set_picture_appearance(gb, if gb && !bare { 0.03 } else { 0.0 });
         let gba = platform == slot_store::Platform::Gba;
         // The colour screens, GBC and GBA, cast lighter shadows than the Game Boy's.
         compositor.set_pixel_shadow(match (gba || gbc, gb) {
@@ -666,13 +828,16 @@ impl Frontend {
             false => GB_PALE_OPACITY,
         });
         compositor.set_lcd_mix(GBC_LCD[0], GBC_LCD[1], gba);
-        compositor.set_black_edge(self.session.app().black_border());
+        // Effects off: black around the picture too, nothing of slot.'s screen left.
+        compositor.set_black_edge(self.session.app().black_border() || bare);
         compositor.set_saturation(match (gba, gbc) {
+            _ if bare => 1.0,
             (true, _) => GBA_SATURATION,
             (_, true) => GBC_SATURATION,
             _ => 1.0,
         });
         match gbc || gba {
+            true if bare => compositor.set_panel(Some(GBC_PANEL), [1.0; 3]),
             true => compositor.set_panel(Some(GBC_PANEL), GBC_PANEL),
             false => compositor.set_panel(None, [1.0; 3]),
         }
@@ -683,8 +848,19 @@ impl Frontend {
         } else {
             0.30
         });
-        compositor.set_pixel_transparency(self.session.app().pixel_transparency());
+        // A TV console's picture is a tube's, not an LCD's: no see-through pixels.
+        let tv = platform.tv();
+        // A TV console's screen effects go on and off together: the filter and colours in
+        // its core, the scanlines and the phosphor's afterglow here.
+        let tv_look = self.session.app().tv_look(platform);
+        let afterglow = tv_look.is_some_and(|l| l.afterglow);
+        compositor.set_afterglow(if afterglow { TV_AFTERGLOW } else { 0 });
+        let lines = tv_look.map_or((false, false), |l| (l.scanlines, l.mask));
+        compositor.set_tv_lines(lines.0, lines.1);
+        compositor.set_pixel_transparency(self.session.app().pixel_transparency() && !tv);
         compositor.set_screen_effect(match self.session.app().screen_shader() {
+            _ if tv && (lines.0 || lines.1) => ScreenEffect::Crt,
+            _ if tv => ScreenEffect::None,
             slot_store::Shader::Off => ScreenEffect::None,
             slot_store::Shader::Grid if gbc => ScreenEffect::GbaLcd,
             slot_store::Shader::Lcd3x => ScreenEffect::Lcd3x,
@@ -702,20 +878,27 @@ impl Frontend {
         self.grab_boot_picture(compositor);
         self.grab_screenshot(compositor);
         self.load_resume_picture(compositor);
+        compositor.set_game_fills(self.session.app().game_fills());
         compositor.begin_frame(self.session.app().layout());
-        if self.draw_rebuild(compositor) {
-            return;
-        }
+        self.poll_ui_faces(compositor);
+        self.poll_rebuild();
         if let Some(frame) = self.session.frame() {
             compositor.upload_game(&frame);
             crate::latency::taken();
         }
+        self.sync_labels();
+        self.fetch_asked_label();
+        self.fetch_versions(compositor);
+        self.search_labels();
+        sync_label_search(self.session.app_mut(), compositor, &mut self.search_tex);
         self.cart_faces.sync(self.session.app_mut(), compositor);
         sync_clock(self.session.app_mut(), compositor, &mut self.clocks);
         sync_about(self.session.app_mut(), compositor, &mut self.about);
         sync_cheats(self.session.app_mut(), compositor, &mut self.cheats);
         sync_shots(self.session.app_mut(), compositor, &mut self.shot_tex);
         sync_quick_clock(self.session.app_mut(), compositor, &mut self.quick_clock);
+        sync_quick_network(self.session.app_mut(), compositor, &mut self.quick_network);
+        sync_quick_zone(self.session.app_mut(), compositor, &mut self.quick_zone);
         sync_quick_palette(self.session.app_mut(), compositor, &mut self.quick_palette);
         sync_wallpaper(self.session.app_mut(), compositor, &mut self.wallpaper);
         sync_game_bezel(self.session.app_mut(), compositor, &mut self.game_bezel);
@@ -760,6 +943,8 @@ impl Frontend {
                     clicks: up(&art.clicks),
                     arrow_left: up(&art.arrow_left),
                     arrow_right: up(&art.arrow_right),
+                    net_home: up(&art.net_home),
+                    net_direct: up(&art.net_direct),
                 };
                 self.session.app_mut().set_link_sprites(sprites);
                 self.link_art_done = true;
@@ -778,6 +963,7 @@ impl Frontend {
         self.draws.clear();
         self.session.app().draw(&mut self.draws);
         compositor.draw_list(&self.draws);
+        self.draw_rebuild(compositor);
     }
 
     pub fn drive_emulator(&mut self) {
@@ -788,8 +974,184 @@ impl Frontend {
         self.session.step_emulator(present, timeout)
     }
 
-    pub fn rebuilding_labels(&self) -> bool {
-        self.rebuild.is_some()
+    /// A label the background worker fetched: the cart takes it and its face is drawn again.
+    fn sync_labels(&mut self) {
+        let Some(ready) = self.labels.take() else {
+            return;
+        };
+        let Some(path) = ready.cart.label else {
+            return;
+        };
+        self.session.app_mut().attach_label(&ready.cart.rom, path);
+        if self.core_asked.as_deref() == Some(ready.cart.stem.as_str())
+            || self.core_built.as_deref() == Some(ready.cart.stem.as_str())
+        {
+            self.core_asked = None;
+            self.core_built = None;
+        }
+    }
+
+    /// The label search asked for the games some words find: looked for on a thread of its own.
+    fn search_labels(&mut self) {
+        if let Some(rx) = &self.search_fetch {
+            match rx.try_recv() {
+                Ok((asked, games)) => {
+                    self.search_fetch = None;
+                    self.session.app_mut().search_found(asked, games);
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => return,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => self.search_fetch = None,
+            }
+        }
+        let Some((asked, words, platform)) = self.session.app_mut().take_search_ask() else {
+            return;
+        };
+        let (tx, rx) = std::sync::mpsc::channel();
+        let spawned = std::thread::Builder::new()
+            .name("slot-label-search".into())
+            .spawn(move || {
+                let games = match slot_labels::Downloader::default().search(&words, platform) {
+                    Ok(games) => Some(games),
+                    Err(slot_labels::Error::Unavailable(_)) => Some(Vec::new()),
+                    Err(e) => {
+                        eprintln!("slot: labels: search {words:?}: {e}");
+                        None
+                    }
+                };
+                let _ = tx.send((asked, games));
+            });
+        match spawned {
+            Ok(_) => self.search_fetch = Some(rx),
+            Err(e) => eprintln!("slot: labels: search thread failed to start: {e}"),
+        }
+    }
+
+    /// The studio's label tab asked for the versions of a cart's label: fetched and cut on a
+    /// thread of its own, then each one's thumbnail and caption uploaded.
+    fn fetch_versions(&mut self, compositor: &mut Compositor) {
+        if let Some(rx) = &self.versions_fetch {
+            let (rom, got) = match rx.try_recv() {
+                Ok(got) => got,
+                Err(std::sync::mpsc::TryRecvError::Empty) => return,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    self.versions_fetch = None;
+                    return;
+                }
+            };
+            self.versions_fetch = None;
+            let found = got.map(|versions| {
+                versions
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, v)| {
+                        if self.version_tex.len() <= i {
+                            self.version_tex.resize(i + 1, (None, None));
+                        }
+                        let thumb =
+                            upload_rgba(compositor, &mut self.version_tex[i].0, v.w, v.h, &v.thumb);
+                        let word = slot_ui::shell_picker_word(&v.caption);
+                        let caption = upload_rgba(
+                            compositor,
+                            &mut self.version_tex[i].1,
+                            word.w,
+                            word.h,
+                            &word.rgba,
+                        );
+                        (v.path, (thumb, v.w, v.h), (caption, word.w))
+                    })
+                    .collect()
+            });
+            self.session.app_mut().versions_found(&rom, found);
+            return;
+        }
+        let Some((cart, picked)) = self.session.app_mut().take_versions_ask() else {
+            return;
+        };
+        let Some(root) = self.session.app().root().map(|r| r.to_path_buf()) else {
+            return;
+        };
+        let (tx, rx) = std::sync::mpsc::channel();
+        let spawned = std::thread::Builder::new()
+            .name("slot-label-versions".into())
+            .spawn(move || {
+                let mut downloader = slot_labels::Downloader::default();
+                let versions = match picked {
+                    Some(game) => downloader.versions_of(&cart, game),
+                    None => downloader.versions(&cart),
+                };
+                let got = match versions {
+                    Ok(versions) => Some(version_files(&root, &cart, versions)),
+                    Err(slot_labels::Error::Unavailable(_) | slot_labels::Error::Image(_)) => {
+                        Some(Vec::new())
+                    }
+                    Err(e) => {
+                        eprintln!("slot: labels: {}: {e}", cart.stem);
+                        None
+                    }
+                };
+                let _ = tx.send((cart.rom, got));
+            });
+        match spawned {
+            Ok(_) => self.versions_fetch = Some(rx),
+            Err(e) => eprintln!("slot: labels: versions thread failed to start: {e}"),
+        }
+    }
+
+    /// The shell picker asked for one cart's label: fetched on a thread of its own, as the
+    /// background worker fetches them, and attached when it comes.
+    fn fetch_asked_label(&mut self) {
+        if let Some(rx) = &self.label_fetch {
+            let (cart, got) = match rx.try_recv() {
+                Ok(got) => got,
+                Err(std::sync::mpsc::TryRecvError::Empty) => return,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    self.label_fetch = None;
+                    return;
+                }
+            };
+            self.label_fetch = None;
+            let app = self.session.app_mut();
+            let found = match got {
+                LabelFetched::Found(path) => {
+                    app.attach_label(&cart.rom, path);
+                    Some(true)
+                }
+                LabelFetched::Missing => Some(false),
+                LabelFetched::Failed => None,
+            };
+            app.label_fetched(&cart.rom, found);
+            return;
+        }
+        let Some(cart) = self.session.app_mut().take_label_ask() else {
+            return;
+        };
+        let Some(root) = self.session.app().root().map(|r| r.to_path_buf()) else {
+            return;
+        };
+        let (tx, rx) = std::sync::mpsc::channel();
+        let spawned = std::thread::Builder::new()
+            .name("slot-label-ask".into())
+            .spawn(move || {
+                let got = match slot_labels::Downloader::default().prepare(&root, &cart) {
+                    Ok(path) => {
+                        slot_store::forget_no_label(&root, cart.platform, &cart.stem);
+                        LabelFetched::Found(path)
+                    }
+                    Err(slot_labels::Error::Unavailable(_) | slot_labels::Error::Image(_)) => {
+                        slot_store::note_no_label(&root, cart.platform, &cart.stem);
+                        LabelFetched::Missing
+                    }
+                    Err(e) => {
+                        eprintln!("slot: labels: {}: {e}", cart.stem);
+                        LabelFetched::Failed
+                    }
+                };
+                let _ = tx.send((cart, got));
+            });
+        match spawned {
+            Ok(_) => self.label_fetch = Some(rx),
+            Err(e) => eprintln!("slot: labels: fetch thread failed to start: {e}"),
+        }
     }
 
     fn check_labels(
@@ -826,54 +1188,81 @@ impl Frontend {
         }
     }
 
-    fn draw_rebuild(&mut self, compositor: &mut Compositor) -> bool {
+    /// New labels are cached on worker threads while the shelf is in use; they wait
+    /// while a game runs. On the shelf a banner along the top counts them.
+    fn poll_rebuild(&mut self) {
         self.poll_label_check();
-        self.poll_ui_faces(compositor);
         let Some(rebuild) = &self.rebuild else {
-            return false;
+            return;
         };
         if rebuild.finished() {
+            // A handful done before the banner ever showed needs no word that they are.
+            if self.rebuild_faces.shown.is_some() {
+                self.session.app_mut().say_labels_ready();
+            }
             self.rebuild = None;
-            self.last = Instant::now();
-            return false;
+            self.rebuild_faces.shown = None;
+            return;
         }
-        let faces = &mut self.rebuild_faces;
-        let title = *faces.title.get_or_insert_with(|| {
-            let f = rebuild_title_face("Caching New Labels");
-            (compositor.create_texture(f.w, f.h, &f.rgba), f.w, f.h)
-        });
+        rebuild.set_paused(!self.session.app().labels_may_cache());
+    }
+
+    fn draw_rebuild(&mut self, compositor: &mut Compositor) {
+        let Some(rebuild) = &self.rebuild else {
+            return;
+        };
+        if !self.session.app().labels_banner_shown()
+            || rebuild.started().elapsed() < REBUILD_BANNER_AFTER
+        {
+            return;
+        }
         let done = rebuild.done();
+        let faces = &mut self.rebuild_faces;
         if faces.shown != Some(done) {
-            let f = rebuild_count_face(&format!("{done} / {}", rebuild.total()));
-            faces.count_size = (f.w, f.h);
-            upload(compositor, &mut faces.count, f);
+            let f = rebuild_banner_face(&format!("Caching Labels  {done} / {}", rebuild.total()));
+            upload_rgba(compositor, &mut faces.line, f.w, f.h, &f.rgba);
             faces.shown = Some(done);
         }
-        let screen = RebuildScreen {
-            title: Some(title),
-            count: faces
-                .count
-                .map(|tex| (tex, faces.count_size.0, faces.count_size.1)),
+        let banner = RebuildBanner {
+            line: faces.line,
             fraction: done as f32 / rebuild.total().max(1) as f32,
         };
         self.draws.clear();
-        screen.draw(self.session.app().canvas(), &mut self.draws);
+        banner.draw(self.session.app().canvas(), &mut self.draws);
         compositor.draw_list(&self.draws);
-        true
     }
 
     pub fn advance(&mut self, input: &mut dyn InputSource) {
         let now = self.now();
         let events = input.poll(now);
-        if self.rebuild.is_some() {
-            return;
-        }
         self.session
             .set_menu_dpad_display(input.menu_dpad_display());
         self.session.feed(events, now);
         let dt = self.last.elapsed().as_secs_f32();
         self.last = Instant::now();
         self.session.update(dt);
+        self.fetch_once_online();
+    }
+
+    /// Cheat files and labels come only from online: their workers start the first time Home
+    /// Wi-Fi is connected, whether that is shortly after boot or after it is switched on in
+    /// the menu. They give up on a network that keeps failing, so every time the connection
+    /// comes back (after the deep sleep, or Wi-Fi off and on) fresh ones start for the carts
+    /// still without a label or a cheat look-up.
+    fn fetch_once_online(&mut self) {
+        let app = self.session.app();
+        let online = app.home_wifi_on() && app.home_connected();
+        let back = online && !self.was_online;
+        self.was_online = online;
+        if !back {
+            return;
+        }
+        let Some(root) = app.root().map(|r| r.to_path_buf()) else {
+            return;
+        };
+        let carts: Vec<_> = app.carts().cloned().collect();
+        self.labels = crate::labels::Labels::spawn(root.clone(), carts.clone());
+        self.cheat_fetch = Some(crate::cheat_fetch::CheatFetch::spawn(root, carts));
     }
 
     pub fn app(&self) -> &crate::app::App {
@@ -890,6 +1279,7 @@ impl Frontend {
             .set_menu_dpad_display(input.menu_dpad_display());
         self.session.feed(events, now);
         self.session.update(dt);
+        self.fetch_once_online();
     }
 
     fn now(&self) -> Millis {
@@ -898,6 +1288,11 @@ impl Frontend {
 
     pub fn powering_off(&self) -> bool {
         self.session.app().ready_to_power_off()
+    }
+
+    /// The light sleep: the screen is off and nothing needs drawing.
+    pub fn dozing(&self) -> bool {
+        matches!(self.session.app().phase(), Phase::Doze { .. })
     }
 
     pub fn restarting(&self) -> bool {
@@ -928,6 +1323,12 @@ impl Frontend {
     /// For previews: the picture a shutdown would leave as the boot screen.
     pub fn boot_picture(&mut self) -> Option<(Vec<u8>, u32, u32)> {
         self.session.app_mut().take_boot_picture()
+    }
+
+    pub fn stop(&mut self) {
+        self.session.app_mut().flush_resume();
+        self.session.app_mut().settle_saves();
+        self.session.app_mut().clear_loading_mark();
     }
 }
 
@@ -972,6 +1373,9 @@ struct UiFaces {
     blank_chip: CartFace,
     chip_shadow: CartFace,
     core_legend: Vec<UndoFace>,
+    shell_shapes: [UndoFace; 3],
+    shell_words: Vec<UndoFace>,
+    shell_legend: Vec<UndoFace>,
     link_roles: Vec<UndoFace>,
     linked: UndoFace,
     link_legend: Vec<UndoFace>,
@@ -1041,6 +1445,28 @@ impl UiFaces {
                 arrows_hint_face("Swap"),
                 hint_face("A", "Choose"),
             ],
+            shell_shapes: slot_ui::shell_picker_shapes(),
+            // The swatches' names, the finishes, the shapes, the tabs, the label tab's states, then
+            // the markers' names.
+            shell_words: crate::shell_picker::swatch_names()
+                .into_iter()
+                .chain(crate::shell_picker::FINISH_NAMES.map(|(_, name)| name))
+                .chain(MODEL_WORDS)
+                .chain(["Color", "Label", "Marker", "Looking", "None Found"])
+                .chain(crate::shell_picker::MARKERS.map(|(name, _)| name))
+                .map(slot_ui::shell_picker_word)
+                .collect(),
+            shell_legend: vec![
+                slot_ui::tint_mask(hint_face("B", "Cancel")),
+                slot_ui::tint_mask(arrows_hint_face("Change")),
+                slot_ui::tint_mask(hint_face("A", "Save")),
+                // Taken off as the confirm legend, then the remove hint, shown only for a cart
+                // wearing a label.
+                slot_ui::tint_mask(hint_face("B", "Keep Label")),
+                slot_ui::tint_mask(hint_face("A", "Remove Label")),
+                slot_ui::tint_mask(hint_face("Y", "Remove Label")),
+                slot_ui::tint_mask(hint_face("Y", "Search")),
+            ],
             link_roles: LinkRow::ALL.iter().map(|r| menu_face(r.text())).collect(),
             linked: menu_face("Linked"),
             link_legend: link_legend_faces(footer_ink(false)),
@@ -1109,9 +1535,9 @@ fn sync_clock(app: &mut App, compositor: &mut Compositor, clocks: &mut Clocks) {
             app.set_clock_faces(line, hint);
         }
     }
-    let shown = hhmm(app.wall_secs());
+    let shown = clock_text(app.wall_secs(), app.clock_24h());
     if shown != clocks.shown {
-        let face = word_ink(&shown, clocks.ink);
+        let face = slot_ui::status_clock_face(&shown, clocks.ink);
         clocks.shown = shown;
         let w = face.w;
         let id = upload(compositor, &mut clocks.shelf, face);
@@ -1141,14 +1567,15 @@ fn sync_clock(app: &mut App, compositor: &mut Compositor, clocks: &mut Clocks) {
             app.set_shelf_title_face(id, w);
         }
     }
-    let battery_shown = app
-        .battery()
-        .map(|b| format!("{}%", b.percent))
+    let battery = app.battery();
+    let battery_shown = battery
+        .map(|b| format!("{}{:?}", b.percent, b.charge))
         .unwrap_or_default();
     if battery_shown != clocks.battery {
         clocks.battery = battery_shown.clone();
-        if !battery_shown.is_empty() {
-            let face = word_ink(&battery_shown, clocks.ink);
+        if let Some(b) = battery {
+            let charging = b.charge == slot_power::Charge::Charging;
+            let face = slot_ui::battery_face(b.percent, charging, clocks.ink);
             let w = face.w;
             let id = upload(compositor, &mut clocks.battery_tex, face);
             app.set_battery_percent_face(id, w);
@@ -1257,11 +1684,53 @@ fn sync_wallpaper(app: &mut App, compositor: &mut Compositor, state: &mut Wallpa
     state.label = label;
 }
 
+/// Connected To on the Network page: the home network's name, or that there is none.
+fn sync_quick_network(app: &mut App, compositor: &mut Compositor, state: &mut QuickClock) {
+    if app.quick_menu().is_none() {
+        return;
+    }
+    let text = app
+        .home_network()
+        .unwrap_or_else(|| "Not connected".to_string());
+    if text == state.shown {
+        return;
+    }
+    let (dim, lit) = (
+        quick_value_face(&text, false),
+        quick_value_face(&text, true),
+    );
+    let (dim_size, lit_size) = ((dim.w, dim.h), (lit.w, lit.h));
+    let dim = upload(compositor, &mut state.dim, dim);
+    let lit = upload(compositor, &mut state.lit, lit);
+    app.set_quick_network_faces((dim, dim_size.0, dim_size.1), (lit, lit_size.0, lit_size.1));
+    state.shown = text;
+}
+
+/// Time Zone on the General page: the clock's city.
+fn sync_quick_zone(app: &mut App, compositor: &mut Compositor, state: &mut QuickClock) {
+    if app.quick_menu().is_none() {
+        return;
+    }
+    let text = app.zone_name();
+    if text == state.shown {
+        return;
+    }
+    let (dim, lit) = (
+        quick_value_face(&text, false),
+        quick_value_face(&text, true),
+    );
+    let (dim_size, lit_size) = ((dim.w, dim.h), (lit.w, lit.h));
+    let dim = upload(compositor, &mut state.dim, dim);
+    let lit = upload(compositor, &mut state.lit, lit);
+    app.set_quick_zone_faces((dim, dim_size.0, dim_size.1), (lit, lit_size.0, lit_size.1));
+    state.shown = text;
+}
+
 fn sync_quick_clock(app: &mut App, compositor: &mut Compositor, state: &mut QuickClock) {
     if app.quick_menu().is_none() {
         return;
     }
-    let text = date_time_text(app.wall_secs());
+    let text = date_time_text_in(app.wall_secs(), app.clock_24h());
     if text == state.shown {
         return;
     }
@@ -1293,7 +1762,11 @@ fn sync_quick_palette(app: &mut App, compositor: &mut Compositor, state: &mut Qu
 fn help_line_face(line: &str) -> slot_ui::UndoFace {
     use slot_ui::text;
     let Some(font) = text::label_font() else {
-        return slot_ui::UndoFace { rgba: Vec::new(), w: 0, h: 0 };
+        return slot_ui::UndoFace {
+            rgba: Vec::new(),
+            w: 0,
+            h: 0,
+        };
     };
     let layout = text::fit(font, line, 600.0, 1, 17.0, 12.0);
     let set = layout
@@ -1311,7 +1784,11 @@ fn help_line_face(line: &str) -> slot_ui::UndoFace {
 fn cheat_name_face(name: &str) -> slot_ui::UndoFace {
     use slot_ui::text;
     let Some(font) = text::label_font() else {
-        return slot_ui::UndoFace { rgba: Vec::new(), w: 0, h: 0 };
+        return slot_ui::UndoFace {
+            rgba: Vec::new(),
+            w: 0,
+            h: 0,
+        };
     };
     // Shrink to fit; past the smallest size, drop words from the end behind an ellipsis.
     let words: Vec<&str> = name.split_whitespace().collect();
@@ -1334,7 +1811,12 @@ fn cheat_name_face(name: &str) -> slot_ui::UndoFace {
         .map(|l| text::line_width(font, l, layout.px, layout.tracking))
         .fold(0.0, f32::max);
     let reference = quick_value_face("Hg", false);
-    let (w, h) = ((set.ceil() as u32 + 4).min(slot_ui::NAME_MAX_W as u32 + 4).max(1), reference.h);
+    let (w, h) = (
+        (set.ceil() as u32 + 4)
+            .min(slot_ui::NAME_MAX_W as u32 + 4)
+            .max(1),
+        reference.h,
+    );
     let mut rgba = vec![0u8; (w * h * 4) as usize];
     text::draw_centred(&mut rgba, w, h, &layout, [0xff, 0xff, 0xff]);
     slot_ui::UndoFace { rgba, w, h }
@@ -1383,7 +1865,10 @@ fn sync_cheats(app: &mut App, compositor: &mut Compositor, state: &mut CheatText
             let (w, h) = (f.w, f.h);
             (upload(compositor, slot, f), w, h)
         };
-        let empty = up(&mut state.empty, quick_value_face("No cheats for this game", false));
+        let empty = up(
+            &mut state.empty,
+            quick_value_face("No cheats for this game", false),
+        );
         let line = format!(
             "Put a .cht file named like this game in Cheats/{}.",
             app.cheat_platform().dir_name()
@@ -1391,8 +1876,14 @@ fn sync_cheats(app: &mut App, compositor: &mut Compositor, state: &mut CheatText
         let empty_help = up(&mut state.empty_help, help_line_face(&line));
         let off = up(&mut state.switches[0], slot_ui::quick_switch_face(false));
         let on = up(&mut state.switches[1], slot_ui::quick_switch_face(true));
-        let more_up = up(&mut state.more[0], quarter_turn(quick_caret_face(true), false));
-        let more_down = up(&mut state.more[1], quarter_turn(quick_caret_face(true), true));
+        let more_up = up(
+            &mut state.more[0],
+            quarter_turn(quick_caret_face(true), false),
+        );
+        let more_down = up(
+            &mut state.more[1],
+            quarter_turn(quick_caret_face(true), true),
+        );
         let mut hint = |slot: &mut Option<TexId>, key: &str, label: &str| {
             let f = slot_ui::tint_mask(hint_face(key, label));
             let w = f.w;
@@ -1433,7 +1924,11 @@ fn sync_cheats(app: &mut App, compositor: &mut Compositor, state: &mut CheatText
 fn text_face(line: &str, px: f32, max_w: f32) -> slot_ui::UndoFace {
     use slot_ui::text;
     let Some(font) = text::label_font() else {
-        return slot_ui::UndoFace { rgba: Vec::new(), w: 0, h: 0 };
+        return slot_ui::UndoFace {
+            rgba: Vec::new(),
+            w: 0,
+            h: 0,
+        };
     };
     let layout = text::fit(font, line, max_w, 1, px, 12.0);
     let set = layout
@@ -1441,7 +1936,10 @@ fn text_face(line: &str, px: f32, max_w: f32) -> slot_ui::UndoFace {
         .iter()
         .map(|l| text::line_width(font, l, layout.px, layout.tracking))
         .fold(0.0, f32::max);
-    let (w, h) = ((set.ceil() as u32 + 4).min(max_w as u32 + 4), (px * 1.5).ceil() as u32);
+    let (w, h) = (
+        (set.ceil() as u32 + 4).min(max_w as u32 + 4),
+        (px * 1.5).ceil() as u32,
+    );
     let mut rgba = vec![0u8; (w * h * 4) as usize];
     text::draw_centred(&mut rgba, w, h, &layout, [0xff, 0xff, 0xff]);
     slot_ui::UndoFace { rgba, w, h }
@@ -1458,9 +1956,15 @@ fn read_png(path: &std::path::Path) -> Option<(Vec<u8>, u32, u32)> {
     let px = (w * h) as usize;
     let rgba = match info.color_type {
         png::ColorType::Rgba => buf[..px * 4].to_vec(),
-        png::ColorType::Rgb => buf[..px * 3].chunks_exact(3).flat_map(|p| [p[0], p[1], p[2], 255]).collect(),
+        png::ColorType::Rgb => buf[..px * 3]
+            .chunks_exact(3)
+            .flat_map(|p| [p[0], p[1], p[2], 255])
+            .collect(),
         png::ColorType::Grayscale => buf[..px].iter().flat_map(|&g| [g, g, g, 255]).collect(),
-        png::ColorType::GrayscaleAlpha => buf[..px * 2].chunks_exact(2).flat_map(|p| [p[0], p[0], p[0], p[1]]).collect(),
+        png::ColorType::GrayscaleAlpha => buf[..px * 2]
+            .chunks_exact(2)
+            .flat_map(|p| [p[0], p[0], p[0], p[1]])
+            .collect(),
         _ => return None,
     };
     Some((rgba, w, h))
@@ -1476,7 +1980,10 @@ fn build_shot_faces(app: &mut App, compositor: &mut Compositor, st: &mut ShotTex
         let [f0, f1, f2] = &mut st.fixed;
         let confirm = up(f0, help_line_face("Delete this screenshot?"));
         let empty = up(f1, quick_value_face("No screenshots yet", false));
-        let empty_help = up(f2, help_line_face("Press VOL+ and POWER together to take one."));
+        let empty_help = up(
+            f2,
+            help_line_face("Press VOL+ and POWER together to take one."),
+        );
         let mut hint = |slot: &mut Option<TexId>, f: slot_ui::UndoFace| {
             let f = slot_ui::tint_mask(f);
             let w = f.w;
@@ -1517,6 +2024,10 @@ fn build_shot_faces(app: &mut App, compositor: &mut Compositor, st: &mut ShotTex
 /// The Game Boy Color's unlit, reflective panel: what white becomes, and the tone light colours
 /// take on. A warm grey, like the glass of a GBC held in daylight.
 const GBC_PANEL: [f32; 3] = [0.79, 0.80, 0.74];
+/// How much of the last picture a TV's phosphor still glows with, out of 256: brief, a
+/// trace behind what moves fast.
+const TV_AFTERGLOW: u32 = 108;
+
 /// Grid lines a little darker than the panel, as the gaps between a GBC's pixels look.
 /// The GBC's LCD on its own pixels: a dark line under each row at 10%, and a red, green or blue
 /// line down each third of a pixel at 20%.
@@ -1553,13 +2064,20 @@ fn sync_shots(app: &mut App, compositor: &mut Compositor, st: &mut ShotTextures)
         true => Vec::new(),
         false => vec![view.sel],
     };
-    for i in [view.sel.wrapping_sub(1), view.sel + 1, view.pos.floor() as usize, view.pos.ceil() as usize] {
+    for i in [
+        view.sel.wrapping_sub(1),
+        view.sel + 1,
+        view.pos.floor() as usize,
+        view.pos.ceil() as usize,
+    ] {
         if i < view.shots.len() && !wanted.contains(&i) {
             wanted.push(i);
         }
     }
-    let paths: Vec<(usize, std::path::PathBuf)> =
-        wanted.iter().map(|&i| (i, view.shots[i].path.clone())).collect();
+    let paths: Vec<(usize, std::path::PathBuf)> = wanted
+        .iter()
+        .map(|&i| (i, view.shots[i].path.clone()))
+        .collect();
     if st.key != Some(key) {
         st.key = Some(key);
         let t = (!title.is_empty()).then(|| {
@@ -1581,9 +2099,9 @@ fn sync_shots(app: &mut App, compositor: &mut Compositor, st: &mut ShotTextures)
     let mut loaded = false;
     let mut pics = Vec::new();
     for (i, path) in &paths {
-        if let Some(at) = st.pics.iter().position(|(p, _)| p == path) {
+        if let Some(at) = st.pics.iter().position(|(p, ..)| p == path) {
             let entry = st.pics.remove(at);
-            pics.push((*i, entry.1));
+            pics.push((*i, entry.1, entry.2));
             st.pics.push(entry);
             continue;
         }
@@ -1596,15 +2114,21 @@ fn sync_shots(app: &mut App, compositor: &mut Compositor, st: &mut ShotTextures)
         };
         let keep: Vec<&std::path::PathBuf> = paths.iter().map(|(_, p)| p).collect();
         let tex = if st.pics.len() >= 5 {
-            let at = st.pics.iter().position(|(p, _)| !keep.contains(&p)).unwrap_or(0);
-            let (_, tex) = st.pics.remove(at);
+            let at = st
+                .pics
+                .iter()
+                .position(|(p, ..)| !keep.contains(&p))
+                .unwrap_or(0);
+            let (_, tex, _) = st.pics.remove(at);
             compositor.update_texture(tex, w, h, &rgba);
             tex
         } else {
             compositor.create_texture(w, h, &rgba)
         };
-        st.pics.push((path.clone(), tex));
-        pics.push((*i, tex));
+        // Its width as drawn 480 high.
+        let pw = w as f32 * OUT_H as f32 / h.max(1) as f32;
+        st.pics.push((path.clone(), tex, pw));
+        pics.push((*i, tex, pw));
     }
     app.set_shot_pics(pics);
 }
@@ -1683,8 +2207,123 @@ fn sync_core_picker(
     *built = Some(faces.stem);
 }
 
+/// The label search's textures: its keyboard's, made once, and its words', made again as they
+/// change.
+#[derive(Default)]
+struct SearchTextures {
+    heading: Option<TexId>,
+    typed: Option<TexId>,
+    status: Option<TexId>,
+    rows: Vec<(Option<TexId>, Option<TexId>)>,
+}
+
+fn sync_label_search(app: &mut App, compositor: &mut Compositor, state: &mut SearchTextures) {
+    if !app.label_search_open() {
+        return;
+    }
+    if !app.has_search_faces() {
+        let faces = slot_ui::KeyboardFaces::build()
+            .map(|f| (compositor.create_texture(f.w, f.h, &f.rgba), f.w, f.h));
+        app.set_search_faces(faces);
+    }
+    let Some((rev, words)) = app.search_words() else {
+        return;
+    };
+    let mut up = |slot: &mut Option<TexId>, f: slot_ui::UndoFace| {
+        let (w, h) = (f.w, f.h);
+        (upload(compositor, slot, f), w, h)
+    };
+    let heading = up(
+        &mut state.heading,
+        slot_ui::search_heading_face(&words.heading),
+    );
+    let typed = words
+        .typed
+        .map(|t| up(&mut state.typed, slot_ui::search_typed_face(&t)));
+    let status = words
+        .status
+        .map(|t| up(&mut state.status, slot_ui::search_status_face(&t)));
+    if state.rows.len() < words.rows.len() {
+        state.rows.resize(words.rows.len(), (None, None));
+    }
+    let rows = words
+        .rows
+        .iter()
+        .zip(state.rows.iter_mut())
+        .map(|((name, platform), (a, b))| {
+            let (n, p) = slot_ui::search_row_faces(name, platform);
+            (up(a, n), up(b, p))
+        })
+        .collect();
+    app.set_search_texts(
+        rev,
+        slot_ui::SearchTexts {
+            heading,
+            typed,
+            status,
+            rows,
+        },
+    );
+}
+
 fn upload(compositor: &mut Compositor, slot: &mut Option<TexId>, face: slot_ui::UndoFace) -> TexId {
     upload_rgba(compositor, slot, face.w, face.h, &face.rgba)
+}
+
+/// The versions written where the label tab keeps them, each with a thumbnail and a caption:
+/// where it comes from, and which of how many it is.
+fn version_files(
+    root: &std::path::Path,
+    cart: &slot_store::Cart,
+    versions: Vec<slot_labels::Version>,
+) -> Vec<VersionFile> {
+    let dir = root.join(VERSIONS_DIR);
+    let _ = std::fs::create_dir_all(&dir);
+    let (lw, lh) = slot_ui::label_size(cart);
+    let (w, h) = (lw * THUMB_H / lh.max(1), THUMB_H);
+    // An SNES cart's label tab offers only the labels made for its shape, so each is counted
+    // among those of its own shape: the wide PAL and Super Famicom ones, or the taller
+    // American ones.
+    let shape = |png: &[u8]| {
+        let size = |at: usize| {
+            png.get(at..at + 4)
+                .map(|b| u32::from_be_bytes(b.try_into().unwrap()))
+        };
+        match (cart.platform, size(16), size(20)) {
+            (slot_store::Platform::Snes, Some(w), Some(h)) => {
+                Some(w as f32 / h.max(1) as f32 > 2.45)
+            }
+            _ => None,
+        }
+    };
+    let shapes: Vec<_> = versions.iter().map(|v| shape(&v.png)).collect();
+    versions
+        .into_iter()
+        .enumerate()
+        .filter_map(|(i, v)| {
+            let n = shapes.iter().filter(|s| **s == shapes[i]).count();
+            let at = shapes[..i].iter().filter(|s| **s == shapes[i]).count();
+            let path = dir.join(format!("{i}.png"));
+            if let Err(e) = slot_store::atomic_write(&path, &v.png) {
+                eprintln!("slot: labels: {}: {e}", path.display());
+                return None;
+            }
+            let thumb = slot_ui::cover(&path, w, h)?;
+            let region = match v.region.as_str() {
+                "" => "Version",
+                "North America" | "United States" => "USA",
+                region => region,
+            };
+            let kind = if v.render { "Render" } else { "Photo" };
+            Some(VersionFile {
+                path,
+                caption: format!("{region} · {kind} · {} of {n}", at + 1),
+                thumb,
+                w,
+                h,
+            })
+        })
+        .collect()
 }
 
 fn upload_rgba(
