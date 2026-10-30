@@ -48,8 +48,8 @@ DECK_X = (C - 120 - 2 - 3 - DECK_R, C + 120 + 2 + 3 + DECK_R)
 
 def pal_deck(band):
     """The SNES PAL's top (Roy, Originals): the dark deck in the middle, rounded where it meets
-    the light front, a shadow where the deck falls away under the front's edge and a lit rim on
-    that edge. The grain stays; the grooves are cut afterwards, on the front only."""
+    the light front. Both lie flush; the seam between the two plastic parts is drawn like the
+    grooves. The grain stays; the grooves are cut afterwards, on the front only."""
     ys, xs = np.mgrid[0:H * SS, 0:W * SS].astype(np.float32)
     y, x = (ys + 0.5) / SS, (xs + 0.5) / SS
     x0, x1 = DECK_X
@@ -58,28 +58,16 @@ def pal_deck(band):
         side = (x < cx) if cx == x0 + DECK_R else (x > cx)
         m &= ~(side & (y > DECK_B - DECK_R) & ((x - cx) ** 2 + (y - DECK_B + DECK_R) ** 2 > DECK_R ** 2))
     e = m.astype(np.float32)
-
-    def shifted(dy, dx, edge=1.0):
-        r = np.roll(e, (dy, dx), (0, 1))
-        if dy > 0: r[:dy] = edge
-        if dx > 0: r[:, :dx] = edge
-        if dx < 0: r[:, dx:] = edge
-        return r
+    # how far outside the deck: its seam is the grooves' line, 2px dark and 1px lit, all round
+    cy = DECK_B - DECK_R
+    cx = np.clip(x, x0 + DECK_R, x1 - DECK_R)
+    d = np.where(y > cy, np.hypot(x - cx, y - cy) - DECK_R, np.maximum(x0 - x, x - x1))
+    dark = ((d > 0) & (d <= 2)).astype(np.float32)
+    lit = ((d > 2) & (d <= 3)).astype(np.float32)
 
     def down(a):
         return a.reshape(H, SS, W, SS).mean((1, 3))
 
-    shadow = np.zeros_like(e)
-    for k in range(1, 3 * SS):
-        f = 1 - k / (3 * SS)
-        shadow = np.maximum(shadow, e * (1 - shifted(k, 0)) * f)
-        shadow = np.maximum(shadow, e * (1 - shifted(0, k)) * f * 0.6)
-        shadow = np.maximum(shadow, e * (1 - shifted(0, -k)) * f * 0.6)
-    rim = np.zeros_like(e)
-    for k in range(SS, 2 * SS):
-        rim = np.maximum(rim, (1 - e) * shifted(k, 0, 0.0))
-        rim = np.maximum(rim, (1 - e) * shifted(0, k, 0.0) * 0.6)
-        rim = np.maximum(rim, (1 - e) * shifted(0, -k, 0.0) * 0.6)
     a = np.asarray(band, np.float32)
     rgb = a[..., :3]
     body = np.median(rgb[20:50, 40:120].reshape(-1, 3), 0)
@@ -90,7 +78,9 @@ def pal_deck(band):
     tone[:2] *= row[:2] / body
     deck = np.array(DECK, np.float32) * tone
     rgb = rgb * (1 - md) + deck * md
-    rgb = rgb * (1 - 0.45 * down(shadow)[..., None]) + down(rim)[..., None] * 28
+    dk, lt = down(dark)[..., None], down(lit)[..., None]
+    rgb = rgb * (1 - dk) + rgb * 0.55 * dk
+    rgb = rgb * (1 - lt) + np.minimum(255, rgb * 1.12 + 10) * lt
     a[..., :3] = rgb.clip(0, 255)
     return Image.fromarray(a.astype(np.uint8), 'RGBA')
 
