@@ -371,10 +371,36 @@ pub struct KeyboardFaces<T> {
     pub legend_empty: Vec<T>,
     pub legend_results: Vec<T>,
     pub legend_back: Vec<T>,
+    /// Legends of the screens built on this one, picked by the caller (see `WifiLegend`).
+    pub extra: Vec<Vec<T>>,
+}
+
+/// What the keyboard is for: the words on its keys and legends follow.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum Purpose {
+    Search,
+    Password,
+}
+
+/// The Wi-Fi pages' own legends, in `KeyboardFaces::extra` of the password faces.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum WifiLegend {
+    Nearby = 0,
+    Saved = 1,
+    Confirm = 2,
+    Wps = 3,
+    Zones = 4,
+    Back = 5,
 }
 
 impl KeyboardFaces<UndoFace> {
     pub fn build() -> Self {
+        Self::build_for(Purpose::Search)
+    }
+
+    pub fn build_for(purpose: Purpose) -> Self {
+        let pw = purpose == Purpose::Password;
+        let go = if pw { "Join" } else { "Search" };
         let set: String = key_rows(false)
             .iter()
             .chain(key_rows(true).iter())
@@ -399,18 +425,28 @@ impl KeyboardFaces<UndoFace> {
                 .iter()
                 .map(|&c| (c, plain(&c.to_string(), KEY_PX, 0.0, false)))
                 .collect(),
-            words: ["space", "search", "123", "ABC"].map(|w| plain(w, WORD_PX, 0.0, false)),
+            words: ["space", if pw { "join" } else { "search" }, "123", "ABC"]
+                .map(|w| plain(w, WORD_PX, 0.0, false)),
             shapes: shapes().into_iter().map(|s| (s, rounded(s))).collect(),
             icons: icons(),
-            placeholder: plain("Game title", FIELD_PX, 0.0, false),
-            searching: plain("Searching", 16.0, 3.0, true),
-            try_again: plain("Try fewer or other words", 13.0, 2.0, true),
+            placeholder: plain(if pw { "Password" } else { "Game title" }, FIELD_PX, 0.0, false),
+            searching: plain(if pw { "Scanning" } else { "Searching" }, 16.0, 3.0, true),
+            try_again: plain(
+                if pw {
+                    "Move closer to the router"
+                } else {
+                    "Try fewer or other words"
+                },
+                13.0,
+                2.0,
+                true,
+            ),
             legend_typing: vec![
                 // X still clears the field; its hint makes room for MENU's.
                 hint("B", "Delete"),
                 hint("Y", "Space"),
                 hint("SELECT", "Shift"),
-                hint("START", "Search"),
+                hint("START", go),
                 hint("MENU", "Exit"),
             ],
             legend_accents: vec![
@@ -425,11 +461,23 @@ impl KeyboardFaces<UndoFace> {
                 hint("B", "Close"),
                 hint("Y", "Space"),
                 hint("SELECT", "Shift"),
-                hint("START", "Search"),
+                hint("START", go),
                 hint("MENU", "Exit"),
             ],
             legend_results: vec![hint("B", "Back"), hint("A", "Choose"), hint("MENU", "Exit")],
             legend_back: vec![hint("B", "Back"), hint("MENU", "Exit")],
+            extra: if pw {
+                vec![
+                    vec![hint("B", "Back"), hint("A", "Join"), hint("Y", "Scan Again")],
+                    vec![hint("B", "Back"), hint("Y", "Forget")],
+                    vec![hint("B", "Cancel"), hint("A", "Forget")],
+                    vec![hint("B", "Cancel")],
+                    vec![hint("B", "Back"), hint("A", "Choose")],
+                    vec![hint("B", "Back")],
+                ]
+            } else {
+                Vec::new()
+            },
         }
     }
 
@@ -441,6 +489,7 @@ impl KeyboardFaces<UndoFace> {
         let legend_empty = many(self.legend_empty);
         let legend_results = many(self.legend_results);
         let legend_back = many(self.legend_back);
+        let extra = self.extra.into_iter().map(&mut many).collect();
         KeyboardFaces {
             glyphs: self.glyphs.into_iter().map(|(c, f)| (c, up(f))).collect(),
             words: self.words.map(&mut up),
@@ -455,6 +504,7 @@ impl KeyboardFaces<UndoFace> {
             legend_empty,
             legend_results,
             legend_back,
+            extra,
         }
     }
 }
@@ -469,6 +519,8 @@ pub struct SearchTexts<T> {
     pub status: Option<T>,
     /// Each game found: its name, and its platform under it.
     pub rows: Vec<(T, T)>,
+    /// Under the status on the message screen, in place of "try fewer words".
+    pub note: Option<T>,
 }
 
 pub fn search_heading_face(text: &str) -> UndoFace {
@@ -513,10 +565,16 @@ pub fn search_status_face(text: &str) -> UndoFace {
 /// A game found: its name, cut short with an ellipsis when it is wider than the list, and
 /// its platform under it.
 pub fn search_row_faces(name: &str, platform: &str) -> (UndoFace, UndoFace) {
+    list_row_faces(name, platform, true)
+}
+
+/// A row of a list on this screen; `upper` false keeps a network's name as it is written.
+pub fn list_row_faces(name: &str, platform: &str, upper: bool) -> (UndoFace, UndoFace) {
     let (px, tracking) = (19.0, 3.0);
     let fits = |s: &str| {
         text::label_font().is_none_or(|font| {
-            text::line_width(font, &s.to_uppercase(), px, tracking) + 4.0 <= ROW_MAX
+            let s = if upper { s.to_uppercase() } else { s.to_owned() };
+            text::line_width(font, &s, px, tracking) + 4.0 <= ROW_MAX
         })
     };
     let mut shown = name.trim().to_owned();
@@ -533,7 +591,7 @@ pub fn search_row_faces(name: &str, platform: &str) -> (UndoFace, UndoFace) {
         }
     }
     (
-        plain(&shown, px, tracking, true),
+        plain(&shown, px, if upper { tracking } else { 1.0 }, upper),
         plain(platform, 11.0, 2.5, true),
     )
 }
@@ -567,6 +625,8 @@ pub struct SearchView<'a> {
     pub screen: SearchScreen,
     /// How far it has faded in.
     pub openness: f32,
+    /// In place of the search's own legend, on every screen but the keyboard.
+    pub legend: Option<&'a [Up]>,
 }
 
 fn rgb(c: [u8; 3], a: f32) -> [f32; 4] {
@@ -844,15 +904,20 @@ pub fn draw_label_search(canvas: Canvas, v: &SearchView, out: &mut Vec<Draw>) {
         SearchScreen::Searching => {
             heading(v.texts.heading, HEADING_Y, faded(v.ink.dim, a), out);
             heading(v.faces.searching, 220.0, faded(v.ink.text, a), out);
-            legend(&v.faces.legend_back, LEGEND_GAP, out);
+            legend(v.legend.unwrap_or(&v.faces.legend_back), LEGEND_GAP, out);
         }
         SearchScreen::Nothing => {
             heading(v.texts.heading, HEADING_Y, faded(v.ink.dim, a), out);
             if let Some(s) = v.texts.status {
                 heading(s, 200.0, faded(v.ink.text, a), out);
             }
-            heading(v.faces.try_again, 236.0, faded(v.ink.dim, a), out);
-            legend(&v.faces.legend_back, LEGEND_GAP, out);
+            heading(
+                v.texts.note.unwrap_or(v.faces.try_again),
+                236.0,
+                faded(v.ink.dim, a),
+                out,
+            );
+            legend(v.legend.unwrap_or(&v.faces.legend_back), LEGEND_GAP, out);
         }
         SearchScreen::Results { at: chosen } => {
             if let Some(s) = v.texts.status {
@@ -892,7 +957,7 @@ pub fn draw_label_search(canvas: Canvas, v: &SearchView, out: &mut Vec<Draw>) {
                     small,
                 ));
             }
-            legend(&v.faces.legend_results, LEGEND_GAP, out);
+            legend(v.legend.unwrap_or(&v.faces.legend_results), LEGEND_GAP, out);
         }
     }
 }

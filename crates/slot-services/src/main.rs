@@ -2,6 +2,7 @@
 mod config;
 mod radio;
 mod system;
+mod wifi;
 
 use radio::{connected, Home, Interface};
 use std::fs::{self, OpenOptions};
@@ -286,6 +287,7 @@ fn serve(root: &Path, run: &Path) -> std::io::Result<()> {
     let mut ntp_at = Instant::now();
     let mut tick_at = Instant::now();
     let mut powered_down = false;
+    let mut wps: Option<wifi::Wps> = None;
     unsafe {
         libc::signal(libc::SIGTERM, stop as *const () as libc::sighandler_t);
         libc::signal(libc::SIGINT, stop as *const () as libc::sighandler_t);
@@ -376,6 +378,36 @@ fn serve(root: &Path, run: &Path) -> std::io::Result<()> {
                             ),
                         );
                     }
+                    ("wifi", "scan") => match wifi::scan(&home) {
+                        Ok(seen) => respond(&mut stream, 0, &format!("SEEN {seen}")),
+                        Err(e) => respond(&mut stream, 1, e),
+                    },
+                    ("wifi", "wps") => {
+                        if !home.enabled {
+                            respond(&mut stream, 1, "HOME_OFF");
+                        } else {
+                            match wifi::Wps::start(&mut home) {
+                                Ok(w) => {
+                                    wps = Some(w);
+                                    respond(&mut stream, 0, "WPS");
+                                }
+                                Err(e) => {
+                                    wifi::stop(&mut home, root);
+                                    respond(&mut stream, 1, e);
+                                }
+                            }
+                        }
+                    }
+                    ("wifi", "wpsstatus") => match &wps {
+                        Some(w) => respond(&mut stream, 0, &w.word()),
+                        None => respond(&mut stream, 0, "NONE"),
+                    },
+                    ("wifi", "wpsstop") => {
+                        if wps.take().is_some() && home.held {
+                            wifi::stop(&mut home, root);
+                        }
+                        respond(&mut stream, 0, "STOPPED");
+                    }
                     ("service", "stop") => {
                         STOP.store(true, Ordering::Relaxed);
                         respond(&mut stream, 0, "STOPPING");
@@ -435,6 +467,9 @@ fn serve(root: &Path, run: &Path) -> std::io::Result<()> {
         }
         if now >= tick_at {
             link.tick();
+            if let Some(w) = &mut wps {
+                w.tick(&mut home, root);
+            }
             let mut ours = home.interface.pids();
             ours.extend(link.interface.pids());
             home.tick(root, link.busy(), link.freq, &ours);
@@ -534,7 +569,7 @@ fn main() {
         return;
     }
     if args.len() != 2 {
-        eprintln!("usage: slot-services home on|off|reload|sleep|wake | time auto|manual | link warm|cool|host|join|down | service status|stop");
+        eprintln!("usage: slot-services home on|off|reload|sleep|wake | time auto|manual | link warm|cool|host|join|down | service status|stop | wifi scan|wps|wpsstatus|wpsstop");
         std::process::exit(2);
     }
     let pid = std::env::var("SLOT_OWNER_PID")
@@ -549,6 +584,8 @@ fn main() {
         s.set_read_timeout(Some(Duration::from_secs(
             if args[0] == "link" && ["host", "join"].contains(&args[1].as_str()) {
                 45
+            } else if args[0] == "wifi" {
+                20
             } else {
                 8
             },
@@ -562,13 +599,13 @@ fn main() {
             args[1]
         )?;
         let mut response = String::new();
-        s.take(2048).read_to_string(&mut response)?;
+        s.take(8192).read_to_string(&mut response)?;
         let code = response
             .split_whitespace()
             .next()
             .and_then(|s| s.parse().ok())
             .unwrap_or(1);
-        if args[1] == "status" || (args[1] == "lan" && code == 0) {
+        if args[1] == "status" || args[0] == "wifi" || (args[1] == "lan" && code == 0) {
             println!("{}", response.trim());
         } else if code != 0 {
             eprintln!("slot-services: {}", response.trim());

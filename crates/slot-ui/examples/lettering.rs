@@ -155,7 +155,7 @@ fn main() {
     let futura = face(FUTURA, FUTURA_MEDIUM);
     let futura_bold = face(FUTURA, FUTURA_BOLD);
     let assets = Path::new(env!("CARGO_MANIFEST_DIR")).join("assets");
-    let (gb_w, gb_h) = slot_ui::seated_box(slot_store::Platform::Gb);
+    let (gb_w, gb_h) = slot_ui::seated_box(slot_ui::Mould::Notched);
 
     let game_boy = |px: f32| Run {
         font: &gill,
@@ -218,7 +218,7 @@ fn main() {
     );
     gbc.write(&assets.join("lettering_gbc.png"));
 
-    let (gba_w, gba_h) = slot_ui::seated_box(slot_store::Platform::Gba);
+    let (gba_w, gba_h) = slot_ui::seated_box(slot_ui::Mould::Gba);
     let mut gba = Canvas::new(gba_w, gba_h);
     gba.line(
         &[

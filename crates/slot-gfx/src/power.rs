@@ -43,6 +43,7 @@ pub fn integer_game_rect(
     t: f32,
     source_size: [f32; 2],
     picture_size: [f32; 2],
+    fill_height: bool,
 ) -> (f32, f32, f32, f32) {
     if source_size
         .iter()
@@ -52,10 +53,15 @@ pub fn integer_game_rect(
         return screen_rect(t);
     }
 
-    let scale = (OUT_W as f32 / picture_size[0])
-        .floor()
-        .min((OUT_H as f32 / picture_size[1]).floor())
-        .max(1.0);
+    // As tall as the screen: the ground round the picture runs past the edges.
+    let scale = if fill_height {
+        OUT_H as f32 / picture_size[1]
+    } else {
+        (OUT_W as f32 / picture_size[0])
+            .floor()
+            .min((OUT_H as f32 / picture_size[1]).floor())
+            .max(1.0)
+    };
     let source_w = source_size[0] * scale;
     let source_h = source_size[1] * scale;
     let w = source_w * screen_width_for(t, source_w);

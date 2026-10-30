@@ -222,7 +222,7 @@ fn both_cores_are_told_about_colour_correction_in_their_own_words() {
         }
         let theirs = match which {
             Core::Mgba => "gpsp_color_correction",
-            Core::Gpsp => "mgba_color_correction",
+            _ => "mgba_color_correction",
         };
         assert_eq!(
             core.option(theirs),
@@ -441,6 +441,8 @@ fn a_gpsp_carts_resume_is_read_from_its_own_core_directory_through_the_session()
     s.app_mut().settle_saves();
 
     let state = persist::read_resume(d.path(), Platform::Gba, Core::Gpsp, "Emerald")
+        .ok()
+        .flatten()
         .expect("nothing resumed");
     let n = u64::from_le_bytes(state.try_into().expect("mock state is 8 bytes"));
     assert!(
@@ -491,6 +493,8 @@ fn a_gpsp_cart_runs_the_dylib_planted_under_its_own_name_through_the_session() {
     s.app_mut().settle_saves();
 
     let state = persist::read_resume(d.path(), Platform::Gba, Core::Gpsp, "Emerald")
+        .ok()
+        .flatten()
         .expect("nothing resumed");
     assert!(
         state.len() > 100_000,
@@ -709,6 +713,8 @@ fn a_game_boy_carts_gpsp_line_is_dropped_and_it_runs_on_the_platform_default() {
 
     let counter = |core| {
         persist::read_resume(d.path(), Platform::Gb, core, "Tetris")
+            .ok()
+            .flatten()
             .map(|b| u64::from_le_bytes(b.try_into().expect("the mock's state is 8 bytes")))
     };
 

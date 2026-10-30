@@ -874,6 +874,7 @@ impl Frontend {
         compositor.set_screen_power(self.session.app().screen_power());
         compositor.set_overlay_slide(self.session.app().overlay_slide());
         compositor.set_game_source_rect(self.session.app().source_rect());
+        compositor.set_game_fills_height(self.session.app().fills_height());
         self.grab_link_shot(compositor);
         self.grab_boot_picture(compositor);
         self.grab_screenshot(compositor);
@@ -1527,7 +1528,8 @@ fn sync_clock(app: &mut App, compositor: &mut Compositor, clocks: &mut Clocks) {
         clocks.shown.clear();
         clocks.battery.clear();
     }
-    let picked = app.picker().map(|p| p.text());
+    // The wheels show one page at a time: moving onto the other page draws them again.
+    let picked = app.picker().map(|p| format!("{} {:?}", p.text(), p.cursor()));
     if picked != clocks.picked {
         clocks.picked = picked;
         if let (Some(face), Some(hint)) = (app.picker().map(|p| p.face()), clocks.hint) {
@@ -1685,6 +1687,9 @@ fn sync_wallpaper(app: &mut App, compositor: &mut Compositor, state: &mut Wallpa
 }
 
 /// Connected To on the Network page: the home network's name, or that there is none.
+/// How wide the network's name can be, right of "Connected To".
+const NETWORK_NAME_MAX: u32 = 320;
+
 fn sync_quick_network(app: &mut App, compositor: &mut Compositor, state: &mut QuickClock) {
     if app.quick_menu().is_none() {
         return;
@@ -1695,9 +1700,16 @@ fn sync_quick_network(app: &mut App, compositor: &mut Compositor, state: &mut Qu
     if text == state.shown {
         return;
     }
+    // A long network name is cut with an ellipsis rather than run into "Connected To".
+    let mut shown = text.clone();
+    let mut chars: Vec<char> = text.chars().collect();
+    while quick_value_face(&shown, false).w > NETWORK_NAME_MAX && !chars.is_empty() {
+        chars.pop();
+        shown = format!("{}…", chars.iter().collect::<String>().trim_end());
+    }
     let (dim, lit) = (
-        quick_value_face(&text, false),
-        quick_value_face(&text, true),
+        quick_value_face(&shown, false),
+        quick_value_face(&shown, true),
     );
     let (dim_size, lit_size) = ((dim.w, dim.h), (lit.w, lit.h));
     let dim = upload(compositor, &mut state.dim, dim);
@@ -1715,9 +1727,16 @@ fn sync_quick_zone(app: &mut App, compositor: &mut Compositor, state: &mut Quick
     if text == state.shown {
         return;
     }
+    // A long network name is cut with an ellipsis rather than run into "Connected To".
+    let mut shown = text.clone();
+    let mut chars: Vec<char> = text.chars().collect();
+    while quick_value_face(&shown, false).w > NETWORK_NAME_MAX && !chars.is_empty() {
+        chars.pop();
+        shown = format!("{}…", chars.iter().collect::<String>().trim_end());
+    }
     let (dim, lit) = (
-        quick_value_face(&text, false),
-        quick_value_face(&text, true),
+        quick_value_face(&shown, false),
+        quick_value_face(&shown, true),
     );
     let (dim_size, lit_size) = ((dim.w, dim.h), (lit.w, lit.h));
     let dim = upload(compositor, &mut state.dim, dim);
@@ -1734,9 +1753,16 @@ fn sync_quick_clock(app: &mut App, compositor: &mut Compositor, state: &mut Quic
     if text == state.shown {
         return;
     }
+    // A long network name is cut with an ellipsis rather than run into "Connected To".
+    let mut shown = text.clone();
+    let mut chars: Vec<char> = text.chars().collect();
+    while quick_value_face(&shown, false).w > NETWORK_NAME_MAX && !chars.is_empty() {
+        chars.pop();
+        shown = format!("{}…", chars.iter().collect::<String>().trim_end());
+    }
     let (dim, lit) = (
-        quick_value_face(&text, false),
-        quick_value_face(&text, true),
+        quick_value_face(&shown, false),
+        quick_value_face(&shown, true),
     );
     let (dim_size, lit_size) = ((dim.w, dim.h), (lit.w, lit.h));
     let dim = upload(compositor, &mut state.dim, dim);
@@ -1848,7 +1874,9 @@ fn sync_cheats(app: &mut App, compositor: &mut Compositor, state: &mut CheatText
     }
     let rev = app.cheats_rev();
     let counts = app.cheat_counts();
-    if state.rev != Some(rev) {
+    // The names are drawn once the in-game menu opens, not as the game starts: a long cheat
+    // list would cost a frame there.
+    if state.rev != Some(rev) && app.cheat_faces_wanted() {
         state.rev = Some(rev);
         state.counts = None;
         let names = app.cheat_names();
@@ -2214,15 +2242,16 @@ struct SearchTextures {
     heading: Option<TexId>,
     typed: Option<TexId>,
     status: Option<TexId>,
+    note: Option<TexId>,
     rows: Vec<(Option<TexId>, Option<TexId>)>,
 }
 
 fn sync_label_search(app: &mut App, compositor: &mut Compositor, state: &mut SearchTextures) {
-    if !app.label_search_open() {
+    if !app.search_screen_open() {
         return;
     }
     if !app.has_search_faces() {
-        let faces = slot_ui::KeyboardFaces::build()
+        let faces = slot_ui::KeyboardFaces::build_for(app.search_purpose())
             .map(|f| (compositor.create_texture(f.w, f.h, &f.rgba), f.w, f.h));
         app.set_search_faces(faces);
     }
@@ -2243,6 +2272,9 @@ fn sync_label_search(app: &mut App, compositor: &mut Compositor, state: &mut Sea
     let status = words
         .status
         .map(|t| up(&mut state.status, slot_ui::search_status_face(&t)));
+    let note = words
+        .note
+        .map(|t| up(&mut state.note, slot_ui::search_heading_face(&t)));
     if state.rows.len() < words.rows.len() {
         state.rows.resize(words.rows.len(), (None, None));
     }
@@ -2251,7 +2283,7 @@ fn sync_label_search(app: &mut App, compositor: &mut Compositor, state: &mut Sea
         .iter()
         .zip(state.rows.iter_mut())
         .map(|((name, platform), (a, b))| {
-            let (n, p) = slot_ui::search_row_faces(name, platform);
+            let (n, p) = slot_ui::list_row_faces(name, platform, words.upper);
             (up(a, n), up(b, p))
         })
         .collect();
@@ -2262,6 +2294,7 @@ fn sync_label_search(app: &mut App, compositor: &mut Compositor, state: &mut Sea
             typed,
             status,
             rows,
+            note,
         },
     );
 }

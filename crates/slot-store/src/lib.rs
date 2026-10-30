@@ -20,6 +20,7 @@ mod scan;
 mod slot_state;
 pub mod snes;
 mod stamp;
+pub mod wifi;
 mod zone;
 
 pub use atomic::{atomic_write, sweep_temps};

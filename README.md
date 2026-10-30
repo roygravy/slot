@@ -8,7 +8,7 @@ slot.'s real cartridges on a shelf and its real cartridge slot, with a little ex
 
 <img src=".github/resources/gravy/carousel.gif" width="640" alt="Scrolling the GBA shelf and pushing Goodboy Galaxy into the slot">
 
-[**Download slot-x-gravy-v1.1**](https://github.com/roygravy/slot/releases) · [Install](#install) · [What's in the gravy](#whats-in-the-gravy) · [Controls](#controls)
+[**Download slot-x-gravy-v1.1.1**](https://github.com/roygravy/slot/releases/download/slot-x-gravy-v1.1.1/slot-x-gravy-v1.1.1.zip) · [Install](#install) · [What's in the gravy](#whats-in-the-gravy) · [Controls](#controls)
 
 </div>
 
@@ -108,7 +108,7 @@ Star a cart with **Y** and it stands a little taller under a warm spotlight. Pre
 
 ### Home Wi-Fi
 
-Put your networks in `Config/wifi.toml` (copy `wifi.toml.example`) and turn **Home Wi-Fi** on under **Network** in the menu. From then on it works by itself:
+Turn **Home Wi-Fi** on under **Network** in the menu and pick **Add Network** (or press your router's WPS button and pick **WPS**). You can also list networks in `Config/wifi.toml` (copy `wifi.toml.example`). From then on it works by itself:
 
 - A phone-style status bar shows the clock, Wi-Fi and battery, and the clock sets itself (Auto Time, with your city's own summer time)
 - Carts without label art get one in the background, found by the ROM's checksum or name; **Y** in the cartridge studio lets you search and pick another. No Wi-Fi? Put an `Artwork.pack` in `Labels/` and labels come from there. A label you added yourself is never replaced
@@ -130,7 +130,7 @@ Tap **POWER** and the console drops into a light sleep: Wi-Fi stays on and any b
 - **Resume Game** powers straight back into your game, its picture as the boot screen
 - Carts without label art get their title written on by hand
 - **3:2 screens** too (RG34XX SP, 720×480): the shelf, menus, games, save states and screenshots fill the whole panel, no black bars
-- Native 640×480, with Game Boy and Game Boy Color games filling the screen; **L1 / R1** flips between full screen and original size
+- Native 640×480, with Game Boy and Game Boy Color games filling the screen; **L1 / R1** step Game Boy and Game Boy Color games through three sizes: their own size, as tall as the screen, and full screen
 - Starts on your Favorites; GB, GBC, GBA, NES, SNES in that order
 
 <img src=".github/resources/gravy/marker.png" width="100%" alt="Carts with no label art, titled in marker">
@@ -140,8 +140,8 @@ Tap **POWER** and the console drops into a light sleep: Wi-Fi stays on and any b
 
 ## Install
 
-1. Download **slot-x-gravy-v1.1.zip** from the [releases](https://github.com/roygravy/slot/releases).
-2. Unzip it and copy the **contents** of the `slot-x-gravy-v1.1` folder onto the second SD card of your RG35XX Plus.
+1. Download **[slot-x-gravy-v1.1.1.zip](https://github.com/roygravy/slot/releases/download/slot-x-gravy-v1.1.1/slot-x-gravy-v1.1.1.zip)** from the [releases](https://github.com/roygravy/slot/releases/tag/slot-x-gravy-v1.1.1).
+2. Unzip it and copy the **contents** of the `slot-x-gravy-v1.1.1` folder onto the second SD card of your RG35XX Plus.
 3. Put your games in `Games/GB`, `Games/GBC`, `Games/GBA`, `Games/NES` and `Games/SNES`, and optional label art (PNG, named like the ROM) in the matching `Labels` folders.
 4. Put the BIOS files (`gb_bios.bin`, `gbc_bios.bin`, `gba_bios.bin`) in `BIOS/` if you have them. For the real Super Game Boy borders, put your own `SGB1.sfc` and/or `SGB2.sfc` in `BIOS/` too (any name works).
 
@@ -168,7 +168,7 @@ The full list is on the **Buttons** pages in the menu. The essentials:
 | SELECT + R1 / L1 | Save / load a state |
 | Hold L2 / Hold R2 | Rewind / fast-forward |
 | SELECT + B | Screen effects on / off |
-| L1 / R1 | Full screen / original size (GB, GBC) |
+| L1 / R1 | Bigger / smaller picture (GB, GBC) |
 | START + SELECT | Reset the game |
 
 | Everywhere | |

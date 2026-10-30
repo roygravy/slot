@@ -43,6 +43,7 @@ pub mod link_radio;
 pub mod link_screen;
 pub mod link_start;
 pub mod link_state;
+pub mod list_page;
 pub mod loading_mark;
 pub mod panel_turn;
 pub mod persist;

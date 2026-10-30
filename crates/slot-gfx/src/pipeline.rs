@@ -54,6 +54,7 @@ pub struct GamePass {
     saturation: f32,
     pale_opacity: f32,
     black_edge: bool,
+    fills_height: bool,
     lcd_mix: [f32; 3],
     grid_opacity: f32,
     pixel_transparency: bool,
@@ -197,6 +198,7 @@ impl GamePass {
             saturation: 1.0,
             pale_opacity: PALE_OPACITY,
             black_edge: false,
+            fills_height: false,
             lcd_mix: [1.0, 1.0, 0.0],
             grid_opacity: 0.3,
             pixel_transparency: false,
@@ -225,6 +227,10 @@ impl GamePass {
             true => (0.0, 0.0, OUT_W as f32, OUT_H as f32),
             false => screen_rect(self.power),
         }
+    }
+
+    pub fn set_fills_height(&mut self, on: bool) {
+        self.fills_height = on;
     }
 
     pub fn set_fills_frame(&mut self, on: bool) {
@@ -444,6 +450,7 @@ impl GamePass {
                     (self.pic[2] - self.pic[0]) * SRC_W as f32,
                     (self.pic[3] - self.pic[1]) * SRC_H as f32,
                 ],
+                self.fills_height,
             );
             // Drawn across a panel wider than 4:3 (the frame's 640 columns stretched to it):
             // the picture keeps its own pixels in the middle and its ground runs to the edges.

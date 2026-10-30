@@ -26,7 +26,8 @@ use crate::audio::Sfx;
 use crate::core_picker::{Chip, CorePicker, Outcome, Press};
 use crate::label_search::{self, LabelSearch};
 use crate::link_kind::{link_carried, link_kind, serial_option, LinkKind};
-use crate::link_radio::{radio_jobs, LinkRole, RadioJob, RadioJobs};
+use crate::link_radio::{radio_jobs, LinkRole, RadioJob, RadioJobs, WifiAnswer, WifiJob};
+use crate::list_page::{self, ListPage};
 use crate::link_screen::LinkSprites;
 use crate::link_start::{link_port, LinkFail, LinkProgress, LinkStarter, LinkStep};
 use crate::loading_mark::LoadingMark;
@@ -75,6 +76,8 @@ const SGB_ZOOM_MS_FADED: f32 = 1200.0;
 const SGB_CAMERA_PART: f32 = 0.75;
 /// The camera pulling back out of the Super Game Boy: off at once, landing softly on the SNES.
 const SGB_UNZOOM_MS: f32 = 700.0;
+/// How much of the Super Game Boy 2's way out goes to its band fading back into the cart.
+const SGB_UNZOOM_FADE: f32 = 0.25;
 
 const CHARGE_POLL_MS: Millis = 1_000;
 const HEADPHONES_POLL_MS: Millis = 500;
@@ -341,6 +344,16 @@ pub struct App {
     /// A search asked for: its number, the words and the shelf, for the frontend to make.
     search_ask: Option<(u64, String, Platform)>,
     search_faces: Option<slot_ui::KeyboardFaces<slot_ui::Up>>,
+    /// The menu's Wi-Fi and time zone lists, over the menu while one is open.
+    list_page: Option<ListPage>,
+    /// The menu or page the light sleep came over, to come back to on waking.
+    doze_return: Option<Phase>,
+    /// The keyboard and legends the list pages use: "join" on the go key.
+    list_faces: Option<slot_ui::KeyboardFaces<slot_ui::Up>>,
+    /// A network just added: its name and when to give up waiting for it.
+    joining: Option<(String, Millis)>,
+    /// WPS is asked how it is going once a second.
+    wps_poll_at: Millis,
     /// The search's words as faces, and the search's rev they were made for.
     search_texts: Option<(u64, slot_ui::SearchTexts<slot_ui::Up>)>,
     /// The versions found: where each is kept while it is looked at, its thumbnail and its
@@ -564,6 +577,11 @@ impl App {
             label_search: None,
             search_ask: None,
             search_faces: None,
+            list_page: None,
+            doze_return: None,
+            list_faces: None,
+            joining: None,
+            wps_poll_at: 0,
             search_texts: None,
             version_paths: Vec::new(),
             version_thumbs: Vec::new(),
@@ -1249,7 +1267,10 @@ impl App {
                 slot_store::Appearance::Light => QuickValue::Light,
                 slot_store::Appearance::Originals => QuickValue::Originals,
             }),
-            QuickRow::DateTime
+            QuickRow::AddNetwork
+            | QuickRow::SavedNetworks
+            | QuickRow::Wps
+            | QuickRow::DateTime
             | QuickRow::TimeZone
             | QuickRow::About
             | QuickRow::Screenshots
@@ -1409,7 +1430,7 @@ impl App {
     }
 
     pub fn shown_game_bezel(&self) -> Option<TexId> {
-        if self.video_mode() == VideoMode::Stretch || self.game_fills() {
+        if self.video_mode() != VideoMode::Actual || self.game_fills() {
             return None;
         }
         self.game_bezel
@@ -1908,15 +1929,20 @@ impl App {
         self.named_core = named;
     }
 
-    /// Full screen or the game's own size: one setting for the Game Boy and the Game Boy
+    /// Full screen, as tall as the screen, or the game's own size: one setting for the Game Boy and the Game Boy
     /// Color, kept between games. A game in the Super Game Boy is on the SNES's screen, which
     /// has its border round it: never cut to the Game Boy's picture (Roy: a full-screen game
     /// came out wrong in the SGB).
     fn video_mode(&self) -> VideoMode {
         match self.screen_platform() {
             Platform::Gb | Platform::Gbc if self.state.gb_fullscreen => VideoMode::Stretch,
+            Platform::Gb | Platform::Gbc if self.state.gb_fill_height => VideoMode::FillHeight,
             _ => VideoMode::Actual,
         }
+    }
+
+    pub fn fills_height(&self) -> bool {
+        self.video_mode() == VideoMode::FillHeight
     }
 
     pub fn source_rect(&self) -> [f32; 4] {
@@ -1945,10 +1971,12 @@ impl App {
 
     fn set_picture(&mut self, mode: VideoMode) {
         let full = mode == VideoMode::Stretch;
-        if self.state.gb_fullscreen == full {
+        let tall = mode == VideoMode::FillHeight;
+        if (self.state.gb_fullscreen, self.state.gb_fill_height) == (full, tall) {
             return;
         }
         self.state.gb_fullscreen = full;
+        self.state.gb_fill_height = tall;
         self.persist_soon();
     }
 
@@ -2034,8 +2062,16 @@ impl App {
     /// it leaves; None once the camera is back on the SNES.
     fn sgb_unzoom(&self) -> Option<(f32, usize)> {
         let (at, shelf) = self.sgb_unzoom?;
-        let s = self.now().saturating_sub(at) as f32 / SGB_UNZOOM_MS;
+        let s = self.now().saturating_sub(at) as f32 / self.sgb_unzoom_ms();
         (s < 1.0).then_some((s, shelf))
+    }
+
+    /// The way out takes as long for the camera every time; the SGB2's fade comes on top.
+    fn sgb_unzoom_ms(&self) -> f32 {
+        match self.sgb_two() {
+            true => SGB_UNZOOM_MS / (1.0 - SGB_UNZOOM_FADE),
+            false => SGB_UNZOOM_MS,
+        }
     }
 
     fn draw_shelf_footer(&self, out: &mut Vec<Draw>) {
@@ -2114,18 +2150,14 @@ impl App {
         };
         // The face goes out exactly as the band comes in: while the band is not yet whole, the
         // two clear plastics would add up to a flash if the face stayed (Roy).
-        let face_alpha = if clear { 1.0 - sharp * sharp } else { 1.0 };
-        // Under the clear face a backing in the band's own teal keeps the cart from going
-        // see-through and brings it up to the band's colour (Roy: more like the band).
-        if clear && face.is_some() {
-            out.push(Draw::Rect {
-                x: a.0,
-                y: a.1,
-                w: a.2,
-                h: a.3,
-                colour: [0.09, 0.47, 0.52, 0.3 * face_alpha],
-            });
-        }
+        // Drawn under a band at `sharp`, the face fades so that the two together keep the clear
+        // plastic's own cover all the way: a plain crossfade lets it thin out halfway, a blink
+        // to more see-through just as the band lands (Roy). COVER is about what both let through.
+        const COVER: f32 = 0.7;
+        let face_alpha = match clear {
+            true => ((1.0 - (1.0 - COVER) / (1.0 - COVER * sharp)) / COVER).clamp(0.0, 1.0),
+            false => 1.0,
+        };
         if let Some(tex) = face {
             out.push(Draw::Tex {
                 x: a.0,
@@ -2216,7 +2248,7 @@ impl App {
         self.name_pending = true;
         self.phase = Phase::Ejecting {
             cart: slot_store::SGB_STEM.to_string(),
-            t: -(SGB_UNZOOM_MS / 1000.0 + 0.05),
+            t: -(self.sgb_unzoom_ms() / 1000.0 + 0.05),
         };
     }
 
@@ -2877,6 +2909,9 @@ impl App {
                 return self.in_game_menu_input(row, action);
             }
         }
+        if self.list_page.as_ref().is_some_and(|p| !p.closing()) {
+            return self.list_page_input(action);
+        }
         let now = self.now();
         match self.phase {
             Phase::Shelf => match action {
@@ -2914,10 +2949,10 @@ impl App {
             Phase::Inserting { .. } if action == Action::Eject => self.eject(),
             Phase::Playing { .. } => match action {
                 Action::GbaDown(Btn::L1) if self.slot_owns_the_shoulders() => {
-                    self.set_picture(VideoMode::Stretch)
+                    self.set_picture(self.video_mode().bigger())
                 }
                 Action::GbaDown(Btn::R1) if self.slot_owns_the_shoulders() => {
-                    self.set_picture(VideoMode::Actual)
+                    self.set_picture(self.video_mode().smaller())
                 }
                 Action::Eject => self.eject(),
                 Action::GameMenu => self.game_menu_shortcut(),
@@ -3114,6 +3149,11 @@ impl App {
         self.cheat_faces = Some(faces);
     }
 
+    /// Whether the cheat page's faces are wanted yet: only with the in-game menu open.
+    pub fn cheat_faces_wanted(&self) -> bool {
+        self.in_game_menu_shown().is_some()
+    }
+
     pub fn cheat_faces_mut(&mut self) -> Option<&mut slot_ui::CheatFaces> {
         self.cheat_faces.as_mut()
     }
@@ -3224,6 +3264,8 @@ impl App {
                     true,
                 );
             }
+            QuickRow::AddNetwork | QuickRow::SavedNetworks | QuickRow::Wps => self.wifi_page(row),
+            QuickRow::TimeZone => self.open_zones(),
             QuickRow::About => self.phase = Phase::About,
             QuickRow::Screenshots => self.open_shots(false),
             QuickRow::Buttons => self.phase = Phase::Buttons { page: 0 },
@@ -3255,7 +3297,6 @@ impl App {
             | QuickRow::HomeWifi
             | QuickRow::ConnectedTo
             | QuickRow::AutoTime
-            | QuickRow::TimeZone
             | QuickRow::Clock24
             | QuickRow::CheatIcon
             | QuickRow::GbcBlackBorder
@@ -3473,6 +3514,9 @@ impl App {
             | QuickRow::ShowTitles
             | QuickRow::DateTime
             | QuickRow::TimeZone
+            | QuickRow::AddNetwork
+            | QuickRow::SavedNetworks
+            | QuickRow::Wps
             | QuickRow::About
             | QuickRow::SgbBorder
             | QuickRow::Screenshots
@@ -3927,6 +3971,11 @@ impl App {
         if self.label_search.as_ref().is_some_and(|s| s.finished(now)) {
             self.label_search = None;
         }
+        if self.list_page.as_ref().is_some_and(|p| p.finished(now)) {
+            self.list_page = None;
+            self.search_texts = None;
+        }
+        self.wifi_timers(now);
         if !self.on_shelf() {
             self.shelf_mut().release_hold();
         }
@@ -4558,10 +4607,23 @@ impl App {
             }
             Phase::Ejecting { .. } if self.sgb_unzoom().is_some() => {
                 if let Some((s, shelf)) = self.sgb_unzoom() {
-                    // Off at once, the shelf going up first; a soft landing on the SNES.
-                    let e = (1.0 - s) * (1.0 - s);
-                    let come = (1.0 - s / 0.6).clamp(0.0, 1.0).powi(2);
-                    self.draw_sgb_camera(e, come, 1.0 - s, shelf, out)
+                    // The zoom in reverse: the clear Super Game Boy 2's band first fades back
+                    // into its cart with the camera still, as it came (Roy: fading while the
+                    // camera already moved glitched). Then off, the shelf going up first; a soft
+                    // landing on the SNES.
+                    let hold = if self.sgb_model() == Some(slot_ui::SgbModel::Sgb2) {
+                        SGB_UNZOOM_FADE
+                    } else {
+                        0.0
+                    };
+                    let c = ((s - hold) / (1.0 - hold)).clamp(0.0, 1.0);
+                    let e = (1.0 - c) * (1.0 - c);
+                    let come = (1.0 - c / 0.6).clamp(0.0, 1.0).powi(2);
+                    let u = match hold > 0.0 {
+                        true => 1.0 - (1.0 - SGB_CAMERA_PART) * (s / hold).min(1.0),
+                        false => 1.0 - s,
+                    };
+                    self.draw_sgb_camera(e, come, u, shelf, out)
                 }
             }
             Phase::Shelf => {
@@ -4827,6 +4889,9 @@ impl App {
         }
         if let Some(search) = &self.label_search {
             self.draw_label_search(search, out);
+        }
+        if let Some(page) = &self.list_page {
+            self.draw_list_page(page, out);
         }
         if let Some(menu) = self.game_menu {
             self.draw_game_menu(menu, out);
@@ -5532,6 +5597,9 @@ impl App {
             self.in_game_menu = Some(QuickRow::States);
         }
         self.polaroids = None;
+        // A menu or page off the shelf comes back on waking, as a game does.
+        let before = std::mem::replace(&mut self.phase, Phase::Shelf);
+        self.doze_return = Some(before).filter(|p| cart.is_none() && !matches!(p, Phase::Shelf));
         self.phase = Phase::Doze { cart };
         self.dozed_at = self.now();
         self.deep_tried = false;
@@ -5553,7 +5621,7 @@ impl App {
                 self.screen = 1.0;
                 Phase::Playing { cart }
             }
-            None => Phase::Shelf,
+            None => self.doze_return.take().unwrap_or(Phase::Shelf),
         };
         if let Some(power) = &mut self.power {
             power.on_open();
@@ -5934,15 +6002,55 @@ impl App {
     }
 
     pub fn has_search_faces(&self) -> bool {
-        self.search_faces.is_some()
+        match self.search_purpose() {
+            slot_ui::Purpose::Search => self.search_faces.is_some(),
+            slot_ui::Purpose::Password => self.list_faces.is_some(),
+        }
+    }
+
+    /// The keyboard's faces for the screen that is open: the label search's, or the lists'.
+    pub fn search_purpose(&self) -> slot_ui::Purpose {
+        match self.list_page {
+            Some(_) => slot_ui::Purpose::Password,
+            None => slot_ui::Purpose::Search,
+        }
+    }
+
+    /// A screen on the search's keyboard and list is open.
+    pub fn search_screen_open(&self) -> bool {
+        self.label_search.is_some() || self.list_page.is_some()
     }
 
     pub fn set_search_faces(&mut self, faces: slot_ui::KeyboardFaces<slot_ui::Up>) {
-        self.search_faces = Some(faces);
+        match self.search_purpose() {
+            slot_ui::Purpose::Search => self.search_faces = Some(faces),
+            slot_ui::Purpose::Password => self.list_faces = Some(faces),
+        }
     }
 
     /// The search's words, and the rev they belong to, when its faces were made for another.
     pub fn search_words(&self) -> Option<(u64, SearchWords)> {
+        if let Some(page) = &self.list_page {
+            if self
+                .search_texts
+                .as_ref()
+                .is_some_and(|(rev, _)| *rev == page.rev())
+            {
+                return None;
+            }
+            let w = page.words();
+            return Some((
+                page.rev(),
+                SearchWords {
+                    heading: w.heading,
+                    typed: w.typed,
+                    status: w.status,
+                    rows: w.rows,
+                    note: w.note,
+                    upper: w.upper,
+                },
+            ));
+        }
         let search = self.label_search.as_ref()?;
         if self
             .search_texts
@@ -5971,6 +6079,8 @@ impl App {
                     .iter()
                     .map(|g| (g.name.clone(), g.platform.clone()))
                     .collect(),
+                note: None,
+                upper: true,
             },
         ))
     }
@@ -5993,8 +6103,211 @@ impl App {
             light,
             screen: search.screen(now),
             openness: search.openness(now),
+            legend: None,
         };
         slot_ui::draw_label_search(self.canvas(), &view, out);
+    }
+
+    fn draw_list_page(&self, page: &ListPage, out: &mut Vec<Draw>) {
+        let (Some(faces), Some((_, texts))) = (&self.list_faces, &self.search_texts) else {
+            return;
+        };
+        let light = self.light_ground();
+        let now = self.now();
+        let view = slot_ui::SearchView {
+            faces,
+            texts,
+            ink: slot_ui::theme::ink(light),
+            ground: slot_ui::theme::menu_flat(light),
+            light,
+            screen: page.screen(now),
+            openness: page.openness(now),
+            legend: page
+                .legend()
+                .and_then(|l| faces.extra.get(l as usize))
+                .map(Vec::as_slice),
+        };
+        slot_ui::draw_label_search(self.canvas(), &view, out);
+    }
+
+    fn open_list_page(&mut self, page: ListPage) {
+        self.search_texts = None;
+        self.list_page = Some(page);
+    }
+
+    /// Add Network, My Networks and WPS want Home Wi-Fi on: it is switched on for them.
+    fn wifi_page(&mut self, row: QuickRow) {
+        if !self.state.home_wifi_enabled {
+            self.state.home_wifi_enabled = true;
+            self.radio.ask(RadioJob::Home(true));
+            self.radio.ask(RadioJob::Time(self.state.auto_time));
+            self.persist();
+        }
+        let now = self.now();
+        match row {
+            QuickRow::AddNetwork => {
+                self.radio.wifi(WifiJob::Scan);
+                self.open_list_page(ListPage::nearby(now));
+            }
+            QuickRow::SavedNetworks => {
+                let names = self
+                    .root
+                    .as_deref()
+                    .map(slot_store::wifi::read)
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|n| n.ssid)
+                    .collect();
+                let current = self.radio.home_ssid();
+                self.open_list_page(ListPage::saved(names, current.as_deref(), now));
+            }
+            _ => {
+                self.radio.wifi(WifiJob::WpsStart);
+                self.wps_poll_at = now + 1000;
+                self.open_list_page(ListPage::wps(now));
+            }
+        }
+    }
+
+    fn open_zones(&mut self) {
+        let utc = self.utc_secs();
+        let here = self.time_zone().city();
+        let rows: Vec<(String, String)> = slot_store::ZONES
+            .iter()
+            .map(|z| {
+                let off = slot_ui::TimeZone::City(z).offset_at(utc);
+                let sign = if off < 0 { "−" } else { "+" };
+                let text = match off {
+                    0 => "UTC".to_owned(),
+                    m if m % 60 == 0 => format!("UTC{sign}{}", m.abs() / 60),
+                    m => format!("UTC{sign}{}:{:02}", m.abs() / 60, m.abs() % 60),
+                };
+                (z.name.to_owned(), text)
+            })
+            .collect();
+        let at = slot_store::ZONES
+            .iter()
+            .position(|z| Some(z.name) == here)
+            .unwrap_or(9);
+        let now = self.now();
+        self.open_list_page(ListPage::zones(rows, at, now));
+    }
+
+    fn list_page_input(&mut self, action: Action) {
+        use label_search::Press;
+        let press = match action {
+            Action::GbaDown(Btn::Left) | Action::ShelfLeft => Press::Left,
+            Action::GbaDown(Btn::Right) | Action::ShelfRight => Press::Right,
+            Action::GbaDown(Btn::Up) => Press::Up,
+            Action::GbaDown(Btn::Down) => Press::Down,
+            Action::GbaDown(Btn::A) => Press::Choose,
+            Action::GbaDown(Btn::B) => Press::Back,
+            Action::GbaDown(Btn::X) => Press::Clear,
+            Action::GbaDown(Btn::Y) => Press::Space,
+            Action::GbaDown(Btn::Select) => Press::Shift,
+            Action::GbaDown(Btn::Start) => Press::Search,
+            Action::QuickMenu => Press::Exit,
+            _ => return,
+        };
+        let now = self.now();
+        let Some(page) = &mut self.list_page else {
+            return;
+        };
+        match page.press(press, now) {
+            list_page::Step::None | list_page::Step::Close => {}
+            list_page::Step::Scan => self.radio.wifi(WifiJob::Scan),
+            list_page::Step::WpsStop => self.radio.wifi(WifiJob::WpsStop),
+            list_page::Step::Zone(city) => {
+                self.state.time_zone = slot_store::zone_named(&city).map(|z| z.name);
+                self.persist();
+            }
+            list_page::Step::Forget(ssid) => {
+                if let Some(root) = self.root.clone() {
+                    match slot_store::wifi::forget(&root, &ssid) {
+                        Ok(()) => {
+                            self.radio.wifi(WifiJob::Reload);
+                            self.hud.toast(Toast::WifiForgotten, now);
+                        }
+                        Err(e) => eprintln!("slot: wifi forget: {e}"),
+                    }
+                }
+            }
+            list_page::Step::Join { ssid, password } => {
+                if password
+                    .as_deref()
+                    .is_some_and(|p| !slot_store::wifi::password_ok(p))
+                {
+                    self.hud.toast(Toast::PasswordLength, now);
+                    return;
+                }
+                let Some(root) = self.root.clone() else {
+                    return;
+                };
+                let saved = slot_store::wifi::Saved {
+                    ssid: ssid.clone(),
+                    password,
+                };
+                match slot_store::wifi::add(&root, saved) {
+                    Ok(()) => {
+                        self.radio.wifi(WifiJob::Reload);
+                        self.joining = Some((ssid, now + 30_000));
+                    }
+                    Err(e) => {
+                        eprintln!("slot: wifi add: {e}");
+                        self.hud.toast(Toast::CardUnwritable, now);
+                    }
+                }
+            }
+        }
+    }
+
+    /// The service's answers, WPS asked after, and a network just added watched until it is
+    /// joined or given up on.
+    fn wifi_timers(&mut self, now: Millis) {
+        while let Some(answer) = self.radio.wifi_answer() {
+            let current = self.radio.home_ssid();
+            match answer {
+                WifiAnswer::Scanned(seen) => {
+                    if let Some(p) = &mut self.list_page {
+                        p.scanned(seen, current.as_deref());
+                    }
+                }
+                WifiAnswer::WpsWaiting(secs) => {
+                    if let Some(p) = &mut self.list_page {
+                        p.wps_waiting(secs);
+                    }
+                }
+                WifiAnswer::WpsDone(ssid) => {
+                    if let Some(p) = &mut self.list_page {
+                        p.close(now);
+                    }
+                    self.joining = Some((ssid, now + 30_000));
+                }
+                WifiAnswer::WpsFailed => {
+                    if let Some(p) = &mut self.list_page {
+                        p.close(now);
+                    }
+                    self.hud.toast(Toast::WpsFailed, now);
+                }
+            }
+        }
+        let wps_open = self
+            .list_page
+            .as_ref()
+            .is_some_and(|p| p.kind == list_page::Kind::Wps && !p.closing());
+        if wps_open && now >= self.wps_poll_at {
+            self.wps_poll_at = now + 1000;
+            self.radio.wifi(WifiJob::WpsPoll);
+        }
+        if let Some((ssid, until)) = &self.joining {
+            if self.radio.home_ssid().as_deref() == Some(ssid.as_str()) {
+                self.joining = None;
+                self.hud.toast(Toast::WifiConnected, now);
+            } else if now >= *until {
+                self.joining = None;
+                self.hud.toast(Toast::WifiFailed, now);
+            }
+        }
     }
 
     /// The versions the label tab asked for came back, each with its thumbnail and caption
@@ -7340,10 +7653,11 @@ fn cable_value(cable: TvCable) -> QuickValue {
 }
 
 /// The next cable along: the SNES's core also draws an aerial's RF signal, the NES's does not.
+/// RGB is not offered (Roy).
 fn step_cable(cable: TvCable, right: bool, rf: bool) -> TvCable {
     let all: Vec<TvCable> = TvCable::ALL
         .into_iter()
-        .filter(|c| rf || *c != TvCable::Rf)
+        .filter(|c| *c != TvCable::Rgb && (rf || *c != TvCable::Rf))
         .collect();
     let at = all.iter().position(|c| *c == cable).unwrap_or(0);
     let n = all.len();
@@ -7361,6 +7675,10 @@ pub struct SearchWords {
     pub status: Option<String>,
     /// Each game found: its name and its platform.
     pub rows: Vec<(String, String)>,
+    /// Under the status on a message screen.
+    pub note: Option<String>,
+    /// False keeps a network's name as it is written.
+    pub upper: bool,
 }
 
 /// A draw seen through a camera that scales by `k` and then shifts by (`dx`, `dy`), at `alpha`.

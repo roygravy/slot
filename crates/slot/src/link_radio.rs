@@ -53,8 +53,43 @@ pub enum RadioJob {
     Down,
 }
 
+/// The Wi-Fi pages' questions for the service, each answered later through `wifi_answer`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WifiJob {
+    Scan,
+    /// Config/wifi.toml changed: join from it afresh.
+    Reload,
+    WpsStart,
+    WpsPoll,
+    WpsStop,
+}
+
+/// A network heard nearby.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Seen {
+    pub ssid: String,
+    pub signal: i32,
+    pub secure: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum WifiAnswer {
+    /// None when the scan could not be made.
+    Scanned(Option<Vec<Seen>>),
+    WpsWaiting(u64),
+    /// WPS joined this network and saved it.
+    WpsDone(String),
+    WpsFailed,
+}
+
 pub trait RadioJobs: Send {
     fn ask(&mut self, job: RadioJob);
+
+    fn wifi(&mut self, _job: WifiJob) {}
+
+    fn wifi_answer(&mut self) -> Option<WifiAnswer> {
+        None
+    }
 
     fn warmed(&self) -> bool;
 
@@ -91,6 +126,41 @@ impl RadioJobs for RadioQueue {
         let _ = queue().send(job);
     }
 
+    fn wifi(&mut self, job: WifiJob) {
+        std::thread::spawn(move || {
+            let word = match job {
+                WifiJob::Scan => "scan",
+                WifiJob::Reload => {
+                    let _ = helper().args(["home", "reload"]).status();
+                    return;
+                }
+                WifiJob::WpsStart => "wps",
+                WifiJob::WpsPoll => "wpsstatus",
+                WifiJob::WpsStop => "wpsstop",
+            };
+            let out = helper().args(["wifi", word]).output();
+            let text = out
+                .as_ref()
+                .ok()
+                .filter(|o| o.status.success())
+                .map(|o| String::from_utf8_lossy(&o.stdout).into_owned());
+            let answer = match job {
+                WifiJob::Scan => Some(WifiAnswer::Scanned(text.as_deref().map(parse_seen))),
+                WifiJob::WpsStart if text.is_none() => Some(WifiAnswer::WpsFailed),
+                WifiJob::WpsPoll => text.as_deref().and_then(parse_wps),
+                _ => None,
+            };
+            if let (Some(a), Ok(mut q)) = (answer, WIFI_ANSWERS.lock()) {
+                q.push(a);
+            }
+        });
+    }
+
+    fn wifi_answer(&mut self) -> Option<WifiAnswer> {
+        let mut q = WIFI_ANSWERS.lock().ok()?;
+        (!q.is_empty()).then(|| q.remove(0))
+    }
+
     fn warmed(&self) -> bool {
         WARM.load(Ordering::SeqCst)
     }
@@ -117,6 +187,8 @@ impl RadioJobs for RadioQueue {
     }
 }
 
+#[cfg(feature = "device")]
+static WIFI_ANSWERS: std::sync::Mutex<Vec<WifiAnswer>> = std::sync::Mutex::new(Vec::new());
 #[cfg(feature = "device")]
 static WARM: AtomicBool = AtomicBool::new(false);
 #[cfg(feature = "device")]
@@ -230,6 +302,43 @@ fn home_address() -> Option<std::net::Ipv4Addr> {
     parse_lan_reply(&String::from_utf8_lossy(&out.stdout))
 }
 
+fn unhex(hex: &str) -> Option<String> {
+    let bytes: Option<Vec<u8>> = (0..hex.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(hex.get(i..i + 2)?, 16).ok())
+        .collect();
+    String::from_utf8(bytes?).ok()
+}
+
+/// `0 SEEN hexname,signal,secure ...` from `wifi scan`.
+pub fn parse_seen(reply: &str) -> Vec<Seen> {
+    reply
+        .split_whitespace()
+        .skip_while(|w| *w != "SEEN")
+        .skip(1)
+        .filter_map(|w| {
+            let mut f = w.split(',');
+            Some(Seen {
+                ssid: unhex(f.next()?)?,
+                signal: f.next()?.parse().ok()?,
+                secure: f.next()? == "1",
+            })
+        })
+        .collect()
+}
+
+/// `0 WAITING:secs`, `0 DONE:hexname` or `0 FAILED` from `wifi wpsstatus`.
+pub fn parse_wps(reply: &str) -> Option<WifiAnswer> {
+    let word = reply.split_whitespace().nth(1)?;
+    if let Some(secs) = word.strip_prefix("WAITING:") {
+        return Some(WifiAnswer::WpsWaiting(secs.parse().ok()?));
+    }
+    if let Some(hex) = word.strip_prefix("DONE:") {
+        return Some(WifiAnswer::WpsDone(unhex(hex)?));
+    }
+    (word == "FAILED").then_some(WifiAnswer::WpsFailed)
+}
+
 /// The network name from `service status`, which sends it hex-encoded as `home_ssid=` so a
 /// name with spaces stays one word.
 pub fn status_ssid(status: &str) -> Option<String> {
@@ -300,8 +409,44 @@ pub fn up(_role: LinkRole, _cancel: &Cancel) -> Result<LinkNet, RadioFail> {
 pub fn down() {}
 
 #[cfg(not(feature = "device"))]
+static FAKE_WIFI: std::sync::Mutex<Vec<WifiAnswer>> = std::sync::Mutex::new(Vec::new());
+
+#[cfg(not(feature = "device"))]
 impl RadioJobs for RadioQueue {
     fn ask(&mut self, _job: RadioJob) {}
+
+    /// Off-device: with SLOT_FAKE_HOME, a street's worth of networks and a router that never
+    /// answers WPS, for previews.
+    fn wifi(&mut self, job: WifiJob) {
+        if std::env::var_os("SLOT_FAKE_HOME").is_none() {
+            return;
+        }
+        let seen = |s: &str, signal, secure| Seen {
+            ssid: s.into(),
+            signal,
+            secure,
+        };
+        let answer = match job {
+            WifiJob::Scan => WifiAnswer::Scanned(Some(vec![
+                seen("Ziggo-5G", -42, true),
+                seen("KPN-Thuis", -55, true),
+                seen("Ziggo-2G", -60, true),
+                seen("Buren Wifi", -71, true),
+                seen("Ziggo Guest", -74, false),
+                seen("iPhone van Roy", -82, true),
+            ])),
+            WifiJob::WpsStart | WifiJob::WpsPoll => WifiAnswer::WpsWaiting(107),
+            _ => return,
+        };
+        if let Ok(mut q) = FAKE_WIFI.lock() {
+            q.push(answer);
+        }
+    }
+
+    fn wifi_answer(&mut self) -> Option<WifiAnswer> {
+        let mut q = FAKE_WIFI.lock().ok()?;
+        (!q.is_empty()).then(|| q.remove(0))
+    }
 
     fn warmed(&self) -> bool {
         true

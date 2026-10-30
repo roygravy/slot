@@ -17,15 +17,20 @@ const YEAR_MAX: i64 = 2099;
 /// White, so the menu's ink can tint it.
 const INK: [u8; 3] = [0xff, 0xff, 0xff];
 
-/// The last cell holds AM or PM on a 12-hour clock and is gone on a 24-hour one.
-const CELLS: [u32; 11] = [88, 22, 52, 22, 52, 32, 52, 22, 52, 14, 64];
-const FIELD_CELL: [usize; 5] = [0, 2, 4, 6, 8];
-
-const PICKER_H: u32 = 44;
-const PICKER_PX: f32 = 30.0;
-const PICKER_MIN_PX: f32 = 12.0;
-const CARET_H: f32 = 4.0;
-const CARET_GAP: f32 = 6.0;
+/// The wheels: the time's on one page, the date's on the next, as a phone's are. Each wheel
+/// shows its value large, with the one before over it and the one after under it, faint.
+const WHEEL_W: u32 = 560;
+const WHEEL_H: u32 = 250;
+const ROW_Y: [u32; 3] = [48, 118, 188];
+const BIG_PX: f32 = 60.0;
+const SMALL_PX: f32 = 36.0;
+const FAINT: u32 = 70;
+const UNDER_Y: u32 = 236;
+const UNDER_PX: f32 = 18.0;
+/// The ring round the wheel being turned.
+const RING_H: f32 = 74.0;
+const RING_W: f32 = 3.0;
+const WEEKDAYS: [&str; 7] = ["THU", "FRI", "SAT", "SUN", "MON", "TUE", "WED"];
 
 const SET_CLOCK_KEY: &str = "A";
 const SET_CLOCK_LABEL: &str = "set the clock";
@@ -82,13 +87,18 @@ pub enum Field {
 }
 
 impl Field {
+    /// The time first, then the date: left and right walk across both pages.
     pub const ALL: [Field; 5] = [
-        Field::Year,
-        Field::Month,
-        Field::Day,
         Field::Hour,
         Field::Minute,
+        Field::Day,
+        Field::Month,
+        Field::Year,
     ];
+
+    fn on_time_page(self) -> bool {
+        matches!(self, Field::Hour | Field::Minute)
+    }
 }
 
 /// Where the clock is: a city that keeps its own summer time, or a bare
@@ -280,58 +290,125 @@ impl ClockPicker {
             self.year,
             self.month,
             self.day,
-            self.cell_text(6),
+            self.value_text(Field::Hour),
             self.minute,
             match self.h24 {
                 true => String::new(),
-                false => format!(" {}", self.cell_text(10)),
+                false => format!(" {}", if self.hour < 12 { "AM" } else { "PM" }),
             }
         )
     }
 
-    pub fn face(&self) -> UndoFace {
-        let w = self.picker_w();
-        let mut rgba = vec![0u8; (w * PICKER_H * 4) as usize];
-        for (i, cell) in self.cells().iter().enumerate() {
-            let text = self.cell_text(i);
-            if text.is_empty() {
-                continue;
-            }
-            // A 12-hour hour of one digit sits against its colon, as 6:00 does.
-            let (cell, x) = match (i, self.h24, text::label_font()) {
-                (6, false, Some(font)) => {
-                    let tight = (text::line_width(font, &text, PICKER_PX, 0.0).ceil() as u32 + 4)
-                        .min(*cell);
-                    (tight, self.cell_x(i) + cell - tight)
-                }
-                _ => (*cell, self.cell_x(i)),
-            };
-            let mut buf = vec![0u8; (cell * PICKER_H * 4) as usize];
-            if let Some(font) = text::label_font() {
-                let layout = text::fit(font, &text, cell as f32, 1, PICKER_PX, PICKER_MIN_PX);
-                text::draw_centred(&mut buf, cell, PICKER_H, &layout, INK);
-            }
-            blit(&mut rgba, w, &buf, cell, PICKER_H, x, 0);
-        }
-        UndoFace {
-            rgba,
-            w,
-            h: PICKER_H,
+    /// One wheel's value as it reads: the month by name, the hour on a 12-hour clock.
+    fn value_text(&self, field: Field) -> String {
+        match field {
+            Field::Year => format!("{:04}", self.year),
+            Field::Month => MONTHS[(self.month - 1) as usize].into(),
+            Field::Day => format!("{}", self.day),
+            Field::Hour if self.h24 => format!("{:02}", self.hour),
+            Field::Hour => format!("{}", (self.hour + 11) % 12 + 1),
+            Field::Minute => format!("{:02}", self.minute),
         }
     }
 
-    fn cell_text(&self, cell: usize) -> String {
-        match cell {
-            0 => format!("{:04}", self.year),
-            1 | 3 => "-".into(),
-            2 => format!("{:02}", self.month),
-            4 => format!("{:02}", self.day),
-            6 if self.h24 => format!("{:02}", self.hour),
-            6 => format!("{}", (self.hour + 11) % 12 + 1),
-            7 => ":".into(),
-            8 => format!("{:02}", self.minute),
-            10 if !self.h24 => if self.hour < 12 { "AM" } else { "PM" }.into(),
-            _ => String::new(),
+    /// This wheel turned one step either way, for the faint values over and under it.
+    fn turned(&self, field: Field, by: i64) -> String {
+        let mut c = self.clone();
+        c.field(field);
+        c.step(by);
+        c.value_text(field)
+    }
+
+    /// The page's wheels and their widths, AM or PM a wheel of its own on a 12-hour clock.
+    fn wheels(&self) -> Vec<(Option<Field>, u32)> {
+        if self.cursor().on_time_page() {
+            let mut w = vec![
+                (Some(Field::Hour), 120),
+                (None, 40),
+                (Some(Field::Minute), 120),
+            ];
+            if !self.h24 {
+                w.push((None, 110));
+            }
+            w
+        } else {
+            vec![
+                (Some(Field::Day), 110),
+                (Some(Field::Month), 150),
+                (Some(Field::Year), 170),
+            ]
+        }
+    }
+
+    fn wheel_x(&self) -> Vec<u32> {
+        let wheels = self.wheels();
+        let total: u32 = wheels.iter().map(|w| w.1).sum();
+        let mut x = (WHEEL_W - total) / 2;
+        wheels
+            .iter()
+            .map(|w| {
+                let at = x;
+                x += w.1;
+                at
+            })
+            .collect()
+    }
+
+    /// What the other page holds, in a line under the wheels.
+    fn under_text(&self) -> String {
+        if self.cursor().on_time_page() {
+            let days = days_from_civil(self.year, self.month, self.day);
+            format!(
+                "{} {} {} {}",
+                WEEKDAYS[days.rem_euclid(7) as usize],
+                self.day,
+                MONTHS[(self.month - 1) as usize],
+                self.year
+            )
+        } else {
+            clock_text(self.hour * 3600 + self.minute * 60, self.h24)
+        }
+    }
+
+    pub fn face(&self) -> UndoFace {
+        let mut rgba = vec![0u8; (WHEEL_W * WHEEL_H * 4) as usize];
+        let Some(font) = text::label_font() else {
+            return UndoFace {
+                rgba,
+                w: WHEEL_W,
+                h: WHEEL_H,
+            };
+        };
+        let mut put = |text: &str, x: u32, w: u32, mid: u32, px: f32, alpha: u32| {
+            let h = (px * 1.5) as u32;
+            let mut buf = vec![0u8; (w * h * 4) as usize];
+            let layout = text::fit(font, text, w as f32, 1, px, px * 0.5);
+            text::draw_centred(&mut buf, w, h, &layout, INK);
+            for a in buf.iter_mut().skip(3).step_by(4) {
+                *a = (*a as u32 * alpha / 255) as u8;
+            }
+            blit(&mut rgba, WHEEL_W, &buf, w, h, x, mid - h / 2);
+        };
+        for ((field, w), x) in self.wheels().into_iter().zip(self.wheel_x()) {
+            match field {
+                Some(f) => {
+                    put(&self.turned(f, -1), x, w, ROW_Y[0], SMALL_PX, FAINT);
+                    put(&self.value_text(f), x, w, ROW_Y[1], BIG_PX, 255);
+                    put(&self.turned(f, 1), x, w, ROW_Y[2], SMALL_PX, FAINT);
+                }
+                // The colon, or AM and PM, which turn with the hour.
+                None if w == 40 => put(":", x, w, ROW_Y[1] - 4, BIG_PX, 255),
+                None => {
+                    let half = if self.hour < 12 { "AM" } else { "PM" };
+                    put(half, x, w, ROW_Y[1], SMALL_PX, 255);
+                }
+            }
+        }
+        put(&self.under_text(), 0, WHEEL_W, UNDER_Y, UNDER_PX, 150);
+        UndoFace {
+            rgba,
+            w: WHEEL_W,
+            h: WHEEL_H,
         }
     }
 
@@ -347,27 +424,40 @@ impl ClockPicker {
         out: &mut Vec<Draw>,
     ) {
         draw_menu_ground(canvas, ground, ink, out);
-        let w = self.picker_w() as f32;
+        let w = WHEEL_W as f32;
         let x = canvas.centred(w).round();
-        let y = ((LEGEND_Y - PICKER_H as f32) / 2.0).round();
+        let y = ((LEGEND_Y - WHEEL_H as f32) / 2.0).round();
         if let Some(tex) = line {
             out.push(Draw::Tint {
                 x,
                 y,
                 w,
-                h: PICKER_H as f32,
+                h: WHEEL_H as f32,
                 tex,
                 colour: ink.text,
             });
         }
-        let cell = FIELD_CELL[self.cursor];
-        out.push(Draw::Rect {
-            x: x + self.cell_x(cell) as f32,
-            y: y + PICKER_H as f32 + CARET_GAP,
-            w: self.cells()[cell] as f32,
-            h: CARET_H,
-            colour: ink.text,
-        });
+        let at = self
+            .wheels()
+            .iter()
+            .position(|(f, _)| *f == Some(self.cursor()))
+            .unwrap_or(0);
+        let (rx, rw) = (x + self.wheel_x()[at] as f32 + 8.0, self.wheels()[at].1 as f32 - 16.0);
+        let ry = y + ROW_Y[1] as f32 - RING_H / 2.0;
+        for (bx, by, bw, bh) in [
+            (rx, ry, rw, RING_W),
+            (rx, ry + RING_H - RING_W, rw, RING_W),
+            (rx, ry, RING_W, RING_H),
+            (rx + rw - RING_W, ry, RING_W, RING_H),
+        ] {
+            out.push(Draw::Rect {
+                x: bx,
+                y: by,
+                w: bw,
+                h: bh,
+                colour: ink.text,
+            });
+        }
         let hw = hint_width(SET_CLOCK_KEY, SET_CLOCK_LABEL);
         let hints: Vec<(TexId, u32)> = back.into_iter().chain(hint.map(|t| (t, hw))).collect();
         for (tex, w, x) in centred_hints(canvas, &hints, LEGEND_GAP) {
@@ -385,24 +475,6 @@ impl ClockPicker {
 
 pub fn set_clock_hint_face() -> UndoFace {
     crate::plate::tint_mask(crate::plate::hint_face(SET_CLOCK_KEY, SET_CLOCK_LABEL))
-}
-
-impl ClockPicker {
-    fn cells(&self) -> [u32; 11] {
-        let mut cells = CELLS;
-        if self.h24 {
-            (cells[9], cells[10]) = (0, 0);
-        }
-        cells
-    }
-
-    fn picker_w(&self) -> u32 {
-        self.cells().iter().sum()
-    }
-
-    fn cell_x(&self, cell: usize) -> u32 {
-        self.cells()[..cell].iter().sum()
-    }
 }
 
 fn wrap(v: i64, lo: i64, hi: i64) -> i64 {
