@@ -130,7 +130,7 @@ Tap **POWER** and the console drops into a light sleep: Wi-Fi stays on and any b
 - **Resume Game** powers straight back into your game, its picture as the boot screen
 - Carts without label art get their title written on by hand
 - **3:2 screens** too (RG34XX SP, 720×480): the shelf, menus, games, save states and screenshots fill the whole panel, no black bars
-- Native 640×480, with Game Boy and Game Boy Color games filling the screen; **L1 / R1** flips between full screen and original size
+- Native 640×480, with Game Boy and Game Boy Color games filling the screen; **L1 / R1** step Game Boy and Game Boy Color games through three sizes: their own size, as tall as the screen, and full screen
 - Starts on your Favorites; GB, GBC, GBA, NES, SNES in that order
 
 <img src=".github/resources/gravy/marker.png" width="100%" alt="Carts with no label art, titled in marker">
@@ -168,7 +168,7 @@ The full list is on the **Buttons** pages in the menu. The essentials:
 | SELECT + R1 / L1 | Save / load a state |
 | Hold L2 / Hold R2 | Rewind / fast-forward |
 | SELECT + B | Screen effects on / off |
-| L1 / R1 | Full screen / original size (GB, GBC) |
+| L1 / R1 | Bigger / smaller picture (GB, GBC) |
 | START + SELECT | Reset the game |
 
 | Everywhere | |

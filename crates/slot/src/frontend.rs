@@ -1849,7 +1849,9 @@ fn sync_cheats(app: &mut App, compositor: &mut Compositor, state: &mut CheatText
     }
     let rev = app.cheats_rev();
     let counts = app.cheat_counts();
-    if state.rev != Some(rev) {
+    // The names are drawn once the in-game menu opens, not as the game starts: a long cheat
+    // list would cost a frame there.
+    if state.rev != Some(rev) && app.cheat_faces_wanted() {
         state.rev = Some(rev);
         state.counts = None;
         let names = app.cheat_names();

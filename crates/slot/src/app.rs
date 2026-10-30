@@ -3121,6 +3121,11 @@ impl App {
         self.cheat_faces = Some(faces);
     }
 
+    /// Whether the cheat page's faces are wanted yet: only with the in-game menu open.
+    pub fn cheat_faces_wanted(&self) -> bool {
+        self.in_game_menu_shown().is_some()
+    }
+
     pub fn cheat_faces_mut(&mut self) -> Option<&mut slot_ui::CheatFaces> {
         self.cheat_faces.as_mut()
     }

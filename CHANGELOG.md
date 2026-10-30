@@ -14,6 +14,9 @@ Everything since slot. x GRAVY v1.0.2.
 - **Highlight** behind the cart, next to Spotlight, Glow and Star, for Favorites.
 - **Label search**: Y in the cartridge studio searches for a label and lets you pick another, Europe first, then USA, then Japan. The on-screen keyboard has accents.
 - Your own wallpaper gets black menus, whatever the Slot Color.
+- **Three screen sizes** for Game Boy and Game Boy Color: L1 makes the picture one size bigger, R1 one size smaller: the game's own size at a whole scale, as tall as the screen in its own shape, and full screen. The size is kept between games.
+- The **Super Game Boy**'s slot lies deeper, darker under a soft shade from its rim, on the shelf and in the SNES slot.
+- Cheat names are drawn when the in-game menu opens, not as the game starts.
 - **3:2 screens** (RG34XX SP, 720x480): the shelf and menus span the whole panel, and full screen GB/GBC, GBA, save states and screenshots fill it without black bars. The GBA LCD filter keeps to the panel's own pixels.
 - **Home Wi-Fi** (ported from pvaibhav/slot): join your home network from Settings -> General -> Home Wi-Fi. Networks are listed in `Config/wifi.toml`.
 - **Network** has its own row in the menu, with Home Wi-Fi on/off and the network you are connected to.
