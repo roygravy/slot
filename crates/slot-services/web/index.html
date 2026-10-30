@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GRAVY ROM Manager</title>
+<style>
+@font-face { font-family: "slot"; src: url("font.ttf"); }
+:root { --bg: #0b0e11; --panel: #14181d; --line: #262c33; --fg: #eef0f4; --dim: #8a929c; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 760px; margin: 0 auto; padding: 32px 16px 64px; }
+header { text-align: center; margin-bottom: 28px; }
+.slot { font-family: "slot"; font-size: 56px; font-weight: 700; letter-spacing: -1px; line-height: 1; }
+.x { font-size: 16px; font-weight: 300; color: var(--dim); margin: 8px 0 6px; }
+.gravy { font-size: 20px; font-weight: 300; letter-spacing: .55em; margin-right: -.55em; }
+.sub { font-size: 11px; letter-spacing: .3em; color: var(--dim); margin-top: 14px; text-transform: uppercase; }
+nav { display: flex; gap: 4px; border-bottom: 1px solid var(--line); overflow-x: auto; }
+nav button { flex: 1; background: none; border: 0; color: var(--dim); font: inherit; font-weight: 600; letter-spacing: .12em;
+  padding: 10px 6px; border-bottom: 2px solid transparent; cursor: pointer; }
+nav button.on { color: var(--fg); border-bottom-color: var(--fg); }
+.drop { display: block; margin: 20px 0; border: 1px dashed var(--line); border-radius: 10px; padding: 22px; text-align: center; color: var(--dim); cursor: pointer; }
+.drop b { color: var(--fg); font-weight: 600; }
+.drop.over { border-color: var(--fg); color: var(--fg); }
+.bar { height: 3px; background: var(--line); border-radius: 2px; margin-top: 12px; overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--fg); }
+ul { list-style: none; margin: 0; padding: 0; }
+li { display: flex; align-items: center; gap: 12px; padding: 11px 4px; border-bottom: 1px solid var(--line); }
+li .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+li .size { color: var(--dim); font-size: 13px; white-space: nowrap; }
+li button { background: none; border: 1px solid var(--line); color: var(--fg); border-radius: 6px; font: inherit; font-size: 13px; padding: 4px 10px; cursor: pointer; }
+li button:hover { border-color: var(--fg); }
+li.playing .name::after { content: "  ·  playing"; color: var(--dim); font-size: 12px; }
+li.playing button.del { opacity: .3; pointer-events: none; }
+li input { flex: 1; background: var(--panel); border: 1px solid var(--fg); color: var(--fg); font: inherit; padding: 4px 8px; border-radius: 6px; }
+footer { margin-top: 18px; color: var(--dim); font-size: 12px; display: flex; justify-content: space-between; }
+.pin { position: fixed; inset: 0; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; }
+.pin input { width: 150px; text-align: center; font: 600 30px system-ui; letter-spacing: .4em; background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
+@media (max-width: 520px) { li { flex-wrap: wrap; gap: 6px 10px; } li .name { flex-basis: 100%; } li .size { flex: 1; } }
+.pin p { color: var(--dim); margin: 0; font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="slot">slot.</div><div class="x">x</div><div class="gravy">GRAVY</div>
+    <div class="sub">ROM Manager</div>
+  </header>
+  <nav id="tabs"></nav>
+  <label class="drop" id="drop"><b>Drop games here</b> or tap to choose<input type="file" multiple hidden id="pick">
+    <div id="up"></div></label>
+  <ul id="list"></ul>
+  <footer><span id="count"></span><span id="free"></span></footer>
+</main>
+<script>
+const SYS = ["GB", "GBC", "GBA", "NES", "SNES"];
+const MOCK = {
+  GB: [["Hauntsfield.gb", 262144], ["Tetris.gb", 32768]],
+  GBC: [["Tobu Tobu Girl Deluxe.gbc", 524288], ["uCity.gbc", 1048576], ["Pokemon Crystal.gbc", 2097152]],
+  GBA: [["Goodboy Galaxy (Demo).gba", 13212672], ["The Minish Cap.gba", 16777216]],
+  NES: [], SNES: [],
+};
+let sys = "GBC";
+const $ = id => document.getElementById(id);
+const mb = n => n < 1048576 ? Math.round(n / 1024) + " KB" : (n / 1048576).toFixed(1) + " MB";
+function tabs() {
+  $("tabs").innerHTML = SYS.map(s => `<button class="${s == sys ? "on" : ""}" onclick="sys='${s}';render()">${s}</button>`).join("");
+}
+function render() {
+  tabs();
+  const games = MOCK[sys];
+  $("list").innerHTML = games.length ? games.map(([n, s], i) =>
+    `<li class="${sys == "GBC" && i == 1 ? "playing" : ""}"><span class="name">${n}</span><span class="size">${mb(s)}</span>` +
+    `<button>Rename</button><button class="del">Delete</button></li>`).join("")
+    : `<li><span class="name" style="color:var(--dim)">No ${sys} games yet</span></li>`;
+  $("count").textContent = games.length + (games.length == 1 ? " game" : " games");
+  $("free").textContent = "21.4 GB free on SD card";
+}
+render();
+</script>
+</body>
+</html>
