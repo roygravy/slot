@@ -6,6 +6,7 @@ groove cut down its front each side, just outside the seated NTSC cart.
 Usage: tv_slots.py ASSETS_DIR
 """
 import sys
+import numpy as np
 from PIL import Image, ImageDraw
 
 A = sys.argv[1].rstrip('/') + '/'
@@ -37,6 +38,73 @@ def nes_blocks(im, x0=MX - 82, x1=MX - 6):
         d.line((x0, y0, x0, y1), fill=(60, 60, 62, 255))
         d.line((x0, y1, x1, y1), fill=(18, 18, 20, 255))
         d.line((x1, y0, x1, y1), fill=(24, 24, 26, 255))
+
+
+DECK = (150, 149, 153)              # the SNES PAL's darker top deck, around its cartridge slot
+DECK_X, DECK_B, DECK_R, SS = (150, 570), 33, 9, 4
+
+
+def pal_deck(band):
+    """The SNES PAL's top (Roy, Originals): the dark deck in the middle, rounded where it meets
+    the light front, a shadow where the deck falls away under the front's edge and a lit rim on
+    that edge. The grain stays; the grooves are cut afterwards."""
+    ys, xs = np.mgrid[0:H * SS, 0:W * SS].astype(np.float32)
+    y, x = (ys + 0.5) / SS, (xs + 0.5) / SS
+    x0, x1 = DECK_X
+    m = (x >= x0) & (x < x1) & (y < DECK_B)
+    for cx in (x0 + DECK_R, x1 - DECK_R):
+        side = (x < cx) if cx == x0 + DECK_R else (x > cx)
+        m &= ~(side & (y > DECK_B - DECK_R) & ((x - cx) ** 2 + (y - DECK_B + DECK_R) ** 2 > DECK_R ** 2))
+    e = m.astype(np.float32)
+
+    def shifted(dy, dx, edge=1.0):
+        r = np.roll(e, (dy, dx), (0, 1))
+        if dy > 0: r[:dy] = edge
+        if dx > 0: r[:, :dx] = edge
+        if dx < 0: r[:, dx:] = edge
+        return r
+
+    def down(a):
+        return a.reshape(H, SS, W, SS).mean((1, 3))
+
+    shadow = np.zeros_like(e)
+    for k in range(1, 3 * SS):
+        f = 1 - k / (3 * SS)
+        shadow = np.maximum(shadow, e * (1 - shifted(k, 0)) * f)
+        shadow = np.maximum(shadow, e * (1 - shifted(0, k)) * f * 0.6)
+        shadow = np.maximum(shadow, e * (1 - shifted(0, -k)) * f * 0.6)
+    rim = np.zeros_like(e)
+    for k in range(SS, 2 * SS):
+        rim = np.maximum(rim, (1 - e) * shifted(k, 0, 0.0))
+        rim = np.maximum(rim, (1 - e) * shifted(0, k, 0.0) * 0.6)
+        rim = np.maximum(rim, (1 - e) * shifted(0, -k, 0.0) * 0.6)
+    a = np.asarray(band, np.float32)
+    rgb = a[..., :3]
+    body = np.median(rgb[20:50, 40:120].reshape(-1, 3), 0)
+    md = down(e)[..., None]
+    # the deck takes the housing's grain, and only the top two rows of its lit edge
+    row = np.median(rgb[:, 40:120], 1)[:, None]
+    tone = rgb / row
+    tone[:2] *= row[:2] / body
+    deck = np.array(DECK, np.float32) * tone
+    rgb = rgb * (1 - md) + deck * md
+    rgb = rgb * (1 - 0.45 * down(shadow)[..., None]) + down(rim)[..., None] * 28
+    a[..., :3] = rgb.clip(0, 255)
+    return Image.fromarray(a.astype(np.uint8), 'RGBA')
+
+
+def grooves(band):
+    """A groove cut down the band each side, just outside the 240 wide seated cart (2px play),
+    shaded from the plastic beside it, so it reads on the light front and the dark deck alike."""
+    a = np.asarray(band, np.float32)
+    gx = C - 120 - 2 - 3
+    for x in (gx, W - gx - 3):
+        beside = a[:, x - 3, :3]
+        light = beside.sum(1, keepdims=True) > 300
+        a[:, x:x + 2, :3] = (beside * np.where(light, 0.55, 0.45))[:, None]
+        a[:, x + 2, :3] = np.minimum(255, beside * 1.12 + 10)
+        a[0, x:x + 3, :3] = a[0, x - 3, :3] * np.where(light[0], 0.55, 0.45)
+    return Image.fromarray(a.astype(np.uint8), 'RGBA')
 
 
 def strips(name):
@@ -84,15 +152,9 @@ for theme, nes_from, snes_from in [('dark', 'dark', 'dark'), ('light', 'light', 
     base = gb.getpixel((120, 30))[:3]
     band = gb.copy()
     band.paste(plain(gb, R_START + EDGE - (L_END - EDGE) + 20), (L_END - EDGE - 10, 0))
-    d = ImageDraw.Draw(band)
-    light = sum(base) > 300
-    dark = tuple(round(v * (0.55 if light else 0.45)) for v in base)
-    lit = tuple(min(255, round(v * 1.12 + 10)) for v in base)
-    gx = C - 120 - 2 - 3                                   # just outside the 240 wide cart, 2px play
-    for x in (gx, W - gx - 3):
-        d.rectangle((x, 0, x + 1, H), fill=dark)
-        d.line((x + 2, 0, x + 2, H), fill=lit)
-        d.line((x, 0, x + 2, 0), fill=dark)
+    if theme == 'orig':
+        band = pal_deck(band)
+    band = grooves(band)
     band.save(f'{A}slot_front_snes_{theme}.png', optimize=True)
     band.save(f'{A}slot_back_snes_{theme}.png', optimize=True)
 
