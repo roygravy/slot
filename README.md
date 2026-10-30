@@ -8,7 +8,7 @@ slot.'s real cartridges on a shelf and its real cartridge slot, with a little ex
 
 <img src=".github/resources/gravy/carousel.gif" width="640" alt="Scrolling the GBA shelf and pushing Goodboy Galaxy into the slot">
 
-[**Download slot-x-gravy-v1.1**](https://github.com/roygravy/slot/releases) · [Install](#install) · [What's in the gravy](#whats-in-the-gravy) · [Controls](#controls)
+[**Download slot-x-gravy-v1.1**](https://github.com/roygravy/slot/releases/download/slot-x-gravy-v1.1/slot-x-gravy-v1.1.zip) · [Install](#install) · [What's in the gravy](#whats-in-the-gravy) · [Controls](#controls)
 
 </div>
 
@@ -140,7 +140,7 @@ Tap **POWER** and the console drops into a light sleep: Wi-Fi stays on and any b
 
 ## Install
 
-1. Download **slot-x-gravy-v1.1.zip** from the [releases](https://github.com/roygravy/slot/releases).
+1. Download **[slot-x-gravy-v1.1.zip](https://github.com/roygravy/slot/releases/download/slot-x-gravy-v1.1/slot-x-gravy-v1.1.zip)** from the [releases](https://github.com/roygravy/slot/releases/tag/slot-x-gravy-v1.1).
 2. Unzip it and copy the **contents** of the `slot-x-gravy-v1.1` folder onto the second SD card of your RG35XX Plus.
 3. Put your games in `Games/GB`, `Games/GBC`, `Games/GBA`, `Games/NES` and `Games/SNES`, and optional label art (PNG, named like the ROM) in the matching `Labels` folders.
 4. Put the BIOS files (`gb_bios.bin`, `gbc_bios.bin`, `gba_bios.bin`) in `BIOS/` if you have them. For the real Super Game Boy borders, put your own `SGB1.sfc` and/or `SGB2.sfc` in `BIOS/` too (any name works).

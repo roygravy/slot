@@ -355,6 +355,28 @@ fn draw_console_shadow(canvas: Canvas, alpha: f32, out: &mut Vec<Draw>) {
     }
 }
 
+/// How dark the Super Game Boy's slot lies below its top, and the shade its rim throws in it.
+const SGB_MOUTH_DIM: f32 = 0.22;
+const SGB_MOUTH_SHADE: f32 = 14.0;
+const SGB_MOUTH_SHADE_ALPHA: f32 = 0.7;
+
+/// The Super Game Boy's slot for the Game Boy pak lies deeper than its top, as the Game Boy
+/// slot's mouth does: darker, with a soft shade from the rim falling over it. A pak in it
+/// covers it, so it stays light around the pak (Roy).
+fn draw_sgb_mouth(canvas: Canvas, alpha: f32, out: &mut Vec<Draw>) {
+    let w = SEATED_W as f32 + 4.0;
+    let (x, top) = (canvas.centred(w), BAND_Y - rise() + SGB_TOP);
+    out.push(band(x, top, w, OUT_H as f32 - top, [0.0, 0.0, 0.0, SGB_MOUTH_DIM], alpha));
+    const STEPS: usize = 8;
+    let step = SGB_MOUTH_SHADE / STEPS as f32;
+    for k in 0..STEPS {
+        // Darkest under the rim, easing out to nothing.
+        let t = (STEPS - k) as f32 / STEPS as f32;
+        let a = SGB_MOUTH_SHADE_ALPHA * t * t / STEPS as f32 * 2.2;
+        out.push(band(x, top, w, step * (k + 1) as f32, [0.0, 0.0, 0.0, a], alpha));
+    }
+}
+
 fn draw_slot_back(canvas: Canvas, slot: Option<(TexId, TexId)>, alpha: f32, out: &mut Vec<Draw>) {
     if let Some((back, _)) = slot {
         // The Super Game Boy stands alone, no console around it to cast the shadow.
@@ -362,6 +384,9 @@ fn draw_slot_back(canvas: Canvas, slot: Option<(TexId, TexId)>, alpha: f32, out:
             draw_console_shadow(canvas, alpha, out);
         }
         out.push(strip(canvas, back, alpha));
+        if rise() > 0.0 {
+            draw_sgb_mouth(canvas, alpha, out);
+        }
         return;
     }
     let (bay_x, mouth_x) = (bay_x(canvas), mouth_x(canvas));
