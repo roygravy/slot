@@ -41,7 +41,9 @@ def nes_blocks(im, x0=MX - 82, x1=MX - 6):
 
 
 DECK = (150, 149, 153)              # the SNES PAL's darker top deck, around its cartridge slot
-DECK_X, DECK_B, DECK_R, SS = (150, 570), 33, 16, 4
+DECK_R, DECK_B, SS = 16, 33, 4
+# the corners' arcs start right where the grooves come out from under the deck
+DECK_X = (C - 120 - 2 - 3 - DECK_R, C + 120 + 2 + 3 + DECK_R)
 
 
 def pal_deck(band):
