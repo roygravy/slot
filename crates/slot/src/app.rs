@@ -76,6 +76,8 @@ const SGB_ZOOM_MS_FADED: f32 = 1200.0;
 const SGB_CAMERA_PART: f32 = 0.75;
 /// The camera pulling back out of the Super Game Boy: off at once, landing softly on the SNES.
 const SGB_UNZOOM_MS: f32 = 700.0;
+/// How much of the Super Game Boy 2's way out goes to its band fading back into the cart.
+const SGB_UNZOOM_FADE: f32 = 0.25;
 
 const CHARGE_POLL_MS: Millis = 1_000;
 const HEADPHONES_POLL_MS: Millis = 500;
@@ -2060,8 +2062,16 @@ impl App {
     /// it leaves; None once the camera is back on the SNES.
     fn sgb_unzoom(&self) -> Option<(f32, usize)> {
         let (at, shelf) = self.sgb_unzoom?;
-        let s = self.now().saturating_sub(at) as f32 / SGB_UNZOOM_MS;
+        let s = self.now().saturating_sub(at) as f32 / self.sgb_unzoom_ms();
         (s < 1.0).then_some((s, shelf))
+    }
+
+    /// The way out takes as long for the camera every time; the SGB2's fade comes on top.
+    fn sgb_unzoom_ms(&self) -> f32 {
+        match self.sgb_two() {
+            true => SGB_UNZOOM_MS / (1.0 - SGB_UNZOOM_FADE),
+            false => SGB_UNZOOM_MS,
+        }
     }
 
     fn draw_shelf_footer(&self, out: &mut Vec<Draw>) {
@@ -2238,7 +2248,7 @@ impl App {
         self.name_pending = true;
         self.phase = Phase::Ejecting {
             cart: slot_store::SGB_STEM.to_string(),
-            t: -(SGB_UNZOOM_MS / 1000.0 + 0.05),
+            t: -(self.sgb_unzoom_ms() / 1000.0 + 0.05),
         };
     }
 
@@ -4597,10 +4607,23 @@ impl App {
             }
             Phase::Ejecting { .. } if self.sgb_unzoom().is_some() => {
                 if let Some((s, shelf)) = self.sgb_unzoom() {
-                    // Off at once, the shelf going up first; a soft landing on the SNES.
-                    let e = (1.0 - s) * (1.0 - s);
-                    let come = (1.0 - s / 0.6).clamp(0.0, 1.0).powi(2);
-                    self.draw_sgb_camera(e, come, 1.0 - s, shelf, out)
+                    // The zoom in reverse: the clear Super Game Boy 2's band first fades back
+                    // into its cart with the camera still, as it came (Roy: fading while the
+                    // camera already moved glitched). Then off, the shelf going up first; a soft
+                    // landing on the SNES.
+                    let hold = if self.sgb_model() == Some(slot_ui::SgbModel::Sgb2) {
+                        SGB_UNZOOM_FADE
+                    } else {
+                        0.0
+                    };
+                    let c = ((s - hold) / (1.0 - hold)).clamp(0.0, 1.0);
+                    let e = (1.0 - c) * (1.0 - c);
+                    let come = (1.0 - c / 0.6).clamp(0.0, 1.0).powi(2);
+                    let u = match hold > 0.0 {
+                        true => 1.0 - (1.0 - SGB_CAMERA_PART) * (s / hold).min(1.0),
+                        false => 1.0 - s,
+                    };
+                    self.draw_sgb_camera(e, come, u, shelf, out)
                 }
             }
             Phase::Shelf => {
