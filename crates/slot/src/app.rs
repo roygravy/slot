@@ -2140,7 +2140,14 @@ impl App {
         };
         // The face goes out exactly as the band comes in: while the band is not yet whole, the
         // two clear plastics would add up to a flash if the face stayed (Roy).
-        let face_alpha = if clear { 1.0 - sharp * sharp } else { 1.0 };
+        // Drawn under a band at `sharp`, the face fades so that the two together keep the clear
+        // plastic's own cover all the way: a plain crossfade lets it thin out halfway, a blink
+        // to more see-through just as the band lands (Roy). COVER is about what both let through.
+        const COVER: f32 = 0.7;
+        let face_alpha = match clear {
+            true => ((1.0 - (1.0 - COVER) / (1.0 - COVER * sharp)) / COVER).clamp(0.0, 1.0),
+            false => 1.0,
+        };
         if let Some(tex) = face {
             out.push(Draw::Tex {
                 x: a.0,
