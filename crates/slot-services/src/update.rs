@@ -5,6 +5,7 @@
 use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
 
@@ -28,11 +29,14 @@ pub enum Status {
 
 pub struct Update {
     status: Mutex<Status>,
+    /// A zip from the page is coming in: a download meanwhile would write the same files.
+    uploading: AtomicBool,
 }
 
 /// One for the daemon: a download carries on when the page is closed and opened again.
 pub static UPDATE: Update = Update {
     status: Mutex::new(Status::Idle),
+    uploading: AtomicBool::new(false),
 };
 
 /// Left in System.new by Install on the page; the console sees it and restarts.
@@ -48,7 +52,8 @@ impl Update {
     }
 
     fn busy(&self) -> bool {
-        matches!(self.get(), Status::Checking | Status::Downloading { .. })
+        self.uploading.load(Ordering::SeqCst)
+            || matches!(self.get(), Status::Checking | Status::Downloading { .. })
     }
 
     pub fn json(&self, root: &Path) -> String {
@@ -96,6 +101,9 @@ impl Update {
 
     /// Fetches the release found by `check` and unpacks it, on its own thread.
     pub fn download(&'static self, root: &Path) -> Result<(), &'static str> {
+        if self.busy() {
+            return Err("Already busy with an update");
+        }
         let Status::Available { version, url } = self.get() else {
             return Err("Check for an update first");
         };
@@ -135,9 +143,15 @@ impl Update {
 
     /// A release zip sent from the page.
     pub fn upload(&self, root: &Path, length: u64, body: &mut impl Read) -> Result<(), &'static str> {
-        if self.busy() {
+        if self.busy() || self.uploading.swap(true, Ordering::SeqCst) {
             return Err("Already busy with an update");
         }
+        let result = self.take_zip(root, length, body);
+        self.uploading.store(false, Ordering::SeqCst);
+        result
+    }
+
+    fn take_zip(&self, root: &Path, length: u64, body: &mut impl Read) -> Result<(), &'static str> {
         if length == 0 || length > MAX_ZIP {
             return Err("That is not a slot. x GRAVY zip");
         }
