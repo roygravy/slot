@@ -37,7 +37,7 @@ pub struct GamePass {
     u_grid_opacity: gl::types::GLint,
     u_pixel_transparency: gl::types::GLint,
     u_tv: gl::types::GLint,
-    u_edge: gl::types::GLint,
+    u_backlight: gl::types::GLint,
     u_lcd_overlay_size: gl::types::GLint,
     fbo_scale: [f32; 2],
     u_origin: gl::types::GLint,
@@ -59,7 +59,7 @@ pub struct GamePass {
     lcd_mix: [f32; 3],
     grid_opacity: f32,
     pixel_transparency: bool,
-    edge: f32,
+    backlight: f32,
     paper: gl::types::GLuint,
     paper_size: f32,
     lcd_overlay: gl::types::GLuint,
@@ -118,7 +118,7 @@ impl GamePass {
             u_grid_opacity,
             u_pixel_transparency,
             u_tv,
-            u_edge,
+            u_backlight,
             u_lcd_overlay,
             u_lcd_overlay_size,
             u_origin,
@@ -160,7 +160,7 @@ impl GamePass {
             u_grid_opacity = crate::gl::uniform_location(prog, "u_grid_opacity");
             u_pixel_transparency = crate::gl::uniform_location(prog, "u_pixel_transparency");
             u_tv = crate::gl::uniform_location(prog, "u_tv");
-            u_edge = crate::gl::uniform_location(prog, "u_edge");
+            u_backlight = crate::gl::uniform_location(prog, "u_backlight");
             u_lcd_overlay = crate::gl::uniform_location(prog, "u_lcd_overlay");
             u_lcd_overlay_size = crate::gl::uniform_location(prog, "u_lcd_overlay_size");
             gl::Uniform1i(u_lcd_overlay, 2);
@@ -186,7 +186,7 @@ impl GamePass {
             u_grid_opacity,
             u_pixel_transparency,
             u_tv,
-            u_edge,
+            u_backlight,
             u_lcd_overlay_size,
             fbo_scale: [1.0, 1.0],
             u_origin,
@@ -207,7 +207,7 @@ impl GamePass {
             lcd_mix: [1.0, 1.0, 0.0],
             grid_opacity: 0.3,
             pixel_transparency: false,
-            edge: 0.0,
+            backlight: 0.0,
             paper,
             paper_size: 1.0,
             lcd_overlay,
@@ -324,9 +324,9 @@ impl GamePass {
         self.tv_lines = (scanlines, mask);
     }
 
-    /// The Game Boy's bare LCD round its picture, rather than the picture's ground.
-    pub fn set_screen_edge(&mut self, edge: ScreenEdge) {
-        self.edge = edge as u8 as f32;
+    /// The GB Light's backlight glowing through its screen.
+    pub fn set_backlight(&mut self, on: bool) {
+        self.backlight = on as u8 as f32;
     }
 
     /// The share of the last picture a TV's phosphor keeps glowing with, out of 256; 0 for none.
@@ -519,7 +519,7 @@ impl GamePass {
                 self.tv_lines.0 as u8 as f32,
                 self.tv_lines.1 as u8 as f32,
             );
-            gl::Uniform1f(self.u_edge, self.edge);
+            gl::Uniform1f(self.u_backlight, self.backlight);
             gl::Uniform2f(
                 self.u_lcd_overlay_size,
                 self.lcd_overlay_size[0],
@@ -695,13 +695,3 @@ mod tests {
     }
 }
 
-/// The bare LCD round a Game Boy picture.
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub enum ScreenEdge {
-    /// The picture's own ground.
-    Plain = 0,
-    /// The Pocket's: a shade lighter than the ground.
-    Lighter = 2,
-    /// The Light's: its ground, with the backlight glowing through the whole screen.
-    Backlit = 3,
-}

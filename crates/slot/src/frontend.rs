@@ -816,16 +816,10 @@ impl Frontend {
         // Effects off is the emulator's own picture: no dimming, saturation or panel tone.
         let bare = self.session.app().screen_bare();
         compositor.set_picture_appearance(gb, if gb && !bare { 0.03 } else { 0.0 });
-        // The Pocket's bare LCD round its picture is a shade lighter than its ground (the DMG's
-        // is its ground, Roy); the Light's backlight glows through its whole screen.
-        let app = self.session.app();
-        let edge = match app.gb_palette().map(|p| p.core_name()) {
-            _ if !gb || bare => slot_gfx::ScreenEdge::Plain,
-            Some("GB Pocket") if app.gb_edge() => slot_gfx::ScreenEdge::Lighter,
-            Some("GB Light") if app.gb_backlight() => slot_gfx::ScreenEdge::Backlit,
-            _ => slot_gfx::ScreenEdge::Plain,
-        };
-        compositor.set_screen_edge(edge);
+        // The Light's backlight glows through its whole screen; the DMG's and the Pocket's
+        // bare LCD round the picture is the picture's ground (Roy).
+        let light = self.session.app().gb_palette().map(|p| p.core_name()) == Some("GB Light");
+        compositor.set_backlight(gb && !bare && light);
         let gba = platform == slot_store::Platform::Gba;
         // The colour screens, GBC and GBA, cast lighter shadows than the Game Boy's.
         compositor.set_pixel_shadow(match (gba || gbc, gb) {

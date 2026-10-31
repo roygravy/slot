@@ -191,8 +191,8 @@ impl Compositor {
         self.game.set_tv_lines(scanlines, mask);
     }
 
-    pub fn set_screen_edge(&mut self, edge: crate::pipeline::ScreenEdge) {
-        self.game.set_screen_edge(edge);
+    pub fn set_backlight(&mut self, on: bool) {
+        self.game.set_backlight(on);
     }
 
     pub fn set_afterglow(&mut self, keep: u32) {

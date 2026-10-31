@@ -78,13 +78,12 @@ uniform vec3 u_lcd_mix;
 uniform float u_grid_opacity;
 uniform float u_pixel_transparency;
 uniform vec2 u_tv;
-uniform float u_edge;
+uniform float u_backlight;
 varying vec2 v_uv;
 const vec3 offsets = vec3(3.141592654) * vec3(1.0 / 2.0, 1.0 / 2.0 - 2.0 / 3.0, 1.0 / 2.0 - 4.0 / 3.0);
 const float TV_SCANLINE = 0.72;
 const float TV_MASK = 0.18;
 const float TV_GLOW = 0.08;
-const float EDGE_LIGHTER = 1.08;
 const float BACKLIGHT_GLOW = 0.30;
 const float BACKLIGHT_CENTRE = 0.06;
 const vec3 luma_coeff = vec3(0.2126, 0.7152, 0.0722);
@@ -115,10 +114,6 @@ void main() {
     bool inside = all(greaterThanEqual(uv, u_pic.xy)) && all(lessThan(uv, u_pic.zw));
     if (!inside) {
         c = u_black_edge > 0.5 ? vec3(0.0) : u_bg;
-        if (u_black_edge < 0.5 && u_edge > 1.5 && u_edge < 2.5) {
-            // The Pocket's bare LCD round its pixels: a shade lighter than the picture's ground.
-            c = min(c * EDGE_LIGHTER, vec3(1.0));
-        }
     } else if (u_mode > 5.5) {
         // A TV's picture: the console's pixels as they are, every other screen line a little
         // darker, a faint slot mask over them, and a soft glow around the bright parts. Worked
@@ -278,7 +273,7 @@ void main() {
         vec3 shade = u_shadow.z > 0.5 ? shadow_rgb * 0.5 : vec3(0.0);
         c = mix(c, c * shade, shadow);
     }
-    if (u_black_edge < 0.5 && u_edge > 2.5) {
+    if (u_black_edge < 0.5 && u_backlight > 0.5) {
         // The Light's backlight shines through the LCD: the light round each pixel spills
         // over the dark ones, and the middle of the screen is a little brighter.
         vec2 texel = vec2(1.0 / u_src.x, 1.0 / u_src.y);
