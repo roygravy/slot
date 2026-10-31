@@ -228,8 +228,8 @@ impl QuickRow {
     pub const NETWORK: [QuickRow; 5] = [
         QuickRow::HomeWifi,
         QuickRow::ConnectedTo,
-        QuickRow::AddNetwork,
         QuickRow::SavedNetworks,
+        QuickRow::AddNetwork,
         QuickRow::Wps,
     ];
 
