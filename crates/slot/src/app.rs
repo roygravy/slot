@@ -549,6 +549,8 @@ fn shelves_of(carts: Vec<Cart>) -> Vec<(Rack, Shelf)> {
 
 /// The GBC's Screen Light row, in its order.
 const GBC_LIGHTS: [QuickValue; 3] = [QuickValue::Bright, QuickValue::Soft, QuickValue::Dim];
+/// The Game Boy's Screen Edge row, in its order.
+const GB_EDGES: [QuickValue; 3] = [QuickValue::Plain, QuickValue::Tinted, QuickValue::Shaded];
 
 impl App {
     pub fn new(carts: Vec<Cart>) -> Self {
@@ -1142,6 +1144,10 @@ impl App {
         if platform != Platform::Gbc {
             hidden.push(QuickRow::ScreenLight);
         }
+        // Only the Game Boy shows its bare LCD round the picture.
+        if platform != Platform::Gb {
+            hidden.push(QuickRow::ScreenEdge);
+        }
         // Only the NES's picture has colours a TV made up.
         if platform != Platform::Nes {
             hidden.push(QuickRow::Colors);
@@ -1180,6 +1186,7 @@ impl App {
             (QuickRow::BlackBorder, Platform::Gb) => QuickRow::GbBlackBorder,
             (QuickRow::BlackBorder, Platform::Gbc) => QuickRow::GbcBlackBorder,
             (QuickRow::ScreenLight, Platform::Gbc) => QuickRow::GbcLight,
+            (QuickRow::ScreenEdge, Platform::Gb) => QuickRow::GbEdge,
             (QuickRow::Cable, Platform::Nes) => QuickRow::NesCable,
             (QuickRow::Cable, Platform::Snes) => QuickRow::SnesCable,
             (QuickRow::Colors, Platform::Nes) => QuickRow::NesColors,
@@ -1197,6 +1204,7 @@ impl App {
         match row {
             QuickRow::Shader
             | QuickRow::ScreenLight
+            | QuickRow::ScreenEdge
             | QuickRow::PixelTransparency
             | QuickRow::LcdGhosting
             | QuickRow::BlackBorder
@@ -1250,6 +1258,7 @@ impl App {
             QuickRow::CheatIcon => Some(QuickValue::flag(self.state.cheat_icon)),
             QuickRow::GbcBlackBorder => Some(QuickValue::flag(self.state.gbc_black_border)),
             QuickRow::GbcLight => Some(GBC_LIGHTS[usize::from(self.state.gbc_light.min(2))]),
+            QuickRow::GbEdge => Some(GB_EDGES[usize::from(self.state.gb_edge.min(2))]),
             QuickRow::GbBlackBorder => Some(QuickValue::flag(self.state.gb_black_border)),
             QuickRow::EjectSave => Some(QuickValue::flag(self.state.eject_save)),
             QuickRow::Turbo => Some(QuickValue::flag(self.state.turbo)),
@@ -2469,6 +2478,11 @@ impl App {
         self.seated_cart().map_or(self.platform, |c| c.platform)
     }
 
+    /// The Game Boy's glass round its picture: 0 plain, 1 tinted, 2 tinted and shaded.
+    pub fn gb_edge(&self) -> u8 {
+        self.state.gb_edge.min(2)
+    }
+
     /// How much light falls on the GBC's screen: 0 bright, 1 soft, 2 dim.
     pub fn gbc_light(&self) -> u8 {
         self.state.gbc_light.min(2)
@@ -3350,6 +3364,8 @@ impl App {
             | QuickRow::Bezel
             | QuickRow::ScreenLight
             | QuickRow::GbcLight
+            | QuickRow::ScreenEdge
+            | QuickRow::GbEdge
             | QuickRow::PixelTransparency
             | QuickRow::LcdGhosting
             | QuickRow::BlackBorder
@@ -3417,13 +3433,13 @@ impl App {
             self.persist();
             return;
         }
-        if row == QuickRow::GbcLight {
+        if let QuickRow::GbcLight | QuickRow::GbEdge = row {
             let s = &mut self.state;
-            s.gbc_light = if right {
-                (s.gbc_light + 1) % 3
-            } else {
-                (s.gbc_light + 2) % 3
+            let at = match row {
+                QuickRow::GbcLight => &mut s.gbc_light,
+                _ => &mut s.gb_edge,
             };
+            *at = if right { (*at + 1) % 3 } else { (*at + 2) % 3 };
             self.persist();
             return;
         }
@@ -3590,6 +3606,8 @@ impl App {
             // Mapped to this system's own row above; on the GBA there is no border.
             | QuickRow::ScreenLight
             | QuickRow::GbcLight
+            | QuickRow::ScreenEdge
+            | QuickRow::GbEdge
             | QuickRow::PixelTransparency
             | QuickRow::LcdGhosting
             | QuickRow::BlackBorder

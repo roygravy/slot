@@ -191,6 +191,10 @@ impl Compositor {
         self.game.set_tv_lines(scanlines, mask);
     }
 
+    pub fn set_screen_edge(&mut self, tinted: bool, shaded: bool) {
+        self.game.set_screen_edge(tinted, shaded);
+    }
+
     pub fn set_afterglow(&mut self, keep: u32) {
         self.game.set_afterglow(keep);
     }

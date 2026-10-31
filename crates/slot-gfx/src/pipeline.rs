@@ -37,6 +37,7 @@ pub struct GamePass {
     u_grid_opacity: gl::types::GLint,
     u_pixel_transparency: gl::types::GLint,
     u_tv: gl::types::GLint,
+    u_edge: gl::types::GLint,
     u_lcd_overlay_size: gl::types::GLint,
     fbo_scale: [f32; 2],
     u_origin: gl::types::GLint,
@@ -58,6 +59,7 @@ pub struct GamePass {
     lcd_mix: [f32; 3],
     grid_opacity: f32,
     pixel_transparency: bool,
+    edge: [f32; 2],
     paper: gl::types::GLuint,
     paper_size: f32,
     lcd_overlay: gl::types::GLuint,
@@ -116,6 +118,7 @@ impl GamePass {
             u_grid_opacity,
             u_pixel_transparency,
             u_tv,
+            u_edge,
             u_lcd_overlay,
             u_lcd_overlay_size,
             u_origin,
@@ -157,6 +160,7 @@ impl GamePass {
             u_grid_opacity = crate::gl::uniform_location(prog, "u_grid_opacity");
             u_pixel_transparency = crate::gl::uniform_location(prog, "u_pixel_transparency");
             u_tv = crate::gl::uniform_location(prog, "u_tv");
+            u_edge = crate::gl::uniform_location(prog, "u_edge");
             u_lcd_overlay = crate::gl::uniform_location(prog, "u_lcd_overlay");
             u_lcd_overlay_size = crate::gl::uniform_location(prog, "u_lcd_overlay_size");
             gl::Uniform1i(u_lcd_overlay, 2);
@@ -182,6 +186,7 @@ impl GamePass {
             u_grid_opacity,
             u_pixel_transparency,
             u_tv,
+            u_edge,
             u_lcd_overlay_size,
             fbo_scale: [1.0, 1.0],
             u_origin,
@@ -202,6 +207,7 @@ impl GamePass {
             lcd_mix: [1.0, 1.0, 0.0],
             grid_opacity: 0.3,
             pixel_transparency: false,
+            edge: [0.0, 0.0],
             paper,
             paper_size: 1.0,
             lcd_overlay,
@@ -316,6 +322,12 @@ impl GamePass {
 
     pub fn set_tv_lines(&mut self, scanlines: bool, mask: bool) {
         self.tv_lines = (scanlines, mask);
+    }
+
+    /// The Game Boy's glass round its picture: tinted the brown-yellow of its bare LCD, and
+    /// shaded where the case's edge falls on it.
+    pub fn set_screen_edge(&mut self, tinted: bool, shaded: bool) {
+        self.edge = [tinted as u8 as f32, shaded as u8 as f32];
     }
 
     /// The share of the last picture a TV's phosphor keeps glowing with, out of 256; 0 for none.
@@ -508,6 +520,7 @@ impl GamePass {
                 self.tv_lines.0 as u8 as f32,
                 self.tv_lines.1 as u8 as f32,
             );
+            gl::Uniform2f(self.u_edge, self.edge[0], self.edge[1]);
             gl::Uniform2f(
                 self.u_lcd_overlay_size,
                 self.lcd_overlay_size[0],
