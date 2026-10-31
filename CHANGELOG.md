@@ -1,5 +1,27 @@
 # Changelog
 
+## slot. x GRAVY v1.2
+
+Everything since slot. x GRAVY v1.1.1.
+
+### New
+
+- **GRAVY Manager**: under Network, the console shows an address, a QR code and a PIN. In the browser on your phone or computer you add, rename and delete games, BIOS files and wallpapers, look at and download screenshots, and update slot. x GRAVY. A renamed game keeps its saves, states, label, cart colour, favourite and recent. The manager only listens while its screen is open, and the console stays awake meanwhile.
+- **Updates over Wi-Fi**: the Update tab finds the newest release on GitHub or takes a dropped zip. The new version is swapped in only after **Install**; if it does not reach the shelf, the old version comes back at the next start.
+- **Remember this phone**: a phone you tick needs no PIN next time. Reopened within 5 minutes, the manager keeps its PIN.
+- **GB Pocket and Light** colours measured from the real handhelds; the Pocket keeps a touch of LCD green, the Light glows softly like its backlight.
+- **Screen Light** for the Game Boy Color: Bright, Soft or Dim. Also on a Game Boy game with Color Palettes off.
+- **Favorites**: the glow rests while you browse and rises once the cart stands still; only the Favorites light fades, and on light wallpapers the glow is amber. A cart in its glow casts no drop shadow.
+- **Originals SNES slot**: the deck around the slot follows the real PAL console.
+- About: the light DMG back with Originals, always with a dark Back button.
+
+### Fixed
+
+- No more audio drops when a game goes quiet for a moment.
+- The card is set read-only before the console restarts or powers off.
+- Deep sleep wakes every 2 hours instead of every hour to look at the battery, and reads it once the gauge has settled.
+- In Light Sleep the sound device closes after its silence again.
+
 ## slot. x GRAVY v1.1.1
 
 Everything since slot. x GRAVY v1.1.

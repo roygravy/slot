@@ -8,7 +8,7 @@ slot.'s real cartridges on a shelf and its real cartridge slot, with a little ex
 
 <img src=".github/resources/gravy/carousel.gif" width="640" alt="Scrolling the GBA shelf and pushing Goodboy Galaxy into the slot">
 
-[**Download slot-x-gravy-v1.1.1**](https://github.com/roygravy/slot/releases/download/slot-x-gravy-v1.1.1/slot-x-gravy-v1.1.1.zip) · [Install](#install) · [What's in the gravy](#whats-in-the-gravy) · [Controls](#controls)
+[**Download slot-x-gravy-v1.2**](https://github.com/roygravy/slot/releases/download/slot-x-gravy-v1.2/slot-x-gravy-v1.2.zip) · [Install](#install) · [What's in the gravy](#whats-in-the-gravy) · [Controls](#controls)
 
 </div>
 
@@ -82,7 +82,7 @@ Quiet, monochrome menus: options on the left, values on the right, simple switch
 
 ### Every console, its own settings
 
-Dot Matrix, palettes, Pixel Transparency, Ghosting and a Black Border, set per console, from the menu or right in the game. The Game Boy keeps to its own three palettes, DMG, Pocket and Light, or plays a game in its own Game Boy Color colours.
+Dot Matrix, palettes, Pixel Transparency, Ghosting and a Black Border, set per console, from the menu or right in the game. The Game Boy keeps to its own three palettes, DMG, Pocket and Light, with the Pocket and Light colours measured from the real handhelds and the Light glowing softly like its backlight. Or it plays a game in its own Game Boy Color colours. The Game Boy Color gets a **Screen Light**: Bright, Soft or Dim.
 
 <img src=".github/resources/gravy/menus2.png" width="100%" alt="The Game Boy screen settings and the in-game Screen page">
 
@@ -100,7 +100,7 @@ Switch a game's cheats on and off while you play. The whole RetroArch cheat coll
 
 ### Favorites in the spotlight
 
-Star a cart with **Y** and it stands a little taller under a warm spotlight. Prefer a glow, a highlight behind the cart or a plain star? That's a setting.
+Star a cart with **Y** and it stands a little taller under a warm spotlight. Prefer a glow, a highlight behind the cart or a plain star? That's a setting. The light rests while you browse and comes up once the cart stands still.
 
 <img src=".github/resources/gravy/highlight.png" width="100%" alt="A favorite in the highlight, and the Screenshots page">
 
@@ -116,6 +116,16 @@ Turn **Home Wi-Fi** on under **Network** in the menu and pick **Add Network** (o
 - Two handhelds at home link over your home network, no ad hoc network needed. Away from home the usual direct link still works
 
 More in [network/README.md](network/README.md).
+
+### GRAVY Manager
+
+Pick **GRAVY Manager** under **Network** and the console shows an address, a QR code and a PIN. Open it in the browser on your phone or computer and you can:
+
+- Add, rename and delete games, BIOS files and wallpapers, no SD card reader needed. A renamed game keeps its saves, states, label, cart colour and its place in Favorites
+- Look at your screenshots and download them
+- Update slot. x GRAVY: it finds the newest release on GitHub, or takes the zip you drop in. Nothing changes until you press **Install**, and if the new version does not start, the old one comes back
+
+Tick **Remember this phone** and that phone needs no PIN next time. The manager only listens while its screen is open on the console.
 
 ### Light sleep, deep sleep
 
@@ -140,12 +150,14 @@ Tap **POWER** and the console drops into a light sleep: Wi-Fi stays on and any b
 
 ## Install
 
-1. Download **[slot-x-gravy-v1.1.1.zip](https://github.com/roygravy/slot/releases/download/slot-x-gravy-v1.1.1/slot-x-gravy-v1.1.1.zip)** from the [releases](https://github.com/roygravy/slot/releases/tag/slot-x-gravy-v1.1.1).
-2. Unzip it and copy the **contents** of the `slot-x-gravy-v1.1.1` folder onto the second SD card of your RG35XX Plus.
+1. Download **[slot-x-gravy-v1.2.zip](https://github.com/roygravy/slot/releases/download/slot-x-gravy-v1.2/slot-x-gravy-v1.2.zip)** from the [releases](https://github.com/roygravy/slot/releases/tag/slot-x-gravy-v1.2).
+2. Unzip it and copy the **contents** of the `slot-x-gravy-v1.2` folder onto the second SD card of your RG35XX Plus.
 3. Put your games in `Games/GB`, `Games/GBC`, `Games/GBA`, `Games/NES` and `Games/SNES`, and optional label art (PNG, named like the ROM) in the matching `Labels` folders.
 4. Put the BIOS files (`gb_bios.bin`, `gbc_bios.bin`, `gba_bios.bin`) in `BIOS/` if you have them. For the real Super Game Boy borders, put your own `SGB1.sfc` and/or `SGB2.sfc` in `BIOS/` too (any name works).
 
 ROMs must be unzipped; `.zip` and `.7z` are not read.
+
+Coming from v1.1.1 or older? Copy v1.2 onto the card this once. From v1.2 on, **GRAVY Manager** installs new versions over Wi-Fi.
 
 ---
 
