@@ -568,6 +568,7 @@ impl Frontend {
             .collect();
         let carets = faces.quick_carets.map(&mut up);
         let more = faces.quick_more.map(&mut up);
+        let quick_tabs = faces.quick_tabs.map(&mut up);
         let switches = faces.quick_switches.map(&mut up);
         let button_tabs = faces.button_tabs.into_iter().map(&mut up).collect();
         let button_bodies = faces.button_bodies.into_iter().map(&mut up).collect();
@@ -665,6 +666,7 @@ impl Frontend {
             switches,
             help,
             more,
+            tabs: quick_tabs,
         });
         app.set_buttons_faces(slot_ui::ButtonsFaces {
             tabs: button_tabs,
@@ -1369,7 +1371,8 @@ struct UiFaces {
     quick_values: Vec<[UndoFace; 2]>,
     quick_carets: [UndoFace; 2],
     quick_more: [UndoFace; 2],
-    quick_legend: [UndoFace; 5],
+    quick_legend: [UndoFace; 6],
+    quick_tabs: [UndoFace; 2],
     quick_switches: [UndoFace; 2],
     quick_help: Vec<Option<UndoFace>>,
     button_tabs: Vec<UndoFace>,
@@ -1421,6 +1424,7 @@ impl UiFaces {
                 quarter_turn(quick_caret_face(true), true),
             ],
             quick_legend: quick_legend_faces(),
+            quick_tabs: slot_ui::quick_tab_faces(),
             quick_switches: [false, true].map(slot_ui::quick_switch_face),
             quick_help: QuickRow::ALL
                 .iter()

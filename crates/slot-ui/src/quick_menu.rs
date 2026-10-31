@@ -199,9 +199,10 @@ impl QuickRow {
 
     pub const MAIN: [QuickRow; 7] = [
         QuickRow::General,
+        // Game Settings: the Screen and Gameplay pages, as two tabs.
         QuickRow::Screen,
-        QuickRow::Game,
         QuickRow::Network,
+        QuickRow::RomManager,
         QuickRow::Screenshots,
         QuickRow::Buttons,
         QuickRow::About,
@@ -224,13 +225,12 @@ impl QuickRow {
     ];
 
     /// Home Wi-Fi and what it is connected to.
-    pub const NETWORK: [QuickRow; 6] = [
+    pub const NETWORK: [QuickRow; 5] = [
         QuickRow::HomeWifi,
         QuickRow::ConnectedTo,
         QuickRow::AddNetwork,
         QuickRow::SavedNetworks,
         QuickRow::Wps,
-        QuickRow::RomManager,
     ];
 
     /// Every screen setting belongs to one system: nothing here reaches across all three.
@@ -382,8 +382,7 @@ impl QuickRow {
             | QuickRow::ConnectedTo
             | QuickRow::AddNetwork
             | QuickRow::SavedNetworks
-            | QuickRow::Wps
-            | QuickRow::RomManager => &QuickRow::NETWORK,
+            | QuickRow::Wps => &QuickRow::NETWORK,
             QuickRow::Resume
             | QuickRow::States
             | QuickRow::Cheats
@@ -417,7 +416,8 @@ impl QuickRow {
             QuickRow::GbShader => Some(QuickRow::ScreenGb),
             QuickRow::NesCable => Some(QuickRow::ScreenNes),
             QuickRow::SnesCable => Some(QuickRow::ScreenSnes),
-            QuickRow::FastForward => Some(QuickRow::Game),
+            // Gameplay is Game Settings' second tab.
+            QuickRow::FastForward => Some(QuickRow::Screen),
             QuickRow::Wallpaper => Some(QuickRow::General),
             QuickRow::HomeWifi => Some(QuickRow::Network),
             QuickRow::AutoSleep => Some(QuickRow::General),
@@ -429,10 +429,32 @@ impl QuickRow {
     }
 
     pub fn parent_in_game(self) -> Option<QuickRow> {
-        match self.parent() {
-            Some(QuickRow::Game) => Some(QuickRow::PlayGameplay),
-            parent => parent,
+        match self.page() == QuickRow::GAME {
+            true => Some(QuickRow::PlayGameplay),
+            false => self.parent(),
         }
+    }
+
+    /// Game Settings' tabs: Screen and Gameplay. None off those pages, and in game, where the
+    /// shelf's Game Settings row is hidden and Settings has its own two rows instead.
+    pub fn tab(self, hidden: &[QuickRow]) -> Option<usize> {
+        if hidden.contains(&QuickRow::Screen) {
+            return None;
+        }
+        match self.page() {
+            p if p == QuickRow::SCREEN => Some(0),
+            p if p == QuickRow::GAME => Some(1),
+            _ => None,
+        }
+    }
+
+    /// The other tab's first row shown, for L1 and R1.
+    pub fn other_tab(self, hidden: &[QuickRow]) -> Option<QuickRow> {
+        let page: &[QuickRow] = match self.tab(hidden)? {
+            0 => &QuickRow::GAME,
+            _ => &QuickRow::SCREEN,
+        };
+        page[0].shown(hidden).first().copied()
     }
 
     pub fn centred(self) -> bool {
@@ -482,7 +504,7 @@ impl QuickRow {
         match self {
             QuickRow::FastForward => "Fast Forward",
             QuickRow::FastForwardSound => "Fast Forward Sound",
-            QuickRow::Screen => "Screen",
+            QuickRow::Screen => "Game Settings",
             QuickRow::Rumble => "Rumble",
             QuickRow::CheatIcon => "Cheat Icon",
             QuickRow::GbcBlackBorder | QuickRow::GbBlackBorder | QuickRow::BlackBorder => {
@@ -564,7 +586,7 @@ impl QuickRow {
     pub fn help(self) -> Option<&'static str> {
         Some(match self {
             QuickRow::General => "Theme, slot color, shelves and sleep.",
-            QuickRow::Screen => "How the game picture looks.",
+            QuickRow::Screen => "How games look and play.",
             QuickRow::Game => "Speed, rewind, turbo and saving.",
             QuickRow::Buttons => "Every button and shortcut, explained.",
             QuickRow::About => "Who made this, and what it runs on.",
@@ -977,6 +999,13 @@ const PANEL_GAP: f32 = 12.0;
 pub(crate) const MENU_CENTRE: f32 = 202.0;
 /// A sub-page shows this many rows at once and scrolls the rest.
 pub const SUB_ROWS: usize = 6;
+/// A tabbed page's rows start under the tabs, and show one row fewer.
+const TABBED_TOP: f32 = 84.0;
+const TABBED_ROWS: usize = 5;
+/// The tab row, as on the Buttons page.
+const TAB_Y: f32 = 22.0;
+const TAB_PAD: f32 = 22.0;
+const TAB_GAP: f32 = 0.0;
 /// Room between a scroll arrow and the rows it points past.
 pub(crate) const MORE_GAP: f32 = 8.0;
 
@@ -1000,7 +1029,8 @@ pub fn quick_first(row: QuickRow, hidden: &[QuickRow], prev: usize) -> usize {
         return 0;
     }
     let n = row.shown(hidden).len();
-    window_first(row.position(hidden), n, prev, SUB_ROWS)
+    let (_, rows) = page_layout(row, hidden);
+    window_first(row.position(hidden), n, prev, rows)
 }
 
 /// The top of the first row shown, and how many rows show, for `row`'s page.
@@ -1009,6 +1039,9 @@ fn page_layout(row: QuickRow, hidden: &[QuickRow]) -> (f32, usize) {
     let page = row.page();
     if page == QuickRow::PLAY_SCREEN {
         return (HELP_Y - PANEL_GAP - QUICK_PITCH * n as f32, n);
+    }
+    if row.tab(hidden).is_some() {
+        return (TABBED_TOP, n.min(TABBED_ROWS));
     }
     let shown = if row.centred() { n } else { n.min(SUB_ROWS) };
     (MENU_CENTRE - QUICK_PITCH * shown as f32 / 2.0, shown)
@@ -1185,14 +1218,20 @@ pub fn quick_caret_face(right: bool) -> UndoFace {
     UndoFace { rgba, w, h }
 }
 
-pub fn quick_legend_faces() -> [UndoFace; 5] {
+pub fn quick_legend_faces() -> [UndoFace; 6] {
     [
         tint_mask(hint_face("B", "Back")),
         tint_mask(arrows_hint_face("Change")),
         tint_mask(hint_face("A", "Open")),
         tint_mask(hint_face("B", "Resume")),
         tint_mask(hint_face("A", "Select")),
+        tint_mask(hint_face("L1/R1", "Tab")),
     ]
+}
+
+/// Game Settings' tab names, white, in the Buttons page's tab face.
+pub fn quick_tab_faces() -> [UndoFace; 2] {
+    [crate::buttons_help::tab_face("Screen"), crate::buttons_help::tab_face("Gameplay")]
 }
 
 pub struct QuickMenuFaces {
@@ -1200,7 +1239,9 @@ pub struct QuickMenuFaces {
     pub pointer: (TexId, u32, u32),
     pub values: Vec<[(TexId, u32, u32); 2]>,
     pub carets: [(TexId, u32, u32); 2],
-    pub legend: [(TexId, u32); 5],
+    pub legend: [(TexId, u32); 6],
+    /// Game Settings' tabs, Screen and Gameplay, in white.
+    pub tabs: [(TexId, u32, u32); 2],
     /// Off, on.
     pub switches: [(TexId, u32, u32); 2],
     pub help: Vec<Option<(TexId, u32, u32)>>,
@@ -1274,6 +1315,20 @@ impl QuickMenu<'_> {
         let Some(faces) = self.faces else {
             return;
         };
+        if let Some(lit) = self.row.tab(self.hidden) {
+            let total: f32 = faces.tabs.iter().map(|t| t.1 as f32 + 2.0 * TAB_PAD).sum::<f32>()
+                + TAB_GAP;
+            let mut x = self.canvas.centred(total).round();
+            for (i, &(tex, w, h)) in faces.tabs.iter().enumerate() {
+                let cell = w as f32 + 2.0 * TAB_PAD;
+                if i == lit {
+                    out.push(Draw::Rect { x, y: TAB_Y, w: cell, h: h as f32, colour: ink.bar });
+                }
+                let colour = if i == lit { ink.on_bar } else { ink.dim };
+                tint(out, tex, x + TAB_PAD, TAB_Y, w, h, colour);
+                x += cell + TAB_GAP;
+            }
+        }
         let (right, pad) = (self.canvas.w - QUICK_EDGE, MENU_PAD as f32);
         let centre = row_cap_centre();
         // Arrows where the page carries on above or below.
@@ -1397,7 +1452,7 @@ impl QuickMenu<'_> {
                 ink.dim,
             );
         }
-        let [back, change, open, resume, select] = faces.legend;
+        let [back, change, open, resume, select, tab] = faces.legend;
         let back = match self.row.page() == QuickRow::PLAY {
             true => resume,
             false => back,
@@ -1408,9 +1463,12 @@ impl QuickMenu<'_> {
             (false, false) => change,
         };
         // A row that only tells, like Connected To, has nothing to change.
-        let hints: &[(TexId, u32)] = match self.row.read_only() || self.locked == Some(self.row) {
-            true => &[back],
-            false => &[back, other],
+        let tabbed = self.row.tab(self.hidden).is_some();
+        let hints: &[(TexId, u32)] = match (self.row.read_only() || self.locked == Some(self.row), tabbed) {
+            (true, false) => &[back],
+            (true, true) => &[tab, back],
+            (false, false) => &[back, other],
+            (false, true) => &[tab, back, other],
         };
         for (tex, w, x) in centred_hints(self.canvas, hints, LEGEND_GAP) {
             tint(out, tex, x, LEGEND_Y, w, HINT_H, ink.text);

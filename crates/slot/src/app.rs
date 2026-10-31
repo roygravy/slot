@@ -1112,7 +1112,9 @@ impl App {
     /// The in-game rows this game has no use for.
     pub fn in_game_hidden(&self) -> Vec<QuickRow> {
         let platform = self.playing_platform();
-        let mut hidden = Vec::new();
+        // The shelf's Game Settings row: in game, Settings opens Screen and Gameplay as rows,
+        // so their pages show no tabs.
+        let mut hidden = vec![QuickRow::Screen];
         if !self.palette_capable {
             hidden.push(QuickRow::Palette);
         }
@@ -3060,6 +3062,10 @@ impl App {
             Action::GbaDown(Btn::Down) => row.down(self.hidden_rows()),
             Action::GbaDown(Btn::Left) => return self.change_setting(row, false),
             Action::GbaDown(Btn::Right) => return self.change_setting(row, true),
+            Action::GbaDown(Btn::L1 | Btn::R1) => match row.other_tab(self.hidden_rows()) {
+                Some(row) => row,
+                None => return,
+            },
             Action::GbaDown(Btn::A) => return self.open_quick_row(row),
             Action::GbaDown(Btn::B) | Action::QuickMenu => {
                 self.phase = match row.parent() {

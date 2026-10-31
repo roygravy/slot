@@ -54,6 +54,10 @@ fn open_at(a: &mut App, row: QuickRow) {
         if depth > 0 {
             press(a, Btn::A);
         }
+        // Gameplay is Game Settings' second tab: A opens Screen, R1 turns to it.
+        if step.page() == QuickRow::GAME.as_slice() {
+            press(a, Btn::R1);
+        }
         for _ in 0..step.position(a.hidden_rows()) {
             press(a, Btn::Down);
         }
@@ -559,10 +563,12 @@ fn fake_faces(a: &mut App) {
             (id(402), 80),
             (id(403), 90),
             (id(404), 90),
+            (id(405), 90),
         ],
         switches: [(id(600), 52, 30), (id(601), 52, 30)],
         help: vec![None; QuickRow::ALL.len()],
         more: [(id(800), 20, 20), (id(801), 20, 20)],
+        tabs: [(id(900), 80, 30), (id(901), 100, 30)],
     });
     a.set_quick_clock_faces((id(500), 150, 40), (id(501), 150, 40));
 }
@@ -791,10 +797,12 @@ fn no_row_in_hand_runs_its_arrows_into_its_label() {
             (id(402), 80),
             (id(403), 90),
             (id(404), 90),
+            (id(405), 90),
         ],
         switches: [(id(600), 52, 30), (id(601), 52, 30)],
         help: vec![None; QuickRow::ALL.len()],
         more: [(id(800), 20, 20), (id(801), 20, 20)],
+        tabs: [(id(900), 80, 30), (id(901), 100, 30)],
     });
     for page in [
         &QuickRow::SCREEN_GBA[..],

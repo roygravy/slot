@@ -118,6 +118,18 @@ fn word(font: &fontdue::Font, s: &str, px: f32, max_w: f32, h: u32) -> UndoFace 
     UndoFace { rgba, w, h }
 }
 
+/// A tab's name, white: the Buttons page's tabs and Game Settings' share it.
+pub fn tab_face(name: &str) -> UndoFace {
+    let Some(font) = text::label_font() else {
+        return UndoFace {
+            rgba: Vec::new(),
+            w: 0,
+            h: 0,
+        };
+    };
+    word(font, name, TAB_PX, 200.0, TAB_H)
+}
+
 pub fn buttons_tab_face(page: usize) -> UndoFace {
     let Some(font) = text::label_font() else {
         return UndoFace {
