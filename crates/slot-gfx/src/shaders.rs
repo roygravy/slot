@@ -83,7 +83,7 @@ const vec3 offsets = vec3(3.141592654) * vec3(1.0 / 2.0, 1.0 / 2.0 - 2.0 / 3.0, 
 const float TV_SCANLINE = 0.72;
 const float TV_MASK = 0.18;
 const float TV_GLOW = 0.08;
-const vec3 GBC_INK = vec3(0.10, 0.11, 0.13);
+const vec3 GBC_INK = vec3(0.07, 0.075, 0.09);
 const vec3 luma_coeff = vec3(0.2126, 0.7152, 0.0722);
 vec2 grid_band(vec2 x) {
     return floor(x) / 3.0 + min(fract(x), vec2(1.0 / 3.0));
@@ -109,7 +109,6 @@ void main() {
     vec2 sharp = (floor(uv * u_src) + (d - clamp(d, -span, span)) * px + 0.5) / u_src;
     vec3 c = texture2D(u_game, sharp).rgb;
     vec4 lcd = vec4(0.0);
-    bool gbc_lcd = false;
     bool inside = all(greaterThanEqual(uv, u_pic.xy)) && all(lessThan(uv, u_pic.zw));
     if (!inside) {
         c = u_black_edge > 0.5 ? vec3(0.0) : u_bg;
@@ -150,30 +149,33 @@ void main() {
         vec2 overlay_uv = (overlay_px + 0.5) / u_lcd_overlay_size;
         lcd = texture2D(u_lcd_overlay, overlay_uv);
         if (u_panel_fixed > 0.5) {
+            // The GBC's LCD, drawn on its own pixels (three screen pixels each way): a solid
+            // red, green and blue line down each pixel, and a faint dark line under every row.
+            // On the GBA, which is not scaled a whole number of times, the cells follow the
+            // screen's own pixels instead, three to a cell.
+            // Each screen pixel takes the stripes it covers, so a picture scaled by no whole
+            // number, full screen, keeps the colours it has at three times.
+            vec3 stripe;
+            float dark;
             if (u_lcd_mix.z > 0.5) {
-                // The GBA's LCD, on the screen's own pixels, three to a cell, as it is not
-                // scaled a whole number of times: a solid red, green and blue line down each
-                // cell, and a faint dark line under every row.
                 vec2 cell = mod(screen_px, 3.0);
-                vec3 stripe = cell.x < 0.5 ? vec3(1.0, 0.0, 0.0) : (cell.x < 1.5 ? vec3(0.0, 1.0, 0.0) : vec3(0.0, 0.0, 1.0));
-                float dark = cell.y > 1.5 ? 1.0 : 0.0;
-                c = mix(c, stripe, u_lcd_mix.y);
-                c = mix(c, vec3(0.0), u_lcd_mix.x * dark);
+                stripe = cell.x < 0.5 ? vec3(1.0, 0.0, 0.0) : (cell.x < 1.5 ? vec3(0.0, 1.0, 0.0) : vec3(0.0, 0.0, 1.0));
+                dark = cell.y > 1.5 ? 1.0 : 0.0;
             } else {
-                // The GBC's reflective LCD, on its own pixels: no light behind it, so its
-                // black is a deep grey, and a thin dark seam right of and under each pixel.
-                // Each screen pixel takes the seams it covers, so a picture scaled by no
-                // whole number, full screen, keeps the look it has at three times.
                 vec2 w = 0.5 / px;
                 vec2 lo = f - w;
                 vec2 hi = f + w;
-                vec2 seams = vec2(
-                    band_cover(lo.x, hi.x, 2.0 / 3.0, 1.0) / (2.0 * w.x),
-                    band_cover(lo.y, hi.y, 2.0 / 3.0, 1.0) / (2.0 * w.y));
-                float seam = seams.x + seams.y - seams.x * seams.y;
+                stripe = vec3(
+                    band_cover(lo.x, hi.x, 0.0, 1.0 / 3.0),
+                    band_cover(lo.x, hi.x, 1.0 / 3.0, 2.0 / 3.0),
+                    band_cover(lo.x, hi.x, 2.0 / 3.0, 1.0)) / (2.0 * w.x);
+                dark = band_cover(lo.y, hi.y, 2.0 / 3.0, 1.0) / (2.0 * w.y);
+            }
+            c = mix(c, stripe, u_lcd_mix.y);
+            c = mix(c, vec3(0.0), u_lcd_mix.x * dark);
+            // The GBC's panel has no light behind it: its black is a deep grey.
+            if (u_lcd_mix.z < 0.5) {
                 c = GBC_INK + (1.0 - GBC_INK) * c;
-                c *= 1.0 - u_lcd_mix.x * seam;
-                gbc_lcd = true;
             }
         } else {
             c = mix(c, lcd.rgb, lcd.a * 0.45);
@@ -267,15 +269,6 @@ void main() {
         // Light through a coloured pixel is coloured: its shadow is a darker shade of it.
         vec3 shade = u_shadow.z > 0.5 ? shadow_rgb * 0.5 : vec3(0.0);
         c = mix(c, c * shade, shadow);
-    }
-    if (gbc_lcd && u_lcd_mix.y > 0.0) {
-        // Daylight on the GBC's glass: a soft bright band from the upper left, with the faint
-        // rainbow sheen its layers give off.
-        vec2 at = (uv - u_pic.xy) / (u_pic.zw - u_pic.xy);
-        float d = at.x * 0.6 + at.y * 0.4;
-        float glare = pow(clamp(1.0 - abs(d - 0.35) / 0.35, 0.0, 1.0), 2.0);
-        vec3 sheen = 0.5 * sin(d * 14.0 + vec3(0.0, 2.1, 4.2));
-        c = clamp(c + u_lcd_mix.y * glare * (0.10 + 0.05 * sheen), 0.0, 1.0);
     }
     FRAG_COLOR = vec4(c * u_bright, 1.0);
 }
