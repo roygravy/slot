@@ -8,7 +8,7 @@ slot.'s real cartridges on a shelf and its real cartridge slot, with a little ex
 
 <img src=".github/resources/gravy/carousel.gif" width="640" alt="Scrolling the GBA shelf and pushing Goodboy Galaxy into the slot">
 
-[**Download slot-x-gravy-v1.2**](https://github.com/roygravy/slot/releases/download/slot-x-gravy-v1.2/slot-x-gravy-v1.2.zip) · [Install](#install) · [What's in the gravy](#whats-in-the-gravy) · [Controls](#controls)
+[**Download slot-x-gravy-v1.2**](https://github.com/roygravy/slot/releases/download/slot-x-gravy-v1.2/slot-x-gravy-v1.2.zip) · [GRAVY Manager](#gravy-manager-your-card-from-your-phone) · [Install](#install) · [What's in the gravy](#whats-in-the-gravy) · [Controls](#controls)
 
 </div>
 
@@ -37,6 +37,19 @@ Rather have it clean? **SELECT + B** turns it all off, and back on.
 <img src=".github/resources/gravy/gameplay.png" width="100%" alt="Goodboy Galaxy on the GBA screen and Hauntsfield in Game Boy green">
 
 <img src=".github/resources/gravy/zelda.png" width="100%" alt="Link's Awakening DX on the Game Boy Color screen and The Minish Cap on the GBA screen">
+
+### GRAVY Manager: your card, from your phone
+
+New in v1.2, and no more SD card shuffling. Pick **GRAVY Manager** under **Network** and the console shows a QR code, an address and a PIN. Scan it with your phone, or open the address on your computer, and the whole card is yours:
+
+- **Games**: drop in ROMs for GB, GBC, GBA, NES and SNES, rename them or delete them. A renamed game keeps its saves, states, label, cart colour and its place in Favorites
+- **BIOS and wallpapers**: add your BIOS files and your own wallpapers, with a preview
+- **Screenshots**: everything you shot on the console, newest first, to look at and download
+- **Update**: the console finds the newest slot. x GRAVY on GitHub, with what's new in it, or takes the zip you drop in. Nothing changes until you press **Install**, and if the new version does not start, the old one comes back by itself
+
+Tick **Remember this phone** and that phone needs no PIN next time. The manager only listens while its screen is open on the console, and the console stays awake meanwhile.
+
+<img src=".github/resources/gravy/manager.png" width="100%" alt="The GRAVY Manager screen on the console, and the Games and Update tabs on a phone">
 
 ### A slot for every cartridge
 
@@ -84,6 +97,8 @@ Quiet, monochrome menus: options on the left, values on the right, simple switch
 
 Dot Matrix, palettes, Pixel Transparency, Ghosting and a Black Border, set per console, from the menu or right in the game. The Game Boy keeps to its own three palettes, DMG, Pocket and Light, with the Pocket and Light colours measured from the real handhelds and the Light glowing softly like its backlight. Or it plays a game in its own Game Boy Color colours. The Game Boy Color gets a **Screen Light**: Bright, Soft or Dim.
 
+<img src=".github/resources/gravy/gb-palettes.png" width="100%" alt="Hauntsfield in the DMG, Pocket and Light colours">
+
 <img src=".github/resources/gravy/menus2.png" width="100%" alt="The Game Boy screen settings and the in-game Screen page">
 
 ### Screenshots
@@ -116,16 +131,6 @@ Turn **Home Wi-Fi** on under **Network** in the menu and pick **Add Network** (o
 - Two handhelds at home link over your home network, no ad hoc network needed. Away from home the usual direct link still works
 
 More in [network/README.md](network/README.md).
-
-### GRAVY Manager
-
-Pick **GRAVY Manager** under **Network** and the console shows an address, a QR code and a PIN. Open it in the browser on your phone or computer and you can:
-
-- Add, rename and delete games, BIOS files and wallpapers, no SD card reader needed. A renamed game keeps its saves, states, label, cart colour and its place in Favorites
-- Look at your screenshots and download them
-- Update slot. x GRAVY: it finds the newest release on GitHub, or takes the zip you drop in. Nothing changes until you press **Install**, and if the new version does not start, the old one comes back
-
-Tick **Remember this phone** and that phone needs no PIN next time. The manager only listens while its screen is open on the console.
 
 ### Light sleep, deep sleep
 
