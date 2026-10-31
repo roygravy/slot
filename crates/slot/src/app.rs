@@ -6261,12 +6261,13 @@ impl App {
     }
 
     /// A GRAVY Manager update: the start script swaps System.new in on a restart, and keeps
-    /// the old System until this one has run long enough to clear its .trial.
+    /// the old System until this one reaches the shelf and clears its .trial.
     fn update_timers(&mut self) {
         let Some(root) = self.root.clone() else {
             return;
         };
-        if self.on_trial && self.now() > 20_000 {
+        // Started well once the shelf shows, or a game resumed straight from boot (Roy).
+        if self.on_trial && matches!(self.phase, Phase::Shelf | Phase::Playing { .. }) {
             self.on_trial = false;
             let _ = std::fs::remove_file(root.join("System/.trial"));
         }
