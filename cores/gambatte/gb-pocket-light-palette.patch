@@ -1,8 +1,8 @@
 diff --git a/libgambatte/libretro/gbcpalettes.h b/libgambatte/libretro/gbcpalettes.h
-index 12db886..80f6962 100644
+index 12db886..4d84d7f 100644
 --- a/libgambatte/libretro/gbcpalettes.h
 +++ b/libgambatte/libretro/gbcpalettes.h
-@@ -35,10 +35,10 @@ static const unsigned short gbdmg[] = { // Original Game Boy
+@@ -35,16 +35,16 @@ static const unsigned short gbdmg[] = { // Original Game Boy
  	PACK15_4(0x578200, 0x317400, 0x005121, 0x00420C)
  };
  
@@ -16,4 +16,14 @@ index 12db886..80f6962 100644
 +	PACK15_4(0x798D81, 0x63746A, 0x4C5750, 0x323935)
  };
  
- static const unsigned short gblit[] = { // Game Boy Light
+-static const unsigned short gblit[] = { // Game Boy Light
+-	PACK15_4(0x01CBDF, 0x01B6D5, 0x269BAD, 0x00778D),
+-	PACK15_4(0x01CBDF, 0x01B6D5, 0x269BAD, 0x00778D),
+-	PACK15_4(0x01CBDF, 0x01B6D5, 0x269BAD, 0x00778D)
++static const unsigned short gblit[] = { // Game Boy Light: slot., measured from a real Light
++	PACK15_4(0x2AEEE3, 0x1FBAB3, 0x178281, 0x085A5C),
++	PACK15_4(0x2AEEE3, 0x1FBAB3, 0x178281, 0x085A5C),
++	PACK15_4(0x2AEEE3, 0x1FBAB3, 0x178281, 0x085A5C)
+ };
+ 
+ //
