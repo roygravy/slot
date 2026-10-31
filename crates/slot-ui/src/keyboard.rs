@@ -529,7 +529,7 @@ pub struct SearchTexts<T> {
 }
 
 pub fn search_heading_face(text: &str) -> UndoFace {
-    plain(text, 13.0, 3.0, true)
+    plain(text, crate::quick_menu::HELP_PX, 2.0, true)
 }
 
 /// How wide the typed words can show in the field, between the magnifier and the clear button.
