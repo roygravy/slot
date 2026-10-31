@@ -1151,6 +1151,10 @@ impl App {
         if platform != Platform::Gb {
             hidden.push(QuickRow::ScreenEdge);
         }
+        // Only the Light's colours have a backlight behind them.
+        if !(platform == Platform::Gb && self.palette_live && self.gb_palette_is_light()) {
+            hidden.push(QuickRow::Backlight);
+        }
         // Only the NES's picture has colours a TV made up.
         if platform != Platform::Nes {
             hidden.push(QuickRow::Colors);
@@ -1190,6 +1194,7 @@ impl App {
             (QuickRow::BlackBorder, Platform::Gbc) => QuickRow::GbcBlackBorder,
             (QuickRow::ScreenLight, Platform::Gbc | Platform::Gb) => QuickRow::GbcLight,
             (QuickRow::ScreenEdge, Platform::Gb) => QuickRow::GbEdge,
+            (QuickRow::Backlight, Platform::Gb) => QuickRow::GbBacklight,
             (QuickRow::Cable, Platform::Nes) => QuickRow::NesCable,
             (QuickRow::Cable, Platform::Snes) => QuickRow::SnesCable,
             (QuickRow::Colors, Platform::Nes) => QuickRow::NesColors,
@@ -1208,6 +1213,7 @@ impl App {
             QuickRow::Shader
             | QuickRow::ScreenLight
             | QuickRow::ScreenEdge
+            | QuickRow::Backlight
             | QuickRow::PixelTransparency
             | QuickRow::LcdGhosting
             | QuickRow::BlackBorder
@@ -1262,6 +1268,7 @@ impl App {
             QuickRow::GbcBlackBorder => Some(QuickValue::flag(self.state.gbc_black_border)),
             QuickRow::GbcLight => Some(GBC_LIGHTS[usize::from(self.state.gbc_light.min(2))]),
             QuickRow::GbEdge => Some(QuickValue::flag(self.state.gb_edge)),
+            QuickRow::GbBacklight => Some(QuickValue::flag(self.state.gb_backlight)),
             QuickRow::GbBlackBorder => Some(QuickValue::flag(self.state.gb_black_border)),
             QuickRow::EjectSave => Some(QuickValue::flag(self.state.eject_save)),
             QuickRow::Turbo => Some(QuickValue::flag(self.state.turbo)),
@@ -2486,6 +2493,14 @@ impl App {
         self.state.gb_edge
     }
 
+    pub fn gb_backlight(&self) -> bool {
+        self.state.gb_backlight
+    }
+
+    fn gb_palette_is_light(&self) -> bool {
+        self.state.gb_palette.core_name() == "GB Light"
+    }
+
     /// How much light falls on the GBC's screen: 0 bright, 1 soft, 2 dim.
     pub fn gbc_light(&self) -> u8 {
         self.state.gbc_light.min(2)
@@ -3368,7 +3383,9 @@ impl App {
             | QuickRow::ScreenLight
             | QuickRow::GbcLight
             | QuickRow::ScreenEdge
+            | QuickRow::Backlight
             | QuickRow::GbEdge
+            | QuickRow::GbBacklight
             | QuickRow::PixelTransparency
             | QuickRow::LcdGhosting
             | QuickRow::BlackBorder
@@ -3561,6 +3578,7 @@ impl App {
             QuickRow::GbcBlackBorder => s.gbc_black_border = !s.gbc_black_border,
             QuickRow::GbBlackBorder => s.gb_black_border = !s.gb_black_border,
             QuickRow::GbEdge => s.gb_edge = !s.gb_edge,
+            QuickRow::GbBacklight => s.gb_backlight = !s.gb_backlight,
             QuickRow::EjectSave => s.eject_save = !s.eject_save,
             QuickRow::Turbo => s.turbo = !s.turbo,
             QuickRow::Rewind => s.rewind = !s.rewind,
@@ -3611,6 +3629,7 @@ impl App {
             | QuickRow::ScreenLight
             | QuickRow::GbcLight
             | QuickRow::ScreenEdge
+            | QuickRow::Backlight
             | QuickRow::PixelTransparency
             | QuickRow::LcdGhosting
             | QuickRow::BlackBorder

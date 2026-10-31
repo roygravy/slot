@@ -704,4 +704,6 @@ pub enum ScreenEdge {
     Ochre = 1,
     /// The Pocket's: a shade lighter than the ground.
     Lighter = 2,
+    /// The Light's: its ground, with the backlight glowing through the whole screen.
+    Backlit = 3,
 }

@@ -86,6 +86,8 @@ const float TV_MASK = 0.18;
 const float TV_GLOW = 0.08;
 const vec3 EDGE_OCHRE = vec3(1.0, 0.93, 0.62) * 0.95;
 const float EDGE_LIGHTER = 1.08;
+const float BACKLIGHT_GLOW = 0.30;
+const float BACKLIGHT_CENTRE = 0.06;
 const vec3 luma_coeff = vec3(0.2126, 0.7152, 0.0722);
 vec2 grid_band(vec2 x) {
     return floor(x) / 3.0 + min(fract(x), vec2(1.0 / 3.0));
@@ -114,10 +116,10 @@ void main() {
     bool inside = all(greaterThanEqual(uv, u_pic.xy)) && all(lessThan(uv, u_pic.zw));
     if (!inside) {
         c = u_black_edge > 0.5 ? vec3(0.0) : u_bg;
-        if (u_black_edge < 0.5 && u_edge > 1.5) {
+        if (u_black_edge < 0.5 && u_edge > 1.5 && u_edge < 2.5) {
             // The Pocket's bare LCD round its pixels: a shade lighter than the picture's ground.
             c = min(c * EDGE_LIGHTER, vec3(1.0));
-        } else if (u_black_edge < 0.5 && u_edge > 0.5) {
+        } else if (u_black_edge < 0.5 && u_edge > 0.5 && u_edge < 1.5) {
             // The Game Boy's bare LCD round its pixels: browner and yellower than the
             // picture's ground, with no pixel layer over it.
             c *= EDGE_OCHRE;
@@ -280,6 +282,22 @@ void main() {
         // Light through a coloured pixel is coloured: its shadow is a darker shade of it.
         vec3 shade = u_shadow.z > 0.5 ? shadow_rgb * 0.5 : vec3(0.0);
         c = mix(c, c * shade, shadow);
+    }
+    if (u_black_edge < 0.5 && u_edge > 2.5) {
+        // The Light's backlight shines through the LCD: the light round each pixel spills
+        // over the dark ones, and the middle of the screen is a little brighter.
+        vec2 texel = vec2(1.0 / u_src.x, 1.0 / u_src.y);
+        vec3 glow = vec3(0.0);
+        for (int j = -1; j <= 1; j++) {
+            for (int i = -1; i <= 1; i++) {
+                vec2 at = uv + vec2(float(i), float(j)) * texel * 1.5;
+                bool on = all(greaterThanEqual(at, u_pic.xy)) && all(lessThan(at, u_pic.zw));
+                glow += (on ? texture2D(u_game, at).rgb : u_bg) / 9.0;
+            }
+        }
+        c = 1.0 - (1.0 - c) * (1.0 - glow * BACKLIGHT_GLOW);
+        vec2 r = (v_uv - 0.5) * 2.0;
+        c = min(c * (1.0 + BACKLIGHT_CENTRE * (1.0 - min(dot(r, r), 1.0))), vec3(1.0));
     }
     FRAG_COLOR = vec4(c * u_bright, 1.0);
 }

@@ -817,11 +817,13 @@ impl Frontend {
         let bare = self.session.app().screen_bare();
         compositor.set_picture_appearance(gb, if gb && !bare { 0.03 } else { 0.0 });
         // The DMG's bare LCD round its picture is ochre and the Pocket's a shade lighter than
-        // its ground; the Light's is its ground.
-        let edge = match self.session.app().gb_palette().map(|p| p.core_name()) {
-            _ if !(gb && !bare && self.session.app().gb_edge()) => slot_gfx::ScreenEdge::Plain,
-            Some("DMG Green") => slot_gfx::ScreenEdge::Ochre,
-            Some("GB Pocket") => slot_gfx::ScreenEdge::Lighter,
+        // its ground; the Light's backlight glows through its whole screen.
+        let app = self.session.app();
+        let edge = match app.gb_palette().map(|p| p.core_name()) {
+            _ if !gb || bare => slot_gfx::ScreenEdge::Plain,
+            Some("DMG Green") if app.gb_edge() => slot_gfx::ScreenEdge::Ochre,
+            Some("GB Pocket") if app.gb_edge() => slot_gfx::ScreenEdge::Lighter,
+            Some("GB Light") if app.gb_backlight() => slot_gfx::ScreenEdge::Backlit,
             _ => slot_gfx::ScreenEdge::Plain,
         };
         compositor.set_screen_edge(edge);

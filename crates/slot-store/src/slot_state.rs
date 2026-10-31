@@ -320,6 +320,8 @@ pub struct SlotState {
     pub gbc_light: u8,
     /// The Game Boy's bare LCD round its picture tinted ochre, with the DMG's palette.
     pub gb_edge: bool,
+    /// The GB Light palette's backlight glowing through its screen.
+    pub gb_backlight: bool,
     pub gb_black_border: bool,
     /// Moving pixels fade out slowly, for each system on its own: GB, GBC, GBA.
     pub lcd_ghosting_gb: bool,
@@ -565,6 +567,7 @@ impl Default for SlotState {
             gbc_black_border: false,
             gbc_light: 0,
             gb_edge: true,
+            gb_backlight: true,
             gb_black_border: false,
             lcd_ghosting_gb: true,
             lcd_ghosting_gbc: true,
@@ -724,6 +727,7 @@ pub fn write_slot_state(root: &Path, s: &SlotState) -> std::io::Result<()> {
     text.push_str(&format!("gbc_black_border={}\n", s.gbc_black_border as u8));
     text.push_str(&format!("gbc_light={}\n", s.gbc_light));
     text.push_str(&format!("gb_edge={}\n", s.gb_edge as u8));
+    text.push_str(&format!("gb_backlight={}\n", s.gb_backlight as u8));
     text.push_str(&format!("gb_black_border={}\n", s.gb_black_border as u8));
     text.push_str(&format!("resume_game={}\n", s.resume_game as u8));
     text.push_str(&format!("boot_picture={}\n", s.boot_picture as u8));
@@ -811,6 +815,7 @@ fn parse(text: &str) -> Option<SlotState> {
     let mut gbc_black_border = None;
     let mut gbc_light = None;
     let mut gb_edge = None;
+    let mut gb_backlight = None;
     let mut gb_black_border = None;
     let mut resume_game = None;
     let mut boot_picture = None;
@@ -892,6 +897,7 @@ fn parse(text: &str) -> Option<SlotState> {
             "gbc_black_border" => gbc_black_border = flag(value),
             "gbc_light" => gbc_light = value.parse::<u8>().ok().filter(|n| *n < 3),
             "gb_edge" => gb_edge = flag(value),
+            "gb_backlight" => gb_backlight = flag(value),
             "gb_black_border" => gb_black_border = flag(value),
             "resume_game" => resume_game = flag(value),
             "boot_picture" => boot_picture = flag(value),
@@ -983,6 +989,7 @@ fn parse(text: &str) -> Option<SlotState> {
         gbc_black_border: gbc_black_border.unwrap_or(fallback.gbc_black_border),
         gbc_light: gbc_light.unwrap_or(fallback.gbc_light),
         gb_edge: gb_edge.unwrap_or(fallback.gb_edge),
+        gb_backlight: gb_backlight.unwrap_or(fallback.gb_backlight),
         gb_black_border: gb_black_border.unwrap_or(fallback.gb_black_border),
         resume_game: resume_game.unwrap_or(fallback.resume_game),
         boot_picture: boot_picture.unwrap_or(fallback.boot_picture),
