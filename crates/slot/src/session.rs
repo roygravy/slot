@@ -508,6 +508,7 @@ impl Session {
     }
 
     fn sync_speed(&self) {
+        self.sink.ring().set_dozing(self.dozing());
         if let Some(emu) = &self.emu {
             emu.set_fast_steps(u32::from(self.app.ff_speed()));
             emu.set_ff_sound(self.app.ff_sound());

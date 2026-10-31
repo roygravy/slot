@@ -29,6 +29,7 @@ pub struct Ring {
     muted: AtomicBool,
     idle: AtomicBool,
     playing: AtomicBool,
+    dozing: AtomicBool,
     overruns: AtomicU64,
     underruns: AtomicU64,
     consuming: AtomicBool,
@@ -51,6 +52,7 @@ impl Ring {
             queued: AtomicUsize::new(0),
             idle: AtomicBool::new(false),
             playing: AtomicBool::new(false),
+            dozing: AtomicBool::new(false),
             capacity: AtomicUsize::new(capacity_frames),
             rate: AtomicU32::new(0),
             muted: AtomicBool::new(false),
@@ -197,8 +199,14 @@ impl Ring {
         self.playing.store(playing, Ordering::Relaxed);
     }
 
+    /// In Light Sleep the device goes after its silence again, as on the shelf (Roy): nothing
+    /// is heard while the console sleeps.
+    pub fn set_dozing(&self, dozing: bool) {
+        self.dozing.store(dozing, Ordering::Relaxed);
+    }
+
     pub fn playing(&self) -> bool {
-        self.playing.load(Ordering::Relaxed)
+        self.playing.load(Ordering::Relaxed) && !self.dozing.load(Ordering::Relaxed)
     }
 
     pub fn set_muted(&self, muted: bool) {
