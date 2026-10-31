@@ -239,7 +239,7 @@ impl QuickRow {
         &[
             (&QuickRow::GENERAL, "Shelf"),
             (&QuickRow::CLOCK, "Clock"),
-            (&QuickRow::SLEEP, "Sleep"),
+            (&QuickRow::SLEEP, "Power"),
         ],
     ];
 
