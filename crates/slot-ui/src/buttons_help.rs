@@ -89,6 +89,8 @@ const ROW_MAX: f32 = 40.0;
 const KEY_PX: f32 = 17.0;
 const DO_PX: f32 = 17.0;
 const KEY_W: f32 = 244.0;
+/// Room between the widest key and its description.
+const COLUMN_GAP: u32 = 36;
 pub const LEGEND_Y: f32 = crate::quick_menu::LEGEND_Y;
 /// How strongly the description column reads against the key column.
 const DO_ALPHA: f32 = 0.72;
@@ -139,22 +141,37 @@ fn pitch(rows: usize) -> f32 {
     (BODY_ROOM / rows.max(1) as f32).floor().min(ROW_MAX)
 }
 
+/// A page's two columns: its widest key plus a gap, and the key column plus its widest
+/// description. The block is drawn centred, so each page's ink sits in the middle.
+fn columns(font: &fontdue::Font, page: usize) -> (u32, u32) {
+    let ink = |s: &str, px: f32| {
+        let layout = text::fit(font, s, BODY_W as f32, 1, px, px);
+        text::line_width(font, &layout.lines.concat(), layout.px, layout.tracking).ceil() as u32 + 2
+    };
+    let rows = BUTTON_PAGES[page].1.iter();
+    let key = rows.clone().map(|(k, _)| ink(k, KEY_PX)).max().unwrap_or(0);
+    let what = rows.map(|(_, d)| ink(d, DO_PX)).max().unwrap_or(0);
+    let key_w = (key + COLUMN_GAP).min(KEY_W as u32);
+    (key_w, (key_w + what).min(BODY_W))
+}
+
 pub fn buttons_body_face(page: usize) -> UndoFace {
     let rows = BUTTON_PAGES[page].1;
     let p = pitch(rows.len());
     let h = (p * rows.len() as f32).ceil() as u32;
-    let w = BODY_W;
-    let mut rgba = vec![0u8; (w * h * 4) as usize];
     let Some(font) = text::label_font() else {
-        return UndoFace { rgba, w, h };
+        let w = BODY_W;
+        return UndoFace { rgba: vec![0u8; (w * h * 4) as usize], w, h };
     };
+    let (key_w, w) = columns(font, page);
+    let mut rgba = vec![0u8; (w * h * 4) as usize];
     let line_h = p as u32;
     for (i, (key, what)) in rows.iter().enumerate() {
         let y = (i as f32 * p) as u32;
-        let k = word(font, key, KEY_PX, KEY_W - 8.0, line_h);
+        let k = word(font, key, KEY_PX, key_w as f32 - 8.0, line_h);
         stamp(&mut rgba, w, h, &k, 0, y, 1.0);
-        let d = word(font, what, DO_PX, w as f32 - KEY_W, line_h);
-        stamp(&mut rgba, w, h, &d, KEY_W as u32, y, DO_ALPHA);
+        let d = word(font, what, DO_PX, (w - key_w) as f32, line_h);
+        stamp(&mut rgba, w, h, &d, key_w, y, DO_ALPHA);
     }
     UndoFace { rgba, w, h }
 }
