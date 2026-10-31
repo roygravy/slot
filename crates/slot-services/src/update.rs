@@ -289,6 +289,20 @@ fn fetch(url: &str, root: &Path, mut progress: impl FnMut(u64, u64)) -> Result<P
 fn unpack(zip: &Path, root: &Path) -> Result<String, &'static str> {
     let bad = "That is not a slot. x GRAVY zip";
     let mut archive = zip::ZipArchive::new(File::open(zip).map_err(|_| bad)?).map_err(|_| bad)?;
+    // A zip from GitHub Actions wraps the release zip in one of its own: unpack the inner one.
+    if archive.len() == 1 {
+        let mut entry = archive.by_index(0).map_err(|_| bad)?;
+        if entry.name().is_ok_and(|n| n.to_ascii_lowercase().ends_with(".zip")) {
+            let inner = root.join(".update-inner.zip");
+            let copied = File::create(&inner).and_then(|mut f| std::io::copy(&mut entry, &mut f));
+            let result = match copied {
+                Ok(_) => unpack(&inner, root),
+                Err(_) => Err("The card can't be written"),
+            };
+            let _ = fs::remove_file(&inner);
+            return result;
+        }
+    }
     let new = root.join("System.new");
     let _ = fs::remove_dir_all(&new);
     let mut has_slot = false;
@@ -383,6 +397,27 @@ mod tests {
         assert!(!r.join("System.new/wifi.toml.example").exists());
         assert!(!r.join("Config").exists());
         assert_eq!(ready(r).as_deref(), Some("v1.2"));
+    }
+
+    #[test]
+    fn a_zip_inside_a_zip_is_opened() {
+        let d = tempfile::tempdir().unwrap();
+        let r = d.path();
+        let mut inner = std::io::Cursor::new(Vec::new());
+        let mut w = zip::ZipWriter::new(&mut inner);
+        let o = zip::write::SimpleFileOptions::default();
+        w.start_file("slot-x-gravy-v1.2/System/slot", o).unwrap();
+        w.write_all(b"bin").unwrap();
+        w.start_file("slot-x-gravy-v1.2/System/version.txt", o).unwrap();
+        w.write_all(b"v1.2").unwrap();
+        w.finish().unwrap();
+        let zip = r.join("outer.zip");
+        let mut w = zip::ZipWriter::new(File::create(&zip).unwrap());
+        w.start_file("slot-x-gravy-v1.2.zip", o).unwrap();
+        w.write_all(inner.get_ref()).unwrap();
+        w.finish().unwrap();
+        assert_eq!(unpack(&zip, r).unwrap(), "v1.2");
+        assert!(!r.join(".update-inner.zip").exists());
     }
 
     #[test]
