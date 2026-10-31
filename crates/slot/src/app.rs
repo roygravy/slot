@@ -6115,6 +6115,7 @@ impl App {
                     qr: w.qr,
                     upper: w.upper,
                     large_status: w.large_status,
+                    wps: w.wps,
                 },
             ));
         }
@@ -6151,6 +6152,7 @@ impl App {
                 qr: None,
                 upper: true,
                 large_status: false,
+                wps: false,
             },
         ))
     }
@@ -7889,6 +7891,7 @@ pub struct SearchWords {
     pub upper: bool,
     /// The status is the page's subject (an address, a network) and shows larger.
     pub large_status: bool,
+    pub wps: bool,
 }
 
 /// A draw seen through a camera that scales by `k` and then shifts by (`dx`, `dy`), at `alpha`.

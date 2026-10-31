@@ -78,13 +78,13 @@ pub use hud::{
 };
 pub use icon::{
     badge_face, drop_shadow_face, glow_face, halo_face, icon_box, icon_face, icon_glyph_box,
-    icon_glyph_face,
+    icon_glyph_face, icon_plain_face,
     star_mark_face, warm_fonts, Badge, Icon,
 };
 pub use keyboard::{
     accents, draw_label_search, key_rows, list_row_faces, search_heading_face, search_row_faces,
     Purpose, WifiLegend,
-    qr_face, search_big_face, search_status_face, search_address_face, search_typed_face, Cap, Key, KeyboardFaces, SearchScreen, SearchTexts,
+    qr_face, search_big_face, search_status_face, search_address_face, search_lead_face, search_sub_face, search_typed_face, Cap, Key, KeyboardFaces, SearchScreen, SearchTexts,
     SearchView, Shape, Up,
 };
 pub use link_art::{

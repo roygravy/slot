@@ -469,3 +469,13 @@ pub(crate) fn symbols_font() -> Option<&'static Font> {
     FONT.get_or_init(|| Font::from_bytes(SYMBOLS_TTF, FontSettings::default()).ok())
         .as_ref()
 }
+
+/// A symbol in plain white, no halo, for tinting: the WPS screen's Wi-Fi sign.
+pub fn icon_plain_face(icon: Icon, px: f32) -> crate::plate::UndoFace {
+    let Some(font) = symbols_font() else {
+        return crate::plate::UndoFace { rgba: vec![0; 4], w: 1, h: 1 };
+    };
+    let (m, cov) = font.rasterize(icon.glyph(), px);
+    let rgba = cov.iter().flat_map(|&a| [255, 255, 255, a]).collect();
+    crate::plate::UndoFace { rgba, w: m.width.max(1) as u32, h: m.height.max(1) as u32 }
+}

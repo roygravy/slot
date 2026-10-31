@@ -526,6 +526,8 @@ pub struct SearchTexts<T> {
     pub big: Option<T>,
     /// Over the big line: the ROM Manager's address as a QR code.
     pub qr: Option<T>,
+    /// WPS: a large Wi-Fi sign over the status, which then reads at menu size.
+    pub icon: Option<T>,
 }
 
 pub fn search_heading_face(text: &str) -> UndoFace {
@@ -602,6 +604,29 @@ pub fn search_big_face(text: &str) -> UndoFace {
 pub fn search_status_face(text: &str) -> UndoFace {
     plain(text, 15.0, 3.0, true)
 }
+
+/// A message screen's lead line at menu size, over two lines if it must: WPS's instruction.
+pub fn search_lead_face(text: &str) -> UndoFace {
+    let Some(font) = text::label_font() else {
+        return UndoFace { rgba: vec![0; 4], w: 1, h: 1 };
+    };
+    // Narrow enough that "Press the WPS button" and "on your router" break apart.
+    let layout = text::fit(font, text, 400.0, 2, 26.0, 20.0);
+    let (w, h) = (560, LEAD_H);
+    let mut rgba = vec![0u8; (w * h * 4) as usize];
+    text::draw_centred(&mut rgba, w, h, &layout, [255, 255, 255]);
+    UndoFace { rgba, w, h }
+}
+
+/// Under a lead line: the WPS countdown.
+pub fn search_sub_face(text: &str) -> UndoFace {
+    plain(text, 20.0, 2.0, true)
+}
+
+const LEAD_H: u32 = 84;
+const ICON_Y: f32 = 96.0;
+const LEAD_Y: f32 = 214.0;
+const SUB_Y: f32 = 312.0;
 
 /// The GRAVY Manager's address under its PIN: larger, to type it over from the screen.
 pub fn search_address_face(text: &str) -> UndoFace {
@@ -954,6 +979,18 @@ pub fn draw_label_search(canvas: Canvas, v: &SearchView, out: &mut Vec<Draw>) {
         }
         SearchScreen::Nothing => {
             heading(v.texts.heading, HEADING_Y, faded(v.ink.dim, a), out);
+            // WPS: a grey Wi-Fi sign, the instruction at menu size, the countdown under it.
+            if let Some(icon) = v.texts.icon {
+                heading(icon, ICON_Y, faded(v.ink.dim, a), out);
+                if let Some(s) = v.texts.status {
+                    heading(s, LEAD_Y, faded(v.ink.text, a), out);
+                }
+                if let Some(n) = v.texts.note {
+                    heading(n, SUB_Y, faded(v.ink.dim, a), out);
+                }
+                legend(v.legend.unwrap_or(&v.faces.legend_back), LEGEND_GAP, out);
+                return;
+            }
             // With a big line the status and note move down under it, and a QR code above
             // it moves all three down again.
             let mut low = 0.0;

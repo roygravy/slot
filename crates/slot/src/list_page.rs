@@ -79,6 +79,8 @@ pub struct Words {
     pub upper: bool,
     /// The status line is the page's subject, an address or a network, and shows larger.
     pub large_status: bool,
+    /// WPS waiting: a Wi-Fi sign, the instruction large, the countdown under it.
+    pub wps: bool,
 }
 
 /// A signal in dBm, as a word.
@@ -315,6 +317,7 @@ impl ListPage {
             upper: self.kind == Kind::Zones,
             large_status: (self.kind == Kind::Details && matches!(self.stage, Stage::Message(..)))
                 || self.pin.is_some(),
+            wps: self.kind == Kind::Wps && matches!(self.stage, Stage::Message(..)),
         };
         match &self.stage {
             Stage::Waiting => w.heading = "Networks Nearby".into(),

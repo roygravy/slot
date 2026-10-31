@@ -2283,6 +2283,7 @@ struct SearchTextures {
     note: Option<TexId>,
     big: Option<TexId>,
     qr: Option<TexId>,
+    icon: Option<TexId>,
     rows: Vec<(Option<TexId>, Option<TexId>)>,
 }
 
@@ -2311,13 +2312,23 @@ fn sync_label_search(app: &mut App, compositor: &mut Compositor, state: &mut Sea
         .map(|t| up(&mut state.typed, slot_ui::search_typed_face(&t)));
     let status = words
         .status
-        .map(|t| match words.large_status {
-            true => up(&mut state.status, slot_ui::search_address_face(&t)),
-            false => up(&mut state.status, slot_ui::search_status_face(&t)),
+        .map(|t| match (words.wps, words.large_status) {
+            (true, _) => up(&mut state.status, slot_ui::search_lead_face(&t)),
+            (false, true) => up(&mut state.status, slot_ui::search_address_face(&t)),
+            (false, false) => up(&mut state.status, slot_ui::search_status_face(&t)),
         });
     let note = words
         .note
-        .map(|t| up(&mut state.note, slot_ui::search_heading_face(&t)));
+        .map(|t| match words.wps {
+            true => up(&mut state.note, slot_ui::search_sub_face(&t)),
+            false => up(&mut state.note, slot_ui::search_heading_face(&t)),
+        });
+    let icon = words.wps.then(|| {
+        up(
+            &mut state.icon,
+            slot_ui::icon_plain_face(slot_ui::Icon::Wifi, 120.0),
+        )
+    });
     let big = words
         .big
         .map(|t| up(&mut state.big, slot_ui::search_big_face(&t)));
@@ -2344,6 +2355,7 @@ fn sync_label_search(app: &mut App, compositor: &mut Compositor, state: &mut Sea
             note,
             big,
             qr,
+            icon,
         },
     );
 }
