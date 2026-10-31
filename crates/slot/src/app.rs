@@ -6057,6 +6057,7 @@ impl App {
                     rows: w.rows,
                     note: w.note,
                     big: w.big,
+                    qr: w.qr,
                     upper: w.upper,
                 },
             ));
@@ -6091,6 +6092,7 @@ impl App {
                     .collect(),
                 note: None,
                 big: None,
+                qr: None,
                 upper: true,
             },
         ))
@@ -7730,6 +7732,8 @@ pub struct SearchWords {
     pub note: Option<String>,
     /// Large over the status on a message screen.
     pub big: Option<String>,
+    /// A QR code over the big line.
+    pub qr: Option<String>,
     /// False keeps a network's name as it is written.
     pub upper: bool,
 }

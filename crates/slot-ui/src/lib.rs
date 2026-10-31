@@ -84,7 +84,7 @@ pub use icon::{
 pub use keyboard::{
     accents, draw_label_search, key_rows, list_row_faces, search_heading_face, search_row_faces,
     Purpose, WifiLegend,
-    search_big_face, search_status_face, search_typed_face, Cap, Key, KeyboardFaces, SearchScreen, SearchTexts,
+    qr_face, search_big_face, search_status_face, search_typed_face, Cap, Key, KeyboardFaces, SearchScreen, SearchTexts,
     SearchView, Shape, Up,
 };
 pub use link_art::{

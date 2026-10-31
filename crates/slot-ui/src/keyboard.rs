@@ -523,6 +523,8 @@ pub struct SearchTexts<T> {
     pub note: Option<T>,
     /// Large over the status on the message screen: the ROM Manager's PIN.
     pub big: Option<T>,
+    /// Over the big line: the ROM Manager's address as a QR code.
+    pub qr: Option<T>,
 }
 
 pub fn search_heading_face(text: &str) -> UndoFace {
@@ -558,6 +560,37 @@ pub fn search_typed_face(text: &str) -> UndoFace {
         }
     }
     UndoFace { rgba, w, h }
+}
+
+/// How wide the QR code shows, its quiet zone included.
+const QR_PX: u32 = 176;
+
+/// `text` as a QR code, black on a white square with a quiet zone round it so a phone's
+/// camera finds it on the dark screen.
+pub fn qr_face(text: &str) -> UndoFace {
+    use qrcodegen::{QrCode, QrCodeEcc};
+    let Ok(qr) = QrCode::encode_text(text, QrCodeEcc::Medium) else {
+        return UndoFace {
+            rgba: vec![0; 4],
+            w: 1,
+            h: 1,
+        };
+    };
+    let quiet = 2;
+    let n = qr.size() + 2 * quiet;
+    let px = (QR_PX / n as u32).max(1);
+    let w = px * n as u32;
+    let mut rgba = vec![255u8; (w * w * 4) as usize];
+    for y in 0..w {
+        for x in 0..w {
+            let (mx, my) = ((x / px) as i32 - quiet, (y / px) as i32 - quiet);
+            if qr.get_module(mx, my) {
+                let at = ((y * w + x) * 4) as usize;
+                rgba[at..at + 3].fill(0);
+            }
+        }
+    }
+    UndoFace { rgba, w, h: w }
 }
 
 /// The ROM Manager's PIN, big enough to read off the console from arm's length.
@@ -915,14 +948,24 @@ pub fn draw_label_search(canvas: Canvas, v: &SearchView, out: &mut Vec<Draw>) {
         }
         SearchScreen::Nothing => {
             heading(v.texts.heading, HEADING_Y, faded(v.ink.dim, a), out);
-            // With a big line the status and note move down under it.
-            let low = match v.texts.big {
-                Some(b) => {
-                    heading(b, 150.0, faded(v.ink.text, a), out);
-                    70.0
-                }
-                None => 0.0,
-            };
+            // With a big line the status and note move down under it, and a QR code above
+            // it moves all three down again.
+            let mut low = 0.0;
+            if let Some(q) = v.texts.qr {
+                out.push(tint(
+                    q.0,
+                    canvas.centred(q.1 as f32),
+                    52.0,
+                    q.1 as f32,
+                    q.2 as f32,
+                    [1.0, 1.0, 1.0, a],
+                ));
+                low = 90.0;
+            }
+            if let Some(b) = v.texts.big {
+                heading(b, 150.0 + low, faded(v.ink.text, a), out);
+                low += 66.0;
+            }
             if let Some(s) = v.texts.status {
                 heading(s, 200.0 + low, faded(v.ink.text, a), out);
             }

@@ -63,6 +63,9 @@ const GAMES = s => SYS.indexOf(s) < 5;
 const EXT = { gb: "GB", gbc: "GBC", gba: "GBA", nes: "NES", sfc: "SNES", smc: "SNES", bin: "BIOS", png: "WALLPAPERS" };
 let sys = "GB", data = null, pin = "", renaming = null;
 try { pin = sessionStorage.getItem("pin") || ""; sys = sessionStorage.getItem("sys") || sys; } catch (e) {}
+// Scanned from the console's QR code: the PIN comes in after the #, then leaves the address bar.
+const scanned = location.hash.match(/pin=(\d{4})/);
+if (scanned) { pin = scanned[1]; history.replaceState(null, "", "/"); try { sessionStorage.setItem("pin", pin); } catch (e) {} }
 const $ = id => document.getElementById(id);
 const esc = t => t.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 const size = n => n < 1048576 ? Math.round(n / 1024) + " KB" : (n / 1048576).toFixed(1) + " MB";

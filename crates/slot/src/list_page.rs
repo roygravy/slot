@@ -57,6 +57,7 @@ pub struct ListPage {
     rev: u64,
     /// The ROM Manager's PIN, shown large.
     pin: Option<String>,
+    address: Option<String>,
     opened: Millis,
     closed: Option<(Millis, f32)>,
 }
@@ -69,6 +70,8 @@ pub struct Words {
     pub note: Option<String>,
     /// Large over the status: the ROM Manager's PIN.
     pub big: Option<String>,
+    /// The ROM Manager's address with its PIN, as a QR code to scan.
+    pub qr: Option<String>,
     pub rows: Vec<(String, String)>,
     /// Network names keep their own capitals.
     pub upper: bool,
@@ -91,6 +94,7 @@ impl ListPage {
             rows,
             rev: 0,
             pin: None,
+            address: None,
             opened: now,
             closed: None,
         }
@@ -149,9 +153,10 @@ impl ListPage {
         self.stage = match page {
             Some((address, pin)) => {
                 self.pin = Some(pin);
+                self.address = Some(address.clone());
                 Stage::Message(
                     address,
-                    "Open it on a phone or computer, enter the PIN".into(),
+                    "Scan the code, or open the address and enter the PIN".into(),
                 )
             }
             None => Stage::Message(
@@ -259,6 +264,15 @@ impl ListPage {
             status: None,
             note: None,
             big: self.pin.clone(),
+            qr: self
+                .pin
+                .as_ref()
+                .zip(self.address.as_ref())
+                .map(|(pin, address)| {
+                    // The PIN rides along after the #, so scanning signs in at once; it never
+                    // leaves the phone in a request.
+                    format!("{address}/#pin={pin}")
+                }),
             rows: self
                 .rows
                 .iter()
