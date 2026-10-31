@@ -250,17 +250,12 @@ impl GamePass {
     /// A fixed panel behind the picture (instead of black, or the GB's sampled lightest
     /// colour), and the tone light colours take from it.
     /// For the GBC's LCD: how dark the line under each row, and how strong each column's
-    /// red, green or blue. On the GBC's own pixels, how grey its black: an unlit panel in a
-    /// dim room never shows a true black.
-    pub fn set_lcd_mix(&mut self, scanlines: f32, tint: f32, on_screen_pixels: bool, ink: f32) {
+    /// red, green or blue.
+    pub fn set_lcd_mix(&mut self, scanlines: f32, tint: f32, on_screen_pixels: bool) {
         self.lcd_mix = [
             scanlines.max(0.0),
             tint.max(0.0),
-            if on_screen_pixels {
-                1.0
-            } else {
-                ink.clamp(0.0, 0.4)
-            },
+            f32::from(u8::from(on_screen_pixels)),
         ];
     }
 

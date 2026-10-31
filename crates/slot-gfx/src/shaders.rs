@@ -172,11 +172,6 @@ void main() {
             }
             c = mix(c, stripe, u_lcd_mix.y);
             c = mix(c, vec3(0.0), u_lcd_mix.x * dark);
-            if (u_lcd_mix.z < 0.5) {
-                // The GBC's black, greyer the less light falls on its unlit panel.
-                vec3 ink = u_lcd_mix.z * vec3(1.0, 1.04, 1.15);
-                c = ink + (1.0 - ink) * c;
-            }
         } else {
             c = mix(c, lcd.rgb, lcd.a * 0.45);
         }

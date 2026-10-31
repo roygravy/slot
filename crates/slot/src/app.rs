@@ -547,9 +547,6 @@ fn shelves_of(carts: Vec<Cart>) -> Vec<(Rack, Shelf)> {
         .collect()
 }
 
-/// The GBC's Screen Light row, in its order.
-const GBC_LIGHTS: [QuickValue; 3] = [QuickValue::Bright, QuickValue::Soft, QuickValue::Dim];
-
 impl App {
     pub fn new(carts: Vec<Cart>) -> Self {
         let shelves = shelves_of(carts);
@@ -1138,10 +1135,6 @@ impl App {
         if !self.sgb_playing() {
             hidden.push(QuickRow::SgbBorder);
         }
-        // Only the GBC's screen has no light of its own.
-        if platform != Platform::Gbc {
-            hidden.push(QuickRow::ScreenLight);
-        }
         // Only the NES's picture has colours a TV made up.
         if platform != Platform::Nes {
             hidden.push(QuickRow::Colors);
@@ -1179,7 +1172,6 @@ impl App {
             (QuickRow::LcdGhosting, Platform::Gba) => QuickRow::GbaGhosting,
             (QuickRow::BlackBorder, Platform::Gb) => QuickRow::GbBlackBorder,
             (QuickRow::BlackBorder, Platform::Gbc) => QuickRow::GbcBlackBorder,
-            (QuickRow::ScreenLight, Platform::Gbc) => QuickRow::GbcLight,
             (QuickRow::Cable, Platform::Nes) => QuickRow::NesCable,
             (QuickRow::Cable, Platform::Snes) => QuickRow::SnesCable,
             (QuickRow::Colors, Platform::Nes) => QuickRow::NesColors,
@@ -1196,7 +1188,6 @@ impl App {
     pub fn quick_value(&self, row: QuickRow) -> Option<QuickValue> {
         match row {
             QuickRow::Shader
-            | QuickRow::ScreenLight
             | QuickRow::PixelTransparency
             | QuickRow::LcdGhosting
             | QuickRow::BlackBorder
@@ -1249,7 +1240,6 @@ impl App {
             QuickRow::Clock24 => Some(QuickValue::flag(self.state.clock_24h)),
             QuickRow::CheatIcon => Some(QuickValue::flag(self.state.cheat_icon)),
             QuickRow::GbcBlackBorder => Some(QuickValue::flag(self.state.gbc_black_border)),
-            QuickRow::GbcLight => Some(GBC_LIGHTS[usize::from(self.state.gbc_light.min(2))]),
             QuickRow::GbBlackBorder => Some(QuickValue::flag(self.state.gb_black_border)),
             QuickRow::EjectSave => Some(QuickValue::flag(self.state.eject_save)),
             QuickRow::Turbo => Some(QuickValue::flag(self.state.turbo)),
@@ -2469,11 +2459,6 @@ impl App {
         self.seated_cart().map_or(self.platform, |c| c.platform)
     }
 
-    /// How much light falls on the GBC's screen: 0 bright, 1 soft, 2 dim.
-    pub fn gbc_light(&self) -> u8 {
-        self.state.gbc_light.min(2)
-    }
-
     /// Whether the playing GB or GBC picture is framed in black rather than the screen's glass.
     pub fn black_border(&self) -> bool {
         match self.playing_platform() {
@@ -3348,8 +3333,6 @@ impl App {
             | QuickRow::GbcBezel
             | QuickRow::GbaBezel
             | QuickRow::Bezel
-            | QuickRow::ScreenLight
-            | QuickRow::GbcLight
             | QuickRow::PixelTransparency
             | QuickRow::LcdGhosting
             | QuickRow::BlackBorder
@@ -3414,16 +3397,6 @@ impl App {
                 (at + n - 1) % n
             }];
             self.sgb_border_changed = true;
-            self.persist();
-            return;
-        }
-        if row == QuickRow::GbcLight {
-            let s = &mut self.state;
-            s.gbc_light = if right {
-                (s.gbc_light + 1) % 3
-            } else {
-                (s.gbc_light + 2) % 3
-            };
             self.persist();
             return;
         }
@@ -3588,8 +3561,6 @@ impl App {
             | QuickRow::PowerOff
             | QuickRow::GbPalettes
             // Mapped to this system's own row above; on the GBA there is no border.
-            | QuickRow::ScreenLight
-            | QuickRow::GbcLight
             | QuickRow::PixelTransparency
             | QuickRow::LcdGhosting
             | QuickRow::BlackBorder
