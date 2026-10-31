@@ -20,9 +20,10 @@ log() {
 	echo "$(date '+%F %T') $*" >> "$LOGS/slot-session.log" 2>/dev/null
 }
 
-# A GRAVY Manager update waits beside System as System.new. It takes over here and the
+# A GRAVY Manager update waits beside System as System.new. Once Install was pressed on the
+# page it takes over here and the
 # old System is kept: when the new one never clears its .trial, the next start goes back.
-if [ -f "$SD/System.new/.complete" ]; then
+if [ -f "$SD/System.new/.complete" ] && [ -f "$SD/System.new/.install" ]; then
 	rm -rf "$SD/System.old"
 	if mv "$SD/System" "$SD/System.old"; then
 		if mv "$SD/System.new" "$SD/System"; then

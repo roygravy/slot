@@ -12,7 +12,7 @@ const LATEST: &str = "https://api.github.com/repos/roygravy/slot/releases/latest
 const PREFIX: &str = "slot-x-gravy-";
 pub const MAX_ZIP: u64 = 256 << 20;
 /// Left beside System.new once every file is out of the zip; the start script only swaps a
-/// System.new that carries it.
+/// System.new that carries it and INSTALL.
 const COMPLETE: &str = ".complete";
 
 #[derive(Clone)]

@@ -6277,7 +6277,8 @@ impl App {
         if !new.join(".complete").is_file() {
             return;
         }
-        if std::fs::remove_file(new.join(".install")).is_ok() {
+        // The start script swaps it in only while .install is there, so it stays.
+        if new.join(".install").is_file() {
             self.begin_restart();
             return;
         }

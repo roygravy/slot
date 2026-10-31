@@ -84,4 +84,13 @@ echo half > "$TMP/card/System.new/version.txt"
 launch
 [ "$(cat "$TMP/card/System/version.txt")" = "old" ] || fail "a half unpacked update was swapped in"
 
+setup
+echo old > "$TMP/card/System/version.txt"
+mkdir -p "$TMP/card/System.new"
+echo new > "$TMP/card/System.new/version.txt"
+: > "$TMP/card/System.new/.complete"
+launch
+[ "$(cat "$TMP/card/System/version.txt")" = "old" ] || fail "an update was swapped in without Install"
+[ -f "$TMP/card/System.new/.complete" ] || fail "a ready update was not kept for Install"
+
 echo "launch: all passed"
