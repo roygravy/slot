@@ -47,6 +47,10 @@ pub const REPEAT_DELAY_MS: Millis = 400;
 pub const GLOW_MARGIN: u32 = 130;
 /// A favourite stands this much higher than the carts beside it.
 const LIFT: f32 = 10.0;
+/// The favourites' glow waits for the cart to come this close to standing still...
+const SETTLED: f32 = 0.04;
+/// ...then rises over this long.
+const LIGHT_UP_S: f32 = 0.22;
 /// How far a cart's drop shadow spreads, and how far below the cart it falls.
 pub const DROP_MARGIN: u32 = 22;
 const DROP_FALL: f32 = 10.0;
@@ -83,6 +87,9 @@ pub struct Shelf {
     light_ground: bool,
     ride: f32,
     vel: f32,
+    /// How far the favourites' glow has come up: it goes out while the carts move and rises
+    /// again once they stand still.
+    lit: f32,
     held: Option<(i32, Millis, usize)>,
 }
 
@@ -107,6 +114,7 @@ impl Shelf {
             backings: [None; MOULDS],
             ride: 0.0,
             vel: 0.0,
+            lit: 1.0,
             held: None,
         }
     }
@@ -484,6 +492,11 @@ impl Shelf {
         let accel = -2.0 * OMEGA * self.vel - OMEGA * OMEGA * (self.scroll - self.scroll_target());
         self.vel += accel * dt;
         self.scroll += self.vel * dt;
+        self.lit = if (self.scroll - self.scroll_target()).abs() > SETTLED {
+            0.0
+        } else {
+            (self.lit + dt / LIGHT_UP_S).min(1.0)
+        };
     }
 
     pub fn draw(
@@ -648,7 +661,7 @@ impl Shelf {
                         w: w + 2.0 * m,
                         h: h + 2.0 * m,
                         tex,
-                        alpha: alpha * dim,
+                        alpha: alpha * dim * smoothstep(self.lit),
                     });
                 }
             }
@@ -686,7 +699,7 @@ impl Shelf {
                     w: w + 2.0 * m,
                     h: h + 2.0 * m,
                     tex,
-                    alpha: (1.0 - recede) * dim,
+                    alpha: (1.0 - recede) * dim * smoothstep(self.lit),
                 });
             }
         }
@@ -696,6 +709,11 @@ impl Shelf {
 
 fn shrink(offset: f32) -> f32 {
     CAROUSEL * (1.0 + (SIDE_SCALE - 1.0) * offset.abs().min(1.0))
+}
+
+fn smoothstep(t: f32) -> f32 {
+    let t = t.clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
 }
 
 fn recede_alpha(face_alpha: f32) -> f32 {
