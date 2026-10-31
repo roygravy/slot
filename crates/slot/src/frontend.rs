@@ -816,8 +816,9 @@ impl Frontend {
         // Effects off is the emulator's own picture: no dimming, saturation or panel tone.
         let bare = self.session.app().screen_bare();
         compositor.set_picture_appearance(gb, if gb && !bare { 0.03 } else { 0.0 });
-        let edge = if gb && !bare { self.session.app().gb_edge() } else { 0 };
-        compositor.set_screen_edge(edge);
+        // The DMG's bare LCD round its picture is ochre; the Pocket's and the Light's are not.
+        let dmg = self.session.app().gb_palette() == Some(slot_store::GbPalette::DEFAULT);
+        compositor.set_screen_edge(gb && !bare && dmg && self.session.app().gb_edge());
         let gba = platform == slot_store::Platform::Gba;
         // The colour screens, GBC and GBA, cast lighter shadows than the Game Boy's.
         compositor.set_pixel_shadow(match (gba || gbc, gb) {

@@ -85,7 +85,6 @@ const float TV_SCANLINE = 0.72;
 const float TV_MASK = 0.18;
 const float TV_GLOW = 0.08;
 const vec3 EDGE_OCHRE = vec3(1.0, 0.93, 0.62) * 0.95;
-const vec3 EDGE_BROWN = vec3(1.0, 0.86, 0.48) * 0.88;
 const vec3 luma_coeff = vec3(0.2126, 0.7152, 0.0722);
 vec2 grid_band(vec2 x) {
     return floor(x) / 3.0 + min(fract(x), vec2(1.0 / 3.0));
@@ -117,7 +116,7 @@ void main() {
         if (u_black_edge < 0.5 && u_edge > 0.5) {
             // The Game Boy's bare LCD round its pixels: browner and yellower than the
             // picture's ground, with no pixel layer over it.
-            c *= u_edge > 1.5 ? EDGE_BROWN : EDGE_OCHRE;
+            c *= EDGE_OCHRE;
         }
     } else if (u_mode > 5.5) {
         // A TV's picture: the console's pixels as they are, every other screen line a little

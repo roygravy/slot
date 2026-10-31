@@ -324,9 +324,9 @@ impl GamePass {
         self.tv_lines = (scanlines, mask);
     }
 
-    /// The Game Boy's bare LCD round its picture: 0 the picture's ground, 1 ochre, 2 brown.
-    pub fn set_screen_edge(&mut self, tone: u8) {
-        self.edge = f32::from(tone.min(2));
+    /// The Game Boy's bare LCD round its picture: ochre, rather than the picture's ground.
+    pub fn set_screen_edge(&mut self, ochre: bool) {
+        self.edge = ochre as u8 as f32;
     }
 
     /// The share of the last picture a TV's phosphor keeps glowing with, out of 256; 0 for none.

@@ -318,8 +318,8 @@ pub struct SlotState {
     pub gbc_black_border: bool,
     /// How much light falls on the GBC's screen: 0 bright, 1 soft, 2 dim.
     pub gbc_light: u8,
-    /// The Game Boy's bare LCD round its picture: 0 plain, 1 ochre, 2 brown.
-    pub gb_edge: u8,
+    /// The Game Boy's bare LCD round its picture tinted ochre, with the DMG's palette.
+    pub gb_edge: bool,
     pub gb_black_border: bool,
     /// Moving pixels fade out slowly, for each system on its own: GB, GBC, GBA.
     pub lcd_ghosting_gb: bool,
@@ -564,7 +564,7 @@ impl Default for SlotState {
             cheat_icon: true,
             gbc_black_border: false,
             gbc_light: 0,
-            gb_edge: 1,
+            gb_edge: true,
             gb_black_border: false,
             lcd_ghosting_gb: true,
             lcd_ghosting_gbc: true,
@@ -723,7 +723,7 @@ pub fn write_slot_state(root: &Path, s: &SlotState) -> std::io::Result<()> {
     text.push_str(&format!("cheat_icon={}\n", s.cheat_icon as u8));
     text.push_str(&format!("gbc_black_border={}\n", s.gbc_black_border as u8));
     text.push_str(&format!("gbc_light={}\n", s.gbc_light));
-    text.push_str(&format!("gb_edge={}\n", s.gb_edge));
+    text.push_str(&format!("gb_edge={}\n", s.gb_edge as u8));
     text.push_str(&format!("gb_black_border={}\n", s.gb_black_border as u8));
     text.push_str(&format!("resume_game={}\n", s.resume_game as u8));
     text.push_str(&format!("boot_picture={}\n", s.boot_picture as u8));
@@ -891,7 +891,7 @@ fn parse(text: &str) -> Option<SlotState> {
             "cheat_icon" => cheat_icon = flag(value),
             "gbc_black_border" => gbc_black_border = flag(value),
             "gbc_light" => gbc_light = value.parse::<u8>().ok().filter(|n| *n < 3),
-            "gb_edge" => gb_edge = value.parse::<u8>().ok().filter(|n| *n < 3),
+            "gb_edge" => gb_edge = flag(value),
             "gb_black_border" => gb_black_border = flag(value),
             "resume_game" => resume_game = flag(value),
             "boot_picture" => boot_picture = flag(value),
