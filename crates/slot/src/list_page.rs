@@ -16,6 +16,8 @@ pub enum Kind {
     Wps,
     Zones,
     RomManager,
+    /// The joined network: its name and address, Y forgets it.
+    Details,
 }
 
 pub struct Row {
@@ -75,6 +77,8 @@ pub struct Words {
     pub rows: Vec<(String, String)>,
     /// Network names keep their own capitals.
     pub upper: bool,
+    /// The status line is the page's subject, an address or a network, and shows larger.
+    pub large_status: bool,
 }
 
 /// A signal in dBm, as a word.
@@ -129,6 +133,20 @@ impl ListPage {
             Stage::List(0)
         };
         Self::new(Kind::Saved, stage, rows, now)
+    }
+
+    pub fn details(name: String, address: Option<String>, now: Millis) -> Self {
+        let note = match address {
+            Some(a) => format!("Connected · {a}"),
+            None => "Connected".into(),
+        };
+        let row = Row {
+            title: name.clone(),
+            sub: String::new(),
+            key: name.clone(),
+            secure: false,
+        };
+        Self::new(Kind::Details, Stage::Message(name, note), vec![row], now)
     }
 
     pub fn wps(now: Millis) -> Self {
@@ -264,6 +282,7 @@ impl ListPage {
             (Stage::Confirm(_), _) => WifiLegend::Confirm,
             (_, Kind::Wps) => WifiLegend::Wps,
             (_, Kind::RomManager) => WifiLegend::Back,
+            (_, Kind::Details) => WifiLegend::Saved,
             (Stage::Message(..), Kind::Nearby) => WifiLegend::Nearby,
             (Stage::Message(..), _) => WifiLegend::Back,
             (_, Kind::Nearby) => WifiLegend::Nearby,
@@ -294,6 +313,8 @@ impl ListPage {
                 .map(|r| (r.title.clone(), r.sub.clone()))
                 .collect(),
             upper: self.kind == Kind::Zones,
+            large_status: (self.kind == Kind::Details && matches!(self.stage, Stage::Message(..)))
+                || self.pin.is_some(),
         };
         match &self.stage {
             Stage::Waiting => w.heading = "Networks Nearby".into(),
@@ -305,6 +326,7 @@ impl ListPage {
                         Kind::Wps => "WPS",
                         Kind::Zones => "Time Zone",
                         Kind::RomManager => "GRAVY Manager",
+                        Kind::Details => "Wi-Fi",
                     }
                     .into(),
                 )
@@ -314,7 +336,11 @@ impl ListPage {
                 w.typed = Some(k.text().to_owned()).filter(|t| !t.is_empty());
             }
             Stage::Confirm(at) => {
-                w.heading = "My Networks".into();
+                w.heading = match self.kind {
+                    Kind::Details => "Wi-Fi",
+                    _ => "My Networks",
+                }
+                .into();
                 w.status = Some(format!("Forget {}?", self.rows[*at].title));
                 w.note = Some("Its password is removed from the card".into());
             }
@@ -323,6 +349,7 @@ impl ListPage {
                     Kind::Wps => "WPS",
                     Kind::RomManager => "GRAVY Manager",
                     Kind::Saved => "My Networks",
+                    Kind::Details => "Wi-Fi",
                     _ => "Networks Nearby",
                 }
                 .into();
@@ -391,6 +418,16 @@ impl ListPage {
             Stage::Confirm(at) => {
                 let at = *at;
                 match press {
+                    Press::Choose if self.kind == Kind::Details => {
+                        let ssid = self.rows.remove(at).key;
+                        self.close(now);
+                        Step::Forget(ssid)
+                    }
+                    Press::Back if self.kind == Kind::Details => {
+                        let name = self.rows[at].title.clone();
+                        self.stage = Stage::Message(name, "Connected".into());
+                        Step::None
+                    }
                     Press::Choose => {
                         let ssid = self.rows.remove(at).key;
                         self.stage = if self.rows.is_empty() {
@@ -450,6 +487,10 @@ impl ListPage {
             },
             Stage::Waiting | Stage::Message(..) => match press {
                 Press::Back => self.close(now),
+                Press::Space if self.kind == Kind::Details => {
+                    self.stage = Stage::Confirm(0);
+                    Step::None
+                }
                 Press::Space if self.kind == Kind::Nearby => self.rescan(),
                 _ => Step::None,
             },

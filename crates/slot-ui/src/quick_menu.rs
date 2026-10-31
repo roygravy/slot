@@ -564,10 +564,11 @@ impl QuickRow {
             QuickRow::Sleep => "Sleep",
             QuickRow::Restart => "Restart",
             QuickRow::PowerOff => "Power Off",
-            QuickRow::HomeWifi => "Home Wi-Fi",
+            QuickRow::HomeWifi => "Wi-Fi",
             QuickRow::Network => "Network",
+            // Shown as the network's own name; this stands in where a name is wanted.
             QuickRow::ConnectedTo => "Connected To",
-            QuickRow::AddNetwork => "Add Network",
+            QuickRow::AddNetwork => "Other Networks",
             QuickRow::SavedNetworks => "My Networks",
             QuickRow::Wps => "WPS",
             QuickRow::RomManager => "GRAVY Manager",
@@ -659,7 +660,7 @@ impl QuickRow {
             QuickRow::Wps => "Join by pressing the WPS button on your router.",
             QuickRow::RomManager => "Games, screenshots and more from a web browser.",
             QuickRow::Network => "Home Wi-Fi and the network you are on.",
-            QuickRow::ConnectedTo => "The home network this device is on now.",
+            QuickRow::ConnectedTo => "Connected. A shows its details.",
             QuickRow::AutoSleep => {
                 "Screen off after this long idle. Wi-Fi stays on."
             }
@@ -687,13 +688,14 @@ impl QuickRow {
 
     /// A row that shows a value and takes no input.
     pub fn read_only(self) -> bool {
-        self == QuickRow::ConnectedTo
+        false
     }
 
     pub fn opens(self) -> bool {
         matches!(
             self,
             QuickRow::DateTime
+                | QuickRow::ConnectedTo
                 | QuickRow::AddNetwork
                 | QuickRow::SavedNetworks
                 | QuickRow::Wps
@@ -1379,7 +1381,12 @@ impl QuickMenu<'_> {
                 .iter()
                 .find(|(r, _)| *r == row)
                 .map_or(row, |&(_, as_row)| as_row);
-            if let Some(&(tex, w, h)) = faces.labels.get(named.index()).map(|l| &l[lit as usize]) {
+            // The network joined: its own name is the row, like a phone's Wi-Fi list.
+            let label = match (row, self.network) {
+                (QuickRow::ConnectedTo, Some(n)) => Some(n[lit as usize]),
+                _ => faces.labels.get(named.index()).map(|l| l[lit as usize]),
+            };
+            if let Some((tex, w, h)) = label {
                 let x = match row.centred() {
                     true => self.canvas.centred(w as f32),
                     false => QUICK_LABEL_X - pad,
@@ -1398,7 +1405,6 @@ impl QuickMenu<'_> {
             }
             let value = match row {
                 QuickRow::DateTime => self.clock.map(|c| c[lit as usize]),
-                QuickRow::ConnectedTo => self.network.map(|c| c[lit as usize]),
                 QuickRow::TimeZone => self.zone.map(|c| c[lit as usize]),
                 QuickRow::Wallpaper => self.wallpaper.map(|c| c[lit as usize]),
                 QuickRow::Palette | QuickRow::GbPalettes => self.palette.map(|c| c[lit as usize]),

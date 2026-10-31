@@ -1612,11 +1612,18 @@ impl App {
             self.state.wallpaper,
             WallpaperPick::File(_) | WallpaperPick::Random
         );
-        match (own, self.framed_panel()) {
-            (true, true) => &[],
-            (true, false) => &[QuickRow::GbaBezel],
-            (false, true) => &[QuickRow::WallpaperTint],
-            (false, false) => &[QuickRow::WallpaperTint, QuickRow::GbaBezel],
+        // The joined network's row is there only while there is one.
+        let offline = self.home_network().is_none();
+        use QuickRow::{ConnectedTo as C, GbaBezel as B, WallpaperTint as T};
+        match (own, self.framed_panel(), offline) {
+            (true, true, false) => &[],
+            (true, false, false) => &[B],
+            (false, true, false) => &[T],
+            (false, false, false) => &[T, B],
+            (true, true, true) => &[C],
+            (true, false, true) => &[B, C],
+            (false, true, true) => &[T, C],
+            (false, false, true) => &[T, B, C],
         }
     }
 
@@ -3303,6 +3310,7 @@ impl App {
             }
             QuickRow::AddNetwork | QuickRow::SavedNetworks | QuickRow::Wps => self.wifi_page(row),
             QuickRow::RomManager => self.open_rom_manager(),
+            QuickRow::ConnectedTo => self.open_network_details(),
             QuickRow::TimeZone => self.open_zones(),
             QuickRow::About => self.phase = Phase::About,
             QuickRow::Screenshots => self.open_shots(false),
@@ -3333,7 +3341,6 @@ impl App {
             | QuickRow::GbPalettes
             | QuickRow::Rumble
             | QuickRow::HomeWifi
-            | QuickRow::ConnectedTo
             | QuickRow::AutoTime
             | QuickRow::Clock24
             | QuickRow::CheatIcon
@@ -6107,6 +6114,7 @@ impl App {
                     big: w.big,
                     qr: w.qr,
                     upper: w.upper,
+                    large_status: w.large_status,
                 },
             ));
         }
@@ -6142,6 +6150,7 @@ impl App {
                 big: None,
                 qr: None,
                 upper: true,
+                large_status: false,
             },
         ))
     }
@@ -6316,6 +6325,15 @@ impl App {
                 self.open_list_page(ListPage::wps(now));
             }
         }
+    }
+
+    /// The joined network: its name, this device's address on it, and Y to forget it.
+    fn open_network_details(&mut self) {
+        let Some(name) = self.home_network() else {
+            return;
+        };
+        let now = self.now();
+        self.open_list_page(ListPage::details(name, local_address(), now));
     }
 
     fn open_zones(&mut self) {
@@ -7869,6 +7887,8 @@ pub struct SearchWords {
     pub qr: Option<String>,
     /// False keeps a network's name as it is written.
     pub upper: bool,
+    /// The status is the page's subject (an address, a network) and shows larger.
+    pub large_status: bool,
 }
 
 /// A draw seen through a camera that scales by `k` and then shifts by (`dx`, `dy`), at `alpha`.
@@ -7935,4 +7955,13 @@ fn orig_kind(platform: Platform) -> usize {
         Platform::Nes => 3,
         Platform::Snes => 4,
     }
+}
+
+/// This device's address on the home network: the source a route to the internet would use.
+/// Connecting a UDP socket sends nothing.
+fn local_address() -> Option<String> {
+    let socket = std::net::UdpSocket::bind("0.0.0.0:0").ok()?;
+    socket.connect("1.1.1.1:80").ok()?;
+    let ip = socket.local_addr().ok()?.ip();
+    (!ip.is_unspecified()).then(|| ip.to_string())
 }
