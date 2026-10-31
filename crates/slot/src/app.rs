@@ -1270,6 +1270,7 @@ impl App {
             QuickRow::AddNetwork
             | QuickRow::SavedNetworks
             | QuickRow::Wps
+            | QuickRow::RomManager
             | QuickRow::DateTime
             | QuickRow::TimeZone
             | QuickRow::About
@@ -3271,6 +3272,7 @@ impl App {
                 );
             }
             QuickRow::AddNetwork | QuickRow::SavedNetworks | QuickRow::Wps => self.wifi_page(row),
+            QuickRow::RomManager => self.open_rom_manager(),
             QuickRow::TimeZone => self.open_zones(),
             QuickRow::About => self.phase = Phase::About,
             QuickRow::Screenshots => self.open_shots(false),
@@ -3523,6 +3525,7 @@ impl App {
             | QuickRow::AddNetwork
             | QuickRow::SavedNetworks
             | QuickRow::Wps
+            | QuickRow::RomManager
             | QuickRow::About
             | QuickRow::SgbBorder
             | QuickRow::Screenshots
@@ -6053,6 +6056,7 @@ impl App {
                     status: w.status,
                     rows: w.rows,
                     note: w.note,
+                    big: w.big,
                     upper: w.upper,
                 },
             ));
@@ -6086,6 +6090,7 @@ impl App {
                     .map(|g| (g.name.clone(), g.platform.clone()))
                     .collect(),
                 note: None,
+                big: None,
                 upper: true,
             },
         ))
@@ -6139,6 +6144,29 @@ impl App {
     fn open_list_page(&mut self, page: ListPage) {
         self.search_texts = None;
         self.list_page = Some(page);
+    }
+
+    /// The ROM Manager listens only while its screen is open, so the PIN is always in sight.
+    fn open_rom_manager(&mut self) {
+        self.radio.wifi(WifiJob::RomManagerOn);
+        let page = ListPage::rom_manager(self.now());
+        self.open_list_page(page);
+    }
+
+    /// Games added, renamed or deleted from the ROM Manager: the shelves are filled afresh,
+    /// keeping recents and favorites that are still there.
+    fn rescan_games(&mut self) {
+        let Some(root) = self.root.clone() else {
+            return;
+        };
+        let carts = scan(&root).unwrap_or_default();
+        for (at, (_, carts)) in shelves_of(carts).into_iter().enumerate() {
+            if self.shelves[at].0.platform().is_some() {
+                self.restock(at, carts.carts);
+            }
+        }
+        self.restock_recents();
+        self.restock_favorites();
     }
 
     /// Add Network, My Networks and WPS want Home Wi-Fi on: it is switched on for them.
@@ -6223,6 +6251,10 @@ impl App {
             list_page::Step::None | list_page::Step::Close => {}
             list_page::Step::Scan => self.radio.wifi(WifiJob::Scan),
             list_page::Step::WpsStop => self.radio.wifi(WifiJob::WpsStop),
+            list_page::Step::RomManagerStop => {
+                self.radio.wifi(WifiJob::RomManagerOff);
+                self.rescan_games();
+            }
             list_page::Step::Zone(city) => {
                 self.state.time_zone = slot_store::zone_named(&city).map(|z| z.name);
                 self.persist();
@@ -6288,6 +6320,11 @@ impl App {
                         p.close(now);
                     }
                     self.joining = Some((ssid, now + 30_000));
+                }
+                WifiAnswer::RomManager(page) => {
+                    if let Some(p) = &mut self.list_page {
+                        p.rom_manager_ready(page);
+                    }
                 }
                 WifiAnswer::WpsFailed => {
                     if let Some(p) = &mut self.list_page {
@@ -7683,6 +7720,8 @@ pub struct SearchWords {
     pub rows: Vec<(String, String)>,
     /// Under the status on a message screen.
     pub note: Option<String>,
+    /// Large over the status on a message screen.
+    pub big: Option<String>,
     /// False keeps a network's name as it is written.
     pub upper: bool,
 }

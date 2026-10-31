@@ -15,6 +15,7 @@ pub enum Kind {
     Saved,
     Wps,
     Zones,
+    RomManager,
 }
 
 pub struct Row {
@@ -46,6 +47,7 @@ pub enum Step {
     Forget(String),
     WpsStop,
     Zone(String),
+    RomManagerStop,
 }
 
 pub struct ListPage {
@@ -53,6 +55,8 @@ pub struct ListPage {
     stage: Stage,
     rows: Vec<Row>,
     rev: u64,
+    /// The ROM Manager's PIN, shown large.
+    pin: Option<String>,
     opened: Millis,
     closed: Option<(Millis, f32)>,
 }
@@ -63,6 +67,8 @@ pub struct Words {
     pub typed: Option<String>,
     pub status: Option<String>,
     pub note: Option<String>,
+    /// Large over the status: the ROM Manager's PIN.
+    pub big: Option<String>,
     pub rows: Vec<(String, String)>,
     /// Network names keep their own capitals.
     pub upper: bool,
@@ -84,6 +90,7 @@ impl ListPage {
             stage,
             rows,
             rev: 0,
+            pin: None,
             opened: now,
             closed: None,
         }
@@ -122,6 +129,37 @@ impl ListPage {
 
     pub fn wps(now: Millis) -> Self {
         Self::new(Kind::Wps, Self::wps_message(120), Vec::new(), now)
+    }
+
+    /// The ROM Manager's address and PIN, once the console has them.
+    pub fn rom_manager(now: Millis) -> Self {
+        Self::new(
+            Kind::RomManager,
+            Stage::Message("Starting...".into(), String::new()),
+            Vec::new(),
+            now,
+        )
+    }
+
+    /// The page is up at `address`, or could not be started.
+    pub fn rom_manager_ready(&mut self, page: Option<(String, String)>) {
+        if self.kind != Kind::RomManager {
+            return;
+        }
+        self.stage = match page {
+            Some((address, pin)) => {
+                self.pin = Some(pin);
+                Stage::Message(
+                    address,
+                    "Open it on a phone or computer, enter the PIN".into(),
+                )
+            }
+            None => Stage::Message(
+                "Not connected".into(),
+                "Join a network first, then try again".into(),
+            ),
+        };
+        self.rev += 1;
     }
 
     fn wps_message(secs: u64) -> Stage {
@@ -205,6 +243,7 @@ impl ListPage {
             (Stage::Typing(..), _) => return None,
             (Stage::Confirm(_), _) => WifiLegend::Confirm,
             (_, Kind::Wps) => WifiLegend::Wps,
+            (_, Kind::RomManager) => WifiLegend::Back,
             (Stage::Message(..), Kind::Nearby) => WifiLegend::Nearby,
             (Stage::Message(..), _) => WifiLegend::Back,
             (_, Kind::Nearby) => WifiLegend::Nearby,
@@ -219,6 +258,7 @@ impl ListPage {
             typed: None,
             status: None,
             note: None,
+            big: self.pin.clone(),
             rows: self
                 .rows
                 .iter()
@@ -235,6 +275,7 @@ impl ListPage {
                         Kind::Saved => "My Networks",
                         Kind::Wps => "WPS",
                         Kind::Zones => "Time Zone",
+                        Kind::RomManager => "ROM Manager",
                     }
                     .into(),
                 )
@@ -251,6 +292,7 @@ impl ListPage {
             Stage::Message(line, note) => {
                 w.heading = match self.kind {
                     Kind::Wps => "WPS",
+                    Kind::RomManager => "ROM Manager",
                     Kind::Saved => "My Networks",
                     _ => "Networks Nearby",
                 }
@@ -281,10 +323,10 @@ impl ListPage {
         if self.closed.is_none() {
             self.closed = Some((now, self.openness(now)));
         }
-        if self.kind == Kind::Wps {
-            Step::WpsStop
-        } else {
-            Step::Close
+        match self.kind {
+            Kind::Wps => Step::WpsStop,
+            Kind::RomManager => Step::RomManagerStop,
+            _ => Step::Close,
         }
     }
 

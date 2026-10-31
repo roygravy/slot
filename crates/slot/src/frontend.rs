@@ -2243,6 +2243,7 @@ struct SearchTextures {
     typed: Option<TexId>,
     status: Option<TexId>,
     note: Option<TexId>,
+    big: Option<TexId>,
     rows: Vec<(Option<TexId>, Option<TexId>)>,
 }
 
@@ -2275,6 +2276,9 @@ fn sync_label_search(app: &mut App, compositor: &mut Compositor, state: &mut Sea
     let note = words
         .note
         .map(|t| up(&mut state.note, slot_ui::search_heading_face(&t)));
+    let big = words
+        .big
+        .map(|t| up(&mut state.big, slot_ui::search_big_face(&t)));
     if state.rows.len() < words.rows.len() {
         state.rows.resize(words.rows.len(), (None, None));
     }
@@ -2295,6 +2299,7 @@ fn sync_label_search(app: &mut App, compositor: &mut Compositor, state: &mut Sea
             status,
             rows,
             note,
+            big,
         },
     );
 }

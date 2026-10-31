@@ -75,6 +75,7 @@ pub enum QuickRow {
     AddNetwork,
     SavedNetworks,
     Wps,
+    RomManager,
     AutoTime,
     TimeZone,
     Clock24,
@@ -98,7 +99,7 @@ pub enum QuickRow {
 }
 
 impl QuickRow {
-    pub const ALL: [QuickRow; 87] = [
+    pub const ALL: [QuickRow; 88] = [
         QuickRow::FastForward,
         QuickRow::FastForwardSound,
         QuickRow::Screen,
@@ -166,6 +167,7 @@ impl QuickRow {
         QuickRow::AddNetwork,
         QuickRow::SavedNetworks,
         QuickRow::Wps,
+        QuickRow::RomManager,
         QuickRow::AutoTime,
         QuickRow::TimeZone,
         QuickRow::Clock24,
@@ -218,12 +220,13 @@ impl QuickRow {
     ];
 
     /// Home Wi-Fi and what it is connected to.
-    pub const NETWORK: [QuickRow; 5] = [
+    pub const NETWORK: [QuickRow; 6] = [
         QuickRow::HomeWifi,
         QuickRow::ConnectedTo,
         QuickRow::AddNetwork,
         QuickRow::SavedNetworks,
         QuickRow::Wps,
+        QuickRow::RomManager,
     ];
 
     /// Every screen setting belongs to one system: nothing here reaches across all three.
@@ -372,7 +375,8 @@ impl QuickRow {
             | QuickRow::ConnectedTo
             | QuickRow::AddNetwork
             | QuickRow::SavedNetworks
-            | QuickRow::Wps => &QuickRow::NETWORK,
+            | QuickRow::Wps
+            | QuickRow::RomManager => &QuickRow::NETWORK,
             QuickRow::Resume
             | QuickRow::States
             | QuickRow::Cheats
@@ -535,6 +539,7 @@ impl QuickRow {
             QuickRow::AddNetwork => "Add Network",
             QuickRow::SavedNetworks => "My Networks",
             QuickRow::Wps => "WPS",
+            QuickRow::RomManager => "ROM Manager",
             QuickRow::ScreenNes => "NES",
             QuickRow::ScreenSnes => "Super Nintendo",
             QuickRow::NesCable | QuickRow::SnesCable | QuickRow::Cable => "Cable",
@@ -618,6 +623,7 @@ impl QuickRow {
             QuickRow::AddNetwork => "Find a network nearby and type its password.",
             QuickRow::SavedNetworks => "The device joins these by itself. Y forgets one.",
             QuickRow::Wps => "Join by pressing the WPS button on your router.",
+            QuickRow::RomManager => "Games, BIOS and wallpapers from a web browser.",
             QuickRow::Network => "Home Wi-Fi and the network you are on.",
             QuickRow::ConnectedTo => "The home network this device is on now.",
             QuickRow::AutoSleep => {
@@ -657,6 +663,7 @@ impl QuickRow {
                 | QuickRow::AddNetwork
                 | QuickRow::SavedNetworks
                 | QuickRow::Wps
+                | QuickRow::RomManager
                 | QuickRow::About
                 | QuickRow::Screenshots
                 | QuickRow::Screen
