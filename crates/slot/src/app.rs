@@ -1147,12 +1147,12 @@ impl App {
         if !gbc_screen {
             hidden.push(QuickRow::ScreenLight);
         }
-        // Only the Game Boy shows its bare LCD round the picture.
-        if platform != Platform::Gb {
+        // Only the Pocket's colours show a bare LCD round the picture.
+        if !(platform == Platform::Gb && self.palette_live && self.gb_palette_is("GB Pocket")) {
             hidden.push(QuickRow::ScreenEdge);
         }
         // Only the Light's colours have a backlight behind them.
-        if !(platform == Platform::Gb && self.palette_live && self.gb_palette_is_light()) {
+        if !(platform == Platform::Gb && self.palette_live && self.gb_palette_is("GB Light")) {
             hidden.push(QuickRow::Backlight);
         }
         // Only the NES's picture has colours a TV made up.
@@ -2488,7 +2488,7 @@ impl App {
         self.seated_cart().map_or(self.platform, |c| c.platform)
     }
 
-    /// The Game Boy's bare LCD round its picture tinted ochre, with the DMG's palette.
+    /// The Game Boy's bare LCD round its picture a shade lighter, with the Pocket's palette.
     pub fn gb_edge(&self) -> bool {
         self.state.gb_edge
     }
@@ -2497,8 +2497,8 @@ impl App {
         self.state.gb_backlight
     }
 
-    fn gb_palette_is_light(&self) -> bool {
-        self.state.gb_palette.core_name() == "GB Light"
+    fn gb_palette_is(&self, name: &str) -> bool {
+        self.state.gb_palette.core_name() == name
     }
 
     /// How much light falls on the GBC's screen: 0 bright, 1 soft, 2 dim.

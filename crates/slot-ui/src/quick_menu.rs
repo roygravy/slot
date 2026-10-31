@@ -636,7 +636,7 @@ impl QuickRow {
                 "Black around the picture, instead of the screen's own glass."
             }
             QuickRow::GbEdge | QuickRow::ScreenEdge => {
-                "The bare LCD round the picture: ochre on the DMG, lighter on the Pocket."
+                "With the Pocket's colours, the bare LCD round the picture shows lighter."
             }
             QuickRow::GbBacklight | QuickRow::Backlight => {
                 "With the Light's colours, its backlight glows through the screen."

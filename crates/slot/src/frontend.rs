@@ -816,12 +816,11 @@ impl Frontend {
         // Effects off is the emulator's own picture: no dimming, saturation or panel tone.
         let bare = self.session.app().screen_bare();
         compositor.set_picture_appearance(gb, if gb && !bare { 0.03 } else { 0.0 });
-        // The DMG's bare LCD round its picture is ochre and the Pocket's a shade lighter than
-        // its ground; the Light's backlight glows through its whole screen.
+        // The Pocket's bare LCD round its picture is a shade lighter than its ground (the DMG's
+        // is its ground, Roy); the Light's backlight glows through its whole screen.
         let app = self.session.app();
         let edge = match app.gb_palette().map(|p| p.core_name()) {
             _ if !gb || bare => slot_gfx::ScreenEdge::Plain,
-            Some("DMG Green") if app.gb_edge() => slot_gfx::ScreenEdge::Ochre,
             Some("GB Pocket") if app.gb_edge() => slot_gfx::ScreenEdge::Lighter,
             Some("GB Light") if app.gb_backlight() => slot_gfx::ScreenEdge::Backlit,
             _ => slot_gfx::ScreenEdge::Plain,

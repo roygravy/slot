@@ -84,7 +84,6 @@ const vec3 offsets = vec3(3.141592654) * vec3(1.0 / 2.0, 1.0 / 2.0 - 2.0 / 3.0, 
 const float TV_SCANLINE = 0.72;
 const float TV_MASK = 0.18;
 const float TV_GLOW = 0.08;
-const vec3 EDGE_OCHRE = vec3(1.0, 0.93, 0.62) * 0.95;
 const float EDGE_LIGHTER = 1.08;
 const float BACKLIGHT_GLOW = 0.30;
 const float BACKLIGHT_CENTRE = 0.06;
@@ -119,10 +118,6 @@ void main() {
         if (u_black_edge < 0.5 && u_edge > 1.5 && u_edge < 2.5) {
             // The Pocket's bare LCD round its pixels: a shade lighter than the picture's ground.
             c = min(c * EDGE_LIGHTER, vec3(1.0));
-        } else if (u_black_edge < 0.5 && u_edge > 0.5 && u_edge < 1.5) {
-            // The Game Boy's bare LCD round its pixels: browner and yellower than the
-            // picture's ground, with no pixel layer over it.
-            c *= EDGE_OCHRE;
         }
     } else if (u_mode > 5.5) {
         // A TV's picture: the console's pixels as they are, every other screen line a little

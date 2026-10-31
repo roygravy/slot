@@ -318,7 +318,7 @@ pub struct SlotState {
     pub gbc_black_border: bool,
     /// How much light falls on the GBC's screen: 0 bright, 1 soft, 2 dim.
     pub gbc_light: u8,
-    /// The Game Boy's bare LCD round its picture tinted ochre, with the DMG's palette.
+    /// The Game Boy's bare LCD round its picture a shade lighter, with the Pocket's palette.
     pub gb_edge: bool,
     /// The GB Light palette's backlight glowing through its screen.
     pub gb_backlight: bool,
