@@ -191,6 +191,10 @@ impl Compositor {
         self.game.set_tv_lines(scanlines, mask);
     }
 
+    pub fn set_screen_edge(&mut self, ochre: bool) {
+        self.game.set_screen_edge(ochre);
+    }
+
     pub fn set_afterglow(&mut self, keep: u32) {
         self.game.set_afterglow(keep);
     }
@@ -236,8 +240,8 @@ impl Compositor {
         self.game.set_picture_appearance(sample_background, dim);
     }
 
-    pub fn set_lcd_mix(&mut self, scanlines: f32, tint: f32, on_screen_pixels: bool) {
-        self.game.set_lcd_mix(scanlines, tint, on_screen_pixels);
+    pub fn set_lcd_mix(&mut self, scanlines: f32, tint: f32, on_screen_pixels: bool, ink: f32) {
+        self.game.set_lcd_mix(scanlines, tint, on_screen_pixels, ink);
     }
 
     pub fn set_black_edge(&mut self, black: bool) {

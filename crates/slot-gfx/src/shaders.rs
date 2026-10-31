@@ -78,11 +78,13 @@ uniform vec3 u_lcd_mix;
 uniform float u_grid_opacity;
 uniform float u_pixel_transparency;
 uniform vec2 u_tv;
+uniform float u_edge;
 varying vec2 v_uv;
 const vec3 offsets = vec3(3.141592654) * vec3(1.0 / 2.0, 1.0 / 2.0 - 2.0 / 3.0, 1.0 / 2.0 - 4.0 / 3.0);
 const float TV_SCANLINE = 0.72;
 const float TV_MASK = 0.18;
 const float TV_GLOW = 0.08;
+const vec3 EDGE_OCHRE = vec3(1.0, 0.93, 0.62) * 0.95;
 const vec3 luma_coeff = vec3(0.2126, 0.7152, 0.0722);
 vec2 grid_band(vec2 x) {
     return floor(x) / 3.0 + min(fract(x), vec2(1.0 / 3.0));
@@ -111,6 +113,11 @@ void main() {
     bool inside = all(greaterThanEqual(uv, u_pic.xy)) && all(lessThan(uv, u_pic.zw));
     if (!inside) {
         c = u_black_edge > 0.5 ? vec3(0.0) : u_bg;
+        if (u_black_edge < 0.5 && u_edge > 0.5) {
+            // The Game Boy's bare LCD round its pixels: browner and yellower than the
+            // picture's ground, with no pixel layer over it.
+            c *= EDGE_OCHRE;
+        }
     } else if (u_mode > 5.5) {
         // A TV's picture: the console's pixels as they are, every other screen line a little
         // darker, a faint slot mask over them, and a soft glow around the bright parts. Worked
@@ -172,6 +179,11 @@ void main() {
             }
             c = mix(c, stripe, u_lcd_mix.y);
             c = mix(c, vec3(0.0), u_lcd_mix.x * dark);
+            if (u_lcd_mix.z < 0.5) {
+                // The GBC's black, greyer the less light falls on its unlit panel.
+                vec3 ink = u_lcd_mix.z * vec3(1.0, 1.04, 1.15);
+                c = ink + (1.0 - ink) * c;
+            }
         } else {
             c = mix(c, lcd.rgb, lcd.a * 0.45);
         }

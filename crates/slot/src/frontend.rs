@@ -816,6 +816,9 @@ impl Frontend {
         // Effects off is the emulator's own picture: no dimming, saturation or panel tone.
         let bare = self.session.app().screen_bare();
         compositor.set_picture_appearance(gb, if gb && !bare { 0.03 } else { 0.0 });
+        // The DMG's bare LCD round its picture is ochre; the Pocket's and the Light's are not.
+        let dmg = self.session.app().gb_palette() == Some(slot_store::GbPalette::DEFAULT);
+        compositor.set_screen_edge(gb && !bare && dmg && self.session.app().gb_edge());
         let gba = platform == slot_store::Platform::Gba;
         // The colour screens, GBC and GBA, cast lighter shadows than the Game Boy's.
         compositor.set_pixel_shadow(match (gba || gbc, gb) {
@@ -827,17 +830,20 @@ impl Frontend {
             true => COLOUR_PALE_OPACITY,
             false => GB_PALE_OPACITY,
         });
-        compositor.set_lcd_mix(GBC_LCD[0], GBC_LCD[1], gba);
+        // How much light falls on the GBC's screen: its panel, colours and black with it.
+        let light = &GBC_LIGHT[usize::from(self.session.app().gbc_light())];
+        compositor.set_lcd_mix(GBC_LCD[0], GBC_LCD[1], gba, light.ink);
         // Effects off: black around the picture too, nothing of slot.'s screen left.
         compositor.set_black_edge(self.session.app().black_border() || bare);
         compositor.set_saturation(match (gba, gbc) {
             _ if bare => 1.0,
             (true, _) => GBA_SATURATION,
-            (_, true) => GBC_SATURATION,
+            (_, true) => light.saturation,
             _ => 1.0,
         });
         match gbc || gba {
             true if bare => compositor.set_panel(Some(GBC_PANEL), [1.0; 3]),
+            true if gbc => compositor.set_panel(Some(light.panel), light.panel),
             true => compositor.set_panel(Some(GBC_PANEL), GBC_PANEL),
             false => compositor.set_panel(None, [1.0; 3]),
         }
@@ -2066,6 +2072,33 @@ const GBC_LCD: [f32; 2] = [0.10, 0.20];
 const GBA_SATURATION: f32 = 0.75;
 /// A GBC's colours, a touch softer than the raw ones.
 const GBC_SATURATION: f32 = 0.85;
+
+/// The GBC's screen under some light: what white becomes, how vivid colours stay, and how
+/// grey black turns.
+struct GbcLight {
+    panel: [f32; 3],
+    saturation: f32,
+    ink: f32,
+}
+
+/// Screen Light: Bright (the GBC in daylight), Soft and Dim (an ever dimmer room).
+const GBC_LIGHT: [GbcLight; 3] = [
+    GbcLight {
+        panel: GBC_PANEL,
+        saturation: GBC_SATURATION,
+        ink: 0.0,
+    },
+    GbcLight {
+        panel: [0.72, 0.73, 0.67],
+        saturation: 0.80,
+        ink: 0.10,
+    },
+    GbcLight {
+        panel: [0.64, 0.66, 0.60],
+        saturation: 0.72,
+        ink: 0.14,
+    },
+];
 
 /// How dark, how wide, and soft-edged.
 /// The GBC's and GBA's pixels let less light through than the Game Boy's and cast lighter
