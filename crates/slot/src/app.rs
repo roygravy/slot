@@ -740,6 +740,8 @@ impl App {
         app.root = Some(root.to_path_buf());
         app.loading = loading;
         app.state = read_slot_state(root);
+        // Renames from a GRAVY Manager the console went off with, still open.
+        app.follow_renames(root);
         app.radio.ask(RadioJob::Home(app.state.home_wifi_enabled));
         app.radio.ask(RadioJob::Time(app.auto_time_on()));
         app.restock_recents();
