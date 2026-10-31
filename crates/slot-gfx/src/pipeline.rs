@@ -324,9 +324,9 @@ impl GamePass {
         self.tv_lines = (scanlines, mask);
     }
 
-    /// The Game Boy's bare LCD round its picture: ochre, rather than the picture's ground.
-    pub fn set_screen_edge(&mut self, ochre: bool) {
-        self.edge = ochre as u8 as f32;
+    /// The Game Boy's bare LCD round its picture, rather than the picture's ground.
+    pub fn set_screen_edge(&mut self, edge: ScreenEdge) {
+        self.edge = edge as u8 as f32;
     }
 
     /// The share of the last picture a TV's phosphor keeps glowing with, out of 256; 0 for none.
@@ -693,4 +693,15 @@ mod tests {
         let grey = [[200, 200, 200], [120, 120, 120], [60, 60, 60], [10, 10, 10]];
         assert_eq!(shades.lightest(&frame(&grey), pic), [200.0 / 255.0; 3]);
     }
+}
+
+/// The bare LCD round a Game Boy picture.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum ScreenEdge {
+    /// The picture's own ground.
+    Plain = 0,
+    /// The DMG's: browner and yellower than the ground.
+    Ochre = 1,
+    /// The Pocket's: a shade lighter than the ground.
+    Lighter = 2,
 }

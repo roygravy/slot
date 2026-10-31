@@ -85,6 +85,7 @@ const float TV_SCANLINE = 0.72;
 const float TV_MASK = 0.18;
 const float TV_GLOW = 0.08;
 const vec3 EDGE_OCHRE = vec3(1.0, 0.93, 0.62) * 0.95;
+const float EDGE_LIGHTER = 1.08;
 const vec3 luma_coeff = vec3(0.2126, 0.7152, 0.0722);
 vec2 grid_band(vec2 x) {
     return floor(x) / 3.0 + min(fract(x), vec2(1.0 / 3.0));
@@ -113,7 +114,10 @@ void main() {
     bool inside = all(greaterThanEqual(uv, u_pic.xy)) && all(lessThan(uv, u_pic.zw));
     if (!inside) {
         c = u_black_edge > 0.5 ? vec3(0.0) : u_bg;
-        if (u_black_edge < 0.5 && u_edge > 0.5) {
+        if (u_black_edge < 0.5 && u_edge > 1.5) {
+            // The Pocket's bare LCD round its pixels: a shade lighter than the picture's ground.
+            c = min(c * EDGE_LIGHTER, vec3(1.0));
+        } else if (u_black_edge < 0.5 && u_edge > 0.5) {
             // The Game Boy's bare LCD round its pixels: browner and yellower than the
             // picture's ground, with no pixel layer over it.
             c *= EDGE_OCHRE;
