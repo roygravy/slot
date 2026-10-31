@@ -21,6 +21,9 @@ const MAX_CONNECTIONS: usize = 8;
 const MAX_WRONG: usize = 10;
 /// Where a half-sent game waits before it gets its name.
 const PART: &str = ".rom-manager.part";
+/// Games renamed while the page was open, one `GB<tab>old<tab>new` a line, for slot to carry
+/// favorites and recents over when the screen closes.
+pub const RENAMED: &str = "Config/.renamed";
 
 pub struct Web {
     pub owner: String,
@@ -565,8 +568,43 @@ fn rename(root: &Path, system: &str, name: &str, to: &str) -> Result<(), &'stati
         {
             move_if_there(&labels.join(label), &labels.join(format!("{new}.png")));
         }
+        // The cart's own colour and marker are kept by name too.
+        for file in [
+            slot_store::CART_SHELL_FILE,
+            slot_store::LABELS_SHELL_FILE,
+            slot_store::CART_MARKER_FILE,
+        ] {
+            if let Err(e) = rekey(&root.join(file), old, new) {
+                eprintln!("slot-services: rom manager: {file}: {e}");
+            }
+        }
+        // Favorites and recents live in slot's own state, which slot writes: it is told.
+        let line = format!("{}\t{old}\t{new}\n", p.dir_name());
+        let journal = root.join(RENAMED);
+        let _ = fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(journal)
+            .and_then(|mut f| f.write_all(line.as_bytes()));
     }
     fs::rename(dir.join(&from), dir.join(&to)).map_err(|_| "The card can't be written")
+}
+
+/// `old`'s line in a `name = value` file, moved to `new`.
+fn rekey(path: &Path, old: &str, new: &str) -> std::io::Result<()> {
+    let Ok(text) = fs::read_to_string(path) else {
+        return Ok(());
+    };
+    let wanted = slot_store::cart_shell::key(old);
+    let Some((was, value)) = slot_store::ini::parse(&text)
+        .into_iter()
+        .find(|(k, _)| slot_store::cart_shell::key(k) == wanted)
+    else {
+        return Ok(());
+    };
+    let text = slot_store::ini::set(&text, &was, None)?;
+    let text = slot_store::ini::set(&text, new, Some(&value))?;
+    slot_store::atomic_write(path, text.as_bytes())
 }
 
 fn move_if_there(from: &Path, to: &Path) {
@@ -611,15 +649,29 @@ mod tests {
             ("Saves/GB", "Tetris.sav"),
             ("States/GB/gambatte/Tetris", "1.state"),
             ("Labels/GB", "tetris.png"),
+            ("Config", "cart_shell.txt"),
         ] {
             fs::create_dir_all(r.join(dir)).unwrap();
             fs::write(r.join(dir).join(file), b"x").unwrap();
         }
+        fs::write(
+            r.join(slot_store::CART_SHELL_FILE),
+            "Tetris = round 3a7bd5 clear\n",
+        )
+        .unwrap();
         rename(r, "GB", "Tetris.gb", "Tetris DX.gb").unwrap();
         assert!(r.join("Games/GB/Tetris DX.gb").is_file());
         assert!(r.join("Saves/GB/Tetris DX.sav").is_file());
         assert!(r.join("States/GB/gambatte/Tetris DX/1.state").is_file());
         assert!(r.join("Labels/GB/Tetris DX.png").is_file());
+        assert_eq!(
+            fs::read_to_string(r.join(slot_store::CART_SHELL_FILE)).unwrap(),
+            "Tetris DX = round 3a7bd5 clear\n"
+        );
+        assert_eq!(
+            fs::read_to_string(r.join(RENAMED)).unwrap(),
+            "GB\tTetris\tTetris DX\n"
+        );
         assert!(rename(r, "GB", "Tetris DX.gb", "../x.gb").is_err());
     }
 

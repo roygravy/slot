@@ -6161,6 +6161,7 @@ impl App {
         let Some(root) = self.root.clone() else {
             return;
         };
+        self.follow_renames(&root);
         let carts = scan(&root).unwrap_or_default();
         for (at, (_, carts)) in shelves_of(carts).into_iter().enumerate() {
             if self.shelves[at].0.platform().is_some() {
@@ -6169,6 +6170,41 @@ impl App {
         }
         self.restock_recents();
         self.restock_favorites();
+    }
+
+    /// The GRAVY Manager journals each rename as "PLATFORM\told\tnew"; recents,
+    /// favorites and the cart in the slot follow the game to its new name.
+    fn follow_renames(&mut self, root: &Path) {
+        let journal = root.join("Config/.renamed");
+        let Ok(text) = std::fs::read_to_string(&journal) else {
+            return;
+        };
+        for line in text.lines() {
+            let mut parts = line.split('\t');
+            let (Some(dir), Some(old), Some(new)) = (parts.next(), parts.next(), parts.next())
+            else {
+                continue;
+            };
+            let Some(platform) = Platform::ALL.into_iter().find(|p| p.dir_name() == dir) else {
+                continue;
+            };
+            let state = &mut self.state;
+            for r in state
+                .recents
+                .iter_mut()
+                .chain(state.favorites.iter_mut())
+                .chain(state.shelf_cart.iter_mut())
+            {
+                if r.platform == platform && r.stem == old {
+                    r.stem = new.to_string();
+                }
+            }
+            if state.cart_platform == Some(platform) && state.cart.as_deref() == Some(old) {
+                state.cart = Some(new.to_string());
+            }
+        }
+        self.persist();
+        let _ = std::fs::remove_file(&journal);
     }
 
     /// Add Network, My Networks and WPS want Home Wi-Fi on: it is switched on for them.
