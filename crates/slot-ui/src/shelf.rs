@@ -569,7 +569,17 @@ impl Shelf {
                     });
                 }
             }
-            if let Some(tex) = self.drops[mould.index()] {
+            // A cart in its own glow casts no shadow (Roy): the shadow goes as the glow comes up.
+            let glowing = if self.mark == FavoriteMark::Star {
+                0.0
+            } else if self.starred.get(i) == Some(&true) {
+                smoothstep(self.lit)
+            } else if self.spotlight && slot == 0 {
+                smoothstep(self.lit) * (1.0 - t)
+            } else {
+                0.0
+            };
+            if let (Some(tex), true) = (self.drops[mould.index()], glowing < 1.0) {
                 let m = DROP_MARGIN as f32 * scale;
                 out.push(Draw::Tex {
                     x: x - m,
@@ -581,7 +591,8 @@ impl Shelf {
                         * alpha
                         * dim
                         * (1.0 + lift / LIFT * 0.3)
-                        * if self.light_ground { 0.55 } else { 1.0 },
+                        * if self.light_ground { 0.55 } else { 1.0 }
+                        * (1.0 - glowing),
                 });
             }
             if self.clear(i) && self.face(i).is_some() {

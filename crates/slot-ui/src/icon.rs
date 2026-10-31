@@ -219,7 +219,12 @@ pub fn halo_face(cw: u32, ch: u32, margin: u32, colour: [u8; 3], peak: f32) -> C
     let (w, h) = (fw.div_ceil(2), fh.div_ceil(2));
     let (cx, cy) = (fw as f32 / 2.0, fh as f32 / 2.0);
     // Full just inside the cart's edges, so it shows right round them.
-    let (hw, hh) = (cw as f32 / 2.0 - 12.0, ch as f32 / 2.0 - 12.0);
+    // Its corners round off over `round` px so the light never shows a square corner (Roy).
+    let round = 28.0;
+    let (hw, hh) = (
+        cw as f32 / 2.0 - 12.0 - round,
+        ch as f32 / 2.0 - 12.0 - round,
+    );
     // Close round the cart and soft (Roy): well inside the face's own edge.
     let reach = margin as f32 * 0.6 + 12.0;
     let mut rgba = vec![0u8; (w * h * 4) as usize];
@@ -227,7 +232,7 @@ pub fn halo_face(cw: u32, ch: u32, margin: u32, colour: [u8; 3], peak: f32) -> C
         for px in 0..w {
             let (x, y) = ((px as f32 + 0.5) * 2.0 - cx, (py as f32 + 0.5) * 2.0 - cy);
             let (qx, qy) = (x.abs() - hw, y.abs() - hh);
-            let out = (qx.max(0.0).powi(2) + qy.max(0.0).powi(2)).sqrt();
+            let out = ((qx.max(0.0).powi(2) + qy.max(0.0).powi(2)).sqrt() - round).max(0.0);
             let t = (out / reach).min(1.0);
             let a = (1.0 - t).powf(2.6) * peak;
             let o = ((py * w + px) * 4) as usize;
