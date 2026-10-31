@@ -233,6 +233,16 @@ fn handle(stream: TcpStream, shared: &Shared) {
                 list(root).as_bytes(),
             )
         }
+        // Wallpapers are shown on the page; nothing else on the card is handed out.
+        ("GET", ["api", "games", "WALLPAPERS", name]) => {
+            let picture = checked("WALLPAPERS", name)
+                .ok()
+                .and_then(|(p, n)| fs::read(p.dir(root).join(n)).ok());
+            return match picture {
+                Some(png) => reply(&mut out, "200 OK", "image/png", &png),
+                None => fail(&mut out, "404 Not Found", "That file isn't there"),
+            };
+        }
         ("PUT", ["api", "games", system, name]) => {
             upload(root, system, name, req.length, &mut reader)
         }

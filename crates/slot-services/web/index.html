@@ -39,8 +39,12 @@ li input { flex: 1; background: var(--panel); border: 1px solid var(--fg); color
 footer { margin-top: 18px; color: var(--dim); font-size: 12px; display: flex; justify-content: space-between; }
 .pin { position: fixed; inset: 0; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; }
 .pin input { width: 150px; text-align: center; font: 600 30px system-ui; letter-spacing: .4em; background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
-@media (max-width: 520px) { main { padding-top: 56px; } .theme { top: 12px; } nav button { font-size: 12px; letter-spacing: .04em; padding: 10px 2px; } li { flex-wrap: wrap; gap: 6px 10px; } li .name { flex-basis: 100%; } li .size { flex: 1; } }
-.pin[hidden] { display: none; }
+@media (max-width: 520px) { main { padding-top: 56px; } .theme { top: 12px; } nav button { font-size: 12px; letter-spacing: .04em; padding: 10px 2px; } li { flex-wrap: wrap; gap: 6px 10px; } li .name { flex-basis: 100%; } li:has(.thumb) .name { flex-basis: calc(100% - 92px); } li .size { flex: 1; } }
+.pin[hidden], .viewer[hidden] { display: none; }
+li img.thumb { width: 80px; height: 60px; object-fit: cover; border-radius: 4px; background: var(--panel); border: 1px solid var(--line); cursor: zoom-in; flex: none; }
+.viewer { position: fixed; inset: 0; background: rgba(0, 0, 0, .85); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 16px; cursor: zoom-out; z-index: 2; }
+.viewer img { max-width: min(100%, 960px); max-height: 80vh; border-radius: 6px; }
+.viewer p { margin: 0; color: #eef0f4; font-size: 13px; }
 .pin p { color: var(--dim); margin: 0; font-size: 13px; }
 </style>
 </head>
@@ -61,6 +65,7 @@ footer { margin-top: 18px; color: var(--dim); font-size: 12px; display: flex; ju
   <ul id="list"></ul>
   <footer><span id="count"></span><span id="free"></span></footer>
 </main>
+<div class="viewer" id="viewer" hidden><img id="big" alt=""><p id="bigname"></p></div>
 <div class="pin" id="lock" hidden>
   <div class="sub">Enter PIN</div>
   <input id="pin" inputmode="numeric" maxlength="4" autocomplete="off">
@@ -120,17 +125,39 @@ function render() {
   const games = data ? data.systems[sys] : [];
   $("list").innerHTML = games.length ? games.map(([n, b], i) => renaming == n
     ? `<li><input id="to" value="${esc(n)}"><button data-save="${i}">Save</button><button data-cancel>Cancel</button></li>`
-    : `<li><span class="name">${esc(n)}</span><span class="size">${size(b)}</span>` +
+    : `<li>${sys == "WALLPAPERS" ? `<img class="thumb" data-view="${i}" alt="">` : ""}<span class="name">${esc(n)}</span><span class="size">${size(b)}</span>` +
       `<button data-ren="${i}">Rename</button><button data-del="${i}">Delete</button></li>`).join("")
     : `<li><span class="name" style="color:var(--dim)">Nothing here yet</span></li>`;
   const what = GAMES(sys) ? " game" : " file";
   $("count").textContent = games.length + what + (games.length == 1 ? "" : "s");
   $("free").textContent = data ? (data.free / 1073741824).toFixed(1) + " GB free on SD card" : "";
+  if (sys == "WALLPAPERS") thumbs(games);
   const to = $("to");
   if (to) { to.focus(); to.setSelectionRange(0, to.value.lastIndexOf(".")); to.onkeydown = e => {
     if (e.key == "Enter") $("list").querySelector("[data-save]").click();
     if (e.key == "Escape") { renaming = null; render(); } }; }
 }
+// Wallpapers come with their picture: fetched with the PIN, kept while the page is open.
+const pictures = {};
+async function picture(name, bytes) {
+  const key = name + ":" + bytes;
+  if (!pictures[key]) pictures[key] = api("GET", url("WALLPAPERS", name)).then(r => r.blob()).then(URL.createObjectURL);
+  return pictures[key];
+}
+function thumbs(games) {
+  $("list").querySelectorAll("img.thumb").forEach(img => {
+    const [n, b] = games[img.dataset.view];
+    picture(n, b).then(src => img.src = src).catch(() => {});
+  });
+}
+async function view(i) {
+  const [n, b] = data.systems.WALLPAPERS[i];
+  $("big").src = await picture(n, b);
+  $("bigname").textContent = n;
+  $("viewer").hidden = false;
+}
+$("viewer").onclick = () => $("viewer").hidden = true;
+document.addEventListener("keydown", e => { if (e.key == "Escape") $("viewer").hidden = true; });
 $("tabs").onclick = e => {
   const s = e.target.dataset.s;
   if (!s) return;
@@ -141,6 +168,7 @@ $("tabs").onclick = e => {
 $("list").onclick = async e => {
   const d = e.target.dataset, games = data.systems[sys];
   try {
+    if (d.view) return view(d.view);
     if (d.ren) { renaming = games[d.ren][0]; return render(); }
     if ("cancel" in d) { renaming = null; return render(); }
     if (d.save) {
