@@ -1140,8 +1140,11 @@ impl App {
         if !self.sgb_playing() {
             hidden.push(QuickRow::SgbBorder);
         }
-        // Only the GBC's screen has no light of its own.
-        if platform != Platform::Gbc {
+        // Only the GBC's screen has no light of its own; a Game Boy game with Color Palettes
+        // off is drawn on it too (Roy).
+        let gbc_screen =
+            platform == Platform::Gbc || (platform == Platform::Gb && !self.palette_live);
+        if !gbc_screen {
             hidden.push(QuickRow::ScreenLight);
         }
         // Only the Game Boy shows its bare LCD round the picture.
@@ -1185,7 +1188,7 @@ impl App {
             (QuickRow::LcdGhosting, Platform::Gba) => QuickRow::GbaGhosting,
             (QuickRow::BlackBorder, Platform::Gb) => QuickRow::GbBlackBorder,
             (QuickRow::BlackBorder, Platform::Gbc) => QuickRow::GbcBlackBorder,
-            (QuickRow::ScreenLight, Platform::Gbc) => QuickRow::GbcLight,
+            (QuickRow::ScreenLight, Platform::Gbc | Platform::Gb) => QuickRow::GbcLight,
             (QuickRow::ScreenEdge, Platform::Gb) => QuickRow::GbEdge,
             (QuickRow::Cable, Platform::Nes) => QuickRow::NesCable,
             (QuickRow::Cable, Platform::Snes) => QuickRow::SnesCable,
