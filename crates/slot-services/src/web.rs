@@ -43,8 +43,18 @@ struct Shared {
 
 impl Web {
     pub fn start(root: &Path, owner: &str, ip: Ipv4Addr) -> Result<Web, &'static str> {
-        // Port 80 so the address needs no number; another server there leaves 8080.
-        let (listener, port) = match TcpListener::bind(("0.0.0.0", 80)) {
+        // Port 80 so the address needs no number; another server there leaves 8080. A page
+        // just closed lets go of 80 within its 50 ms accept nap: wait that out, so the
+        // address stays the same (Roy).
+        let mut bound = TcpListener::bind(("0.0.0.0", 80));
+        for _ in 0..4 {
+            if bound.is_ok() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(50));
+            bound = TcpListener::bind(("0.0.0.0", 80));
+        }
+        let (listener, port) = match bound {
             Ok(l) => (l, 80),
             Err(_) => (
                 TcpListener::bind(("0.0.0.0", 8080)).map_err(|_| "WEB_PORT_BUSY")?,
