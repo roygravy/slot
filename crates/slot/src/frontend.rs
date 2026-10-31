@@ -1801,7 +1801,7 @@ fn help_line_face(line: &str) -> slot_ui::UndoFace {
             h: 0,
         };
     };
-    let layout = text::fit(font, line, 600.0, 1, 17.0, 12.0);
+    let layout = text::fit(font, line, 600.0, 1, slot_ui::HELP_PX, slot_ui::HELP_MIN_PX);
     let set = layout
         .lines
         .iter()
@@ -1905,7 +1905,7 @@ fn sync_cheats(app: &mut App, compositor: &mut Compositor, state: &mut CheatText
             quick_value_face("No cheats for this game", false),
         );
         let line = format!(
-            "Put a .cht file named like this game in Cheats/{}.",
+            "Add a .cht file named like this game to Cheats/{}.",
             app.cheat_platform().dir_name()
         );
         let empty_help = up(&mut state.empty_help, help_line_face(&line));

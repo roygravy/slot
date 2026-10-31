@@ -103,6 +103,7 @@ pub use polaroids::{
 };
 pub use power_menu::{menu_face, PowerChoice, MENU_PAD};
 pub use quick_menu::{
+    HELP_MIN_PX, HELP_PX,
     draw_menu_ground, quick_caret_face, quick_first, quick_help_face, quick_label_face,
     quick_legend_faces, quick_pitch, quick_pointer_face, quick_row_top, quick_switch_face,
     quick_value_face, window_first, QuickMenu, QuickMenuFaces, QuickRow, QuickValue, QUICK_EDGE,

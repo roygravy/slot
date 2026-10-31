@@ -568,20 +568,20 @@ impl QuickRow {
             QuickRow::Game => "Speed, rewind, turbo and saving.",
             QuickRow::Buttons => "Every button and shortcut, explained.",
             QuickRow::About => "Who made this, and what it runs on.",
-            QuickRow::Screenshots => "Every screenshot, newest first. VOL+ and POWER takes one.",
+            QuickRow::Screenshots => "Newest first. VOL+ and POWER takes one.",
             QuickRow::GameScreenshots => "This game's screenshots. VOL+ and POWER takes one.",
             QuickRow::NesCable | QuickRow::SnesCable | QuickRow::Cable => {
-                "How the console reached the TV. SELECT + B turns every effect off."
+                "The cable to the TV. SELECT + B turns effects off."
             }
             QuickRow::NesColors | QuickRow::Colors => "The colors a TV made of the NES's picture.",
             QuickRow::SgbBorder => {
-                "The Super Game Boy's frame. Auto: the game's own, else the Classic one."
+                "The Super Game Boy frame. Auto: the game's own."
             }
             QuickRow::NesScanlines | QuickRow::SnesScanlines | QuickRow::Scanlines => {
                 "A faint dark line between the picture's lines."
             }
             QuickRow::NesMask | QuickRow::SnesMask | QuickRow::Mask => {
-                "The tube's red, green and blue, faintly over the picture."
+                "The tube's red, green and blue dots, faintly."
             }
             QuickRow::NesAfterglow | QuickRow::SnesAfterglow | QuickRow::Afterglow => {
                 "Moving things leave a brief glow, as on a tube."
@@ -591,18 +591,18 @@ impl QuickRow {
             | QuickRow::ScreenGba
             | QuickRow::ScreenNes
             | QuickRow::ScreenSnes => "Settings for this console only.",
-            QuickRow::GbShader => "The Game Boy's dot grid. SELECT + B turns every effect off.",
+            QuickRow::GbShader => "Game Boy dot grid. SELECT + B turns effects off.",
             QuickRow::GbaShader | QuickRow::GbcShader | QuickRow::Shader => {
-                "The real screen's lines. SELECT + B turns every effect off."
+                "Real screen lines. SELECT + B turns effects off."
             }
             QuickRow::GbPalettes | QuickRow::Palette => {
-                "Off: the game's own Game Boy Color colors. SELECT + L2 / R2 picks one."
+                "Off: the game's own colors. SELECT + L2/R2 picks one."
             }
             QuickRow::PixelTransparency
             | QuickRow::GbTransparency
             | QuickRow::GbcTransparency
             | QuickRow::GbaTransparency => {
-                "Pale pixels let the light through and cast soft shadows."
+                "Pale pixels let light through and cast shadows."
             }
             QuickRow::LcdGhosting
             | QuickRow::GbGhosting
@@ -615,21 +615,21 @@ impl QuickRow {
             QuickRow::Rumble => "Let games that support it shake the device.",
             QuickRow::CheatIcon => "Show a masked robber while any cheat is on.",
             QuickRow::GbcBlackBorder | QuickRow::GbBlackBorder | QuickRow::BlackBorder => {
-                "Black around the picture, instead of the screen's own glass."
+                "Black around the picture instead of the glass."
             }
             QuickRow::GbcLight | QuickRow::ScreenLight => {
-                "The GBC has no backlight: the dimmer the room, the greyer its screen."
+                "No backlight: a darker room, a greyer screen."
             }
             QuickRow::InGameMenu => "Tap MENU in a game to pause and open a menu.",
             QuickRow::EjectSave => "Save your place when you eject a cart.",
             QuickRow::Wallpaper => "Dark, Light, or your own from the Wallpapers folder.",
-            QuickRow::Theme => "Dark, light or each console's own colour round the slot.",
+            QuickRow::Theme => "Dark, light or each console's own color.",
             QuickRow::Recents => "A shelf with the last 10 games you played.",
             QuickRow::FavoriteMark => "How favorites stand out. Press Y on a cart to mark it.",
             QuickRow::ShowTitles => "Show the selected game's name under the shelf.",
             QuickRow::DateTime => "Set the date and time yourself.",
             QuickRow::AutoTime => "Set by the internet over Home Wi-Fi.",
-            QuickRow::TimeZone => "Your city, for summer and winter time. A shows them all.",
+            QuickRow::TimeZone => "Your city, for summer time. A shows them all.",
             QuickRow::Clock24 => "Off shows the time as 6:00 PM.",
             QuickRow::HomeWifi => "Join your saved networks. Sets the clock too.",
             QuickRow::AddNetwork => "Find a network nearby and type its password.",
@@ -639,16 +639,16 @@ impl QuickRow {
             QuickRow::Network => "Home Wi-Fi and the network you are on.",
             QuickRow::ConnectedTo => "The home network this device is on now.",
             QuickRow::AutoSleep => {
-                "Screen off after this long without a button press. Wi-Fi stays on."
+                "Screen off after this long idle. Wi-Fi stays on."
             }
             QuickRow::DeepSleep => {
-                "From Light Sleep to Deep Sleep after this long. Saves the most battery."
+                "Deep Sleep after this long. Saves the most battery."
             }
             QuickRow::RememberPosition => "Start where you left off on the shelf.",
             QuickRow::ResumeGame => {
-                "Power on straight back into the game, its picture as boot screen."
+                "Power on straight back into your game."
             }
-            QuickRow::BootPicture => "Power off in a game and it shows while the device starts.",
+            QuickRow::BootPicture => "Power off in a game: it shows at start-up.",
             QuickRow::Resume => "Back to the game, right where you paused.",
             QuickRow::States => "Save, load and flick through save states.",
             QuickRow::Cheats => "Turn this game's cheats on and off.",
@@ -967,8 +967,9 @@ pub(crate) const LEGEND_Y: f32 = 427.0;
 /// The help line sits between the rows and the legend.
 const HELP_Y: f32 = 392.0;
 const HELP_H: u32 = 24;
-const HELP_PX: f32 = 17.0;
-const HELP_MIN_PX: f32 = 12.0;
+pub const HELP_PX: f32 = 16.0;
+/// One size everywhere: help texts are written to fit; only an odd dynamic line shrinks.
+pub const HELP_MIN_PX: f32 = 13.0;
 const HELP_MAX_W: f32 = 600.0;
 /// Rows fill the space above the help line.
 const PANEL_GAP: f32 = 12.0;
@@ -1470,4 +1471,21 @@ fn tint(out: &mut Vec<Draw>, tex: TexId, x: f32, y: f32, w: u32, h: u32, colour:
         tex,
         colour,
     });
+}
+
+#[cfg(test)]
+mod help_fits {
+    use super::*;
+
+    /// Every help line is written to fit one line at the one help size, so none shrinks.
+    #[test]
+    fn every_help_line_fits_at_full_size() {
+        let font = text::label_font().unwrap();
+        for row in QuickRow::ALL {
+            if let Some(line) = row.help() {
+                let layout = text::fit(font, line, HELP_MAX_W, 1, HELP_PX, HELP_MIN_PX);
+                assert_eq!(layout.px, HELP_PX, "{row:?}: {line}");
+            }
+        }
+    }
 }
