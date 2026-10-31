@@ -49,8 +49,9 @@ pub const GLOW_MARGIN: u32 = 130;
 const LIFT: f32 = 10.0;
 /// The favourites' glow waits for the cart to come this close to standing still...
 const SETTLED: f32 = 0.04;
-/// ...then rises over this long.
+/// ...then rises over this long. It fades out quicker, as soon as the carts move.
 const LIGHT_UP_S: f32 = 0.22;
+const LIGHT_DOWN_S: f32 = 0.12;
 /// How far a cart's drop shadow spreads, and how far below the cart it falls.
 pub const DROP_MARGIN: u32 = 22;
 const DROP_FALL: f32 = 10.0;
@@ -493,7 +494,7 @@ impl Shelf {
         self.vel += accel * dt;
         self.scroll += self.vel * dt;
         self.lit = if (self.scroll - self.scroll_target()).abs() > SETTLED {
-            0.0
+            (self.lit - dt / LIGHT_DOWN_S).max(0.0)
         } else {
             (self.lit + dt / LIGHT_UP_S).min(1.0)
         };
