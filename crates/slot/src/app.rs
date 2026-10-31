@@ -4779,7 +4779,11 @@ impl App {
             Phase::About => {
                 slot_ui::draw_about(self.canvas(), self.sticker_face, out);
                 if let Some(back) = self.buttons_faces.as_ref().map(|f| [f.legend[1]]) {
-                    let ink = self.menu_ink();
+                    // The light back always takes the dark Back, whatever the wallpaper (Roy).
+                    let ink = match self.about_back_light() {
+                        true => slot_ui::theme::ink(true),
+                        false => self.menu_ink(),
+                    };
                     for (tex, w, x) in
                         slot_ui::centred_hints(self.canvas(), &back, slot_ui::LEGEND_GAP)
                     {
