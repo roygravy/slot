@@ -2,6 +2,7 @@
 mod config;
 mod radio;
 mod system;
+mod web;
 mod wifi;
 
 use radio::{connected, Home, Interface};
@@ -288,6 +289,7 @@ fn serve(root: &Path, run: &Path) -> std::io::Result<()> {
     let mut tick_at = Instant::now();
     let mut powered_down = false;
     let mut wps: Option<wifi::Wps> = None;
+    let mut web: Option<web::Web> = None;
     unsafe {
         libc::signal(libc::SIGTERM, stop as *const () as libc::sighandler_t);
         libc::signal(libc::SIGINT, stop as *const () as libc::sighandler_t);
@@ -408,6 +410,29 @@ fn serve(root: &Path, run: &Path) -> std::io::Result<()> {
                         }
                         respond(&mut stream, 0, "STOPPED");
                     }
+                    ("web", "on") => {
+                        if web.as_ref().is_some_and(|w| w.owner != owner) {
+                            web = None;
+                        }
+                        if web.is_none() {
+                            web = match home_lan_address(&home) {
+                                Some(ip) => web::Web::start(root, owner, ip)
+                                    .map_err(|e| respond(&mut stream, 1, e))
+                                    .ok(),
+                                None => {
+                                    respond(&mut stream, 1, "NO_HOME_LAN");
+                                    None
+                                }
+                            };
+                        }
+                        if let Some(w) = &web {
+                            respond(&mut stream, 0, &w.word());
+                        }
+                    }
+                    ("web", "off") => {
+                        web = None;
+                        respond(&mut stream, 0, "STOPPED");
+                    }
                     ("service", "stop") => {
                         STOP.store(true, Ordering::Relaxed);
                         respond(&mut stream, 0, "STOPPING");
@@ -469,6 +494,10 @@ fn serve(root: &Path, run: &Path) -> std::io::Result<()> {
             link.tick();
             if let Some(w) = &mut wps {
                 w.tick(&mut home, root);
+            }
+            // The page lives as long as the screen that shows its PIN.
+            if web.as_ref().is_some_and(|w| !system::alive(&w.owner)) {
+                web = None;
             }
             let mut ours = home.interface.pids();
             ours.extend(link.interface.pids());
@@ -569,7 +598,7 @@ fn main() {
         return;
     }
     if args.len() != 2 {
-        eprintln!("usage: slot-services home on|off|reload|sleep|wake | time auto|manual | link warm|cool|host|join|down | service status|stop | wifi scan|wps|wpsstatus|wpsstop");
+        eprintln!("usage: slot-services home on|off|reload|sleep|wake | time auto|manual | link warm|cool|host|join|down | service status|stop | wifi scan|wps|wpsstatus|wpsstop | web on|off");
         std::process::exit(2);
     }
     let pid = std::env::var("SLOT_OWNER_PID")
@@ -605,7 +634,11 @@ fn main() {
             .next()
             .and_then(|s| s.parse().ok())
             .unwrap_or(1);
-        if args[1] == "status" || args[0] == "wifi" || (args[1] == "lan" && code == 0) {
+        if args[1] == "status"
+            || args[0] == "wifi"
+            || args[0] == "web"
+            || (args[1] == "lan" && code == 0)
+        {
             println!("{}", response.trim());
         } else if code != 0 {
             eprintln!("slot-services: {}", response.trim());

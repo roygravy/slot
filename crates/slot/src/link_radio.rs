@@ -62,6 +62,8 @@ pub enum WifiJob {
     WpsStart,
     WpsPoll,
     WpsStop,
+    RomManagerOn,
+    RomManagerOff,
 }
 
 /// A network heard nearby.
@@ -80,6 +82,8 @@ pub enum WifiAnswer {
     /// WPS joined this network and saved it.
     WpsDone(String),
     WpsFailed,
+    /// The ROM Manager's address and PIN; None when it could not start.
+    RomManager(Option<(String, String)>),
 }
 
 pub trait RadioJobs: Send {
@@ -137,8 +141,13 @@ impl RadioJobs for RadioQueue {
                 WifiJob::WpsStart => "wps",
                 WifiJob::WpsPoll => "wpsstatus",
                 WifiJob::WpsStop => "wpsstop",
+                WifiJob::RomManagerOn | WifiJob::RomManagerOff => "",
             };
-            let out = helper().args(["wifi", word]).output();
+            let out = match job {
+                WifiJob::RomManagerOn => helper().args(["web", "on"]).output(),
+                WifiJob::RomManagerOff => helper().args(["web", "off"]).output(),
+                _ => helper().args(["wifi", word]).output(),
+            };
             let text = out
                 .as_ref()
                 .ok()
@@ -148,6 +157,9 @@ impl RadioJobs for RadioQueue {
                 WifiJob::Scan => Some(WifiAnswer::Scanned(text.as_deref().map(parse_seen))),
                 WifiJob::WpsStart if text.is_none() => Some(WifiAnswer::WpsFailed),
                 WifiJob::WpsPoll => text.as_deref().and_then(parse_wps),
+                WifiJob::RomManagerOn => Some(WifiAnswer::RomManager(
+                    text.as_deref().and_then(parse_rom_manager),
+                )),
                 _ => None,
             };
             if let (Some(a), Ok(mut q)) = (answer, WIFI_ANSWERS.lock()) {
@@ -339,6 +351,14 @@ pub fn parse_wps(reply: &str) -> Option<WifiAnswer> {
     (word == "FAILED").then_some(WifiAnswer::WpsFailed)
 }
 
+/// `0 WEB http://address pin` from `web on`.
+pub fn parse_rom_manager(reply: &str) -> Option<(String, String)> {
+    match reply.split_whitespace().collect::<Vec<_>>()[..] {
+        ["0", "WEB", address, pin] => Some((address.into(), pin.into())),
+        _ => None,
+    }
+}
+
 /// The network name from `service status`, which sends it hex-encoded as `home_ssid=` so a
 /// name with spaces stays one word.
 pub fn status_ssid(status: &str) -> Option<String> {
@@ -436,6 +456,9 @@ impl RadioJobs for RadioQueue {
                 seen("iPhone van Roy", -82, true),
             ])),
             WifiJob::WpsStart | WifiJob::WpsPoll => WifiAnswer::WpsWaiting(107),
+            WifiJob::RomManagerOn => {
+                WifiAnswer::RomManager(Some(("http://192.168.1.23".into(), "4821".into())))
+            }
             _ => return,
         };
         if let Ok(mut q) = FAKE_WIFI.lock() {

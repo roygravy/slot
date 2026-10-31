@@ -521,6 +521,8 @@ pub struct SearchTexts<T> {
     pub rows: Vec<(T, T)>,
     /// Under the status on the message screen, in place of "try fewer words".
     pub note: Option<T>,
+    /// Large over the status on the message screen: the ROM Manager's PIN.
+    pub big: Option<T>,
 }
 
 pub fn search_heading_face(text: &str) -> UndoFace {
@@ -556,6 +558,11 @@ pub fn search_typed_face(text: &str) -> UndoFace {
         }
     }
     UndoFace { rgba, w, h }
+}
+
+/// The ROM Manager's PIN, big enough to read off the console from arm's length.
+pub fn search_big_face(text: &str) -> UndoFace {
+    plain(text, 64.0, 18.0, false)
 }
 
 pub fn search_status_face(text: &str) -> UndoFace {
@@ -908,12 +915,20 @@ pub fn draw_label_search(canvas: Canvas, v: &SearchView, out: &mut Vec<Draw>) {
         }
         SearchScreen::Nothing => {
             heading(v.texts.heading, HEADING_Y, faded(v.ink.dim, a), out);
+            // With a big line the status and note move down under it.
+            let low = match v.texts.big {
+                Some(b) => {
+                    heading(b, 150.0, faded(v.ink.text, a), out);
+                    70.0
+                }
+                None => 0.0,
+            };
             if let Some(s) = v.texts.status {
-                heading(s, 200.0, faded(v.ink.text, a), out);
+                heading(s, 200.0 + low, faded(v.ink.text, a), out);
             }
             heading(
                 v.texts.note.unwrap_or(v.faces.try_again),
-                236.0,
+                236.0 + low,
                 faded(v.ink.dim, a),
                 out,
             );
