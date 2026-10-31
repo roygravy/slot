@@ -47,7 +47,7 @@ pub const REPEAT_DELAY_MS: Millis = 400;
 pub const GLOW_MARGIN: u32 = 130;
 /// A favourite stands this much higher than the carts beside it.
 const LIFT: f32 = 10.0;
-/// The favourites' glow waits for the cart to come this close to standing still...
+/// The Favorites light waits for the cart to come this close to standing still...
 const SETTLED: f32 = 0.04;
 /// ...then rises over this long. It fades out quicker, as soon as the carts move.
 const LIGHT_UP_S: f32 = 0.22;
@@ -57,6 +57,8 @@ pub const DROP_MARGIN: u32 = 22;
 const DROP_FALL: f32 = 10.0;
 const DROP_ALPHA: f32 = 0.22;
 pub const GLOW_GOLD: [u8; 3] = [0xff, 0xdc, 0x9a];
+/// The glow on a light ground, laid on as amber (Roy), and how much stronger than as light.
+const LIGHT_GROUND_GLOW: ([f32; 3], f32) = ([0.88, 0.63, 0.25], 1.6);
 pub const GLOW_WHITE: [u8; 3] = [0xff, 0xff, 0xff];
 pub const STAR_PX: u32 = 22;
 const STAR_INSET: f32 = 5.0;
@@ -88,8 +90,8 @@ pub struct Shelf {
     light_ground: bool,
     ride: f32,
     vel: f32,
-    /// How far the favourites' glow has come up: it goes out while the carts move and rises
-    /// again once they stand still.
+    /// How far the Favorites shelf's still light has come up: it goes out while the carts move
+    /// and rises again once one stands still.
     lit: f32,
     held: Option<(i32, Millis, usize)>,
 }
@@ -178,6 +180,26 @@ impl Shelf {
 
     pub fn set_spotlight(&mut self, on: bool) {
         self.spotlight = on;
+    }
+
+    /// Added light vanishes on a light ground, so there the glow is laid on as warm colour.
+    fn glow_draw(&self, light: Draw) -> Draw {
+        let Draw::Light { x, y, w, h, tex, alpha } = light else {
+            return light;
+        };
+        if !self.light_ground {
+            return light;
+        }
+        let (c, boost) = LIGHT_GROUND_GLOW;
+        let g = GLOW_GOLD.map(|v| v as f32 / 255.0);
+        Draw::Tint {
+            x,
+            y,
+            w,
+            h,
+            tex,
+            colour: [c[0] / g[0], c[1] / g[1], c[2] / g[2], (alpha * boost).min(1.0)],
+        }
     }
 
     fn glow_for(&self, i: usize) -> Option<TexId> {
@@ -573,7 +595,7 @@ impl Shelf {
             let glowing = if self.mark == FavoriteMark::Star {
                 0.0
             } else if self.starred.get(i) == Some(&true) {
-                smoothstep(self.lit)
+                1.0
             } else if self.spotlight && slot == 0 {
                 smoothstep(self.lit) * (1.0 - t)
             } else {
@@ -667,14 +689,14 @@ impl Shelf {
                     } else {
                         &mut *out
                     };
-                    to.push(Draw::Light {
+                    to.push(self.glow_draw(Draw::Light {
                         x: x - m,
                         y: y - m,
                         w: w + 2.0 * m,
                         h: h + 2.0 * m,
                         tex,
-                        alpha: alpha * dim * smoothstep(self.lit),
-                    });
+                        alpha: alpha * dim,
+                    }));
                 }
             }
             if let (FavoriteMark::Star, Some(true), Some((tex, sw, sh))) =
@@ -705,14 +727,14 @@ impl Shelf {
                 } else {
                     &mut *out
                 };
-                to.push(Draw::Light {
+                to.push(self.glow_draw(Draw::Light {
                     x: x - m,
                     y: y - m,
                     w: w + 2.0 * m,
                     h: h + 2.0 * m,
                     tex,
                     alpha: (1.0 - recede) * dim * smoothstep(self.lit),
-                });
+                }));
             }
         }
         out.splice(behind..behind, lights);
