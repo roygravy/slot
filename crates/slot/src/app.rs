@@ -550,7 +550,7 @@ fn shelves_of(carts: Vec<Cart>) -> Vec<(Rack, Shelf)> {
 /// The GBC's Screen Light row, in its order.
 const GBC_LIGHTS: [QuickValue; 3] = [QuickValue::Bright, QuickValue::Soft, QuickValue::Dim];
 /// The Game Boy's Screen Edge row, in its order.
-const GB_EDGES: [QuickValue; 3] = [QuickValue::Plain, QuickValue::Tinted, QuickValue::Shaded];
+const GB_EDGES: [QuickValue; 3] = [QuickValue::Plain, QuickValue::Ochre, QuickValue::Brown];
 
 impl App {
     pub fn new(carts: Vec<Cart>) -> Self {
@@ -2478,7 +2478,7 @@ impl App {
         self.seated_cart().map_or(self.platform, |c| c.platform)
     }
 
-    /// The Game Boy's glass round its picture: 0 plain, 1 tinted, 2 tinted and shaded.
+    /// The Game Boy's bare LCD round its picture: 0 plain, 1 ochre, 2 brown.
     pub fn gb_edge(&self) -> u8 {
         self.state.gb_edge.min(2)
     }

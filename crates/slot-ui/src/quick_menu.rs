@@ -627,7 +627,7 @@ impl QuickRow {
                 "Black around the picture, instead of the screen's own glass."
             }
             QuickRow::GbEdge | QuickRow::ScreenEdge => {
-                "The bare LCD round the picture: plain, brown-yellow, or shaded by the case."
+                "The bare LCD round the picture: plain, ochre or brown, as on the Game Boy."
             }
             QuickRow::GbcLight | QuickRow::ScreenLight => {
                 "The GBC has no backlight: the dimmer the room, the greyer its screen."
@@ -791,8 +791,8 @@ pub enum QuickValue {
     Dim,
     /// The Game Boy's glass round its picture.
     Plain,
-    Tinted,
-    Shaded,
+    Ochre,
+    Brown,
 }
 
 impl QuickValue {
@@ -857,8 +857,8 @@ impl QuickValue {
         QuickValue::Soft,
         QuickValue::Dim,
         QuickValue::Plain,
-        QuickValue::Tinted,
-        QuickValue::Shaded,
+        QuickValue::Ochre,
+        QuickValue::Brown,
     ];
 
     pub fn index(self) -> usize {
@@ -910,8 +910,8 @@ impl QuickValue {
             QuickValue::Soft => "Soft",
             QuickValue::Dim => "Dim",
             QuickValue::Plain => "Plain",
-            QuickValue::Tinted => "Tinted",
-            QuickValue::Shaded => "Shaded",
+            QuickValue::Ochre => "Ochre",
+            QuickValue::Brown => "Brown",
             QuickValue::BorderAuto => "Auto",
             QuickValue::BorderGravy => "GRAVY",
             QuickValue::BorderOff => "Off",

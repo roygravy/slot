@@ -78,13 +78,14 @@ uniform vec3 u_lcd_mix;
 uniform float u_grid_opacity;
 uniform float u_pixel_transparency;
 uniform vec2 u_tv;
-uniform vec2 u_edge;
+uniform float u_edge;
 varying vec2 v_uv;
 const vec3 offsets = vec3(3.141592654) * vec3(1.0 / 2.0, 1.0 / 2.0 - 2.0 / 3.0, 1.0 / 2.0 - 4.0 / 3.0);
 const float TV_SCANLINE = 0.72;
 const float TV_MASK = 0.18;
 const float TV_GLOW = 0.08;
-const vec3 EDGE_TONE = vec3(1.0, 0.86, 0.48) * 0.88;
+const vec3 EDGE_OCHRE = vec3(1.0, 0.93, 0.62) * 0.95;
+const vec3 EDGE_BROWN = vec3(1.0, 0.86, 0.48) * 0.88;
 const vec3 luma_coeff = vec3(0.2126, 0.7152, 0.0722);
 vec2 grid_band(vec2 x) {
     return floor(x) / 3.0 + min(fract(x), vec2(1.0 / 3.0));
@@ -113,16 +114,10 @@ void main() {
     bool inside = all(greaterThanEqual(uv, u_pic.xy)) && all(lessThan(uv, u_pic.zw));
     if (!inside) {
         c = u_black_edge > 0.5 ? vec3(0.0) : u_bg;
-        if (u_black_edge < 0.5 && u_edge.x > 0.5) {
+        if (u_black_edge < 0.5 && u_edge > 0.5) {
             // The Game Boy's bare LCD round its pixels: browner and yellower than the
             // picture's ground, with no pixel layer over it.
-            c *= EDGE_TONE;
-            if (u_edge.y > 0.5) {
-                // The case's edge shades the glass along its top and left.
-                vec2 at = floor(gl_FragCoord.xy / u_fbo.y);
-                float d = min(at.x, u_output_size.y - 1.0 - at.y);
-                c *= 1.0 - 0.35 * pow(clamp(1.0 - d / 18.0, 0.0, 1.0), 1.5);
-            }
+            c *= u_edge > 1.5 ? EDGE_BROWN : EDGE_OCHRE;
         }
     } else if (u_mode > 5.5) {
         // A TV's picture: the console's pixels as they are, every other screen line a little
