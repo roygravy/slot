@@ -16,6 +16,7 @@ header { text-align: center; margin-bottom: 26px; }
 nav { display: flex; gap: 4px; border-bottom: 1px solid var(--line); overflow-x: auto; }
 nav button { flex: 1 0 auto; background: none; border: 0; color: var(--dim); font: inherit; font-weight: 600; letter-spacing: .12em;
   padding: 10px 6px; border-bottom: 2px solid transparent; cursor: pointer; }
+nav .sep { flex: none; width: 1px; margin: 10px 8px 12px; background: var(--line); }
 nav button.on { color: var(--fg); border-bottom-color: var(--fg); }
 .drop { display: block; margin: 20px 0; border: 1px dashed var(--line); border-radius: 10px; padding: 22px; text-align: center; color: var(--dim); cursor: pointer; }
 .drop b { color: var(--fg); font-weight: 600; }
@@ -95,7 +96,9 @@ async function load() {
   render();
 }
 function render() {
-  $("tabs").innerHTML = SYS.map(s => `<button class="${s == sys ? "on" : ""}" data-s="${s}">${NAME[s] || s}</button>`).join("");
+  // Thin lines keep games, BIOS and wallpapers apart.
+  $("tabs").innerHTML = SYS.map(s => (s == "BIOS" || s == "WALLPAPERS" ? '<i class="sep"></i>' : "") +
+    `<button class="${s == sys ? "on" : ""}" data-s="${s}">${NAME[s] || s}</button>`).join("");
   const games = data ? data.systems[sys] : [];
   $("list").innerHTML = games.length ? games.map(([n, b], i) => renaming == n
     ? `<li><input id="to" value="${esc(n)}"><button data-save="${i}">Save</button><button data-cancel>Cancel</button></li>`
