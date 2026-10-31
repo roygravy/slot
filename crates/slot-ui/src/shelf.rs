@@ -57,8 +57,8 @@ pub const DROP_MARGIN: u32 = 22;
 const DROP_FALL: f32 = 10.0;
 const DROP_ALPHA: f32 = 0.22;
 pub const GLOW_GOLD: [u8; 3] = [0xff, 0xdc, 0x9a];
-/// The glow on a light ground, laid on as amber (Roy), and how much stronger than as light.
-const LIGHT_GROUND_GLOW: ([f32; 3], f32) = ([0.88, 0.63, 0.25], 1.6);
+/// The glow's amber, and how much stronger it is laid on than the face's own alpha.
+const GLOW_AMBER: ([f32; 3], f32) = ([0.88, 0.63, 0.25], 1.6);
 pub const GLOW_WHITE: [u8; 3] = [0xff, 0xff, 0xff];
 pub const STAR_PX: u32 = 22;
 const STAR_INSET: f32 = 5.0;
@@ -182,15 +182,13 @@ impl Shelf {
         self.spotlight = on;
     }
 
-    /// Added light vanishes on a light ground, so there the glow is laid on as warm colour.
+    /// The glow is laid on as amber colour on every ground (Roy): added light vanishes on a
+    /// light one.
     fn glow_draw(&self, light: Draw) -> Draw {
         let Draw::Light { x, y, w, h, tex, alpha } = light else {
             return light;
         };
-        if !self.light_ground {
-            return light;
-        }
-        let (c, boost) = LIGHT_GROUND_GLOW;
+        let (c, boost) = GLOW_AMBER;
         let g = GLOW_GOLD.map(|v| v as f32 / 255.0);
         Draw::Tint {
             x,
