@@ -17,25 +17,26 @@ const SWATCH_MORE: f32 = 0.35;
 
 const CART_TOP: f32 = 30.0;
 const CART_MAX_W: f32 = 250.0;
-const CART_MAX_H: f32 = 200.0;
+const CART_MAX_H: f32 = 192.0;
 /// The Super Game Boy has only its model row, so its cart takes the room the others' rows use,
 /// up to its size on the shelf.
 const SGB_CART_MAX_W: f32 = 400.0;
 const SGB_CART_MAX_H: f32 = 330.0;
 /// How far under the Super Game Boy its model row stands.
 const SGB_MODEL_GAP: f32 = 34.0;
-const NAME_Y: f32 = 248.0;
-const SWATCH_Y: f32 = 290.0;
-const FINISH_Y: f32 = 324.0;
+const NAME_Y: f32 = 237.0;
+const SWATCH_Y: f32 = 279.0;
+const FINISH_Y: f32 = 313.0;
 const FINISH_GAP: f32 = 34.0;
 /// A cart's two shapes (SNES NTSC and PAL, Game Boy and Color), under the finishes.
-const MODEL_Y: f32 = 358.0;
+const MODEL_Y: f32 = 347.0;
 /// The tabs' names stand under the cart and the rows move down to make room.
-const TAB_Y: f32 = 246.0;
+const TAB_Y: f32 = 235.0;
 const TAB_GAP: f32 = 34.0;
 const TABBED_DROP: f32 = 34.0;
 const MARKER_PITCH: f32 = 40.0;
-const LEGEND_Y: f32 = 438.0;
+/// The legend sits where every menu has it.
+const LEGEND_Y: f32 = crate::quick_menu::LEGEND_Y;
 /// How far the cart rises off the shelf while its neighbours part, before it lifts into place.
 const HOP: f32 = 22.0;
 /// The rows rise this far into place as the cart arrives, one after the other.

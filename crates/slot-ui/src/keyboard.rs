@@ -100,7 +100,8 @@ const RING_OUT: f32 = 4.0;
 const STRIP_Y: f32 = 108.0;
 const STRIP_KEY: (f32, f32) = (48.0, 36.0);
 const STRIP_GAP: f32 = 6.0;
-const LEGEND_Y: f32 = 438.0;
+/// The legend sits where every menu has it.
+const LEGEND_Y: f32 = crate::quick_menu::LEGEND_Y;
 const KEYS_LEGEND_GAP: f32 = 22.0;
 const KEY_PX: f32 = 25.0;
 const WORD_PX: f32 = 19.0;

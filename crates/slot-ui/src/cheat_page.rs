@@ -18,7 +18,7 @@ const LABEL_DROP: f32 = 4.0;
 const SWITCH_RIGHT: f32 = 32.0;
 const SWITCH_DROP: f32 = 10.0;
 const HELP_Y: f32 = 392.0;
-const LEGEND_Y: f32 = 427.0;
+const LEGEND_Y: f32 = crate::quick_menu::LEGEND_Y;
 const EMPTY_Y: f32 = 170.0;
 
 /// The robber's height in the menu corner (a pixel taller than the battery) and in play.
