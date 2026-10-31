@@ -31,7 +31,10 @@ const KERNEL_LINES: usize = 40;
 const SLEEP_LOG: &str = "deep-sleep.log";
 
 /// Asleep, the RTC wakes the console this often to look at the battery.
-const BATTERY_LOOK: Duration = Duration::from_secs(3600);
+const BATTERY_LOOK: Duration = Duration::from_secs(7200);
+
+/// Just woken by the alarm: the fuel gauge still reports its reading from before the sleep.
+const BATTERY_SETTLE: Duration = Duration::from_secs(2);
 
 /// The green light going out: three slow blinks, each a little shorter on.
 /// Into the light sleep: the light goes out this long, once.
@@ -765,6 +768,10 @@ impl Platform for DevicePlatform {
                 }
                 break None;
             }
+            let by_alarm = alarm && slept + Duration::from_secs(5) >= BATTERY_LOOK;
+            if by_alarm {
+                std::thread::sleep(BATTERY_SETTLE);
+            }
             let irq = fs::read_to_string(power.join("pm_wakeup_irq")).unwrap_or_default();
             self.sleep_log(&format!(
                 "slept {}s, battery {before} -> {}, wake irq [{}]",
@@ -774,7 +781,7 @@ impl Platform for DevicePlatform {
             ));
             // Woken by the alarm, not by POWER: low on battery it powers off, else back to
             // sleep with the screen dark.
-            if !alarm || slept + Duration::from_secs(5) < BATTERY_LOOK {
+            if !by_alarm {
                 break Some(Woke::Button);
             }
             let battery = self.battery();
