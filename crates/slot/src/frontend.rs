@@ -1703,7 +1703,7 @@ fn sync_quick_network(app: &mut App, compositor: &mut Compositor, state: &mut Qu
     }
     let text = app
         .home_network()
-        .unwrap_or_else(|| "Not connected".to_string());
+        .unwrap_or_else(|| "\u{2014}".to_string());
     if text == state.shown {
         return;
     }
