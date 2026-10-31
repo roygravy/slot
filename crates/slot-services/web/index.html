@@ -240,7 +240,8 @@ function send(file, to, path) {
     x.setRequestHeader("X-Pin", pin);
     x.upload.onprogress = e => {
       const p = Math.round(100 * e.loaded / e.total);
-      $("up").innerHTML = `<div style="margin-top:12px;color:var(--fg)">${esc(file.name)} · ${p}%</div><div class="bar"><i style="width:${p}%"></i></div>`;
+      // At 100% the console still writes the file to its card, which can take a while.
+      $("up").innerHTML = `<div style="margin-top:12px;color:var(--fg)">${esc(file.name)} · ${p < 100 ? p + "%" : "saving on the console..."}</div><div class="bar"><i style="width:${p}%"></i></div>`;
     };
     x.onload = () => x.status == 200 ? done() : (x.status == 401 && locked(), fail(new Error(file.name + ": " + x.responseText)));
     x.onerror = () => fail(new Error(file.name + ": the console stopped answering"));
