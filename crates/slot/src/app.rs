@@ -3069,7 +3069,7 @@ impl App {
             Action::GbaDown(Btn::Down) => row.down(self.hidden_rows()),
             Action::GbaDown(Btn::Left) => return self.change_setting(row, false),
             Action::GbaDown(Btn::Right) => return self.change_setting(row, true),
-            Action::GbaDown(Btn::L1 | Btn::R1) => match row.other_tab(self.hidden_rows()) {
+            Action::GbaDown(b @ (Btn::L1 | Btn::R1)) => match row.other_tab(self.hidden_rows(), b == Btn::R1) {
                 Some(row) => row,
                 None => return,
             },

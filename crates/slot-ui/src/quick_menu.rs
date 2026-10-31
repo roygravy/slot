@@ -208,20 +208,39 @@ impl QuickRow {
         QuickRow::About,
     ];
 
-    pub const GENERAL: [QuickRow; 13] = [
+    /// General's first tab, Shelf: how the shelf looks.
+    pub const GENERAL: [QuickRow; 5] = [
         QuickRow::Wallpaper,
         QuickRow::Theme,
         QuickRow::Recents,
         QuickRow::FavoriteMark,
         QuickRow::ShowTitles,
+    ];
+
+    /// General's Clock tab.
+    pub const CLOCK: [QuickRow; 4] = [
         QuickRow::AutoTime,
         QuickRow::TimeZone,
         QuickRow::Clock24,
         QuickRow::DateTime,
+    ];
+
+    /// General's Sleep tab: sleeping, and waking back into a game.
+    pub const SLEEP: [QuickRow; 4] = [
         QuickRow::AutoSleep,
         QuickRow::DeepSleep,
         QuickRow::RememberPosition,
         QuickRow::ResumeGame,
+    ];
+
+    /// The pages shown as tabs of one row, each with its tab's name.
+    pub const TAB_GROUPS: [&'static [(&'static [QuickRow], &'static str)]; 2] = [
+        &[(&QuickRow::SCREEN, "Screen"), (&QuickRow::GAME, "Gameplay")],
+        &[
+            (&QuickRow::GENERAL, "Shelf"),
+            (&QuickRow::CLOCK, "Clock"),
+            (&QuickRow::SLEEP, "Sleep"),
+        ],
     ];
 
     /// Home Wi-Fi and what it is connected to.
@@ -365,19 +384,18 @@ impl QuickRow {
             | QuickRow::EjectSave => &QuickRow::GAME,
             QuickRow::Wallpaper
             | QuickRow::WallpaperTint
-            | QuickRow::DateTime
-            | QuickRow::AutoTime
-            | QuickRow::TimeZone
-            | QuickRow::Clock24
             | QuickRow::Theme
             | QuickRow::Recents
             | QuickRow::FavoriteMark
             | QuickRow::ShowTitles
-            | QuickRow::AutoSleep
+            | QuickRow::BootPicture => &QuickRow::GENERAL,
+            QuickRow::DateTime | QuickRow::AutoTime | QuickRow::TimeZone | QuickRow::Clock24 => {
+                &QuickRow::CLOCK
+            }
+            QuickRow::AutoSleep
             | QuickRow::DeepSleep
             | QuickRow::RememberPosition
-            | QuickRow::ResumeGame
-            | QuickRow::BootPicture => &QuickRow::GENERAL,
+            | QuickRow::ResumeGame => &QuickRow::SLEEP,
             QuickRow::HomeWifi
             | QuickRow::ConnectedTo
             | QuickRow::AddNetwork
@@ -421,6 +439,7 @@ impl QuickRow {
             QuickRow::Wallpaper => Some(QuickRow::General),
             QuickRow::HomeWifi => Some(QuickRow::Network),
             QuickRow::AutoSleep => Some(QuickRow::General),
+            QuickRow::AutoTime => Some(QuickRow::General),
             QuickRow::RememberPosition => Some(QuickRow::General),
             QuickRow::PlayScreen => Some(QuickRow::Settings),
             QuickRow::Shader => Some(QuickRow::PlayScreen),
@@ -435,26 +454,30 @@ impl QuickRow {
         }
     }
 
-    /// Game Settings' tabs: Screen and Gameplay. None off those pages, and in game, where the
-    /// shelf's Game Settings row is hidden and Settings has its own two rows instead.
-    pub fn tab(self, hidden: &[QuickRow]) -> Option<usize> {
+    /// Which tab group this row's page belongs to, and which tab it is. None off those pages,
+    /// and in game, where the shelf's Game Settings row is hidden and Settings has its own
+    /// two rows instead.
+    pub fn tabs(self, hidden: &[QuickRow]) -> Option<(usize, usize)> {
         if hidden.contains(&QuickRow::Screen) {
             return None;
         }
-        match self.page() {
-            p if p == QuickRow::SCREEN => Some(0),
-            p if p == QuickRow::GAME => Some(1),
-            _ => None,
-        }
+        let page = self.page();
+        QuickRow::TAB_GROUPS.iter().enumerate().find_map(|(g, tabs)| {
+            tabs.iter().position(|(p, _)| *p == page).map(|t| (g, t))
+        })
     }
 
-    /// The other tab's first row shown, for L1 and R1.
-    pub fn other_tab(self, hidden: &[QuickRow]) -> Option<QuickRow> {
-        let page: &[QuickRow] = match self.tab(hidden)? {
-            0 => &QuickRow::GAME,
-            _ => &QuickRow::SCREEN,
-        };
-        page[0].shown(hidden).first().copied()
+    pub fn tab(self, hidden: &[QuickRow]) -> Option<usize> {
+        self.tabs(hidden).map(|(_, t)| t)
+    }
+
+    /// The next tab's first row shown (R1), or the one before (L1), round the end.
+    pub fn other_tab(self, hidden: &[QuickRow], forward: bool) -> Option<QuickRow> {
+        let (g, t) = self.tabs(hidden)?;
+        let group = QuickRow::TAB_GROUPS[g];
+        let n = group.len();
+        let next = if forward { (t + 1) % n } else { (t + n - 1) % n };
+        group[next].0[0].shown(hidden).first().copied()
     }
 
     pub fn centred(self) -> bool {
@@ -1231,9 +1254,13 @@ pub fn quick_legend_faces() -> [UndoFace; 6] {
     ]
 }
 
-/// Game Settings' tab names, white, in the Buttons page's tab face.
-pub fn quick_tab_faces() -> [UndoFace; 2] {
-    [crate::buttons_help::tab_face("Screen"), crate::buttons_help::tab_face("Gameplay")]
+/// Every tab name, white, in the Buttons page's tab face, in TAB_GROUPS order.
+pub fn quick_tab_faces() -> Vec<UndoFace> {
+    QuickRow::TAB_GROUPS
+        .iter()
+        .flat_map(|g| g.iter())
+        .map(|(_, name)| crate::buttons_help::tab_face(name))
+        .collect()
 }
 
 pub struct QuickMenuFaces {
@@ -1242,8 +1269,8 @@ pub struct QuickMenuFaces {
     pub values: Vec<[(TexId, u32, u32); 2]>,
     pub carets: [(TexId, u32, u32); 2],
     pub legend: [(TexId, u32); 6],
-    /// Game Settings' tabs, Screen and Gameplay, in white.
-    pub tabs: [(TexId, u32, u32); 2],
+    /// Every tab's name in white, in TAB_GROUPS order.
+    pub tabs: Vec<(TexId, u32, u32)>,
     /// Off, on.
     pub switches: [(TexId, u32, u32); 2],
     pub help: Vec<Option<(TexId, u32, u32)>>,
@@ -1317,11 +1344,13 @@ impl QuickMenu<'_> {
         let Some(faces) = self.faces else {
             return;
         };
-        if let Some(lit) = self.row.tab(self.hidden) {
-            let total: f32 = faces.tabs.iter().map(|t| t.1 as f32 + 2.0 * TAB_PAD).sum::<f32>()
+        if let Some((g, lit)) = self.row.tabs(self.hidden) {
+            let skip: usize = QuickRow::TAB_GROUPS[..g].iter().map(|t| t.len()).sum();
+            let group = faces.tabs.iter().skip(skip).take(QuickRow::TAB_GROUPS[g].len());
+            let total: f32 = group.clone().map(|t| t.1 as f32 + 2.0 * TAB_PAD).sum::<f32>()
                 + TAB_GAP;
             let mut x = self.canvas.centred(total).round();
-            for (i, &(tex, w, h)) in faces.tabs.iter().enumerate() {
+            for (i, &(tex, w, h)) in group.enumerate() {
                 let cell = w as f32 + 2.0 * TAB_PAD;
                 if i == lit {
                     out.push(Draw::Rect { x, y: TAB_Y, w: cell, h: h as f32, colour: ink.bar });

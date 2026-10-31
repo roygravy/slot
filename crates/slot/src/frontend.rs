@@ -568,7 +568,7 @@ impl Frontend {
             .collect();
         let carets = faces.quick_carets.map(&mut up);
         let more = faces.quick_more.map(&mut up);
-        let quick_tabs = faces.quick_tabs.map(&mut up);
+        let quick_tabs = faces.quick_tabs.into_iter().map(&mut up).collect();
         let switches = faces.quick_switches.map(&mut up);
         let button_tabs = faces.button_tabs.into_iter().map(&mut up).collect();
         let button_bodies = faces.button_bodies.into_iter().map(&mut up).collect();
@@ -1372,7 +1372,7 @@ struct UiFaces {
     quick_carets: [UndoFace; 2],
     quick_more: [UndoFace; 2],
     quick_legend: [UndoFace; 6],
-    quick_tabs: [UndoFace; 2],
+    quick_tabs: Vec<UndoFace>,
     quick_switches: [UndoFace; 2],
     quick_help: Vec<Option<UndoFace>>,
     button_tabs: Vec<UndoFace>,

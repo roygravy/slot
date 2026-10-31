@@ -199,6 +199,8 @@ fn clock_screen(way: Way) -> (TempDir, App, Clock) {
             a.apply(Action::GbaDown(Btn::Down));
         }
         a.apply(Action::GbaDown(Btn::A));
+        // Clock is General's second tab.
+        a.apply(Action::GbaDown(Btn::R1));
         for _ in 0..QuickRow::DateTime.position(a.hidden_rows()) {
             a.apply(Action::GbaDown(Btn::Down));
         }
@@ -305,6 +307,10 @@ fn general_row(state: SlotState, row: QuickRow) -> (TempDir, App) {
         a.apply(Action::GbaDown(Btn::Down));
     }
     a.apply(Action::GbaDown(Btn::A));
+    // Turn to the row's own tab of General.
+    for _ in 0..row.tab(a.hidden_rows()).unwrap_or(0) {
+        a.apply(Action::GbaDown(Btn::R1));
+    }
     for _ in 0..row.position(a.hidden_rows()) {
         a.apply(Action::GbaDown(Btn::Down));
     }
