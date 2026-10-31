@@ -5,17 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>GRAVY ROM Manager</title>
 <style>
-@font-face { font-family: "slot"; src: url("font.ttf"); }
 :root { --bg: #0b0e11; --panel: #14181d; --line: #262c33; --fg: #eef0f4; --dim: #8a929c; }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
 main { max-width: 760px; margin: 0 auto; padding: 32px 16px 64px; }
-.logo { display: flex; align-items: baseline; justify-content: center; gap: 16px; }
+.logo { display: block; margin: 0 auto; height: 46px; width: auto; }
 header { text-align: center; margin-bottom: 26px; }
-/* slot. and GRAVY weigh the same: GRAVY's capitals stand as tall as slot.'s ascenders. */
-.slot { font-family: "slot"; font-size: 46px; font-weight: 700; letter-spacing: -1px; line-height: 1; }
-.x { font-size: 15px; font-weight: 300; color: var(--dim); }
-.gravy { font-size: 28px; font-weight: 300; letter-spacing: .38em; margin-right: -.38em; line-height: 1; }
 .sub { font-size: 11px; letter-spacing: .3em; color: var(--dim); margin-top: 10px; text-transform: uppercase; }
 #msg { min-height: 20px; margin: -8px 0 4px; text-align: center; font-size: 13px; color: var(--dim); }
 nav { display: flex; gap: 4px; border-bottom: 1px solid var(--line); overflow-x: auto; }
@@ -45,7 +40,7 @@ footer { margin-top: 18px; color: var(--dim); font-size: 12px; display: flex; ju
 <body>
 <main>
   <header>
-    <div class="logo"><span class="slot">slot.</span><span class="x">x</span><span class="gravy">GRAVY</span></div>
+    <img class="logo" src="logo.png" alt="slot. x GRAVY">
     <div class="sub">ROM Manager</div>
   </header>
   <nav id="tabs"></nav>

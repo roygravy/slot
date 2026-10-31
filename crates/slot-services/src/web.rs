@@ -11,7 +11,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 const PAGE: &str = include_str!("../web/index.html");
-const FONT: &[u8] = include_bytes!("../../slot-ui/assets/label.ttf");
+/// The boot logo's own slot., x and GRAVY, side by side.
+const LOGO: &[u8] = include_bytes!("../web/logo.png");
 /// Larger than any GBA game (32 MB), so a wrong file is turned away before it fills the card.
 const MAX_UPLOAD: u64 = 64 << 20;
 const MAX_HEAD: usize = 16 << 10;
@@ -206,7 +207,7 @@ fn handle(stream: TcpStream, shared: &Shared) {
                 PAGE.as_bytes(),
             )
         }
-        ("GET", ["font.ttf"]) => return reply(&mut out, "200 OK", "font/ttf", FONT),
+        ("GET", ["logo.png"]) => return reply(&mut out, "200 OK", "image/png", LOGO),
         ("GET", ["favicon.ico"]) => return fail(&mut out, "404 Not Found", ""),
         _ => {}
     }
