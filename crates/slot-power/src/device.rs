@@ -395,6 +395,18 @@ fn wlan_rfkills(sysfs: &Path) -> Vec<(PathBuf, String)> {
         .collect()
 }
 
+/// The card read-only before the power goes: FAT marks it cleanly unmounted, so the
+/// kernel's "not properly unmounted" means a real power cut again, and nothing still
+/// running can write to it after the last sync. A busy card just stays as it was.
+fn remount_read_only(root: &Path) {
+    let _ = Command::new("mount")
+        .args(["-o", "remount,ro"])
+        .arg(root)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status();
+}
+
 fn release_logs() {
     #[cfg(unix)]
     if let Ok(null) = fs::OpenOptions::new().write(true).open("/dev/null") {
@@ -790,6 +802,7 @@ impl Platform for DevicePlatform {
         let _ = Command::new("sync").status();
         self.breadcrumb("restart: sync returned, about to signal init");
         release_logs();
+        remount_read_only(&self.root);
         shutdown_until_system_acts("reboot")
     }
 
@@ -801,6 +814,7 @@ impl Platform for DevicePlatform {
         let _ = Command::new("sync").status();
         self.breadcrumb("poweroff: sync returned, about to signal init");
         release_logs();
+        remount_read_only(&self.root);
         shutdown_until_system_acts("poweroff")
     }
 

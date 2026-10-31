@@ -225,7 +225,7 @@ impl Playback {
         let mut pace = Pacer::new(span);
         while !stop.load(Ordering::Relaxed) {
             ring.fill(&mut buf);
-            let hold = silence.hear(&buf, span);
+            let hold = silence.hear(&buf, span) || ring.playing();
             match (self.pcm, hold) {
                 (Some(_), false) => {
                     self.release();
