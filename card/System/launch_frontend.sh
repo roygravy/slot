@@ -20,6 +20,28 @@ log() {
 	echo "$(date '+%F %T') $*" >> "$LOGS/slot-session.log" 2>/dev/null
 }
 
+# A GRAVY Manager update waits beside System as System.new. It takes over here and the
+# old System is kept: when the new one never clears its .trial, the next start goes back.
+if [ -f "$SD/System.new/.complete" ]; then
+	rm -rf "$SD/System.old"
+	if mv "$SD/System" "$SD/System.old"; then
+		if mv "$SD/System.new" "$SD/System"; then
+			rm -f "$SYS/.complete" "$SYS/.install"
+			touch "$SYS/.trial"
+			log "update: $(cat "$SYS/version.txt" 2>/dev/null) swapped in"
+		else
+			mv "$SD/System.old" "$SD/System"
+		fi
+	fi
+	sync
+elif [ -f "$SYS/.trial" ] && [ -d "$SD/System.old" ]; then
+	if mv "$SD/System" "$SD/System.bad" && mv "$SD/System.old" "$SD/System"; then
+		rm -rf "$SD/System.bad"
+		log "update: never reached the shelf, back to $(cat "$SYS/version.txt" 2>/dev/null)"
+	fi
+	sync
+fi
+
 pid="$(cat "$RUN/slot-led.pid" 2>/dev/null)"
 if [ -z "$pid" ] || [ ! -d "/proc/$pid" ]; then
 	sh "$SYS/led.sh" once

@@ -167,6 +167,21 @@ impl ListPage {
         self.rev += 1;
     }
 
+    /// An update came down while the page is open: the note says so until it is installed.
+    pub fn rom_manager_update(&mut self, version: &str) {
+        let Stage::Message(address, note) = &self.stage else {
+            return;
+        };
+        if self.kind != Kind::RomManager || self.address.is_none() {
+            return;
+        }
+        let ready = format!("Update {version} ready · install it from the web page");
+        if *note != ready {
+            self.stage = Stage::Message(address.clone(), ready);
+            self.rev += 1;
+        }
+    }
+
     fn wps_message(secs: u64) -> Stage {
         Stage::Message(
             "Press the WPS button on your router".into(),

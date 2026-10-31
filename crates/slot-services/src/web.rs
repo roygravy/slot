@@ -1,6 +1,7 @@
 //! The ROM Manager: a small web page on the home network for adding, renaming and deleting
 //! games on the card. It only listens while the console shows its screen, and every change
 //! asks for the PIN shown there.
+use crate::update::UPDATE;
 use slot_store::Platform;
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader, Read, Write};
@@ -228,6 +229,18 @@ fn handle(stream: TcpStream, shared: &Shared) {
     }
     let root = &shared.root;
     let result = match (req.method.as_str(), path.as_slice()) {
+        ("GET", ["api", "update"]) => {
+            return reply(
+                &mut out,
+                "200 OK",
+                "application/json",
+                UPDATE.json(root).as_bytes(),
+            )
+        }
+        ("POST", ["api", "update", "check"]) => UPDATE.check(root),
+        ("POST", ["api", "update", "download"]) => UPDATE.download(root),
+        ("POST", ["api", "update", "install"]) => UPDATE.install(root),
+        ("PUT", ["api", "update", "zip"]) => UPDATE.upload(root, req.length, &mut reader),
         ("GET", ["api", "list"]) => {
             return reply(
                 &mut out,
@@ -429,7 +442,7 @@ fn list(root: &Path) -> String {
     json
 }
 
-fn quote(s: &str) -> String {
+pub(crate) fn quote(s: &str) -> String {
     let mut q = String::from("\"");
     for c in s.chars() {
         match c {
@@ -443,7 +456,7 @@ fn quote(s: &str) -> String {
     q
 }
 
-fn free(root: &Path) -> u64 {
+pub(crate) fn free(root: &Path) -> u64 {
     use std::os::unix::ffi::OsStrExt;
     let Ok(path) = std::ffi::CString::new(root.as_os_str().as_bytes()) else {
         return 0;

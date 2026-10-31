@@ -354,6 +354,8 @@ pub struct App {
     joining: Option<(String, Millis)>,
     /// WPS is asked how it is going once a second.
     wps_poll_at: Millis,
+    update_poll_at: Millis,
+    on_trial: bool,
     /// The search's words as faces, and the search's rev they were made for.
     search_texts: Option<(u64, slot_ui::SearchTexts<slot_ui::Up>)>,
     /// The versions found: where each is kept while it is looked at, its thumbnail and its
@@ -582,6 +584,8 @@ impl App {
             list_faces: None,
             joining: None,
             wps_poll_at: 0,
+            update_poll_at: 0,
+            on_trial: true,
             search_texts: None,
             version_paths: Vec::new(),
             version_thumbs: Vec::new(),
@@ -6207,6 +6211,33 @@ impl App {
         let _ = std::fs::remove_file(&journal);
     }
 
+    /// A GRAVY Manager update: the start script swaps System.new in on a restart, and keeps
+    /// the old System until this one has run long enough to clear its .trial.
+    fn update_timers(&mut self) {
+        let Some(root) = self.root.clone() else {
+            return;
+        };
+        if self.on_trial && self.now() > 20_000 {
+            self.on_trial = false;
+            let _ = std::fs::remove_file(root.join("System/.trial"));
+        }
+        if !self.rom_manager_open() {
+            return;
+        }
+        let new = root.join("System.new");
+        if !new.join(".complete").is_file() {
+            return;
+        }
+        if std::fs::remove_file(new.join(".install")).is_ok() {
+            self.begin_restart();
+            return;
+        }
+        let version = std::fs::read_to_string(new.join("version.txt")).unwrap_or_default();
+        if let Some(p) = &mut self.list_page {
+            p.rom_manager_update(version.trim());
+        }
+    }
+
     /// Add Network, My Networks and WPS want Home Wi-Fi on: it is switched on for them.
     fn wifi_page(&mut self, row: QuickRow) {
         if !self.state.home_wifi_enabled {
@@ -6379,6 +6410,10 @@ impl App {
         if wps_open && now >= self.wps_poll_at {
             self.wps_poll_at = now + 1000;
             self.radio.wifi(WifiJob::WpsPoll);
+        }
+        if now >= self.update_poll_at {
+            self.update_poll_at = now + 1000;
+            self.update_timers();
         }
         if let Some((ssid, until)) = &self.joining {
             if self.radio.home_ssid().as_deref() == Some(ssid.as_str()) {
@@ -7199,6 +7234,22 @@ impl App {
 
     pub fn clear_resume_picture(&mut self) -> Option<TexId> {
         self.resume_picture.take()
+    }
+
+    fn begin_restart(&mut self) {
+        if self.shutting_down() {
+            return;
+        }
+        self.radio.wifi(WifiJob::RomManagerOff);
+        if self.link_active() {
+            self.end_link();
+        }
+        self.begin_capture();
+        self.close_game_menu();
+        self.remember_shelf();
+        self.restarting = true;
+        self.act_at = self.now() + SHUTDOWN_SHOW_MS;
+        self.set_led(LedState::Off);
     }
 
     fn begin_power_off(&mut self) {
