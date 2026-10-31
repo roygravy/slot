@@ -6,7 +6,7 @@
 
 slot.'s real cartridges on a shelf and its real cartridge slot, with a little extra gravy on top.
 
-<img src=".github/resources/gravy/carousel.gif" width="640" alt="Scrolling the GBA shelf and pushing Goodboy Galaxy into the slot">
+<img src=".github/resources/gravy/carousel.gif" width="640" alt="Browsing the NES and SNES shelves, pushing the Super Game Boy into the SNES slot and playing Hauntsfield with the slot. x GRAVY border">
 
 [**Download slot-x-gravy-v1.2**](https://github.com/roygravy/slot/releases/download/slot-x-gravy-v1.2/slot-x-gravy-v1.2.zip) · [GRAVY Manager](#gravy-manager) · [Install](#install) · [What's in the gravy](#whats-in-the-gravy) · [Controls](#controls)
 
