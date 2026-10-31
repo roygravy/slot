@@ -29,6 +29,9 @@ const PART: &str = ".rom-manager.part";
 /// Games renamed while the page was open, one `GB<tab>old<tab>new` a line, for slot to carry
 /// favorites and recents over when the screen closes.
 pub const RENAMED: &str = "Config/.renamed";
+/// Phones ticked "Remember this phone": one secret key a line, the newest last.
+const KEYS: &str = "Config/.manager-keys";
+const MAX_KEYS: usize = 8;
 
 pub struct Web {
     pub owner: String,
@@ -118,6 +121,33 @@ fn pin() -> String {
     format!("{:04}", u32::from_le_bytes(b) % 10_000)
 }
 
+fn keys(root: &Path) -> Vec<String> {
+    fs::read_to_string(root.join(KEYS))
+        .unwrap_or_default()
+        .lines()
+        .map(str::trim)
+        .filter(|k| k.len() == 32)
+        .map(str::to_owned)
+        .collect()
+}
+
+fn known_key(root: &Path, key: &str) -> bool {
+    key.len() == 32 && keys(root).iter().any(|k| k == key)
+}
+
+/// A new key for this phone, kept on the card; the oldest go once there are too many.
+fn remember(root: &Path) -> Option<String> {
+    let mut b = [0u8; 16];
+    File::open("/dev/urandom").and_then(|mut f| f.read_exact(&mut b)).ok()?;
+    let key: String = b.iter().map(|x| format!("{x:02x}")).collect();
+    let mut all = keys(root);
+    all.push(key.clone());
+    let from = all.len().saturating_sub(MAX_KEYS);
+    let text: String = all[from..].iter().map(|k| format!("{k}\n")).collect();
+    slot_store::atomic_write(&root.join(KEYS), text.as_bytes()).ok()?;
+    Some(key)
+}
+
 fn accept(listener: TcpListener, shared: Arc<Shared>) {
     while !shared.stop.load(Ordering::SeqCst) {
         match listener.accept() {
@@ -144,6 +174,7 @@ struct Request {
     method: String,
     path: Vec<String>,
     pin: String,
+    key: String,
     length: u64,
 }
 
@@ -154,6 +185,7 @@ fn read_head(reader: &mut BufReader<TcpStream>) -> Option<Request> {
     let method = words.next()?.to_owned();
     let target = words.next()?.split('?').next()?.to_owned();
     let mut pin = String::new();
+    let mut key = String::new();
     let mut length = 0;
     loop {
         let mut h = String::new();
@@ -171,6 +203,7 @@ fn read_head(reader: &mut BufReader<TcpStream>) -> Option<Request> {
         };
         match name.trim().to_ascii_lowercase().as_str() {
             "x-pin" => pin = value.trim().to_owned(),
+            "x-key" => key = value.trim().to_owned(),
             "content-length" => length = value.trim().parse().ok()?,
             _ => {}
         }
@@ -184,6 +217,7 @@ fn read_head(reader: &mut BufReader<TcpStream>) -> Option<Request> {
         method,
         path,
         pin,
+        key,
         length,
     })
 }
@@ -240,14 +274,16 @@ fn handle(stream: TcpStream, shared: &Shared) {
         ("GET", ["favicon.ico"]) => return fail(&mut out, "404 Not Found", ""),
         _ => {}
     }
-    if shared.wrong.load(Ordering::SeqCst) >= MAX_WRONG {
+    // A remembered phone needs no PIN; the page still only listens while the screen is open.
+    let remembered = known_key(&shared.root, &req.key);
+    if !remembered && shared.wrong.load(Ordering::SeqCst) >= MAX_WRONG {
         return fail(
             &mut out,
             "403 Forbidden",
             "Too many wrong PINs. Open GRAVY Manager on the console again.",
         );
     }
-    if req.pin != shared.pin {
+    if !remembered && req.pin != shared.pin {
         shared.wrong.fetch_add(1, Ordering::SeqCst);
         std::thread::sleep(Duration::from_secs(1));
         return fail(&mut out, "401 Unauthorized", "Wrong PIN");
@@ -261,6 +297,12 @@ fn handle(stream: TcpStream, shared: &Shared) {
                 "application/json",
                 UPDATE.json(root).as_bytes(),
             )
+        }
+        ("POST", ["api", "remember"]) => {
+            return match remember(root) {
+                Some(key) => reply(&mut out, "200 OK", "text/plain", key.as_bytes()),
+                None => fail(&mut out, "409 Conflict", "The card can't be written"),
+            };
         }
         ("POST", ["api", "update", "check"]) => UPDATE.check(root),
         ("POST", ["api", "update", "download"]) => UPDATE.download(root),
@@ -711,6 +753,22 @@ mod tests {
             "GB\tTetris\tTetris DX\n"
         );
         assert!(rename(r, "GB", "Tetris DX.gb", "../x.gb").is_err());
+    }
+
+    #[test]
+    fn a_remembered_phone_is_known() {
+        let d = tempfile::tempdir().unwrap();
+        let r = d.path();
+        fs::create_dir_all(r.join("Config")).unwrap();
+        let key = remember(r).unwrap();
+        assert!(known_key(r, &key));
+        assert!(!known_key(r, "0123456789abcdef0123456789abcdef"));
+        assert!(!known_key(r, ""));
+        for _ in 0..MAX_KEYS {
+            remember(r).unwrap();
+        }
+        assert!(!known_key(r, &key));
+        assert_eq!(keys(r).len(), MAX_KEYS);
     }
 
     #[test]
