@@ -63,6 +63,15 @@ li img.thumb { width: 80px; height: 60px; object-fit: cover; border-radius: 4px;
 .update button { background: var(--fg); color: var(--bg); border: 0; border-radius: 8px; font: inherit; font-weight: 600; padding: 10px 22px; cursor: pointer; }
 .update button[disabled] { opacity: .4; cursor: default; }
 .update .bar { max-width: 320px; margin: 0 auto 18px; }
+.notes { max-width: 520px; margin: 26px auto 0; text-align: left; border-top: 1px solid var(--line); padding-top: 18px; font-size: 14px; line-height: 1.5; }
+.notes h3 { margin: 18px 0 6px; font-size: 13px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
+.notes h3:first-child { margin-top: 0; }
+.notes p { margin: 0 0 10px; color: inherit; font-size: 14px; }
+.notes ul { margin: 0 0 10px; padding: 0 0 0 20px; list-style: disc; }
+.notes li { display: list-item; margin: 0 0 6px; padding: 0; border: 0; }
+.notes code { font-size: 12px; }
+.notes a, .update .gh { color: inherit; }
+.update .gh { display: inline-block; margin-top: 14px; font-size: 13px; color: var(--dim); }
 </style>
 </head>
 <body>
@@ -286,7 +295,8 @@ function updated() {
   const p = u.total ? Math.round(100 * u.done / u.total) : 0;
   $("update").innerHTML = `<h2>${esc(title.trim())}</h2><p>${esc(note || "")}</p>` +
     (u.state == "downloading" ? `<div class="bar"><i style="width:${p}%"></i></div>` : "") +
-    (button ? `<button id="go" data-state="${u.state}">${button}</button>` : "");
+    (button ? `<button id="go" data-state="${u.state}">${button}</button>` : "") +
+    notes(u);
   const go = $("go");
   if (go) go.onclick = async () => {
     try {
@@ -300,6 +310,30 @@ function updated() {
     } catch (err) { if (err.message) say(err.message); }
     checkUpdate();
   };
+}
+// The release's own notes from GitHub, as a small readme under the update, and its page.
+function notes(u) {
+  const link = u.link || "https://github.com/roygravy/slot/releases";
+  const open = `<div><a class="gh" href="${esc(link)}" target="_blank" rel="noopener">${u.notes ? "Read it on GitHub" : "Release notes on GitHub"}</a></div>`;
+  if (!u.notes || !["available", "downloading", "ready", "latest"].includes(u.state)) return open;
+  const inline = t => esc(t)
+    .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\[([^\]]+)\]\((https:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  let html = "", list = false, skip = false;
+  for (const raw of u.notes.split("\n")) {
+    const line = raw.trim();
+    const head = line.match(/^#{1,4}\s+(.*)/);
+    if (head) skip = /^install/i.test(head[1]);
+    if (skip || /^-{3,}$/.test(line) || /^\*\*(Tag|Release title)/.test(line)) continue;
+    const item = line.match(/^[-*]\s+(.*)/);
+    if (list && !item) { html += "</ul>"; list = false; }
+    if (head) html += `<h3>${inline(head[1])}</h3>`;
+    else if (item) { if (!list) { html += "<ul>"; list = true; } html += `<li>${inline(item[1])}</li>`; }
+    else if (line) html += `<p>${inline(line)}</p>`;
+  }
+  if (list) html += "</ul>";
+  return `<div class="notes"><h3>What's new in ${esc(u.version)}</h3>${html}</div>` + open;
 }
 async function add(files) {
   if (UPDATE(sys)) {

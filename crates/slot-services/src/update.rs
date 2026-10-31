@@ -31,12 +31,30 @@ pub struct Update {
     status: Mutex<Status>,
     /// A zip from the page is coming in: a download meanwhile would write the same files.
     uploading: AtomicBool,
+    /// What the newest GitHub release says about itself, shown under the update.
+    notes: Mutex<Notes>,
 }
+
+/// A release's own notes (its Markdown body) and its page on GitHub.
+#[derive(Clone, Default, PartialEq, Debug)]
+struct Notes {
+    version: String,
+    text: String,
+    link: String,
+}
+
+/// Where every release is listed, for a zip that came without notes.
+const RELEASES: &str = "https://github.com/roygravy/slot/releases";
 
 /// One for the daemon: a download carries on when the page is closed and opened again.
 pub static UPDATE: Update = Update {
     status: Mutex::new(Status::Idle),
     uploading: AtomicBool::new(false),
+    notes: Mutex::new(Notes {
+        version: String::new(),
+        text: String::new(),
+        link: String::new(),
+    }),
 };
 
 /// Left in System.new by Install on the page; the console sees it and restarts.
@@ -74,11 +92,19 @@ impl Update {
             Status::Ready(v) => ("ready", v, 0, 0, String::new()),
             Status::Failed(e) => ("failed", String::new(), 0, 0, e),
         };
+        let notes = self.notes.lock().unwrap().clone();
+        let (text, link) = if notes.version.is_empty() || notes.version != version {
+            (String::new(), RELEASES.to_string())
+        } else {
+            (notes.text, notes.link)
+        };
         format!(
-            "{{\"installed\":{},\"state\":\"{state}\",\"version\":{},\"done\":{done},\"total\":{total},\"error\":{}}}",
+            "{{\"installed\":{},\"state\":\"{state}\",\"version\":{},\"done\":{done},\"total\":{total},\"error\":{},\"notes\":{},\"link\":{}}}",
             crate::web::quote(&installed),
             crate::web::quote(&version),
             crate::web::quote(&error),
+            crate::web::quote(&text),
+            crate::web::quote(&link),
         )
     }
 
@@ -90,9 +116,18 @@ impl Update {
         self.set(Status::Checking);
         let installed = installed(root);
         std::thread::spawn(move || {
-            self.set(match newest() {
-                Ok((version, _)) if !newer(&version, &installed) => Status::Latest(installed.clone()),
-                Ok((version, url)) => Status::Available { version, url },
+            let found = newest();
+            if let Ok((version, _, notes)) = &found {
+                *self.notes.lock().unwrap() = Notes {
+                    version: version.clone(),
+                    ..notes.clone()
+                };
+            }
+            self.set(match found {
+                Ok((version, _, _)) if !newer(&version, &installed) => {
+                    Status::Latest(installed.clone())
+                }
+                Ok((version, url, _)) => Status::Available { version, url },
                 Err(e) => Status::Failed(e.into()),
             });
         });
@@ -216,8 +251,8 @@ fn agent() -> ureq::Agent {
         .into()
 }
 
-/// The newest release's version and the address of its slot-x-gravy zip.
-fn newest() -> Result<(String, String), &'static str> {
+/// The newest release's version, the address of its slot-x-gravy zip and its notes.
+fn newest() -> Result<(String, String, Notes), &'static str> {
     let body = agent()
         .get(LATEST)
         .header("Accept", "application/vnd.github+json")
@@ -231,7 +266,65 @@ fn newest() -> Result<(String, String), &'static str> {
         .limit(1 << 20)
         .read_to_string()
         .map_err(|_| "GitHub can't be reached")?;
-    release_zip(&body).ok_or("The newest release has no slot. x GRAVY zip")
+    let (version, url) = release_zip(&body).ok_or("The newest release has no slot. x GRAVY zip")?;
+    Ok((version, url, release_notes(&body)))
+}
+
+/// The release's Markdown body and its page, from the tag it was made on.
+fn release_notes(json: &str) -> Notes {
+    let mut text = string(json, "body").unwrap_or_default();
+    if text.len() > 16 << 10 {
+        let mut cut = 16 << 10;
+        while !text.is_char_boundary(cut) {
+            cut -= 1;
+        }
+        text.truncate(cut);
+    }
+    let link = string(json, "tag_name")
+        .map(|tag| format!("{RELEASES}/tag/{tag}"))
+        .unwrap_or_else(|| RELEASES.to_string());
+    Notes {
+        version: String::new(),
+        text,
+        link,
+    }
+}
+
+/// The first string value of `key`, with its escapes undone (a release body has quotes and
+/// line breaks in it).
+fn string(json: &str, key: &str) -> Option<String> {
+    let needle = format!("\"{key}\"");
+    let (at, _) = json.match_indices(&needle).next()?;
+    let rest = json[at + needle.len()..].trim_start().strip_prefix(':')?;
+    let mut chars = rest.trim_start().strip_prefix('"')?.chars();
+    let mut out = String::new();
+    while let Some(c) = chars.next() {
+        match c {
+            '"' => return Some(out),
+            '\\' => match chars.next()? {
+                'n' => out.push('\n'),
+                't' => out.push('\t'),
+                'r' => {}
+                'u' => {
+                    let hex: String = chars.by_ref().take(4).collect();
+                    let unit = u32::from_str_radix(&hex, 16).ok()?;
+                    // Emoji come as surrogate pairs; a lone half is dropped.
+                    if (0xD800..0xDC00).contains(&unit) {
+                        let low = chars.by_ref().skip(2).take(4).collect::<String>();
+                        let low = u32::from_str_radix(&low, 16).ok()?;
+                        if let Some(c) = char::from_u32(0x10000 + ((unit - 0xD800) << 10) + (low - 0xDC00)) {
+                            out.push(c);
+                        }
+                    } else if let Some(c) = char::from_u32(unit) {
+                        out.push(c);
+                    }
+                }
+                other => out.push(other),
+            },
+            c => out.push(c),
+        }
+    }
+    None
 }
 
 fn release_zip(json: &str) -> Option<(String, String)> {
@@ -375,6 +468,15 @@ mod tests {
         assert!(!newer("v1.1.1", "v1.1.2"));
         assert!(!newer("v1.1.2", "v1.1.2"));
         assert!(newer("v1.1.1", ""));
+    }
+
+    #[test]
+    fn reads_the_release_notes_and_page() {
+        let json = r###"{"html_url":"x","tag_name":"slot-x-gravy-v1.2","body":"## New\r\n\r\n- **GRAVY Manager**: \"a\" \u00e9 \ud83d\ude80"}"###;
+        let n = release_notes(json);
+        assert_eq!(n.text, "## New\n\n- **GRAVY Manager**: \"a\" \u{e9} \u{1f680}");
+        assert_eq!(n.link, "https://github.com/roygravy/slot/releases/tag/slot-x-gravy-v1.2");
+        assert_eq!(release_notes("{}").link, RELEASES);
     }
 
     #[test]
