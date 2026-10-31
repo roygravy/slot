@@ -2,6 +2,7 @@
 mod config;
 mod radio;
 mod system;
+mod update;
 mod web;
 mod wifi;
 

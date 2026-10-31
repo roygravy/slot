@@ -62,4 +62,26 @@ head -c 1000 /dev/zero | tr '\0' 'x' > "$TMP/card/Logs/slot-session.log"
 launch
 [ ! -e "$TMP/card/Logs/slot-session.log.1" ] || fail "a small session log rotated"
 
+setup
+echo old > "$TMP/card/System/version.txt"
+mkdir -p "$TMP/card/System.new"
+echo new > "$TMP/card/System.new/version.txt"
+: > "$TMP/card/System.new/.complete"
+: > "$TMP/card/System.new/.install"
+launch
+[ "$(cat "$TMP/card/System/version.txt")" = "new" ] || fail "a ready update was not swapped in"
+[ "$(cat "$TMP/card/System.old/version.txt")" = "old" ] || fail "the old System was not kept"
+[ -f "$TMP/card/System/.trial" ] || fail "the update is not on trial"
+[ ! -e "$TMP/card/System/.complete" ] && [ ! -e "$TMP/card/System/.install" ] || fail "update marks were left"
+launch
+[ "$(cat "$TMP/card/System/version.txt")" = "old" ] || fail "an update that never reached the shelf was kept"
+[ ! -e "$TMP/card/System.bad" ] || fail "the failed update was left on the card"
+
+setup
+echo old > "$TMP/card/System/version.txt"
+mkdir -p "$TMP/card/System.new"
+echo half > "$TMP/card/System.new/version.txt"
+launch
+[ "$(cat "$TMP/card/System/version.txt")" = "old" ] || fail "a half unpacked update was swapped in"
+
 echo "launch: all passed"

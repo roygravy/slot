@@ -20,9 +20,9 @@ header { text-align: center; margin-bottom: 26px; }
 .sub { font-size: 11px; letter-spacing: .3em; color: var(--dim); margin-top: 10px; text-transform: uppercase; }
 #msg { min-height: 20px; margin: -8px 0 4px; text-align: center; font-size: 13px; color: var(--dim); }
 nav { display: flex; gap: 4px; border-bottom: 1px solid var(--line); overflow-x: auto; }
-nav button { flex: 1 0 auto; background: none; border: 0; color: var(--dim); font: inherit; font-weight: 600; letter-spacing: .12em;
-  padding: 10px 6px; border-bottom: 2px solid transparent; cursor: pointer; }
-nav .sep { flex: none; width: 1px; margin: 10px 8px 12px; background: var(--line); }
+nav button { flex: 1 0 auto; background: none; border: 0; color: var(--dim); font: inherit; font-weight: 600; letter-spacing: .08em;
+  padding: 10px 4px; border-bottom: 2px solid transparent; cursor: pointer; }
+nav .sep { flex: none; width: 1px; margin: 10px 4px 12px; background: var(--line); }
 .drop[hidden] { display: none; }
 /* Screenshots as a gallery: the picture, its game and time, then the buttons. */
 ul.shots { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; margin-top: 20px; }
@@ -47,13 +47,20 @@ li input { flex: 1; background: var(--panel); border: 1px solid var(--fg); color
 footer { margin-top: 18px; color: var(--dim); font-size: 12px; display: flex; justify-content: space-between; }
 .pin { position: fixed; inset: 0; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; }
 .pin input { width: 150px; text-align: center; font: 600 30px system-ui; letter-spacing: .4em; background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
-@media (max-width: 520px) { main { padding-top: 56px; } .theme { top: 12px; } nav { flex-wrap: wrap; } nav .sep.row { flex-basis: 100%; height: 0; margin: 0; } nav button { font-size: 12px; letter-spacing: .06em; padding: 10px 4px; } li { flex-wrap: wrap; gap: 6px 10px; } li .name { flex-basis: 100%; } li:has(.thumb) .name { flex-basis: calc(100% - 92px); } li .size { flex: 1; } ul.shots li:has(.thumb) .name, ul.shots li .size { flex-basis: 100%; } ul.shots { grid-template-columns: 1fr 1fr; gap: 10px; } }
+@media (max-width: 520px) { main { padding-top: 56px; } .theme { top: 12px; } nav { flex-wrap: wrap; } nav .sep.row { flex-basis: 100%; height: 0; margin: 0; } nav button { font-size: 11px; letter-spacing: .03em; padding: 10px 2px; } nav .sep { margin: 10px 2px 12px; } li { flex-wrap: wrap; gap: 6px 10px; } li .name { flex-basis: 100%; } li:has(.thumb) .name { flex-basis: calc(100% - 92px); } li .size { flex: 1; } ul.shots li:has(.thumb) .name, ul.shots li .size { flex-basis: 100%; } ul.shots { grid-template-columns: 1fr 1fr; gap: 10px; } }
 .pin[hidden], .viewer[hidden] { display: none; }
 li img.thumb { width: 80px; height: 60px; object-fit: cover; border-radius: 4px; background: var(--panel); border: 1px solid var(--line); cursor: zoom-in; flex: none; }
 .viewer { position: fixed; inset: 0; background: rgba(0, 0, 0, .85); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 16px; cursor: zoom-out; z-index: 2; }
 .viewer img { max-width: min(100%, 960px); max-height: 80vh; border-radius: 6px; }
 .viewer p { margin: 0; color: #eef0f4; font-size: 13px; }
 .pin p { color: var(--dim); margin: 0; font-size: 13px; }
+.update { margin: 28px 0 8px; text-align: center; }
+.update[hidden] { display: none; }
+.update h2 { margin: 0 0 4px; font-size: 22px; font-weight: 600; }
+.update p { margin: 0 0 18px; color: var(--dim); font-size: 13px; }
+.update button { background: var(--fg); color: var(--bg); border: 0; border-radius: 8px; font: inherit; font-weight: 600; padding: 10px 22px; cursor: pointer; }
+.update button[disabled] { opacity: .4; cursor: default; }
+.update .bar { max-width: 320px; margin: 0 auto 18px; }
 </style>
 </head>
 <body>
@@ -67,6 +74,7 @@ li img.thumb { width: 80px; height: 60px; object-fit: cover; border-radius: 4px;
     <div class="sub">Manager</div>
   </header>
   <nav id="tabs"></nav>
+  <div class="update" id="update" hidden></div>
   <label class="drop" id="drop"><b>Drop files here</b> or tap to choose<input type="file" multiple hidden id="pick">
     <div id="up"></div></label>
   <div id="msg"></div>
@@ -85,7 +93,8 @@ function theme(light) {
   document.documentElement.dataset.theme = light ? "light" : "dark";
   $("theme").setAttribute("aria-pressed", light);
 }
-const SYS = ["GB", "GBC", "GBA", "NES", "SNES", "BIOS", "WALLPAPERS", "SCREENSHOTS"];
+const SYS = ["GB", "GBC", "GBA", "NES", "SNES", "BIOS", "WALLPAPERS", "SCREENSHOTS", "UPDATE"];
+const UPDATE = s => s == "UPDATE";
 const SHOTS = s => s == "SCREENSHOTS";
 const PICTURES = s => s == "WALLPAPERS" || s == "SCREENSHOTS";
 const NAME = {};
@@ -131,10 +140,14 @@ async function load() {
 function render() {
   // Thin lines keep games, BIOS, wallpapers and screenshots apart; on a phone the first one
   // breaks the tabs into two rows.
-  $("tabs").innerHTML = SYS.map(s => (s == "BIOS" ? '<i class="sep row"></i>' : s == "WALLPAPERS" || s == "SCREENSHOTS" ? '<i class="sep"></i>' : "") +
+  $("tabs").innerHTML = SYS.map(s => (s == "BIOS" ? '<i class="sep row"></i>' : s == "WALLPAPERS" || s == "SCREENSHOTS" || s == "UPDATE" ? '<i class="sep"></i>' : "") +
     `<button class="${s == sys ? "on" : ""}" data-s="${s}">${NAME[s] || s}</button>`).join("");
-  const games = data ? data.systems[sys] : [];
+  const games = data && data.systems[sys] || [];
   $("drop").hidden = SHOTS(sys);
+  $("update").hidden = !UPDATE(sys);
+  $("drop").querySelector("b").textContent = UPDATE(sys) ? "Drop a slot. x GRAVY zip here" : "Drop files here";
+  $("list").hidden = $("count").hidden = UPDATE(sys);
+  if (UPDATE(sys)) { updated(); return; }
   $("list").className = SHOTS(sys) ? "shots" : "";
   if (SHOTS(sys)) $("list").innerHTML = games.length ? games.map(([n, b], i) => {
     const [game, when] = caption(n);
@@ -196,6 +209,7 @@ $("tabs").onclick = e => {
   sys = s; renaming = null; say();
   try { sessionStorage.setItem("sys", s); } catch (e) {}
   render();
+  if (UPDATE(s)) checkUpdate();
 };
 $("list").onclick = async e => {
   const d = e.target.dataset, games = data.systems[sys];
@@ -219,10 +233,10 @@ $("list").onclick = async e => {
   } catch (err) { if (err.message) say(err.message); }
 };
 
-function send(file, to) {
+function send(file, to, path) {
   return new Promise((done, fail) => {
     const x = new XMLHttpRequest();
-    x.open("PUT", url(to, file.name));
+    x.open("PUT", path || url(to, file.name));
     x.setRequestHeader("X-Pin", pin);
     x.upload.onprogress = e => {
       const p = Math.round(100 * e.loaded / e.total);
@@ -233,7 +247,53 @@ function send(file, to) {
     x.send(file);
   });
 }
+// The update tab: the newest release on GitHub, or a zip dropped on the page, is put beside
+// the running version; Install restarts the console into it.
+let update = null, polling = null;
+async function checkUpdate() {
+  try { update = await (await api("GET", "/api/update")).json(); } catch (e) { return; }
+  updated();
+  clearTimeout(polling);
+  if (UPDATE(sys) && (update.state == "checking" || update.state == "downloading")) polling = setTimeout(checkUpdate, 1000);
+}
+function updated() {
+  if (!UPDATE(sys)) return;
+  const u = update || { state: "idle", installed: "" }, have = u.installed || "an older version";
+  const [title, note, button] = {
+    idle: ["slot. x GRAVY " + (u.installed || ""), "Look for a newer version on GitHub.", "Check for update"],
+    checking: ["Checking...", "Asking GitHub for the newest release.", ""],
+    latest: ["Up to date", "You have the newest version, " + u.version + ".", "Check again"],
+    available: [u.version + " is out", "You have " + have + ". Games, saves and settings stay as they are.", "Download"],
+    downloading: ["Downloading " + u.version, u.total ? size(u.done) + " of " + size(u.total) : size(u.done), ""],
+    ready: [(u.version || "The update") + " is ready", "The console restarts into it. If it doesn't start, the next start goes back to " + have + ".", "Install"],
+    failed: ["That didn't work", u.error, "Try again"],
+  }[u.state];
+  const p = u.total ? Math.round(100 * u.done / u.total) : 0;
+  $("update").innerHTML = `<h2>${esc(title.trim())}</h2><p>${esc(note || "")}</p>` +
+    (u.state == "downloading" ? `<div class="bar"><i style="width:${p}%"></i></div>` : "") +
+    (button ? `<button id="go" data-state="${u.state}">${button}</button>` : "");
+  const go = $("go");
+  if (go) go.onclick = async () => {
+    try {
+      if (u.state == "available") await api("POST", "/api/update/download");
+      else if (u.state == "ready") {
+        if (!confirm("Install " + (u.version || "the update") + "? The console restarts.")) return;
+        await api("POST", "/api/update/install");
+        $("update").innerHTML = "<h2>Restarting...</h2><p>The console starts the new version in a moment. This page closes with it.</p>";
+        return;
+      } else await api("POST", "/api/update/check");
+    } catch (err) { if (err.message) say(err.message); }
+    checkUpdate();
+  };
+}
 async function add(files) {
+  if (UPDATE(sys)) {
+    const zip = files.find(f => /\.zip$/i.test(f.name));
+    if (!zip) return say("Drop the slot. x GRAVY zip, as it comes from GitHub");
+    try { await send(zip, null, "/api/update/zip"); say(); } catch (err) { say(err.message); }
+    $("up").innerHTML = "";
+    return checkUpdate();
+  }
   let added = 0, last = sys;
   for (const f of files) {
     // Each game goes to the shelf its file says, whichever tab is open.
@@ -262,7 +322,7 @@ $("theme").onclick = () => {
   try { localStorage.setItem("theme", light ? "light" : "dark"); } catch (e) {}
 };
 render();
-load().catch(() => {});
+load().then(() => UPDATE(sys) && checkUpdate()).catch(() => {});
 </script>
 </body>
 </html>

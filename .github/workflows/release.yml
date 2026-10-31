@@ -72,6 +72,8 @@ jobs:
           # The zip and its folder carry the GRAVY name: slot-x-gravy-v1.1.zip holds slot-x-gravy-v1.1/.
           out="slot-x-gravy-$(printf %s "$VERSION" | tr / -)"
           mv "slot-${BUILD_NAME}" "$out"
+          # The GRAVY Manager compares this with the newest release.
+          printf '%s\n' "$VERSION" > "$out/System/version.txt"
           zip="$out.zip"
           zip -qry "$zip" "$out"
           echo "zip=$zip" >> "$GITHUB_OUTPUT"

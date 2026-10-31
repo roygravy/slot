@@ -11,6 +11,8 @@ toml = "0.8"
 libc = "0.2"
 pbkdf2 = "0.12"
 sha1 = "0.10"
+zip = { version = "9", default-features = false, features = ["deflate"] }
+ureq = { version = "3", default-features = false, features = ["rustls"] }
 
 [dev-dependencies]
 tempfile.workspace = true
