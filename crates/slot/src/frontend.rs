@@ -827,7 +827,14 @@ impl Frontend {
             true => COLOUR_PALE_OPACITY,
             false => GB_PALE_OPACITY,
         });
-        compositor.set_lcd_mix(GBC_LCD[0], GBC_LCD[1], gba);
+        // The GBA's LCD lines and stripes; the GBC's seams, and daylight on its glass.
+        match gba {
+            true => compositor.set_lcd_mix(GBA_LCD[0], GBA_LCD[1], true),
+            false => {
+                let sunlight = self.session.app().gbc_sunlight();
+                compositor.set_lcd_mix(GBC_SEAM, if sunlight { 1.0 } else { 0.0 }, false);
+            }
+        }
         // Effects off: black around the picture too, nothing of slot.'s screen left.
         compositor.set_black_edge(self.session.app().black_border() || bare);
         compositor.set_saturation(match (gba, gbc) {
@@ -2057,9 +2064,11 @@ const GBC_PANEL: [f32; 3] = [0.79, 0.80, 0.74];
 const TV_AFTERGLOW: u32 = 108;
 
 /// Grid lines a little darker than the panel, as the gaps between a GBC's pixels look.
-/// The GBC's LCD on its own pixels: a dark line under each row at 10%, and a red, green or blue
-/// line down each third of a pixel at 20%.
-const GBC_LCD: [f32; 2] = [0.10, 0.20];
+/// The GBA's LCD: a dark line under each row at 10%, and a red, green or blue line down each
+/// third of a cell at 20%.
+const GBA_LCD: [f32; 2] = [0.10, 0.20];
+/// The GBC's LCD: how dark the seam right of and under each of its pixels.
+const GBC_SEAM: f32 = 0.22;
 
 /// A GBA's colours shown a quarter less vivid than the raw ones: between the raw colours and
 /// the old colour correction, as the screen showed them.

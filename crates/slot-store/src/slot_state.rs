@@ -316,6 +316,8 @@ pub struct SlotState {
     pub cheat_icon: bool,
     /// GB and GBC pictures framed in black rather than the LCD's own glass.
     pub gbc_black_border: bool,
+    /// Daylight glinting off the GBC's glass, over its LCD filter.
+    pub gbc_sunlight: bool,
     pub gb_black_border: bool,
     /// Moving pixels fade out slowly, for each system on its own: GB, GBC, GBA.
     pub lcd_ghosting_gb: bool,
@@ -559,6 +561,7 @@ impl Default for SlotState {
             pixel_transparency_gba: true,
             cheat_icon: true,
             gbc_black_border: false,
+            gbc_sunlight: false,
             gb_black_border: false,
             lcd_ghosting_gb: true,
             lcd_ghosting_gbc: true,
@@ -716,6 +719,7 @@ pub fn write_slot_state(root: &Path, s: &SlotState) -> std::io::Result<()> {
     text.push_str(&format!("nes_colors={}\n", s.nes_colors.name()));
     text.push_str(&format!("cheat_icon={}\n", s.cheat_icon as u8));
     text.push_str(&format!("gbc_black_border={}\n", s.gbc_black_border as u8));
+    text.push_str(&format!("gbc_sunlight={}\n", s.gbc_sunlight as u8));
     text.push_str(&format!("gb_black_border={}\n", s.gb_black_border as u8));
     text.push_str(&format!("resume_game={}\n", s.resume_game as u8));
     text.push_str(&format!("boot_picture={}\n", s.boot_picture as u8));
@@ -801,6 +805,7 @@ fn parse(text: &str) -> Option<SlotState> {
     let mut pixel_transparency_gba = None;
     let mut cheat_icon = None;
     let mut gbc_black_border = None;
+    let mut gbc_sunlight = None;
     let mut gb_black_border = None;
     let mut resume_game = None;
     let mut boot_picture = None;
@@ -880,6 +885,7 @@ fn parse(text: &str) -> Option<SlotState> {
             "pixel_transparency_gba" => pixel_transparency_gba = flag(value),
             "cheat_icon" => cheat_icon = flag(value),
             "gbc_black_border" => gbc_black_border = flag(value),
+            "gbc_sunlight" => gbc_sunlight = flag(value),
             "gb_black_border" => gb_black_border = flag(value),
             "resume_game" => resume_game = flag(value),
             "boot_picture" => boot_picture = flag(value),
@@ -969,6 +975,7 @@ fn parse(text: &str) -> Option<SlotState> {
             .unwrap_or(fallback.pixel_transparency_gba),
         cheat_icon: cheat_icon.unwrap_or(fallback.cheat_icon),
         gbc_black_border: gbc_black_border.unwrap_or(fallback.gbc_black_border),
+        gbc_sunlight: gbc_sunlight.unwrap_or(fallback.gbc_sunlight),
         gb_black_border: gb_black_border.unwrap_or(fallback.gb_black_border),
         resume_game: resume_game.unwrap_or(fallback.resume_game),
         boot_picture: boot_picture.unwrap_or(fallback.boot_picture),

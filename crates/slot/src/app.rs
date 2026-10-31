@@ -1131,6 +1131,10 @@ impl App {
         if !self.sgb_playing() {
             hidden.push(QuickRow::SgbBorder);
         }
+        // Daylight on the glass is the GBC's own: the other screens are lit or a TV's.
+        if platform != Platform::Gbc {
+            hidden.push(QuickRow::Sunlight);
+        }
         // Only the NES's picture has colours a TV made up.
         if platform != Platform::Nes {
             hidden.push(QuickRow::Colors);
@@ -1168,6 +1172,7 @@ impl App {
             (QuickRow::LcdGhosting, Platform::Gba) => QuickRow::GbaGhosting,
             (QuickRow::BlackBorder, Platform::Gb) => QuickRow::GbBlackBorder,
             (QuickRow::BlackBorder, Platform::Gbc) => QuickRow::GbcBlackBorder,
+            (QuickRow::Sunlight, Platform::Gbc) => QuickRow::GbcSunlight,
             (QuickRow::Cable, Platform::Nes) => QuickRow::NesCable,
             (QuickRow::Cable, Platform::Snes) => QuickRow::SnesCable,
             (QuickRow::Colors, Platform::Nes) => QuickRow::NesColors,
@@ -1184,6 +1189,7 @@ impl App {
     pub fn quick_value(&self, row: QuickRow) -> Option<QuickValue> {
         match row {
             QuickRow::Shader
+            | QuickRow::Sunlight
             | QuickRow::PixelTransparency
             | QuickRow::LcdGhosting
             | QuickRow::BlackBorder
@@ -1236,6 +1242,7 @@ impl App {
             QuickRow::Clock24 => Some(QuickValue::flag(self.state.clock_24h)),
             QuickRow::CheatIcon => Some(QuickValue::flag(self.state.cheat_icon)),
             QuickRow::GbcBlackBorder => Some(QuickValue::flag(self.state.gbc_black_border)),
+            QuickRow::GbcSunlight => Some(QuickValue::flag(self.state.gbc_sunlight)),
             QuickRow::GbBlackBorder => Some(QuickValue::flag(self.state.gb_black_border)),
             QuickRow::EjectSave => Some(QuickValue::flag(self.state.eject_save)),
             QuickRow::Turbo => Some(QuickValue::flag(self.state.turbo)),
@@ -2455,6 +2462,11 @@ impl App {
         self.seated_cart().map_or(self.platform, |c| c.platform)
     }
 
+    /// Daylight on the glass of the GBC's screen, a GBC game's or a GB game's in its GBC colours.
+    pub fn gbc_sunlight(&self) -> bool {
+        self.state.gbc_sunlight
+    }
+
     /// Whether the playing GB or GBC picture is framed in black rather than the screen's glass.
     pub fn black_border(&self) -> bool {
         match self.playing_platform() {
@@ -3308,6 +3320,7 @@ impl App {
             | QuickRow::Clock24
             | QuickRow::CheatIcon
             | QuickRow::GbcBlackBorder
+            | QuickRow::GbcSunlight
             | QuickRow::GbBlackBorder
             | QuickRow::Theme
             | QuickRow::Recents
@@ -3329,6 +3342,7 @@ impl App {
             | QuickRow::GbcBezel
             | QuickRow::GbaBezel
             | QuickRow::Bezel
+            | QuickRow::Sunlight
             | QuickRow::PixelTransparency
             | QuickRow::LcdGhosting
             | QuickRow::BlackBorder
@@ -3509,6 +3523,7 @@ impl App {
             QuickRow::Clock24 => s.clock_24h = !s.clock_24h,
             QuickRow::CheatIcon => s.cheat_icon = !s.cheat_icon,
             QuickRow::GbcBlackBorder => s.gbc_black_border = !s.gbc_black_border,
+            QuickRow::GbcSunlight => s.gbc_sunlight = !s.gbc_sunlight,
             QuickRow::GbBlackBorder => s.gb_black_border = !s.gb_black_border,
             QuickRow::EjectSave => s.eject_save = !s.eject_save,
             QuickRow::Turbo => s.turbo = !s.turbo,
@@ -3557,6 +3572,7 @@ impl App {
             | QuickRow::PowerOff
             | QuickRow::GbPalettes
             // Mapped to this system's own row above; on the GBA there is no border.
+            | QuickRow::Sunlight
             | QuickRow::PixelTransparency
             | QuickRow::LcdGhosting
             | QuickRow::BlackBorder

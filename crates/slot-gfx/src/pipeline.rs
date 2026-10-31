@@ -249,8 +249,9 @@ impl GamePass {
 
     /// A fixed panel behind the picture (instead of black, or the GB's sampled lightest
     /// colour), and the tone light colours take from it.
-    /// For the GBC's LCD: how dark the line under each row, and how strong each column's
-    /// red, green or blue.
+    /// For the GBA's LCD (on the screen's own pixels): how dark the line under each row, and
+    /// how strong each column's red, green or blue. For the GBC's: how dark the seams between
+    /// its pixels, and how much daylight falls on its glass.
     pub fn set_lcd_mix(&mut self, scanlines: f32, tint: f32, on_screen_pixels: bool) {
         self.lcd_mix = [
             scanlines.max(0.0),

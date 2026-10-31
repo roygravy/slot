@@ -16,6 +16,8 @@ pub enum QuickRow {
     GbcBlackBorder,
     GbBlackBorder,
     BlackBorder,
+    GbcSunlight,
+    Sunlight,
     GbTransparency,
     GbcTransparency,
     GbaTransparency,
@@ -99,7 +101,7 @@ pub enum QuickRow {
 }
 
 impl QuickRow {
-    pub const ALL: [QuickRow; 88] = [
+    pub const ALL: [QuickRow; 90] = [
         QuickRow::FastForward,
         QuickRow::FastForwardSound,
         QuickRow::Screen,
@@ -108,6 +110,8 @@ impl QuickRow {
         QuickRow::GbcBlackBorder,
         QuickRow::GbBlackBorder,
         QuickRow::BlackBorder,
+        QuickRow::GbcSunlight,
+        QuickRow::Sunlight,
         QuickRow::GbTransparency,
         QuickRow::GbcTransparency,
         QuickRow::GbaTransparency,
@@ -259,8 +263,9 @@ impl QuickRow {
         QuickRow::GbaGhosting,
     ];
 
-    pub const SCREEN_GBC: [QuickRow; 4] = [
+    pub const SCREEN_GBC: [QuickRow; 5] = [
         QuickRow::GbcShader,
+        QuickRow::GbcSunlight,
         QuickRow::GbcTransparency,
         QuickRow::GbcGhosting,
         QuickRow::GbcBlackBorder,
@@ -299,9 +304,10 @@ impl QuickRow {
     /// The in-game Screen page: the playing system's own settings, through rows that stand
     /// for whichever system is in the slot.
     /// The TV consoles' rows come after the handhelds' and only one set is shown.
-    pub const PLAY_SCREEN: [QuickRow; 11] = [
+    pub const PLAY_SCREEN: [QuickRow; 12] = [
         QuickRow::SgbBorder,
         QuickRow::Shader,
+        QuickRow::Sunlight,
         QuickRow::Palette,
         QuickRow::PixelTransparency,
         QuickRow::LcdGhosting,
@@ -341,6 +347,7 @@ impl QuickRow {
             | QuickRow::GbcTransparency
             | QuickRow::GbcGhosting
             | QuickRow::GbcBlackBorder
+            | QuickRow::GbcSunlight
             | QuickRow::GbcBezel => &QuickRow::SCREEN_GBC,
             QuickRow::GbShader
             | QuickRow::GbTransparency
@@ -386,6 +393,7 @@ impl QuickRow {
             QuickRow::PlayScreen | QuickRow::PlayGameplay => &QuickRow::SETTINGS,
             QuickRow::Sleep | QuickRow::Restart | QuickRow::PowerOff => &QuickRow::POWER,
             QuickRow::Shader
+            | QuickRow::Sunlight
             | QuickRow::PixelTransparency
             | QuickRow::LcdGhosting
             | QuickRow::Palette
@@ -480,6 +488,7 @@ impl QuickRow {
             QuickRow::GbcBlackBorder | QuickRow::GbBlackBorder | QuickRow::BlackBorder => {
                 "Black Border"
             }
+            QuickRow::GbcSunlight | QuickRow::Sunlight => "Sunlight",
             QuickRow::DateTime => "Date & Time",
             QuickRow::AutoTime => "Auto Time",
             QuickRow::TimeZone => "Time Zone",
@@ -607,6 +616,9 @@ impl QuickRow {
             QuickRow::CheatIcon => "Show a masked robber while any cheat is on.",
             QuickRow::GbcBlackBorder | QuickRow::GbBlackBorder | QuickRow::BlackBorder => {
                 "Black around the picture, instead of the screen's own glass."
+            }
+            QuickRow::GbcSunlight | QuickRow::Sunlight => {
+                "Daylight glints off the glass, as when you play outside."
             }
             QuickRow::InGameMenu => "Tap MENU in a game to pause and open a menu.",
             QuickRow::EjectSave => "Save your place when you eject a cart.",
