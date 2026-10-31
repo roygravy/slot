@@ -2165,7 +2165,7 @@ fn sync_about(app: &mut App, compositor: &mut Compositor, state: &mut AboutFace)
     if !matches!(app.phase(), Phase::About) {
         return;
     }
-    let light = app.about_light();
+    let light = app.about_back_light();
     if state.tex.is_some() && state.light == Some(light) {
         return;
     }

@@ -1519,6 +1519,12 @@ impl App {
         self.light_ground()
     }
 
+    /// Which About back the About page itself shows: with Originals always the light one, the
+    /// original DMG's grey (Roy); otherwise as `about_light`.
+    pub fn about_back_light(&self) -> bool {
+        self.originals() || self.about_light()
+    }
+
     /// Whether the wallpaper behind the shelf and menus is a light one, so text and shadows on
     /// it go dark. Over your own wallpaper the menus are always the black ones, whatever the
     /// Slot Color (Roy).
