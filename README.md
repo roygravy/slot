@@ -53,11 +53,11 @@ Tick **Remember this phone** and that phone needs no PIN next time. The manager 
 
 ### A slot for every cartridge
 
-Game Boy games go into a Game Boy slot, GBA games into a GBA SP slot, both redrawn in moulded plastic, down to the ribs on the back wall. Two new wallpapers come along, and either one goes with the Dark or the Light theme. The slot itself comes in Dark, Light or Originals, the colours of the real consoles.
+Every console gets its own slot: Game Boy, Game Boy Color, GBA SP, NES, Super Nintendo and the Super Game Boy, redrawn in moulded plastic, down to the ribs on the back wall. Two new wallpapers come along, and either one goes with the Dark or the Light theme. The slot itself comes in Dark, Light or Originals, the colours of the real consoles.
 
 <img src=".github/resources/gravy/themes.png" width="100%" alt="The Game Boy Color shelf in the dark and the light theme">
 
-<img src=".github/resources/gravy/slots.png" width="100%" alt="The empty GBA slot and a Game Boy cart seated in its slot, dark and light">
+<img src=".github/resources/gravy/slots.png" width="100%" alt="The Game Boy, Game Boy Color, GBA, NES, Super Nintendo and Super Game Boy slots in their Originals colours">
 
 ### NES and SNES, on their own shelves
 
@@ -95,7 +95,7 @@ Quiet, monochrome menus: options on the left, values on the right, simple switch
 
 ### Every console, its own settings
 
-Dot Matrix, palettes, Pixel Transparency, Ghosting and a Black Border, set per console, from the menu or right in the game. The Game Boy keeps to its own three palettes, DMG, Pocket and Light, with the Pocket and Light colours measured from the real handhelds and the Light glowing softly like its backlight. Or it plays a game in its own Game Boy Color colours. The Game Boy Color gets a **Screen Light**: Bright, Soft or Dim.
+Every console keeps its own screen settings, from the menu or right in the game: Dot Matrix, palettes, Pixel Transparency, Ghosting and a Black Border on the handhelds, a CRT and a screen cable on the NES and Super Nintendo. The Game Boy has its own three palettes, DMG, Pocket and Light, with the colours of the real handhelds, or plays a game in its own Game Boy Color colours.
 
 <img src=".github/resources/gravy/gb-palettes.png" width="100%" alt="Hauntsfield in the DMG, Pocket and Light colours">
 
