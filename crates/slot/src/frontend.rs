@@ -2311,7 +2311,10 @@ fn sync_label_search(app: &mut App, compositor: &mut Compositor, state: &mut Sea
         .map(|t| up(&mut state.typed, slot_ui::search_typed_face(&t)));
     let status = words
         .status
-        .map(|t| up(&mut state.status, slot_ui::search_status_face(&t)));
+        .map(|t| match words.big.is_some() {
+            true => up(&mut state.status, slot_ui::search_address_face(&t)),
+            false => up(&mut state.status, slot_ui::search_status_face(&t)),
+        });
     let note = words
         .note
         .map(|t| up(&mut state.note, slot_ui::search_heading_face(&t)));

@@ -603,6 +603,11 @@ pub fn search_status_face(text: &str) -> UndoFace {
     plain(text, 15.0, 3.0, true)
 }
 
+/// The GRAVY Manager's address under its PIN: larger, to type it over from the screen.
+pub fn search_address_face(text: &str) -> UndoFace {
+    plain(text, 22.0, 3.0, true)
+}
+
 /// A game found: its name, cut short with an ellipsis when it is wider than the list, and
 /// its platform under it.
 pub fn search_row_faces(name: &str, platform: &str) -> (UndoFace, UndoFace) {
@@ -970,9 +975,11 @@ pub fn draw_label_search(canvas: Canvas, v: &SearchView, out: &mut Vec<Draw>) {
             if let Some(s) = v.texts.status {
                 heading(s, 200.0 + low, faded(v.ink.text, a), out);
             }
+            // The larger address under a PIN needs a little more room above the note.
+            let note_drop = if v.texts.big.is_some() { 6.0 } else { 0.0 };
             heading(
                 v.texts.note.unwrap_or(v.faces.try_again),
-                236.0 + low,
+                236.0 + low + note_drop,
                 faded(v.ink.dim, a),
                 out,
             );
