@@ -627,6 +627,8 @@ const LEAD_H: u32 = 84;
 const ICON_Y: f32 = 96.0;
 const LEAD_Y: f32 = 214.0;
 const SUB_Y: f32 = 312.0;
+/// The GRAVY Manager's QR code, clear of the heading.
+const QR_Y: f32 = 64.0;
 
 /// The GRAVY Manager's address under its PIN: larger, to type it over from the screen.
 pub fn search_address_face(text: &str) -> UndoFace {
@@ -998,7 +1000,7 @@ pub fn draw_label_search(canvas: Canvas, v: &SearchView, out: &mut Vec<Draw>) {
                 out.push(tint(
                     q.0,
                     canvas.centred(q.1 as f32),
-                    52.0,
+                    QR_Y,
                     q.1 as f32,
                     q.2 as f32,
                     [1.0, 1.0, 1.0, a],
