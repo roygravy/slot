@@ -1706,7 +1706,7 @@ fn sync_wallpaper(app: &mut App, compositor: &mut Compositor, state: &mut Wallpa
 /// How wide the network's name can be, right of "Connected To".
 /// The joined network is its own row now: its name runs from the label edge up to the caret.
 const NETWORK_NAME_MAX: u32 = 520;
-/// Time Zone's city sits beside its label, so it keeps the old room.
+/// Time Zone's city and Date & Time's value sit beside their labels: they keep the old room.
 const ZONE_NAME_MAX: u32 = 320;
 
 fn sync_quick_network(app: &mut App, compositor: &mut Compositor, state: &mut QuickClock) {
@@ -1749,7 +1749,7 @@ fn sync_quick_zone(app: &mut App, compositor: &mut Compositor, state: &mut Quick
     // A long network name is cut with an ellipsis rather than run into "Connected To".
     let mut shown = text.clone();
     let mut chars: Vec<char> = text.chars().collect();
-    while quick_value_face(&shown, false).w > NETWORK_NAME_MAX && !chars.is_empty() {
+    while quick_value_face(&shown, false).w > ZONE_NAME_MAX && !chars.is_empty() {
         chars.pop();
         shown = format!("{}…", chars.iter().collect::<String>().trim_end());
     }
