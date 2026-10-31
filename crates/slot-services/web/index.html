@@ -6,9 +6,15 @@
 <title>GRAVY ROM Manager</title>
 <style>
 :root { --bg: #0b0e11; --panel: #14181d; --line: #262c33; --fg: #eef0f4; --dim: #8a929c; }
+:root[data-theme="light"] { --bg: #f3f3f0; --panel: #ffffff; --line: #d6d8dc; --fg: #14171b; --dim: #6c737c; }
+:root[data-theme="light"] .logo { filter: invert(1); }
+/* The menu's own switch: an outlined pill when off, a filled one with the knob cut out when on. */
+.theme { position: absolute; top: 16px; right: 16px; background: none; border: 0; padding: 4px; color: var(--fg); cursor: pointer; line-height: 0; }
+.theme .on, :root[data-theme="light"] .theme .off { display: none; }
+:root[data-theme="light"] .theme .on { display: inline; }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
-main { max-width: 760px; margin: 0 auto; padding: 32px 16px 64px; }
+main { position: relative; max-width: 760px; margin: 0 auto; padding: 32px 16px 64px; }
 .logo { display: block; margin: 0 auto; height: 34px; width: auto; }
 header { text-align: center; margin-bottom: 26px; }
 .sub { font-size: 11px; letter-spacing: .3em; color: var(--dim); margin-top: 10px; text-transform: uppercase; }
@@ -33,13 +39,21 @@ li input { flex: 1; background: var(--panel); border: 1px solid var(--fg); color
 footer { margin-top: 18px; color: var(--dim); font-size: 12px; display: flex; justify-content: space-between; }
 .pin { position: fixed; inset: 0; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; }
 .pin input { width: 150px; text-align: center; font: 600 30px system-ui; letter-spacing: .4em; background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
-@media (max-width: 520px) { nav button { font-size: 12px; letter-spacing: .04em; padding: 10px 2px; } li { flex-wrap: wrap; gap: 6px 10px; } li .name { flex-basis: 100%; } li .size { flex: 1; } }
-.pin[hidden] { display: none; }
+@media (max-width: 520px) { main { padding-top: 56px; } .theme { top: 12px; } nav button { font-size: 12px; letter-spacing: .04em; padding: 10px 2px; } li { flex-wrap: wrap; gap: 6px 10px; } li .name { flex-basis: 100%; } li:has(.thumb) .name { flex-basis: calc(100% - 92px); } li .size { flex: 1; } }
+.pin[hidden], .viewer[hidden] { display: none; }
+li img.thumb { width: 80px; height: 60px; object-fit: cover; border-radius: 4px; background: var(--panel); border: 1px solid var(--line); cursor: zoom-in; flex: none; }
+.viewer { position: fixed; inset: 0; background: rgba(0, 0, 0, .85); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 16px; cursor: zoom-out; z-index: 2; }
+.viewer img { max-width: min(100%, 960px); max-height: 80vh; border-radius: 6px; }
+.viewer p { margin: 0; color: #eef0f4; font-size: 13px; }
 .pin p { color: var(--dim); margin: 0; font-size: 13px; }
 </style>
 </head>
 <body>
 <main>
+  <button class="theme" id="theme" aria-label="Light" title="Light"><svg width="46" height="26" viewBox="0 0 46 26">
+    <g class="off"><rect x="1" y="1" width="44" height="24" rx="12" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="13" cy="13" r="6.5" fill="currentColor"/></g>
+    <g class="on"><mask id="cut"><rect width="46" height="26" fill="#fff"/><circle cx="33" cy="13" r="8" fill="#000"/></mask><rect x="1" y="1" width="44" height="24" rx="12" fill="currentColor" mask="url(#cut)"/></g>
+  </svg></button>
   <header>
     <img class="logo" src="logo.png" alt="slot. x GRAVY">
     <div class="sub">ROM Manager</div>
@@ -51,18 +65,27 @@ footer { margin-top: 18px; color: var(--dim); font-size: 12px; display: flex; ju
   <ul id="list"></ul>
   <footer><span id="count"></span><span id="free"></span></footer>
 </main>
+<div class="viewer" id="viewer" hidden><img id="big" alt=""><p id="bigname"></p></div>
 <div class="pin" id="lock" hidden>
   <div class="sub">Enter PIN</div>
   <input id="pin" inputmode="numeric" maxlength="4" autocomplete="off">
   <p id="pinwhy">Shown on your console under Network › ROM Manager</p>
 </div>
 <script>
+// Light or dark, remembered on this browser only.
+function theme(light) {
+  document.documentElement.dataset.theme = light ? "light" : "dark";
+  $("theme").setAttribute("aria-pressed", light);
+}
 const SYS = ["GB", "GBC", "GBA", "NES", "SNES", "BIOS", "WALLPAPERS"];
 const NAME = {};
 const GAMES = s => SYS.indexOf(s) < 5;
 const EXT = { gb: "GB", gbc: "GBC", gba: "GBA", nes: "NES", sfc: "SNES", smc: "SNES", bin: "BIOS", png: "WALLPAPERS" };
 let sys = "GB", data = null, pin = "", renaming = null;
 try { pin = sessionStorage.getItem("pin") || ""; sys = sessionStorage.getItem("sys") || sys; } catch (e) {}
+// Scanned from the console's QR code: the PIN comes in after the #, then leaves the address bar.
+const scanned = location.hash.match(/pin=(\d{4})/);
+if (scanned) { pin = scanned[1]; history.replaceState(null, "", "/"); try { sessionStorage.setItem("pin", pin); } catch (e) {} }
 const $ = id => document.getElementById(id);
 const esc = t => t.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 const size = n => n < 1048576 ? Math.round(n / 1024) + " KB" : (n / 1048576).toFixed(1) + " MB";
@@ -102,17 +125,39 @@ function render() {
   const games = data ? data.systems[sys] : [];
   $("list").innerHTML = games.length ? games.map(([n, b], i) => renaming == n
     ? `<li><input id="to" value="${esc(n)}"><button data-save="${i}">Save</button><button data-cancel>Cancel</button></li>`
-    : `<li><span class="name">${esc(n)}</span><span class="size">${size(b)}</span>` +
+    : `<li>${sys == "WALLPAPERS" ? `<img class="thumb" data-view="${i}" alt="">` : ""}<span class="name">${esc(n)}</span><span class="size">${size(b)}</span>` +
       `<button data-ren="${i}">Rename</button><button data-del="${i}">Delete</button></li>`).join("")
     : `<li><span class="name" style="color:var(--dim)">Nothing here yet</span></li>`;
   const what = GAMES(sys) ? " game" : " file";
   $("count").textContent = games.length + what + (games.length == 1 ? "" : "s");
   $("free").textContent = data ? (data.free / 1073741824).toFixed(1) + " GB free on SD card" : "";
+  if (sys == "WALLPAPERS") thumbs(games);
   const to = $("to");
   if (to) { to.focus(); to.setSelectionRange(0, to.value.lastIndexOf(".")); to.onkeydown = e => {
     if (e.key == "Enter") $("list").querySelector("[data-save]").click();
     if (e.key == "Escape") { renaming = null; render(); } }; }
 }
+// Wallpapers come with their picture: fetched with the PIN, kept while the page is open.
+const pictures = {};
+async function picture(name, bytes) {
+  const key = name + ":" + bytes;
+  if (!pictures[key]) pictures[key] = api("GET", url("WALLPAPERS", name)).then(r => r.blob()).then(URL.createObjectURL);
+  return pictures[key];
+}
+function thumbs(games) {
+  $("list").querySelectorAll("img.thumb").forEach(img => {
+    const [n, b] = games[img.dataset.view];
+    picture(n, b).then(src => img.src = src).catch(() => {});
+  });
+}
+async function view(i) {
+  const [n, b] = data.systems.WALLPAPERS[i];
+  $("big").src = await picture(n, b);
+  $("bigname").textContent = n;
+  $("viewer").hidden = false;
+}
+$("viewer").onclick = () => $("viewer").hidden = true;
+document.addEventListener("keydown", e => { if (e.key == "Escape") $("viewer").hidden = true; });
 $("tabs").onclick = e => {
   const s = e.target.dataset.s;
   if (!s) return;
@@ -123,6 +168,7 @@ $("tabs").onclick = e => {
 $("list").onclick = async e => {
   const d = e.target.dataset, games = data.systems[sys];
   try {
+    if (d.view) return view(d.view);
     if (d.ren) { renaming = games[d.ren][0]; return render(); }
     if ("cancel" in d) { renaming = null; return render(); }
     if (d.save) {
@@ -174,6 +220,14 @@ drop.ondragover = e => { e.preventDefault(); drop.classList.add("over"); };
 drop.ondragleave = () => drop.classList.remove("over");
 drop.ondrop = e => { e.preventDefault(); drop.classList.remove("over"); add([...e.dataTransfer.files]); };
 
+let light = false;
+try { light = localStorage.getItem("theme") == "light"; } catch (e) {}
+theme(light);
+$("theme").onclick = () => {
+  light = !light;
+  theme(light);
+  try { localStorage.setItem("theme", light ? "light" : "dark"); } catch (e) {}
+};
 render();
 load().catch(() => {});
 </script>

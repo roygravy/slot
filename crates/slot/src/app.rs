@@ -6057,6 +6057,7 @@ impl App {
                     rows: w.rows,
                     note: w.note,
                     big: w.big,
+                    qr: w.qr,
                     upper: w.upper,
                 },
             ));
@@ -6091,6 +6092,7 @@ impl App {
                     .collect(),
                 note: None,
                 big: None,
+                qr: None,
                 upper: true,
             },
         ))
@@ -7206,11 +7208,19 @@ impl App {
         self.last_activity = self.now();
     }
 
+    /// Files go over the network with no button pressed: the console stays awake for them.
+    fn rom_manager_open(&self) -> bool {
+        self.list_page
+            .as_ref()
+            .is_some_and(|p| p.kind == list_page::Kind::RomManager && !p.closing())
+    }
+
     fn auto_sleep_expired(&self) -> bool {
         let timeout = Millis::from(self.state.auto_sleep_secs) * 1_000;
         timeout > 0
             && !self.powering_off
             && !self.link_active()
+            && !self.rom_manager_open()
             && !matches!(self.phase, Phase::Doze { .. })
             && self.now().saturating_sub(self.last_activity) >= timeout
     }
@@ -7722,6 +7732,8 @@ pub struct SearchWords {
     pub note: Option<String>,
     /// Large over the status on a message screen.
     pub big: Option<String>,
+    /// A QR code over the big line.
+    pub qr: Option<String>,
     /// False keeps a network's name as it is written.
     pub upper: bool,
 }
