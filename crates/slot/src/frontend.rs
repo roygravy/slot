@@ -1704,7 +1704,8 @@ fn sync_wallpaper(app: &mut App, compositor: &mut Compositor, state: &mut Wallpa
 
 /// Connected To on the Network page: the home network's name, or that there is none.
 /// How wide the network's name can be, right of "Connected To".
-const NETWORK_NAME_MAX: u32 = 320;
+/// The joined network is its own row now: its name runs from the label edge up to the caret.
+const NETWORK_NAME_MAX: u32 = 520;
 
 fn sync_quick_network(app: &mut App, compositor: &mut Compositor, state: &mut QuickClock) {
     if app.quick_menu().is_none() {
