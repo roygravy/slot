@@ -1,5 +1,5 @@
 diff --git a/libgambatte/libretro/gbcpalettes.h b/libgambatte/libretro/gbcpalettes.h
-index 12db886..4d84d7f 100644
+index 12db886..46ea6d0 100644
 --- a/libgambatte/libretro/gbcpalettes.h
 +++ b/libgambatte/libretro/gbcpalettes.h
 @@ -35,16 +35,16 @@ static const unsigned short gbdmg[] = { // Original Game Boy
@@ -11,9 +11,9 @@ index 12db886..4d84d7f 100644
 -	PACK15_4(0xA7B19A, 0x86927C, 0x535f49, 0x2A3325),
 -	PACK15_4(0xA7B19A, 0x86927C, 0x535f49, 0x2A3325)
 +static const unsigned short gbpoc[] = { // Game Boy Pocket: slot., measured from a real Pocket
-+	PACK15_4(0x798D81, 0x63746A, 0x4C5750, 0x323935),
-+	PACK15_4(0x798D81, 0x63746A, 0x4C5750, 0x323935),
-+	PACK15_4(0x798D81, 0x63746A, 0x4C5750, 0x323935)
++	PACK15_4(0x778D78, 0x627463, 0x4B574A, 0x313931),
++	PACK15_4(0x778D78, 0x627463, 0x4B574A, 0x313931),
++	PACK15_4(0x778D78, 0x627463, 0x4B574A, 0x313931)
  };
  
 -static const unsigned short gblit[] = { // Game Boy Light
