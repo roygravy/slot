@@ -28,6 +28,7 @@ pub struct Ring {
     rate: AtomicU32,
     muted: AtomicBool,
     idle: AtomicBool,
+    playing: AtomicBool,
     overruns: AtomicU64,
     underruns: AtomicU64,
     consuming: AtomicBool,
@@ -49,6 +50,7 @@ impl Ring {
             room: Condvar::new(),
             queued: AtomicUsize::new(0),
             idle: AtomicBool::new(false),
+            playing: AtomicBool::new(false),
             capacity: AtomicUsize::new(capacity_frames),
             rate: AtomicU32::new(0),
             muted: AtomicBool::new(false),
@@ -187,6 +189,16 @@ impl Ring {
 
     pub fn set_idle(&self, idle: bool) {
         self.idle.store(idle, Ordering::Relaxed);
+    }
+
+    /// A game is running: the device stays open through its silences, so sound coming back
+    /// never waits on the device reopening (it lost the first tenth of a second or two).
+    pub fn set_playing(&self, playing: bool) {
+        self.playing.store(playing, Ordering::Relaxed);
+    }
+
+    pub fn playing(&self) -> bool {
+        self.playing.load(Ordering::Relaxed)
     }
 
     pub fn set_muted(&self, muted: bool) {

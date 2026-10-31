@@ -644,6 +644,8 @@ impl Worker {
         };
         let mut resampler = Resampler::new(core_hz, device_hz);
         ring.clear_faults();
+        ring.set_playing(true);
+        let _playing = Playing(&ring);
         self.shared
             .state
             .store(CoreState::Ready as u8, Ordering::Release);
@@ -1444,5 +1446,14 @@ mod tests {
         assert_eq!(link.take_inbound().as_deref(), Some(&b"one"[..]));
         assert_eq!(link.take_inbound().as_deref(), Some(&b"two"[..]));
         assert_eq!(link.take_inbound(), None);
+    }
+}
+
+/// Lets the audio device go again once the game stops, however the run ends.
+struct Playing<'a>(&'a Ring);
+
+impl Drop for Playing<'_> {
+    fn drop(&mut self) {
+        self.0.set_playing(false);
     }
 }
