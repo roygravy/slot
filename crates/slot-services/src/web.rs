@@ -8,8 +8,8 @@ use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{Ipv4Addr, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::Arc;
-use std::time::Duration;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 const PAGE: &str = include_str!("../web/index.html");
 /// The boot logo's own slot., x and GRAVY, side by side.
@@ -20,6 +20,10 @@ const MAX_HEAD: usize = 16 << 10;
 const MAX_CONNECTIONS: usize = 8;
 /// Wrong PINs before the page stops taking any, until the screen is opened again.
 const MAX_WRONG: usize = 10;
+/// The screen closed and opened again within this keeps its PIN, so the phone stays signed in.
+const KEEP_PIN: Duration = Duration::from_secs(5 * 60);
+/// The PIN of the page last closed, and when.
+static LAST_PIN: Mutex<Option<(String, Instant)>> = Mutex::new(None);
 /// Where a half-sent game waits before it gets its name.
 const PART: &str = ".rom-manager.part";
 /// Games renamed while the page was open, one `GB<tab>old<tab>new` a line, for slot to carry
@@ -94,10 +98,21 @@ impl Web {
 impl Drop for Web {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::SeqCst);
+        if let Ok(mut last) = LAST_PIN.lock() {
+            *last = Some((self.pin.clone(), Instant::now()));
+        }
     }
 }
 
 fn pin() -> String {
+    let kept = LAST_PIN.lock().ok().and_then(|last| {
+        last.as_ref()
+            .filter(|(_, at)| at.elapsed() < KEEP_PIN)
+            .map(|(pin, _)| pin.clone())
+    });
+    if let Some(pin) = kept {
+        return pin;
+    }
     let mut b = [0u8; 4];
     let _ = File::open("/dev/urandom").and_then(|mut f| f.read_exact(&mut b));
     format!("{:04}", u32::from_le_bytes(b) % 10_000)
