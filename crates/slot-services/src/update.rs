@@ -86,7 +86,7 @@ impl Update {
         let installed = installed(root);
         std::thread::spawn(move || {
             self.set(match newest() {
-                Ok((version, _)) if version == installed => Status::Latest(version),
+                Ok((version, _)) if !newer(&version, &installed) => Status::Latest(installed.clone()),
                 Ok((version, url)) => Status::Available { version, url },
                 Err(e) => Status::Failed(e.into()),
             });
@@ -162,6 +162,18 @@ impl Update {
             Err(e) => Status::Failed((*e).into()),
         });
         result.map(|_| ())
+    }
+}
+
+/// v1.2 is newer than v1.1.2; any release is newer than a System that doesn't know its own.
+fn newer(release: &str, installed: &str) -> bool {
+    let parts = |v: &str| -> Option<Vec<u32>> {
+        v.trim_start_matches('v').split('.').map(|n| n.parse().ok()).collect()
+    };
+    match (parts(release), parts(installed)) {
+        (Some(r), Some(i)) => r > i,
+        (Some(_), None) => true,
+        _ => false,
     }
 }
 
@@ -327,6 +339,15 @@ fn unpack(zip: &Path, root: &Path) -> Result<String, &'static str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_a_newer_release_is_offered() {
+        assert!(newer("v1.2", "v1.1.2"));
+        assert!(newer("v1.1.10", "v1.1.9"));
+        assert!(!newer("v1.1.1", "v1.1.2"));
+        assert!(!newer("v1.1.2", "v1.1.2"));
+        assert!(newer("v1.1.1", ""));
+    }
 
     #[test]
     fn finds_the_zip_among_the_assets() {
