@@ -289,7 +289,7 @@ impl ListPage {
                         Kind::Saved => "My Networks",
                         Kind::Wps => "WPS",
                         Kind::Zones => "Time Zone",
-                        Kind::RomManager => "ROM Manager",
+                        Kind::RomManager => "GRAVY Manager",
                     }
                     .into(),
                 )
@@ -306,7 +306,7 @@ impl ListPage {
             Stage::Message(line, note) => {
                 w.heading = match self.kind {
                     Kind::Wps => "WPS",
-                    Kind::RomManager => "ROM Manager",
+                    Kind::RomManager => "GRAVY Manager",
                     Kind::Saved => "My Networks",
                     _ => "Networks Nearby",
                 }

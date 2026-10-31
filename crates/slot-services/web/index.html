@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>GRAVY ROM Manager</title>
+<title>GRAVY Manager</title>
 <style>
 :root { --bg: #0b0e11; --panel: #14181d; --line: #262c33; --fg: #eef0f4; --dim: #8a929c; }
 :root[data-theme="light"] { --bg: #f3f3f0; --panel: #ffffff; --line: #d6d8dc; --fg: #14171b; --dim: #6c737c; }
@@ -23,6 +23,14 @@ nav { display: flex; gap: 4px; border-bottom: 1px solid var(--line); overflow-x:
 nav button { flex: 1 0 auto; background: none; border: 0; color: var(--dim); font: inherit; font-weight: 600; letter-spacing: .12em;
   padding: 10px 6px; border-bottom: 2px solid transparent; cursor: pointer; }
 nav .sep { flex: none; width: 1px; margin: 10px 8px 12px; background: var(--line); }
+.drop[hidden] { display: none; }
+/* Screenshots as a gallery: the picture, its game and time, then the buttons. */
+ul.shots { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; margin-top: 20px; }
+ul.shots li { flex-wrap: wrap; border: 1px solid var(--line); border-radius: 8px; padding: 10px; gap: 6px 8px; }
+ul.shots li img.thumb { width: 100%; height: auto; aspect-ratio: 4 / 3; }
+ul.shots li .name { flex-basis: 100%; }
+ul.shots li .size { flex-basis: 100%; }
+ul.shots li button { flex: 1; }
 nav button.on { color: var(--fg); border-bottom-color: var(--fg); }
 .drop { display: block; margin: 20px 0; border: 1px dashed var(--line); border-radius: 10px; padding: 22px; text-align: center; color: var(--dim); cursor: pointer; }
 .drop b { color: var(--fg); font-weight: 600; }
@@ -39,7 +47,7 @@ li input { flex: 1; background: var(--panel); border: 1px solid var(--fg); color
 footer { margin-top: 18px; color: var(--dim); font-size: 12px; display: flex; justify-content: space-between; }
 .pin { position: fixed; inset: 0; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; }
 .pin input { width: 150px; text-align: center; font: 600 30px system-ui; letter-spacing: .4em; background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
-@media (max-width: 520px) { main { padding-top: 56px; } .theme { top: 12px; } nav button { font-size: 12px; letter-spacing: .04em; padding: 10px 2px; } li { flex-wrap: wrap; gap: 6px 10px; } li .name { flex-basis: 100%; } li:has(.thumb) .name { flex-basis: calc(100% - 92px); } li .size { flex: 1; } }
+@media (max-width: 520px) { main { padding-top: 56px; } .theme { top: 12px; } nav { flex-wrap: wrap; } nav .sep.row { flex-basis: 100%; height: 0; margin: 0; } nav button { font-size: 12px; letter-spacing: .06em; padding: 10px 4px; } li { flex-wrap: wrap; gap: 6px 10px; } li .name { flex-basis: 100%; } li:has(.thumb) .name { flex-basis: calc(100% - 92px); } li .size { flex: 1; } ul.shots li:has(.thumb) .name, ul.shots li .size { flex-basis: 100%; } ul.shots { grid-template-columns: 1fr 1fr; gap: 10px; } }
 .pin[hidden], .viewer[hidden] { display: none; }
 li img.thumb { width: 80px; height: 60px; object-fit: cover; border-radius: 4px; background: var(--panel); border: 1px solid var(--line); cursor: zoom-in; flex: none; }
 .viewer { position: fixed; inset: 0; background: rgba(0, 0, 0, .85); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 16px; cursor: zoom-out; z-index: 2; }
@@ -56,7 +64,7 @@ li img.thumb { width: 80px; height: 60px; object-fit: cover; border-radius: 4px;
   </svg></button>
   <header>
     <img class="logo" src="logo.png" alt="slot. x GRAVY">
-    <div class="sub">ROM Manager</div>
+    <div class="sub">Manager</div>
   </header>
   <nav id="tabs"></nav>
   <label class="drop" id="drop"><b>Drop files here</b> or tap to choose<input type="file" multiple hidden id="pick">
@@ -69,7 +77,7 @@ li img.thumb { width: 80px; height: 60px; object-fit: cover; border-radius: 4px;
 <div class="pin" id="lock" hidden>
   <div class="sub">Enter PIN</div>
   <input id="pin" inputmode="numeric" maxlength="4" autocomplete="off">
-  <p id="pinwhy">Shown on your console under Network › ROM Manager</p>
+  <p id="pinwhy">Shown on your console under Network › GRAVY Manager</p>
 </div>
 <script>
 // Light or dark, remembered on this browser only.
@@ -77,7 +85,9 @@ function theme(light) {
   document.documentElement.dataset.theme = light ? "light" : "dark";
   $("theme").setAttribute("aria-pressed", light);
 }
-const SYS = ["GB", "GBC", "GBA", "NES", "SNES", "BIOS", "WALLPAPERS"];
+const SYS = ["GB", "GBC", "GBA", "NES", "SNES", "BIOS", "WALLPAPERS", "SCREENSHOTS"];
+const SHOTS = s => s == "SCREENSHOTS";
+const PICTURES = s => s == "WALLPAPERS" || s == "SCREENSHOTS";
 const NAME = {};
 const GAMES = s => SYS.indexOf(s) < 5;
 const EXT = { gb: "GB", gbc: "GBC", gba: "GBA", nes: "NES", sfc: "SNES", smc: "SNES", bin: "BIOS", png: "WALLPAPERS" };
@@ -119,30 +129,52 @@ async function load() {
   render();
 }
 function render() {
-  // Thin lines keep games, BIOS and wallpapers apart.
-  $("tabs").innerHTML = SYS.map(s => (s == "BIOS" || s == "WALLPAPERS" ? '<i class="sep"></i>' : "") +
+  // Thin lines keep games, BIOS, wallpapers and screenshots apart; on a phone the first one
+  // breaks the tabs into two rows.
+  $("tabs").innerHTML = SYS.map(s => (s == "BIOS" ? '<i class="sep row"></i>' : s == "WALLPAPERS" || s == "SCREENSHOTS" ? '<i class="sep"></i>' : "") +
     `<button class="${s == sys ? "on" : ""}" data-s="${s}">${NAME[s] || s}</button>`).join("");
   const games = data ? data.systems[sys] : [];
-  $("list").innerHTML = games.length ? games.map(([n, b], i) => renaming == n
+  $("drop").hidden = SHOTS(sys);
+  $("list").className = SHOTS(sys) ? "shots" : "";
+  if (SHOTS(sys)) $("list").innerHTML = games.length ? games.map(([n, b], i) => {
+    const [game, when] = caption(n);
+    return `<li><img class="thumb" data-view="${i}" alt=""><span class="name">${esc(game)}</span><span class="size">${when}</span>` +
+      `<button data-get="${i}">Download</button><button data-del="${i}">Delete</button></li>`;
+  }).join("") : `<li><span class="name" style="color:var(--dim)">No screenshots yet</span></li>`;
+  else $("list").innerHTML = games.length ? games.map(([n, b], i) => renaming == n
     ? `<li><input id="to" value="${esc(n)}"><button data-save="${i}">Save</button><button data-cancel>Cancel</button></li>`
-    : `<li>${sys == "WALLPAPERS" ? `<img class="thumb" data-view="${i}" alt="">` : ""}<span class="name">${esc(n)}</span><span class="size">${size(b)}</span>` +
+    : `<li>${PICTURES(sys) ? `<img class="thumb" data-view="${i}" alt="">` : ""}<span class="name">${esc(n)}</span><span class="size">${size(b)}</span>` +
       `<button data-ren="${i}">Rename</button><button data-del="${i}">Delete</button></li>`).join("")
     : `<li><span class="name" style="color:var(--dim)">Nothing here yet</span></li>`;
-  const what = GAMES(sys) ? " game" : " file";
+  const what = GAMES(sys) ? " game" : SHOTS(sys) ? " screenshot" : " file";
   $("count").textContent = games.length + what + (games.length == 1 ? "" : "s");
   $("free").textContent = data ? (data.free / 1073741824).toFixed(1) + " GB free on SD card" : "";
-  if (sys == "WALLPAPERS") thumbs(games);
+  if (PICTURES(sys)) thumbs(games);
   const to = $("to");
   if (to) { to.focus(); to.setSelectionRange(0, to.value.lastIndexOf(".")); to.onkeydown = e => {
     if (e.key == "Enter") $("list").querySelector("[data-save]").click();
     if (e.key == "Escape") { renaming = null; render(); } }; }
 }
-// Wallpapers come with their picture: fetched with the PIN, kept while the page is open.
+// "GB/Tetris 2026-10-20_09-14-02 2.png" as its game and when it was taken.
+function caption(n) {
+  const m = n.replace(/^.*\//, "").replace(/\.png$/i, "").match(/^(.*) (\d{4})-(\d\d)-(\d\d)_(\d\d)-(\d\d)-\d\d( \d+)?$/);
+  if (!m) return [n, ""];
+  const month = "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split(" ")[m[3] - 1];
+  return [m[1] == "slot" ? "Menu" : m[1], `${+m[4]} ${month} ${m[2]} · ${m[5]}:${m[6]}`];
+}
+// Pictures are fetched with the PIN and kept while the page is open.
 const pictures = {};
-async function picture(name, bytes) {
-  const key = name + ":" + bytes;
-  if (!pictures[key]) pictures[key] = api("GET", url("WALLPAPERS", name)).then(r => r.blob()).then(URL.createObjectURL);
+async function picture(name, bytes, from = sys) {
+  const key = from + "/" + name + ":" + bytes;
+  if (!pictures[key]) pictures[key] = api("GET", url(from, name)).then(r => r.blob()).then(URL.createObjectURL);
   return pictures[key];
+}
+async function download(i) {
+  const [n, b] = data.systems[sys][i];
+  const a = document.createElement("a");
+  a.href = await picture(n, b);
+  a.download = n.replace(/^.*\//, "");
+  a.click();
 }
 function thumbs(games) {
   $("list").querySelectorAll("img.thumb").forEach(img => {
@@ -151,9 +183,9 @@ function thumbs(games) {
   });
 }
 async function view(i) {
-  const [n, b] = data.systems.WALLPAPERS[i];
+  const [n, b] = data.systems[sys][i];
   $("big").src = await picture(n, b);
-  $("bigname").textContent = n;
+  $("bigname").textContent = SHOTS(sys) ? caption(n).filter(Boolean).join(" · ") : n;
   $("viewer").hidden = false;
 }
 $("viewer").onclick = () => $("viewer").hidden = true;
@@ -169,6 +201,7 @@ $("list").onclick = async e => {
   const d = e.target.dataset, games = data.systems[sys];
   try {
     if (d.view) return view(d.view);
+    if (d.get) return download(d.get);
     if (d.ren) { renaming = games[d.ren][0]; return render(); }
     if ("cancel" in d) { renaming = null; return render(); }
     if (d.save) {
