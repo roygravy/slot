@@ -130,6 +130,14 @@ pub fn tab_face(name: &str) -> UndoFace {
     word(font, name, TAB_PX, 200.0, TAB_H)
 }
 
+/// A tab's name at the tabs' size, in a face `h` tall: the cart studio's tabs.
+pub fn tab_face_in(name: &str, h: u32) -> UndoFace {
+    let Some(font) = text::label_font() else {
+        return UndoFace { rgba: vec![0; 4], w: 1, h: 1 };
+    };
+    word(font, name, TAB_PX, 200.0, h)
+}
+
 pub fn buttons_tab_face(page: usize) -> UndoFace {
     let Some(font) = text::label_font() else {
         return UndoFace {

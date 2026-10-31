@@ -155,6 +155,11 @@ pub fn shell_picker_word(text: &str) -> UndoFace {
     tint_mask(word_face(text))
 }
 
+/// The studio's tabs at the size every tab row uses.
+pub fn shell_picker_tab(text: &str) -> UndoFace {
+    tint_mask(crate::buttons_help::tab_face_in(text, crate::plate::HINT_H))
+}
+
 fn shape(size: u32, cover: impl Fn(f32, f32) -> f32) -> UndoFace {
     let mut rgba = vec![0u8; (size * size * 4) as usize];
     let c = size as f32 / 2.0;

@@ -121,7 +121,7 @@ pub use shell::{
     Shell, DEFAULT_SHELL, DMG_SHELL, DUAL_MODE_SHELL, GBC_CLEAR_SHELL, GB_CLEAR_SHELL,
 };
 pub use shell_picker::{
-    draw_shell_picker, shell_picker_hop, shell_picker_shapes, shell_picker_word, LabelTab,
+    draw_shell_picker, shell_picker_hop, shell_picker_shapes, shell_picker_word, shell_picker_tab, LabelTab,
     PickerRow, ShellPickerFaces, ShellPickerView,
 };
 pub use shot_page::{ShotFaces, ShotPage, SHOT_H, SHOT_W};

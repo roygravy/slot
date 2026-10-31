@@ -1464,9 +1464,14 @@ impl UiFaces {
                 .into_iter()
                 .chain(crate::shell_picker::FINISH_NAMES.map(|(_, name)| name))
                 .chain(MODEL_WORDS)
-                .chain(["Color", "Label", "Marker", "Looking", "None Found"])
-                .chain(crate::shell_picker::MARKERS.map(|(name, _)| name))
                 .map(slot_ui::shell_picker_word)
+                .chain(["Color", "Label", "Marker"].map(slot_ui::shell_picker_tab))
+                .chain(
+                    ["Looking", "None Found"]
+                        .into_iter()
+                        .chain(crate::shell_picker::MARKERS.map(|(name, _)| name))
+                        .map(slot_ui::shell_picker_word),
+                )
                 .collect(),
             shell_legend: vec![
                 slot_ui::tint_mask(hint_face("B", "Cancel")),
