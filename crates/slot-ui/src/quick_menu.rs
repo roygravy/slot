@@ -539,7 +539,7 @@ impl QuickRow {
             QuickRow::AddNetwork => "Add Network",
             QuickRow::SavedNetworks => "My Networks",
             QuickRow::Wps => "WPS",
-            QuickRow::RomManager => "ROM Manager",
+            QuickRow::RomManager => "GRAVY Manager",
             QuickRow::ScreenNes => "NES",
             QuickRow::ScreenSnes => "Super Nintendo",
             QuickRow::NesCable | QuickRow::SnesCable | QuickRow::Cable => "Cable",
@@ -623,7 +623,7 @@ impl QuickRow {
             QuickRow::AddNetwork => "Find a network nearby and type its password.",
             QuickRow::SavedNetworks => "The device joins these by itself. Y forgets one.",
             QuickRow::Wps => "Join by pressing the WPS button on your router.",
-            QuickRow::RomManager => "Games, BIOS and wallpapers from a web browser.",
+            QuickRow::RomManager => "Games, screenshots and more from a web browser.",
             QuickRow::Network => "Home Wi-Fi and the network you are on.",
             QuickRow::ConnectedTo => "The home network this device is on now.",
             QuickRow::AutoSleep => {

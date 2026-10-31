@@ -215,7 +215,7 @@ fn handle(stream: TcpStream, shared: &Shared) {
         return fail(
             &mut out,
             "403 Forbidden",
-            "Too many wrong PINs. Open ROM Manager on the console again.",
+            "Too many wrong PINs. Open GRAVY Manager on the console again.",
         );
     }
     if req.pin != shared.pin {
@@ -233,9 +233,10 @@ fn handle(stream: TcpStream, shared: &Shared) {
                 list(root).as_bytes(),
             )
         }
-        // Wallpapers are shown on the page; nothing else on the card is handed out.
-        ("GET", ["api", "games", "WALLPAPERS", name]) => {
-            let picture = checked("WALLPAPERS", name)
+        // Wallpapers and screenshots are shown on the page; nothing else on the card is
+        // handed out.
+        ("GET", ["api", "games", system @ ("WALLPAPERS" | "SCREENSHOTS"), name]) => {
+            let picture = checked(system, name)
                 .ok()
                 .and_then(|(p, n)| fs::read(p.dir(root).join(n)).ok());
             return match picture {
@@ -274,10 +275,12 @@ enum Place {
     Games(Platform),
     Bios,
     Wallpapers,
+    /// Taken on the console: looked at, downloaded and deleted, never added or renamed.
+    Screenshots,
 }
 
 impl Place {
-    const ALL: [Place; 7] = [
+    const ALL: [Place; 8] = [
         Place::Games(Platform::Gb),
         Place::Games(Platform::Gbc),
         Place::Games(Platform::Gba),
@@ -285,6 +288,7 @@ impl Place {
         Place::Games(Platform::Snes),
         Place::Bios,
         Place::Wallpapers,
+        Place::Screenshots,
     ];
 
     fn key(self) -> &'static str {
@@ -292,6 +296,7 @@ impl Place {
             Place::Games(p) => p.dir_name(),
             Place::Bios => "BIOS",
             Place::Wallpapers => "WALLPAPERS",
+            Place::Screenshots => "SCREENSHOTS",
         }
     }
 
@@ -304,6 +309,7 @@ impl Place {
             Place::Games(p) => root.join("Games").join(p.dir_name()),
             Place::Bios => root.join("BIOS"),
             Place::Wallpapers => root.join("Wallpapers"),
+            Place::Screenshots => root.join("Screenshots"),
         }
     }
 
@@ -318,7 +324,7 @@ impl Place {
             Place::Games(p) => p.accepts(Path::new(name)),
             // slot_ files are made by slot itself from the Super Game Boy program.
             Place::Bios => ext(&["bin", "sfc", "smc"]) && !name.starts_with("slot_"),
-            Place::Wallpapers => ext(&["png"]),
+            Place::Wallpapers | Place::Screenshots => ext(&["png"]),
         }
     }
 
@@ -329,7 +335,7 @@ impl Place {
             Place::Games(Platform::Nes) => "Only .nes files go here",
             Place::Games(Platform::Snes) => "Only .sfc and .smc files go here",
             Place::Bios => "Only .bin, .sfc and .smc files go here",
-            Place::Wallpapers => "Only .png pictures go here",
+            Place::Wallpapers | Place::Screenshots => "Only .png pictures go here",
         }
     }
 }
@@ -339,6 +345,16 @@ impl Place {
 fn checked(system: &str, name: &str) -> Result<(Place, String), &'static str> {
     let place = Place::named(system).ok_or("Unknown folder")?;
     let name = name.trim();
+    // A screenshot taken in a game sits in its system's folder: "GB/Tetris 2026-10-20_09-14-02.png".
+    let (sub, leaf) = match (place, name.split_once('/')) {
+        (Place::Screenshots, Some((sub, leaf)))
+            if Platform::ALL.iter().any(|p| p.dir_name() == sub) =>
+        {
+            (Some(sub), leaf)
+        }
+        _ => (None, name),
+    };
+    let name = leaf;
     let bad = name.is_empty()
         || name.len() > 200
         || name.starts_with('.')
@@ -350,24 +366,50 @@ fn checked(system: &str, name: &str) -> Result<(Place, String), &'static str> {
     if !place.accepts(name) {
         return Err(place.wrong_kind());
     }
-    Ok((place, name.to_owned()))
+    Ok((
+        place,
+        match sub {
+            Some(sub) => format!("{sub}/{name}"),
+            None => name.to_owned(),
+        },
+    ))
+}
+
+/// The pictures in a folder, as names and sizes, each with when it was written.
+fn pictures(dir: &Path, prefix: &str, place: Place, out: &mut Vec<(String, u64, u64)>) {
+    for e in fs::read_dir(dir).into_iter().flatten().flatten() {
+        let Ok(name) = e.file_name().into_string() else {
+            continue;
+        };
+        let Ok(meta) = e.metadata() else {
+            continue;
+        };
+        if meta.is_file() && !name.starts_with('.') && place.accepts(&name) {
+            let when = meta
+                .modified()
+                .ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map_or(0, |d| d.as_secs());
+            out.push((format!("{prefix}{name}"), meta.len(), when));
+        }
+    }
 }
 
 fn list(root: &Path) -> String {
     let mut json = String::from("{\"systems\":{");
     for (i, p) in Place::ALL.into_iter().enumerate() {
-        let mut games: Vec<(String, u64)> = fs::read_dir(p.dir(root))
-            .into_iter()
-            .flatten()
-            .flatten()
-            .filter(|e| e.file_type().is_ok_and(|t| t.is_file()))
-            .filter_map(|e| {
-                let name = e.file_name().into_string().ok()?;
-                let shown = !name.starts_with('.') && p.accepts(&name);
-                shown.then(|| (name, e.metadata().map(|m| m.len()).unwrap_or(0)))
-            })
-            .collect();
-        games.sort_by_key(|(n, _)| slot_store::sort_key(n));
+        let mut found = Vec::new();
+        pictures(&p.dir(root), "", p, &mut found);
+        if p == Place::Screenshots {
+            for sub in Platform::ALL.map(Platform::dir_name) {
+                pictures(&p.dir(root).join(sub), &format!("{sub}/"), p, &mut found);
+            }
+            // Newest first, as the console's own Screenshots page shows them.
+            found.sort_by(|a, b| b.2.cmp(&a.2));
+        } else {
+            found.sort_by_key(|(n, _, _)| slot_store::sort_key(n));
+        }
+        let games: Vec<(String, u64)> = found.into_iter().map(|(n, b, _)| (n, b)).collect();
         if i > 0 {
             json.push(',');
         }
@@ -420,6 +462,9 @@ fn upload(
     body: &mut impl Read,
 ) -> Result<(), &'static str> {
     let (p, name) = checked(system, name)?;
+    if p == Place::Screenshots {
+        return Err("Screenshots are taken on the console");
+    }
     if length == 0 || length > MAX_UPLOAD {
         return Err("That file is too big to be a game");
     }
@@ -475,6 +520,9 @@ fn stem(name: &str) -> &str {
 fn rename(root: &Path, system: &str, name: &str, to: &str) -> Result<(), &'static str> {
     let (p, from) = checked(system, name)?;
     let (_, to) = checked(system, to)?;
+    if p == Place::Screenshots {
+        return Err("Screenshots keep the name the console gave them");
+    }
     if from == to {
         return Ok(());
     }
@@ -546,6 +594,11 @@ mod tests {
         assert!(checked("BIOS", "slot_sgb_ours.bin").is_err());
         assert!(checked("WALLPAPERS", "Sunset.PNG").is_ok());
         assert!(checked("WALLPAPERS", "Sunset.jpg").is_err());
+        assert!(checked("SCREENSHOTS", "GB/Tetris 2026-10-20_09-14-02.png").is_ok());
+        assert!(checked("SCREENSHOTS", "slot 2026-10-20_09-14-02.png").is_ok());
+        assert!(checked("SCREENSHOTS", "../GB/x.png").is_err());
+        assert!(checked("SCREENSHOTS", "Saves/x.png").is_err());
+        assert!(checked("WALLPAPERS", "GB/x.png").is_err());
         assert_eq!(decode("Pok%C3%A9mon%20Red.gb").unwrap(), "Pokémon Red.gb");
     }
 
