@@ -2429,7 +2429,7 @@ impl App {
     }
 
     pub fn set_power(&mut self, mut power: Power) {
-        power.set_backlight(self.state.brightness);
+        power.set_backlight(self.state.brightness + 1);
         self.headphones = power.headphones();
         self.hud.set_headphones(self.headphones);
         let secs = power.now();
@@ -3963,7 +3963,7 @@ impl App {
         let (shown, now) = (self.hud_value(kind, value), self.now());
         self.hud.show(kind, shown, self.muted(), now);
         if let (HudKind::Brightness, Some(power)) = (kind, &mut self.power) {
-            power.set_backlight(value);
+            power.set_backlight(value + 1);
         }
         if moved || unmuted {
             self.persist_soon();
