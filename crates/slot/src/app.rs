@@ -7219,17 +7219,7 @@ impl App {
             canvas: self.canvas(),
         }
         .draw(out);
-        if !view.full || view.shots.is_empty() {
-            slot_ui::draw_corners(
-                self.canvas(),
-                self.battery,
-                self.battery_percent,
-                self.hud_bolt,
-                self.shelf_clock,
-                self.wifi_shown(self.hud_wifi),
-                out,
-            );
-        }
+        // A full page like the settings pages: no clock, battery or Wi-Fi in the corners.
     }
 
     pub fn shot_view(&self) -> Option<&crate::shots::ShotView> {
