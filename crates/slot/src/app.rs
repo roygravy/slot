@@ -3607,6 +3607,12 @@ impl App {
             QuickRow::HomeWifi => {
                 s.home_wifi_enabled = !s.home_wifi_enabled;
                 self.wifi_on_at = now_ms;
+                // Off: nothing is being joined any more, and what was heard is stale.
+                if !s.home_wifi_enabled {
+                    self.joining = None;
+                    self.nearby.clear();
+                    self.radio.fast_status(false);
+                }
                 self.radio.ask(RadioJob::Home(s.home_wifi_enabled));
                 self.radio.ask(RadioJob::Time(s.auto_time && s.home_wifi_enabled));
             }
