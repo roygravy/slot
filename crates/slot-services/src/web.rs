@@ -257,28 +257,39 @@ fn handle(stream: TcpStream, shared: &Shared) {
         return;
     };
     let mut reader = BufReader::new(stream);
-    let Some(req) = read_head(&mut reader) else {
-        return fail(&mut out, "400 Bad Request", "Bad request");
+    serve(&mut out, &mut reader, shared);
+    // Close gently: say we're done, then swallow whatever the phone still sends (a refused
+    // upload's body). Closing with bytes unread resets the connection, and Safari then loses
+    // the answer and the upload never finishes on the page.
+    let _ = out.flush();
+    let _ = out.shutdown(std::net::Shutdown::Write);
+    let _ = reader.get_ref().set_read_timeout(Some(Duration::from_secs(2)));
+    let _ = std::io::copy(&mut (&mut reader).take(MAX_UPLOAD + (1 << 20)), &mut std::io::sink());
+}
+
+fn serve(out: &mut TcpStream, reader: &mut BufReader<TcpStream>, shared: &Shared) {
+    let Some(req) = read_head(reader) else {
+        return fail(out, "400 Bad Request", "Bad request");
     };
     let path: Vec<&str> = req.path.iter().map(String::as_str).collect();
     match (req.method.as_str(), path.as_slice()) {
         ("GET", []) => {
             return reply(
-                &mut out,
+                out,
                 "200 OK",
                 "text/html; charset=utf-8",
                 PAGE.as_bytes(),
             )
         }
-        ("GET", ["logo.png"]) => return reply(&mut out, "200 OK", "image/png", LOGO),
-        ("GET", ["favicon.ico"]) => return fail(&mut out, "404 Not Found", ""),
+        ("GET", ["logo.png"]) => return reply(out, "200 OK", "image/png", LOGO),
+        ("GET", ["favicon.ico"]) => return fail(out, "404 Not Found", ""),
         _ => {}
     }
     // A remembered phone needs no PIN; the page still only listens while the screen is open.
     let remembered = known_key(&shared.root, &req.key);
     if !remembered && shared.wrong.load(Ordering::SeqCst) >= MAX_WRONG {
         return fail(
-            &mut out,
+            out,
             "403 Forbidden",
             "Too many wrong PINs. Open GRAVY Manager on the console again.",
         );
@@ -286,13 +297,13 @@ fn handle(stream: TcpStream, shared: &Shared) {
     if !remembered && req.pin != shared.pin {
         shared.wrong.fetch_add(1, Ordering::SeqCst);
         std::thread::sleep(Duration::from_secs(1));
-        return fail(&mut out, "401 Unauthorized", "Wrong PIN");
+        return fail(out, "401 Unauthorized", "Wrong PIN");
     }
     let root = &shared.root;
     let result = match (req.method.as_str(), path.as_slice()) {
         ("GET", ["api", "update"]) => {
             return reply(
-                &mut out,
+                out,
                 "200 OK",
                 "application/json",
                 UPDATE.json(root).as_bytes(),
@@ -300,17 +311,17 @@ fn handle(stream: TcpStream, shared: &Shared) {
         }
         ("POST", ["api", "remember"]) => {
             return match remember(root) {
-                Some(key) => reply(&mut out, "200 OK", "text/plain", key.as_bytes()),
-                None => fail(&mut out, "409 Conflict", "The card can't be written"),
+                Some(key) => reply(out, "200 OK", "text/plain", key.as_bytes()),
+                None => fail(out, "409 Conflict", "The card can't be written"),
             };
         }
         ("POST", ["api", "update", "check"]) => UPDATE.check(root),
         ("POST", ["api", "update", "download"]) => UPDATE.download(root),
         ("POST", ["api", "update", "install"]) => UPDATE.install(root),
-        ("PUT", ["api", "update", "zip"]) => UPDATE.upload(root, req.length, &mut reader),
+        ("PUT", ["api", "update", "zip"]) => UPDATE.upload(root, req.length, reader),
         ("GET", ["api", "list"]) => {
             return reply(
-                &mut out,
+                out,
                 "200 OK",
                 "application/json",
                 list(root).as_bytes(),
@@ -323,18 +334,18 @@ fn handle(stream: TcpStream, shared: &Shared) {
                 .ok()
                 .and_then(|(p, n)| fs::read(p.dir(root).join(n)).ok());
             return match picture {
-                Some(png) => reply(&mut out, "200 OK", "image/png", &png),
-                None => fail(&mut out, "404 Not Found", "That file isn't there"),
+                Some(png) => reply(out, "200 OK", "image/png", &png),
+                None => fail(out, "404 Not Found", "That file isn't there"),
             };
         }
         ("PUT", ["api", "games", system, name]) => {
-            upload(root, system, name, req.length, &mut reader)
+            upload(root, system, name, req.length, reader)
         }
         ("DELETE", ["api", "games", system, name]) => delete(root, system, name),
         ("POST", ["api", "rename", system, name]) => {
             let mut to = String::new();
             if req.length > 1024
-                || (&mut reader)
+                || (&mut *reader)
                     .take(req.length)
                     .read_to_string(&mut to)
                     .is_err()
@@ -344,11 +355,11 @@ fn handle(stream: TcpStream, shared: &Shared) {
                 rename(root, system, name, to.trim())
             }
         }
-        _ => return fail(&mut out, "404 Not Found", "Not found"),
+        _ => return fail(out, "404 Not Found", "Not found"),
     };
     match result {
-        Ok(()) => reply(&mut out, "200 OK", "text/plain", b"OK"),
-        Err(why) => fail(&mut out, "409 Conflict", why),
+        Ok(()) => reply(out, "200 OK", "text/plain", b"OK"),
+        Err(why) => fail(out, "409 Conflict", why),
     }
 }
 

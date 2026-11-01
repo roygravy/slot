@@ -258,16 +258,39 @@ $("list").onclick = async e => {
 function send(file, to, path) {
   return new Promise((done, fail) => {
     const x = new XMLHttpRequest();
+    let over = false, watching = null;
+    const finish = ok => { if (over) return; over = true; clearInterval(watching); ok ? done() : fail(ok === false ? new Error(file.name + ": the console stopped answering") : ok); };
+    // Is the whole file on the console's list? Then it landed, whatever the browser heard.
+    const landed = async () => {
+      if (!to) return false;
+      try {
+        const now = await (await api("GET", "/api/list")).json();
+        return (now.systems[to] || []).some(([n, b]) => n == file.name && b == file.size);
+      } catch (e) { return false; }
+    };
+    const shown = p => $("up").innerHTML = `<div style="margin-top:12px;color:var(--fg)">${esc(file.name)} · ${p}</div><div class="bar"><i style="width:${p == "done" || p == "saving on the console..." ? 100 : parseInt(p)}%"></i></div>`;
     x.open("PUT", path || url(to, file.name));
     x.setRequestHeader("X-Pin", pin);
     x.setRequestHeader("X-Key", key);
     x.upload.onprogress = e => {
-      const p = Math.round(100 * e.loaded / e.total);
+      const p = e.total ? Math.round(100 * e.loaded / e.total) : 0;
       // At 100% the console still writes the file to its card, which can take a while.
-      $("up").innerHTML = `<div style="margin-top:12px;color:var(--fg)">${esc(file.name)} · ${p < 100 ? p + "%" : "saving on the console..."}</div><div class="bar"><i style="width:${p}%"></i></div>`;
+      shown(p < 100 ? p + "%" : "saving on the console...");
     };
-    x.onload = () => x.status == 200 ? done() : (x.status == 401 && locked(), fail(new Error(file.name + ": " + x.responseText)));
-    x.onerror = () => fail(new Error(file.name + ": the console stopped answering"));
+    // Some phones (Safari) never hear the answer after a big upload: once everything is
+    // sent, look on the list as well, so the upload always ends.
+    x.upload.onload = () => {
+      shown("saving on the console...");
+      if (to && !watching) watching = setInterval(async () => { if (await landed()) { x.abort(); finish(true); } }, 1500);
+    };
+    x.onload = async () => {
+      if (x.status == 200) return finish(true);
+      if (x.status == 401) { locked(); return finish(new Error(file.name + ": " + x.responseText)); }
+      // Sent twice by the browser: the first one is already there.
+      if (await landed()) return finish(true);
+      finish(new Error(file.name + ": " + x.responseText));
+    };
+    x.onerror = async () => finish(await landed() ? true : false);
     x.send(file);
   });
 }
