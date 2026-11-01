@@ -392,6 +392,8 @@ pub enum WifiLegend {
     Wps = 3,
     Zones = 4,
     Back = 5,
+    /// A password turned down: type it again.
+    Retry = 6,
 }
 
 impl KeyboardFaces<UndoFace> {
@@ -470,11 +472,12 @@ impl KeyboardFaces<UndoFace> {
             extra: if pw {
                 vec![
                     vec![hint("B", "Back"), hint("A", "Join"), hint("Y", "Scan Again")],
-                    vec![hint("B", "Back"), hint("Y", "Forget")],
+                    vec![hint("B", "Back"), hint("A", "Join"), hint("Y", "Forget")],
                     vec![hint("B", "Cancel"), hint("A", "Forget")],
                     vec![hint("B", "Cancel")],
                     vec![hint("B", "Back"), hint("A", "Choose")],
                     vec![hint("B", "Back")],
+                    vec![hint("B", "Back"), hint("A", "Try Again")],
                 ]
             } else {
                 Vec::new()
@@ -528,6 +531,13 @@ pub struct SearchTexts<T> {
     pub qr: Option<T>,
     /// WPS: a large Wi-Fi sign over the status, which then reads at menu size.
     pub icon: Option<T>,
+    /// In the empty field in place of the purpose's own: "Network name".
+    pub placeholder: Option<T>,
+}
+
+/// What the empty field says.
+pub fn search_placeholder_face(text: &str) -> UndoFace {
+    plain(text, FIELD_PX, 0.0, false)
 }
 
 pub fn search_heading_face(text: &str) -> UndoFace {
@@ -862,7 +872,7 @@ pub fn draw_label_search(canvas: Canvas, v: &SearchView, out: &mut Vec<Draw>) {
                     f.1 as f32 - 2.0
                 }
                 None => {
-                    let p = v.faces.placeholder;
+                    let p = v.texts.placeholder.unwrap_or(v.faces.placeholder);
                     out.push(tint(
                         p.0,
                         tx,

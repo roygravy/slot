@@ -26,7 +26,7 @@ use crate::audio::Sfx;
 use crate::core_picker::{Chip, CorePicker, Outcome, Press};
 use crate::label_search::{self, LabelSearch};
 use crate::link_kind::{link_carried, link_kind, serial_option, LinkKind};
-use crate::link_radio::{radio_jobs, LinkRole, RadioJob, RadioJobs, WifiAnswer, WifiJob};
+use crate::link_radio::{radio_jobs, LinkRole, RadioJob, RadioJobs, Seen, WifiAnswer, WifiJob};
 use crate::list_page::{self, ListPage};
 use crate::link_screen::LinkSprites;
 use crate::link_start::{link_port, LinkFail, LinkProgress, LinkStarter, LinkStep};
@@ -350,8 +350,22 @@ pub struct App {
     doze_return: Option<Phase>,
     /// The keyboard and legends the list pages use: "join" on the go key.
     list_faces: Option<slot_ui::KeyboardFaces<slot_ui::Up>>,
-    /// A network just added: its name and when to give up waiting for it.
-    joining: Option<(String, Millis)>,
+    /// A network just chosen, followed until it is joined or given up on.
+    joining: Option<Join>,
+    /// The networks nearby as their rows show them, in the order first heard; the joined one
+    /// and the one being joined left out.
+    nearby: Vec<Seen>,
+    /// Everything the last scan heard, the joined network too: its signal and lock.
+    heard: Vec<Seen>,
+    /// The Network page looks around again every so often while it is open.
+    nearby_scan_at: Millis,
+    /// When Wi-Fi was switched on: a while of Searching before Not Connected.
+    wifi_on_at: Millis,
+    quick_nearby: Vec<slot_ui::NearbyRow>,
+    quick_texts: Vec<(QuickRow, [(TexId, u32, u32); 2])>,
+    quick_title: Option<(TexId, u32, u32)>,
+    /// This device's address, read when the details open.
+    address: Option<String>,
     /// WPS is asked how it is going once a second.
     wps_poll_at: Millis,
     update_poll_at: Millis,
@@ -586,6 +600,14 @@ impl App {
             doze_return: None,
             list_faces: None,
             joining: None,
+            nearby: Vec::new(),
+            heard: Vec::new(),
+            nearby_scan_at: 0,
+            wifi_on_at: 0,
+            quick_nearby: Vec::new(),
+            quick_texts: Vec::new(),
+            quick_title: None,
+            address: None,
             wps_poll_at: 0,
             update_poll_at: 0,
             on_trial: true,
@@ -1293,6 +1315,21 @@ impl App {
             | QuickRow::Wps
             | QuickRow::RomManager
             | QuickRow::DateTime
+            | QuickRow::Nearby0
+            | QuickRow::Nearby1
+            | QuickRow::Nearby2
+            | QuickRow::Nearby3
+            | QuickRow::Nearby4
+            | QuickRow::Nearby5
+            | QuickRow::Nearby6
+            | QuickRow::Nearby7
+            | QuickRow::NearbyHeading
+            | QuickRow::OtherNetwork
+            | QuickRow::NetStatus
+            | QuickRow::NetSignal
+            | QuickRow::NetSecurity
+            | QuickRow::NetAddress
+            | QuickRow::NetForget
             | QuickRow::TimeZone
             | QuickRow::About
             | QuickRow::Screenshots
@@ -1607,24 +1644,31 @@ impl App {
         }
     }
 
-    pub fn hidden_rows(&self) -> &'static [QuickRow] {
+    pub fn hidden_rows(&self) -> Vec<QuickRow> {
         let own = matches!(
             self.state.wallpaper,
             WallpaperPick::File(_) | WallpaperPick::Random
         );
-        // The joined network's row is there only while there is one.
-        let offline = self.home_network().is_none();
-        use QuickRow::{ConnectedTo as C, GbaBezel as B, WallpaperTint as T};
-        match (own, self.framed_panel(), offline) {
-            (true, true, false) => &[],
-            (true, false, false) => &[B],
-            (false, true, false) => &[T],
-            (false, false, false) => &[T, B],
-            (true, true, true) => &[C],
-            (true, false, true) => &[B, C],
-            (false, true, true) => &[T, C],
-            (false, false, true) => &[T, B, C],
+        let mut hidden = Vec::new();
+        if !own {
+            hidden.push(QuickRow::WallpaperTint);
         }
+        if !self.framed_panel() {
+            hidden.push(QuickRow::GbaBezel);
+        }
+        // With Wi-Fi on the joined network's row is always there, saying how it is going; the
+        // networks nearby show as many rows as were heard.
+        if self.state.home_wifi_enabled {
+            hidden.extend_from_slice(&QuickRow::NEARBY[self.nearby.len().min(8)..]);
+        } else {
+            hidden.extend_from_slice(&[
+                QuickRow::ConnectedTo,
+                QuickRow::NearbyHeading,
+                QuickRow::OtherNetwork,
+            ]);
+            hidden.extend_from_slice(&QuickRow::NEARBY);
+        }
+        hidden
     }
 
     fn random_drawn(&self) -> bool {
@@ -3065,11 +3109,11 @@ impl App {
 
     fn quick_menu_input(&mut self, row: QuickRow, action: Action) {
         let row = match action {
-            Action::GbaDown(Btn::Up) => row.up(self.hidden_rows()),
-            Action::GbaDown(Btn::Down) => row.down(self.hidden_rows()),
+            Action::GbaDown(Btn::Up) => row.up(&self.hidden_rows()),
+            Action::GbaDown(Btn::Down) => row.down(&self.hidden_rows()),
             Action::GbaDown(Btn::Left) => return self.change_setting(row, false),
             Action::GbaDown(Btn::Right) => return self.change_setting(row, true),
-            Action::GbaDown(b @ (Btn::L1 | Btn::R1)) => match row.other_tab(self.hidden_rows(), b == Btn::R1) {
+            Action::GbaDown(b @ (Btn::L1 | Btn::R1)) => match row.other_tab(&self.hidden_rows(), b == Btn::R1) {
                 Some(row) => row,
                 None => return,
             },
@@ -3309,6 +3353,21 @@ impl App {
                 );
             }
             QuickRow::AddNetwork | QuickRow::SavedNetworks | QuickRow::Wps => self.wifi_page(row),
+            QuickRow::Nearby0
+            | QuickRow::Nearby1
+            | QuickRow::Nearby2
+            | QuickRow::Nearby3
+            | QuickRow::Nearby4
+            | QuickRow::Nearby5
+            | QuickRow::Nearby6
+            | QuickRow::Nearby7 => self.choose_nearby(row),
+            QuickRow::OtherNetwork => self.open_other_network(),
+            QuickRow::NetForget => self.forget_joined(),
+            QuickRow::NearbyHeading
+            | QuickRow::NetStatus
+            | QuickRow::NetSignal
+            | QuickRow::NetSecurity
+            | QuickRow::NetAddress => {}
             QuickRow::RomManager => self.open_rom_manager(),
             QuickRow::ConnectedTo => self.open_network_details(),
             QuickRow::TimeZone => self.open_zones(),
@@ -3325,7 +3384,7 @@ impl App {
             | QuickRow::ScreenNes
             | QuickRow::ScreenSnes => {
                 if let Some(row) = row.child() {
-                    let row = row.shown(self.hidden_rows())[0];
+                    let row = row.shown(&self.hidden_rows())[0];
                     self.phase = Phase::QuickMenu { row };
                 }
             }
@@ -3410,6 +3469,7 @@ impl App {
 
     fn change_setting(&mut self, row: QuickRow, right: bool) {
         let row = self.playing_row(row);
+        let now_ms = self.now();
         if row == QuickRow::SgbBorder {
             // Auto, the SGB's own that are in BIOS, slot.'s, none, and round again.
             let mut all = vec![0u8];
@@ -3546,6 +3606,7 @@ impl App {
             QuickRow::Rumble => s.rumble = !s.rumble,
             QuickRow::HomeWifi => {
                 s.home_wifi_enabled = !s.home_wifi_enabled;
+                self.wifi_on_at = now_ms;
                 self.radio.ask(RadioJob::Home(s.home_wifi_enabled));
                 self.radio.ask(RadioJob::Time(s.auto_time && s.home_wifi_enabled));
             }
@@ -3577,6 +3638,21 @@ impl App {
             | QuickRow::RomManager
             | QuickRow::About
             | QuickRow::SgbBorder
+            | QuickRow::Nearby0
+            | QuickRow::Nearby1
+            | QuickRow::Nearby2
+            | QuickRow::Nearby3
+            | QuickRow::Nearby4
+            | QuickRow::Nearby5
+            | QuickRow::Nearby6
+            | QuickRow::Nearby7
+            | QuickRow::NearbyHeading
+            | QuickRow::OtherNetwork
+            | QuickRow::NetStatus
+            | QuickRow::NetSignal
+            | QuickRow::NetSecurity
+            | QuickRow::NetAddress
+            | QuickRow::NetForget
             | QuickRow::Screenshots
             | QuickRow::Screen
             | QuickRow::Game
@@ -4633,13 +4709,21 @@ impl App {
             }
             Phase::QuickMenu { row } => QuickMenu {
                 row: *row,
-                hidden: self.hidden_rows(),
+                hidden: &self.hidden_rows(),
+                nearby: &self.quick_nearby,
+                joined: self.joined().1,
+                signal: self.joined_seen().map_or(0, |s| bars(s.signal)),
+                texts: &self.quick_texts,
+                title: self.quick_title.filter(|_| row.page() == QuickRow::NET_DETAILS),
+                now: self.now(),
                 values: QuickRow::ALL.map(|r| self.quick_value(r)),
                 clock: self.quick_clock_faces,
                 network: self.quick_network_faces,
                 zone: self.quick_zone_faces,
                 locked: if !self.state.home_wifi_enabled {
                     Some(QuickRow::AutoTime)
+                } else if self.joined().1 == slot_ui::Joined::NotConnected {
+                    Some(QuickRow::ConnectedTo)
                 } else {
                     self.state.auto_time.then_some(QuickRow::DateTime)
                 },
@@ -4654,7 +4738,7 @@ impl App {
                 over_game: false,
                 canvas: self.canvas(),
                 ink: self.menu_ink(),
-                first: self.menu_first(*row, self.hidden_rows()),
+                first: self.menu_first(*row, &self.hidden_rows()),
                 named_as: if self.state.gb_palettes {
                     &[]
                 } else {
@@ -4897,6 +4981,12 @@ impl App {
             QuickMenu {
                 row,
                 hidden: &hidden,
+                nearby: &[],
+                joined: slot_ui::Joined::NotConnected,
+                signal: 0,
+                texts: &[],
+                title: None,
+                now: 0,
                 named_as: &named_as,
                 values: QuickRow::ALL.map(|r| self.quick_value(r)),
                 clock: None,
@@ -6116,6 +6206,7 @@ impl App {
                     upper: w.upper,
                     large_status: w.large_status,
                     wps: w.wps,
+                    placeholder: w.placeholder,
                 },
             ));
         }
@@ -6153,6 +6244,7 @@ impl App {
                 upper: true,
                 large_status: false,
                 wps: false,
+                placeholder: None,
             },
         ))
     }
@@ -6200,6 +6292,17 @@ impl App {
                 .map(Vec::as_slice),
         };
         slot_ui::draw_label_search(self.canvas(), &view, out);
+        // The password being tried: a spinner under the words.
+        if page.spinning() {
+            let a = page.openness(now);
+            slot_ui::draw_spinner(
+                out,
+                self.canvas().w / 2.0,
+                CHECK_SPIN_Y,
+                now,
+                [1.0, 1.0, 1.0, a],
+            );
+        }
     }
 
     fn open_list_page(&mut self, page: ListPage) {
@@ -6298,6 +6401,7 @@ impl App {
     /// Add Network, My Networks and WPS want Home Wi-Fi on: it is switched on for them.
     fn wifi_page(&mut self, row: QuickRow) {
         if !self.state.home_wifi_enabled {
+            self.wifi_on_at = self.now();
             self.state.home_wifi_enabled = true;
             self.radio.ask(RadioJob::Home(true));
             self.radio.ask(RadioJob::Time(self.state.auto_time));
@@ -6329,13 +6433,211 @@ impl App {
         }
     }
 
-    /// The joined network: its name, this device's address on it, and Y to forget it.
+    /// The joined network's details, the cursor on Forget, its one row that does something.
     fn open_network_details(&mut self) {
-        let Some(name) = self.home_network() else {
+        if self.home_network().is_some() && self.joining.is_none() {
+            self.address = local_address();
+            self.phase = Phase::QuickMenu {
+                row: QuickRow::NetForget,
+            };
+        }
+    }
+
+    /// A network nearby chosen: a saved or open one joins at once, any other asks its password.
+    fn choose_nearby(&mut self, row: QuickRow) {
+        let Some(seen) = row.nearby_slot().and_then(|k| self.nearby.get(k)).cloned() else {
             return;
         };
+        let saved = self
+            .root
+            .as_deref()
+            .map(slot_store::wifi::read)
+            .unwrap_or_default()
+            .into_iter()
+            .find(|n| n.ssid == seen.ssid);
+        match (saved, seen.secure) {
+            (Some(n), _) => self.join_now(n.ssid, n.password),
+            (None, false) => self.join_now(seen.ssid, None),
+            (None, true) => {
+                let now = self.now();
+                self.open_list_page(ListPage::password(seen.ssid, now));
+            }
+        }
+    }
+
+    fn open_other_network(&mut self) {
         let now = self.now();
-        self.open_list_page(ListPage::details(name, local_address(), now));
+        self.open_list_page(ListPage::other_network(now));
+    }
+
+    /// Put `ssid` first on the card and join it; its row on the Network page says Connecting.
+    fn join_now(&mut self, ssid: String, password: Option<String>) {
+        let now = self.now();
+        if !self.save_network(&ssid, password) {
+            return;
+        }
+        self.nearby.retain(|n| n.ssid != ssid);
+        self.joining = Some(Join::Connecting {
+            ssid,
+            until: now + JOIN_MS,
+        });
+        self.phase = Phase::QuickMenu {
+            row: QuickRow::ConnectedTo,
+        };
+    }
+
+    /// Writes `ssid` first in the card's networks and has the service join afresh.
+    fn save_network(&mut self, ssid: &str, password: Option<String>) -> bool {
+        let now = self.now();
+        let Some(root) = self.root.clone() else {
+            return false;
+        };
+        let saved = slot_store::wifi::Saved {
+            ssid: ssid.to_owned(),
+            password,
+        };
+        match slot_store::wifi::add(&root, saved) {
+            Ok(()) => {
+                self.radio.wifi(WifiJob::Reload);
+                self.radio.fast_status(true);
+                true
+            }
+            Err(e) => {
+                eprintln!("slot: wifi add: {e}");
+                self.hud.toast(Toast::CardUnwritable, now);
+                false
+            }
+        }
+    }
+
+    /// Forget This Network: off the card, and back to the Network page.
+    fn forget_joined(&mut self) {
+        let now = self.now();
+        if let (Some(ssid), Some(root)) = (self.home_network(), self.root.clone()) {
+            match slot_store::wifi::forget(&root, &ssid) {
+                Ok(()) => {
+                    self.radio.wifi(WifiJob::Reload);
+                    self.hud.toast(Toast::WifiForgotten, now);
+                    self.wifi_on_at = now;
+                }
+                Err(e) => eprintln!("slot: wifi forget: {e}"),
+            }
+        }
+        self.phase = Phase::QuickMenu {
+            row: QuickRow::ConnectedTo,
+        };
+    }
+
+    /// What the joined network's row says, and the name it shows when there is one.
+    pub fn joined(&self) -> (Option<String>, slot_ui::Joined) {
+        use slot_ui::Joined;
+        if let Some(j) = &self.joining {
+            return (Some(j.ssid().to_owned()), Joined::Connecting);
+        }
+        if let Some(name) = self.home_network() {
+            return (Some(name), Joined::Connected);
+        }
+        let p = self.radio.home_progress();
+        let busy = matches!(
+            p.state.as_str(),
+            "AUTHENTICATING" | "ASSOCIATING" | "ASSOCIATED" | "4WAY_HANDSHAKE" | "GROUP_HANDSHAKE"
+                | "COMPLETED"
+        );
+        if busy || self.now().saturating_sub(self.wifi_on_at) < SEARCH_MS {
+            (None, Joined::Searching)
+        } else {
+            (None, Joined::NotConnected)
+        }
+    }
+
+    /// The joined network as the last scan heard it.
+    fn joined_seen(&self) -> Option<&Seen> {
+        let name = self.home_network()?;
+        self.heard.iter().find(|s| s.ssid == name)
+    }
+
+    /// The words the Network page and the details need made into faces.
+    pub fn network_words(&self) -> NetworkWords {
+        let (name, joined) = self.joined();
+        let label = match (name, joined) {
+            (Some(n), _) => n,
+            (None, slot_ui::Joined::Searching) => "SEARCHING".into(),
+            (None, _) => "NOT CONNECTED".into(),
+        };
+        let mut texts = Vec::new();
+        if joined == slot_ui::Joined::Connecting {
+            texts.push((QuickRow::ConnectedTo, "Connecting".to_owned()));
+        }
+        let mut title = None;
+        if joined == slot_ui::Joined::Connected {
+            let seen = self.joined_seen();
+            texts.push((QuickRow::NetStatus, "Connected".to_owned()));
+            texts.push((
+                QuickRow::NetSignal,
+                seen.map_or("—", |s| crate::list_page::strength(s.signal)).to_owned(),
+            ));
+            texts.push((
+                QuickRow::NetSecurity,
+                seen.map_or("—", |s| if s.secure { "Secured" } else { "Open" })
+                    .to_owned(),
+            ));
+            texts.push((
+                QuickRow::NetAddress,
+                self.address.clone().unwrap_or_else(|| "—".to_owned()),
+            ));
+            title = Some(label.clone());
+        }
+        NetworkWords {
+            label,
+            nearby: self
+                .nearby
+                .iter()
+                .map(|n| (n.ssid.clone(), n.secure, bars(n.signal)))
+                .collect(),
+            texts,
+            title,
+        }
+    }
+
+    pub fn set_network_faces(
+        &mut self,
+        nearby: Vec<slot_ui::NearbyRow>,
+        texts: Vec<(QuickRow, [(TexId, u32, u32); 2])>,
+        title: Option<(TexId, u32, u32)>,
+    ) {
+        self.quick_nearby = nearby;
+        self.quick_texts = texts;
+        self.quick_title = title;
+    }
+
+    /// A scan heard `seen`: the rows keep their order, gone ones leave, new ones join the end,
+    /// and the cursor stays on the network it was on.
+    fn heard_nearby(&mut self, seen: Vec<Seen>) {
+        let skip = [self.home_network(), self.joining.as_ref().map(|j| j.ssid().to_owned())];
+        let skipped = |s: &Seen| skip.iter().flatten().any(|n| *n == s.ssid);
+        let mut rows: Vec<Seen> = self
+            .nearby
+            .iter()
+            .filter_map(|old| seen.iter().find(|s| s.ssid == old.ssid).cloned())
+            .filter(|s| !skipped(s))
+            .collect();
+        for s in &seen {
+            if !skipped(s) && !rows.iter().any(|r| r.ssid == s.ssid) {
+                rows.push(s.clone());
+            }
+        }
+        rows.truncate(QuickRow::NEARBY.len());
+        if let Phase::QuickMenu { row } = self.phase {
+            if let Some(k) = row.nearby_slot() {
+                let was = self.nearby.get(k).map(|s| s.ssid.clone());
+                let row = was
+                    .and_then(|n| rows.iter().position(|r| r.ssid == n))
+                    .map_or(QuickRow::OtherNetwork, |k| QuickRow::NEARBY[k]);
+                self.phase = Phase::QuickMenu { row };
+            }
+        }
+        self.nearby = rows;
+        self.heard = seen;
     }
 
     fn open_zones(&mut self) {
@@ -6411,25 +6713,34 @@ impl App {
                     .is_some_and(|p| !slot_store::wifi::password_ok(p))
                 {
                     self.hud.toast(Toast::PasswordLength, now);
+                    if let Some(p) = &mut self.list_page {
+                        p.wrong_password();
+                    }
                     return;
                 }
-                let Some(root) = self.root.clone() else {
-                    return;
-                };
-                let saved = slot_store::wifi::Saved {
-                    ssid: ssid.clone(),
-                    password,
-                };
-                match slot_store::wifi::add(&root, saved) {
-                    Ok(()) => {
-                        self.radio.wifi(WifiJob::Reload);
-                        self.joining = Some((ssid, now + 30_000));
-                    }
-                    Err(e) => {
-                        eprintln!("slot: wifi add: {e}");
-                        self.hud.toast(Toast::CardUnwritable, now);
-                    }
+                if self.save_network(&ssid, password) {
+                    self.nearby.retain(|n| n.ssid != ssid);
+                    self.joining = Some(Join::Checking {
+                        ssid,
+                        until: now + JOIN_MS,
+                    });
                 }
+            }
+            list_page::Step::JoinSaved(ssid) => {
+                let password = self
+                    .root
+                    .as_deref()
+                    .map(slot_store::wifi::read)
+                    .unwrap_or_default()
+                    .into_iter()
+                    .find(|n| n.ssid == ssid)
+                    .and_then(|n| n.password);
+                self.join_now(ssid, password);
+            }
+            list_page::Step::CancelJoin(ssid) => {
+                self.joining = None;
+                self.radio.fast_status(false);
+                self.drop_network(&ssid);
             }
         }
     }
@@ -6440,11 +6751,16 @@ impl App {
         while let Some(answer) = self.radio.wifi_answer() {
             let current = self.radio.home_ssid();
             match answer {
-                WifiAnswer::Scanned(seen) => {
-                    if let Some(p) = &mut self.list_page {
-                        p.scanned(seen, current.as_deref());
+                WifiAnswer::Scanned(seen) => match &mut self.list_page {
+                    Some(p) if p.kind == list_page::Kind::Nearby => {
+                        p.scanned(seen, current.as_deref())
                     }
-                }
+                    _ => {
+                        if let Some(seen) = seen {
+                            self.heard_nearby(seen);
+                        }
+                    }
+                },
                 WifiAnswer::WpsWaiting(secs) => {
                     if let Some(p) = &mut self.list_page {
                         p.wps_waiting(secs);
@@ -6454,7 +6770,11 @@ impl App {
                     if let Some(p) = &mut self.list_page {
                         p.close(now);
                     }
-                    self.joining = Some((ssid, now + 30_000));
+                    self.joining = Some(Join::Connecting {
+                        ssid,
+                        until: now + JOIN_MS,
+                    });
+                    self.radio.fast_status(true);
                 }
                 WifiAnswer::RomManager(page) => {
                     if let Some(p) = &mut self.list_page {
@@ -6481,13 +6801,93 @@ impl App {
             self.update_poll_at = now + 1000;
             self.update_timers();
         }
-        if let Some((ssid, until)) = &self.joining {
-            if self.radio.home_ssid().as_deref() == Some(ssid.as_str()) {
-                self.joining = None;
-                self.hud.toast(Toast::WifiConnected, now);
-            } else if now >= *until {
-                self.joining = None;
-                self.hud.toast(Toast::WifiFailed, now);
+        self.follow_join(now);
+        // The Network page looks around while it is open.
+        let on_network = matches!(self.phase, Phase::QuickMenu { row } if row.page() == QuickRow::NETWORK);
+        if !on_network {
+            self.nearby_scan_at = 0;
+        } else if self.state.home_wifi_enabled
+            && self.list_page.is_none()
+            && now >= self.nearby_scan_at
+        {
+            self.nearby_scan_at = now + SCAN_MS;
+            self.radio.wifi(WifiJob::Scan);
+        }
+    }
+
+    /// A network chosen, followed: its password tried, then an address waited for.
+    fn follow_join(&mut self, now: Millis) {
+        let Some(join) = self.joining.clone() else {
+            return;
+        };
+        let p = self.radio.home_progress();
+        let ssid = join.ssid().to_owned();
+        let on = self.radio.home_ssid().as_deref() == Some(ssid.as_str());
+        let wrong = p.wrong.as_deref() == Some(ssid.as_str());
+        let checking = self
+            .list_page
+            .as_mut()
+            .filter(|l| l.trying() == Some(ssid.as_str()));
+        match join {
+            Join::Checking { until, .. } => {
+                let taken = on || (p.trying.as_deref() == Some(ssid.as_str()) && p.state == "COMPLETED");
+                if wrong {
+                    // Turned down: off the card again, and the page asks for it once more.
+                    match checking {
+                        Some(page) => page.wrong_password(),
+                        None => self.hud.toast(Toast::WrongPassword, now),
+                    }
+                    self.joining = None;
+                    self.radio.fast_status(false);
+                    self.drop_network(&ssid);
+                } else if taken {
+                    // The password was right: back to the Network page, the row says the rest.
+                    if let Some(page) = checking {
+                        page.close(now);
+                    }
+                    self.joining = Some(Join::Connecting {
+                        ssid,
+                        until: now + JOIN_MS,
+                    });
+                    self.phase = Phase::QuickMenu {
+                        row: QuickRow::ConnectedTo,
+                    };
+                } else if now >= until {
+                    match checking {
+                        Some(page) => page.could_not_connect(),
+                        None => self.hud.toast(Toast::WifiFailed, now),
+                    }
+                    self.joining = None;
+                    self.radio.fast_status(false);
+                }
+            }
+            Join::Connecting { until, .. } => {
+                let on_page = matches!(self.phase, Phase::QuickMenu { row } if row.page() == QuickRow::NETWORK);
+                if on {
+                    self.joining = None;
+                    self.radio.fast_status(false);
+                    // On the Network page its row says so; elsewhere the bar does.
+                    if !on_page {
+                        self.hud.toast(Toast::WifiConnected, now);
+                    }
+                } else if wrong {
+                    self.joining = None;
+                    self.radio.fast_status(false);
+                    self.hud.toast(Toast::WrongPassword, now);
+                } else if now >= until {
+                    self.joining = None;
+                    self.radio.fast_status(false);
+                    self.hud.toast(Toast::WifiFailed, now);
+                }
+            }
+        }
+    }
+
+    /// Takes a network off the card again, a password turned down or a try called off.
+    fn drop_network(&mut self, ssid: &str) {
+        if let Some(root) = self.root.clone() {
+            if slot_store::wifi::forget(&root, ssid).is_ok() {
+                self.radio.wifi(WifiJob::Reload);
             }
         }
     }
@@ -7882,6 +8282,8 @@ pub struct SearchWords {
     /// The status is the page's subject (an address, a network) and shows larger.
     pub large_status: bool,
     pub wps: bool,
+    /// In the empty field instead of the purpose's own words.
+    pub placeholder: Option<String>,
 }
 
 /// A draw seen through a camera that scales by `k` and then shifts by (`dx`, `dy`), at `alpha`.
@@ -7957,4 +8359,50 @@ fn local_address() -> Option<String> {
     socket.connect("1.1.1.1:80").ok()?;
     let ip = socket.local_addr().ok()?.ip();
     (!ip.is_unspecified()).then(|| ip.to_string())
+}
+
+/// The spinner on the password screen, between the words and the legend.
+const CHECK_SPIN_Y: f32 = 370.0;
+
+/// How long a join is waited for before it is given up.
+const JOIN_MS: Millis = 30_000;
+/// After Wi-Fi comes on, Searching this long before Not Connected.
+const SEARCH_MS: Millis = 25_000;
+/// The Network page looks around again this often.
+const SCAN_MS: Millis = 10_000;
+
+/// A network just chosen.
+#[derive(Clone, Debug)]
+enum Join {
+    /// Its password being tried, on its own screen.
+    Checking { ssid: String, until: Millis },
+    /// Taken, or a saved or open one: its row says Connecting until there is an address.
+    Connecting { ssid: String, until: Millis },
+}
+
+impl Join {
+    fn ssid(&self) -> &str {
+        match self {
+            Join::Checking { ssid, .. } | Join::Connecting { ssid, .. } => ssid,
+        }
+    }
+}
+
+/// A signal in dBm as one to three bars.
+fn bars(dbm: i32) -> u8 {
+    match dbm {
+        d if d >= -55 => 3,
+        d if d >= -70 => 2,
+        _ => 1,
+    }
+}
+
+/// The Network page's words: the joined row's label, the networks nearby, the values of the
+/// moment and the details' title.
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
+pub struct NetworkWords {
+    pub label: String,
+    pub nearby: Vec<(String, bool, u8)>,
+    pub texts: Vec<(QuickRow, String)>,
+    pub title: Option<String>,
 }

@@ -88,6 +88,18 @@ pub fn fit(
     fit_box(font, text, max_w, f32::INFINITY, max_lines, max_px, min_px)
 }
 
+/// As `fit`, keeping the text's own capitals: a network's name.
+pub fn fit_keep_case(
+    font: &Font,
+    text: &str,
+    max_w: f32,
+    max_lines: usize,
+    max_px: f32,
+    min_px: f32,
+) -> Layout {
+    fit_inner(font, text.to_owned(), max_w, f32::INFINITY, max_lines, max_px, min_px)
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn fit_box(
     font: &Font,
@@ -98,7 +110,19 @@ pub fn fit_box(
     max_px: f32,
     min_px: f32,
 ) -> Layout {
-    let upper = text.to_uppercase();
+    fit_inner(font, text.to_uppercase(), max_w, max_h, max_lines, max_px, min_px)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn fit_inner(
+    font: &Font,
+    upper: String,
+    max_w: f32,
+    max_h: f32,
+    max_lines: usize,
+    max_px: f32,
+    min_px: f32,
+) -> Layout {
     let mut px = max_px;
     while px > min_px {
         let tracking = tracking_for(px);

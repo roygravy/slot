@@ -76,7 +76,7 @@ pub struct Frontend {
     capture_pending: bool,
     shot_pending: bool,
     quick_clock: QuickClock,
-    quick_network: QuickClock,
+    quick_network: NetworkTextures,
     quick_zone: QuickClock,
     quick_palette: QuickPalette,
     wallpaper: WallpaperSync,
@@ -276,7 +276,7 @@ impl Frontend {
             capture_pending: false,
             shot_pending: false,
             quick_clock: QuickClock::default(),
-            quick_network: QuickClock::default(),
+            quick_network: NetworkTextures::default(),
             quick_zone: QuickClock::default(),
             quick_palette: QuickPalette::default(),
             wallpaper: WallpaperSync::default(),
@@ -570,6 +570,8 @@ impl Frontend {
         let more = faces.quick_more.map(&mut up);
         let quick_tabs = faces.quick_tabs.into_iter().map(&mut up).collect();
         let switches = faces.quick_switches.map(&mut up);
+        let quick_wifi = up(faces.quick_wifi);
+        let quick_lock = up(faces.quick_lock);
         let button_tabs = faces.button_tabs.into_iter().map(&mut up).collect();
         let button_bodies = faces.button_bodies.into_iter().map(&mut up).collect();
         let [left, right] = faces.button_arrows;
@@ -667,6 +669,8 @@ impl Frontend {
             help,
             more,
             tabs: quick_tabs,
+            wifi: quick_wifi,
+            lock: quick_lock,
         });
         app.set_buttons_faces(slot_ui::ButtonsFaces {
             tabs: button_tabs,
@@ -1371,7 +1375,9 @@ struct UiFaces {
     quick_values: Vec<[UndoFace; 2]>,
     quick_carets: [UndoFace; 2],
     quick_more: [UndoFace; 2],
-    quick_legend: [UndoFace; 6],
+    quick_legend: [UndoFace; 8],
+    quick_wifi: UndoFace,
+    quick_lock: UndoFace,
     quick_tabs: Vec<UndoFace>,
     quick_switches: [UndoFace; 2],
     quick_help: Vec<Option<UndoFace>>,
@@ -1424,6 +1430,8 @@ impl UiFaces {
                 quarter_turn(quick_caret_face(true), true),
             ],
             quick_legend: quick_legend_faces(),
+            quick_wifi: slot_ui::wifi_face([255, 255, 255]),
+            quick_lock: slot_ui::lock_face(),
             quick_tabs: slot_ui::quick_tab_faces(),
             quick_switches: [false, true].map(slot_ui::quick_switch_face),
             quick_help: QuickRow::ALL
@@ -1705,37 +1713,75 @@ fn sync_wallpaper(app: &mut App, compositor: &mut Compositor, state: &mut Wallpa
 /// Connected To on the Network page: the home network's name, or that there is none.
 /// How wide the network's name can be, right of "Connected To".
 /// The joined network is its own row now: its name runs from the label edge up to the caret.
-const NETWORK_NAME_MAX: u32 = 520;
+const NETWORK_NAME_MAX: u32 = 470;
 /// Time Zone's city and Date & Time's value sit beside their labels: they keep the old room.
 const ZONE_NAME_MAX: u32 = 320;
 
-fn sync_quick_network(app: &mut App, compositor: &mut Compositor, state: &mut QuickClock) {
+fn sync_quick_network(app: &mut App, compositor: &mut Compositor, state: &mut NetworkTextures) {
     if app.quick_menu().is_none() {
         return;
     }
-    let text = app
-        .home_network()
-        .unwrap_or_else(|| "\u{2014}".to_string());
-    if text == state.shown {
+    let words = app.network_words();
+    if state.words.as_ref() == Some(&words) {
         return;
     }
-    // A long network name is cut with an ellipsis rather than run into "Connected To".
-    let mut shown = text.clone();
-    let mut chars: Vec<char> = text.chars().collect();
-    while quick_value_face(&shown, false).w > NETWORK_NAME_MAX && !chars.is_empty() {
-        chars.pop();
-        shown = format!("{}…", chars.iter().collect::<String>().trim_end());
+    let mut up = |slot: &mut Option<TexId>, f: slot_ui::UndoFace| {
+        let (w, h) = (f.w, f.h);
+        let tex = upload(compositor, slot, f);
+        [(tex, w, h); 2]
+    };
+    // A long name is cut with an ellipsis, leaving room for the row's icons.
+    let label = up(&mut state.label, slot_ui::quick_name_face(&words.label, NETWORK_NAME_MAX));
+    app.set_quick_network_faces(label[0], label[1]);
+    if state.nearby.len() < words.nearby.len() {
+        state.nearby.resize(words.nearby.len(), None);
     }
-    let (dim, lit) = (
-        quick_value_face(&shown, false),
-        quick_value_face(&shown, true),
-    );
-    let (dim_size, lit_size) = ((dim.w, dim.h), (lit.w, lit.h));
-    let dim = upload(compositor, &mut state.dim, dim);
-    let lit = upload(compositor, &mut state.lit, lit);
-    app.set_quick_network_faces((dim, dim_size.0, dim_size.1), (lit, lit_size.0, lit_size.1));
-    state.shown = text;
+    let nearby = words
+        .nearby
+        .iter()
+        .zip(state.nearby.iter_mut())
+        .map(|((name, secure, bars), slot)| slot_ui::NearbyRow {
+            name: up(slot, slot_ui::quick_name_face(name, NEARBY_NAME_MAX)),
+            secure: *secure,
+            bars: *bars,
+        })
+        .collect();
+    if state.texts.len() < words.texts.len() {
+        state.texts.resize(words.texts.len(), None);
+    }
+    let texts = words
+        .texts
+        .iter()
+        .zip(state.texts.iter_mut())
+        .map(|((row, t), slot)| {
+            // Connecting is a small word beside the name; the details' values are menu size.
+            let face = match row {
+                QuickRow::ConnectedTo => slot_ui::search_heading_face(t),
+                _ => quick_value_face(t, false),
+            };
+            (*row, up(slot, face))
+        })
+        .collect();
+    let title = words
+        .title
+        .as_ref()
+        .map(|t| up(&mut state.title, slot_ui::quick_name_face(t, 560))[0]);
+    app.set_network_faces(nearby, texts, title);
+    state.words = Some(words);
 }
+
+/// The Network page's faces, made again when its words change.
+#[derive(Default)]
+struct NetworkTextures {
+    words: Option<crate::app::NetworkWords>,
+    label: Option<TexId>,
+    nearby: Vec<Option<TexId>>,
+    texts: Vec<Option<TexId>>,
+    title: Option<TexId>,
+}
+
+/// A network nearby's name, short of the padlock and the bars.
+const NEARBY_NAME_MAX: u32 = 470;
 
 /// Time Zone on the General page: the clock's city.
 fn sync_quick_zone(app: &mut App, compositor: &mut Compositor, state: &mut QuickClock) {
@@ -2285,6 +2331,7 @@ fn sync_core_picker(
 /// change.
 #[derive(Default)]
 struct SearchTextures {
+    placeholder: Option<TexId>,
     heading: Option<TexId>,
     typed: Option<TexId>,
     status: Option<TexId>,
@@ -2341,6 +2388,9 @@ fn sync_label_search(app: &mut App, compositor: &mut Compositor, state: &mut Sea
         .big
         .map(|t| up(&mut state.big, slot_ui::search_big_face(&t)));
     let qr = words.qr.map(|t| up(&mut state.qr, slot_ui::qr_face(&t)));
+    let placeholder = words
+        .placeholder
+        .map(|t| up(&mut state.placeholder, slot_ui::search_placeholder_face(&t)));
     if state.rows.len() < words.rows.len() {
         state.rows.resize(words.rows.len(), (None, None));
     }
@@ -2364,6 +2414,7 @@ fn sync_label_search(app: &mut App, compositor: &mut Compositor, state: &mut Sea
             big,
             qr,
             icon,
+            placeholder,
         },
     );
 }

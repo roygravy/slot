@@ -85,7 +85,7 @@ pub fn hex(s: &str) -> String {
 
 pub fn supplicant(n: &Network, ctrl: &Path, freq: Option<u32>, ap: bool) -> String {
     let mut s = format!(
-        "ctrl_interface={}\nupdate_config=0\nnetwork={{\nssid={}\n",
+        "ctrl_interface={}\nupdate_config=0\nnetwork={{\nssid={}\nscan_ssid=1\n",
         ctrl.display(),
         hex(&n.ssid)
     );

@@ -18,6 +18,12 @@ pub enum Kind {
     RomManager,
     /// The joined network: its name and address, Y forgets it.
     Details,
+    /// A password for a network chosen on the Network page; B goes back there.
+    Password,
+    /// Other...: a hidden network's name, then its password.
+    Name,
+    /// The password just typed being tried, or turned down.
+    Checking,
 }
 
 pub struct Row {
@@ -50,6 +56,10 @@ pub enum Step {
     WpsStop,
     Zone(String),
     RomManagerStop,
+    /// A saved network chosen in My Networks: join it now.
+    JoinSaved(String),
+    /// B while a password was being tried: the network is let go.
+    CancelJoin(String),
 }
 
 pub struct ListPage {
@@ -62,6 +72,12 @@ pub struct ListPage {
     address: Option<String>,
     opened: Millis,
     closed: Option<(Millis, f32)>,
+    /// The network whose password is typed or tried, and what was typed for it.
+    joining: Option<(String, String)>,
+    /// A hidden network, typed by name: no password means an open one.
+    hidden: bool,
+    /// The try failed: A types the password again.
+    retry: bool,
 }
 
 /// What the page shows, made into faces by the frontend.
@@ -81,10 +97,12 @@ pub struct Words {
     pub large_status: bool,
     /// WPS waiting: a Wi-Fi sign, the instruction large, the countdown under it.
     pub wps: bool,
+    /// In the empty field instead of "Password".
+    pub placeholder: Option<String>,
 }
 
 /// A signal in dBm, as a word.
-fn strength(dbm: i32) -> &'static str {
+pub fn strength(dbm: i32) -> &'static str {
     match dbm {
         d if d >= -55 => "Strong",
         d if d >= -70 => "Good",
@@ -103,6 +121,55 @@ impl ListPage {
             address: None,
             opened: now,
             closed: None,
+            joining: None,
+            hidden: false,
+            retry: false,
+        }
+    }
+
+    /// The keyboard for `ssid`'s password, from its row on the Network page.
+    pub fn password(ssid: String, now: Millis) -> Self {
+        let stage = Stage::Typing(Box::new(LabelSearch::password(now)), ssid.clone());
+        let mut p = Self::new(Kind::Password, stage, Vec::new(), now);
+        p.joining = Some((ssid, String::new()));
+        p
+    }
+
+    /// Other...: the keyboard for a network's name.
+    pub fn other_network(now: Millis) -> Self {
+        let stage = Stage::Typing(Box::new(LabelSearch::password(now)), String::new());
+        let mut p = Self::new(Kind::Name, stage, Vec::new(), now);
+        p.hidden = true;
+        p
+    }
+
+    /// The password is being tried: the spinner turns.
+    pub fn spinning(&self) -> bool {
+        self.kind == Kind::Checking && !self.retry && self.closed.is_none()
+    }
+
+    /// The network whose password is being tried.
+    pub fn trying(&self) -> Option<&str> {
+        (self.kind == Kind::Checking && !self.retry)
+            .then(|| self.joining.as_ref().map(|(s, _)| s.as_str()))
+            .flatten()
+    }
+
+    /// The password was turned down: say so, and A types it again.
+    pub fn wrong_password(&mut self) {
+        self.failed("Wrong Password", "Check it and type it again");
+    }
+
+    /// Nothing came of it in time.
+    pub fn could_not_connect(&mut self) {
+        self.failed("Could Not Connect", "Move closer to the router");
+    }
+
+    fn failed(&mut self, line: &str, note: &str) {
+        if self.kind == Kind::Checking {
+            self.retry = true;
+            self.stage = Stage::Message(line.into(), note.into());
+            self.rev += 1;
         }
     }
 
@@ -129,7 +196,7 @@ impl ListPage {
         let stage = if rows.is_empty() {
             Stage::Message(
                 "No networks saved".into(),
-                "Add one from Add Network".into(),
+                "Pick one on the Network page".into(),
             )
         } else {
             Stage::List(0)
@@ -282,6 +349,8 @@ impl ListPage {
         Some(match (&self.stage, self.kind) {
             (Stage::Typing(..), _) => return None,
             (Stage::Confirm(_), _) => WifiLegend::Confirm,
+            (_, Kind::Checking) if self.retry => WifiLegend::Retry,
+            (_, Kind::Checking) => WifiLegend::Wps,
             (_, Kind::Wps) => WifiLegend::Wps,
             (_, Kind::RomManager) => WifiLegend::Back,
             (_, Kind::Details) => WifiLegend::Saved,
@@ -290,6 +359,7 @@ impl ListPage {
             (_, Kind::Nearby) => WifiLegend::Nearby,
             (_, Kind::Saved) => WifiLegend::Saved,
             (_, Kind::Zones) => WifiLegend::Zones,
+            (_, Kind::Password | Kind::Name) => WifiLegend::Back,
         })
     }
 
@@ -317,7 +387,9 @@ impl ListPage {
             upper: self.kind == Kind::Zones,
             large_status: (self.kind == Kind::Details && matches!(self.stage, Stage::Message(..)))
                 || self.pin.is_some(),
-            wps: self.kind == Kind::Wps && matches!(self.stage, Stage::Message(..)),
+            wps: matches!(self.kind, Kind::Wps | Kind::Checking)
+                && matches!(self.stage, Stage::Message(..)),
+            placeholder: (self.kind == Kind::Name).then(|| "Network name".to_owned()),
         };
         match &self.stage {
             Stage::Waiting => w.heading = "Networks Nearby".into(),
@@ -329,10 +401,14 @@ impl ListPage {
                         Kind::Wps => "WPS",
                         Kind::Zones => "Time Zone",
                         Kind::RomManager => "GRAVY Manager",
-                        Kind::Details => "Wi-Fi",
+                        Kind::Details | Kind::Password | Kind::Name | Kind::Checking => "Wi-Fi",
                     }
                     .into(),
                 )
+            }
+            Stage::Typing(k, _) if self.kind == Kind::Name => {
+                w.heading = "Other Network".into();
+                w.typed = Some(k.text().to_owned()).filter(|t| !t.is_empty());
             }
             Stage::Typing(k, ssid) => {
                 w.heading = format!("Password · {ssid}");
@@ -352,6 +428,7 @@ impl ListPage {
                     Kind::Wps => "WPS",
                     Kind::RomManager => "GRAVY Manager",
                     Kind::Saved => "My Networks",
+                    Kind::Checking => self.joining.as_ref().map_or("Wi-Fi", |(s, _)| s.as_str()),
                     Kind::Details => "Wi-Fi",
                     _ => "Networks Nearby",
                 }
@@ -401,7 +478,43 @@ impl ListPage {
         match &mut self.stage {
             Stage::Typing(k, ssid) => {
                 let ssid = ssid.clone();
-                match k.press(press, now) {
+                // A hidden network with nothing typed for its password is an open one.
+                let open = press == Press::Search
+                    && self.hidden
+                    && self.kind == Kind::Password
+                    && k.text().is_empty();
+                let step = match open {
+                    true => label_search::Step::Search(0, String::new()),
+                    false => k.press(press, now),
+                };
+                match step {
+                    // Other...: the name typed, now its password.
+                    label_search::Step::Search(..) if self.kind == Kind::Name => {
+                        let name = k.text().trim().to_owned();
+                        if name.is_empty() {
+                            return Step::None;
+                        }
+                        self.kind = Kind::Password;
+                        self.joining = Some((name.clone(), String::new()));
+                        self.stage = Stage::Typing(Box::new(LabelSearch::password(now)), name);
+                        Step::None
+                    }
+                    // From the Network page: the password is tried on its own screen.
+                    label_search::Step::Search(..) if self.kind == Kind::Password => {
+                        let typed = k.text().to_owned();
+                        let password = match (self.hidden, typed.is_empty()) {
+                            (true, true) => None,
+                            _ => Some(typed.clone()),
+                        };
+                        self.joining = Some((ssid.clone(), typed));
+                        self.kind = Kind::Checking;
+                        self.retry = false;
+                        self.stage = Stage::Message(
+                            "Checking Password".into(),
+                            "This takes a few seconds".into(),
+                        );
+                        Step::Join { ssid, password }
+                    }
                     label_search::Step::Search(..) => {
                         let password = k.text().to_owned();
                         self.close(now);
@@ -409,6 +522,9 @@ impl ListPage {
                             ssid,
                             password: Some(password),
                         }
+                    }
+                    label_search::Step::Close if matches!(self.kind, Kind::Password | Kind::Name) => {
+                        self.close(now)
                     }
                     label_search::Step::Close => {
                         let at = self.rows.iter().position(|r| r.key == ssid).unwrap_or(0);
@@ -483,8 +599,28 @@ impl ListPage {
                             self.close(now);
                             Step::Zone(city)
                         }
+                        Kind::Saved => {
+                            let ssid = row.key.clone();
+                            self.close(now);
+                            Step::JoinSaved(ssid)
+                        }
                         _ => Step::None,
                     }
+                }
+                _ => Step::None,
+            },
+            Stage::Message(..) if self.kind == Kind::Checking => match press {
+                Press::Choose if self.retry => {
+                    let (ssid, typed) = self.joining.clone().unwrap_or_default();
+                    self.kind = Kind::Password;
+                    self.stage = Stage::Typing(Box::new(LabelSearch::password_again(&typed, now)), ssid);
+                    Step::None
+                }
+                Press::Back if self.retry => self.close(now),
+                Press::Back => {
+                    let ssid = self.joining.clone().map(|(s, _)| s).unwrap_or_default();
+                    self.close(now);
+                    Step::CancelJoin(ssid)
                 }
                 _ => Step::None,
             },

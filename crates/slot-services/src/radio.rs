@@ -277,6 +277,13 @@ pub struct Home {
     connected: bool,
     /// The console is going into, or is in, its deep sleep: hands off the radio.
     asleep: bool,
+    /// The network being joined now, for the menu to follow.
+    pub trying: Option<String>,
+    /// The last network whose password was turned down, until the list is read afresh.
+    pub wrong_key: Option<String>,
+    /// The current try reached the key handshake: a turn-down after it is the password.
+    handshook: bool,
+    key_check: Instant,
 }
 impl Home {
     pub fn new(run: &Path) -> Self {
@@ -293,6 +300,10 @@ impl Home {
             retry: Instant::now(),
             connected,
             asleep: false,
+            trying: None,
+            wrong_key: None,
+            handshook: false,
+            key_check: Instant::now(),
         }
     }
     /// Before the deep sleep: let go of the network cleanly, supplicant and lease alike.
@@ -369,6 +380,23 @@ impl Home {
         let now = Instant::now();
         if self.interface.wpa.is_some() {
             let status = self.interface.status();
+            if field(&status, "wpa_state") == Some("4WAY_HANDSHAKE") {
+                self.handshook = true;
+            }
+            // A password turned down: the supplicant sets the network aside after the
+            // handshake fails. Told once a second at most; then on to the next network.
+            if self.handshook && !connected(&status) && now >= self.key_check {
+                self.key_check = now + Duration::from_secs(1);
+                if self
+                    .interface
+                    .cli(&["list_networks"])
+                    .is_ok_and(|l| l.contains("TEMP-DISABLED"))
+                {
+                    self.wrong_key = self.trying.clone();
+                    self.handshook = false;
+                    self.deadline = now;
+                }
+            }
             if connected(&status) {
                 // Also reap/restart a renewal worker that died after the first lease.
                 if let Err(e) = self.interface.dhcp() {
@@ -434,6 +462,8 @@ impl Home {
                 self.next += 1;
                 self.error = "";
                 self.deadline = now + Duration::from_secs(25);
+                self.trying = Some(profile.ssid.clone());
+                self.handshook = false;
             }
             Err(e) => {
                 self.error = e;

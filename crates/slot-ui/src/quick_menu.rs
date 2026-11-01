@@ -98,10 +98,25 @@ pub enum QuickRow {
     Mask,
     Afterglow,
     SgbBorder,
+    Nearby0,
+    Nearby1,
+    Nearby2,
+    Nearby3,
+    Nearby4,
+    Nearby5,
+    Nearby6,
+    Nearby7,
+    NearbyHeading,
+    OtherNetwork,
+    NetStatus,
+    NetSignal,
+    NetSecurity,
+    NetAddress,
+    NetForget,
 }
 
 impl QuickRow {
-    pub const ALL: [QuickRow; 90] = [
+    pub const ALL: [QuickRow; 105] = [
         QuickRow::FastForward,
         QuickRow::FastForwardSound,
         QuickRow::Screen,
@@ -192,6 +207,21 @@ impl QuickRow {
         QuickRow::Mask,
         QuickRow::Afterglow,
         QuickRow::SgbBorder,
+        QuickRow::Nearby0,
+        QuickRow::Nearby1,
+        QuickRow::Nearby2,
+        QuickRow::Nearby3,
+        QuickRow::Nearby4,
+        QuickRow::Nearby5,
+        QuickRow::Nearby6,
+        QuickRow::Nearby7,
+        QuickRow::NearbyHeading,
+        QuickRow::OtherNetwork,
+        QuickRow::NetStatus,
+        QuickRow::NetSignal,
+        QuickRow::NetSecurity,
+        QuickRow::NetAddress,
+        QuickRow::NetForget,
     ];
 
     /// The power menu, held POWER.
@@ -243,14 +273,55 @@ impl QuickRow {
         ],
     ];
 
-    /// Home Wi-Fi and what it is connected to.
-    pub const NETWORK: [QuickRow; 5] = [
+    /// Home Wi-Fi, the network joined, the networks nearby under it as on a phone, Other... to
+    /// type a hidden one's name, then the saved networks and WPS.
+    pub const NETWORK: [QuickRow; 14] = [
         QuickRow::HomeWifi,
         QuickRow::ConnectedTo,
+        QuickRow::NearbyHeading,
+        QuickRow::Nearby0,
+        QuickRow::Nearby1,
+        QuickRow::Nearby2,
+        QuickRow::Nearby3,
+        QuickRow::Nearby4,
+        QuickRow::Nearby5,
+        QuickRow::Nearby6,
+        QuickRow::Nearby7,
+        QuickRow::OtherNetwork,
         QuickRow::SavedNetworks,
-        QuickRow::AddNetwork,
         QuickRow::Wps,
     ];
+
+    /// The rows that stand for the networks heard nearby, in the order they were heard.
+    pub const NEARBY: [QuickRow; 8] = [
+        QuickRow::Nearby0,
+        QuickRow::Nearby1,
+        QuickRow::Nearby2,
+        QuickRow::Nearby3,
+        QuickRow::Nearby4,
+        QuickRow::Nearby5,
+        QuickRow::Nearby6,
+        QuickRow::Nearby7,
+    ];
+
+    /// The joined network's details, A on its row.
+    pub const NET_DETAILS: [QuickRow; 5] = [
+        QuickRow::NetStatus,
+        QuickRow::NetSignal,
+        QuickRow::NetSecurity,
+        QuickRow::NetAddress,
+        QuickRow::NetForget,
+    ];
+
+    /// Which network nearby this row stands for.
+    pub fn nearby_slot(self) -> Option<usize> {
+        QuickRow::NEARBY.iter().position(|r| *r == self)
+    }
+
+    /// A line of the page that only names what is under it: the cursor passes it by.
+    pub fn heading(self) -> bool {
+        self == QuickRow::NearbyHeading
+    }
 
     /// Every screen setting belongs to one system: nothing here reaches across all three.
     pub const SCREEN: [QuickRow; 5] = [
@@ -400,7 +471,22 @@ impl QuickRow {
             | QuickRow::ConnectedTo
             | QuickRow::AddNetwork
             | QuickRow::SavedNetworks
-            | QuickRow::Wps => &QuickRow::NETWORK,
+            | QuickRow::Wps
+            | QuickRow::NearbyHeading
+            | QuickRow::OtherNetwork
+            | QuickRow::Nearby0
+            | QuickRow::Nearby1
+            | QuickRow::Nearby2
+            | QuickRow::Nearby3
+            | QuickRow::Nearby4
+            | QuickRow::Nearby5
+            | QuickRow::Nearby6
+            | QuickRow::Nearby7 => &QuickRow::NETWORK,
+            QuickRow::NetStatus
+            | QuickRow::NetSignal
+            | QuickRow::NetSecurity
+            | QuickRow::NetAddress
+            | QuickRow::NetForget => &QuickRow::NET_DETAILS,
             QuickRow::Resume
             | QuickRow::States
             | QuickRow::Cheats
@@ -438,6 +524,7 @@ impl QuickRow {
             QuickRow::FastForward => Some(QuickRow::Screen),
             QuickRow::Wallpaper => Some(QuickRow::General),
             QuickRow::HomeWifi => Some(QuickRow::Network),
+            QuickRow::NetStatus => Some(QuickRow::ConnectedTo),
             QuickRow::AutoSleep => Some(QuickRow::General),
             QuickRow::AutoTime => Some(QuickRow::General),
             QuickRow::RememberPosition => Some(QuickRow::General),
@@ -594,6 +681,22 @@ impl QuickRow {
             QuickRow::AddNetwork => "Other Networks",
             QuickRow::SavedNetworks => "My Networks",
             QuickRow::Wps => "WPS",
+            // Shown as the network's own name, like Connected To.
+            QuickRow::Nearby0
+            | QuickRow::Nearby1
+            | QuickRow::Nearby2
+            | QuickRow::Nearby3
+            | QuickRow::Nearby4
+            | QuickRow::Nearby5
+            | QuickRow::Nearby6
+            | QuickRow::Nearby7 => "Network",
+            QuickRow::NearbyHeading => "Other Networks",
+            QuickRow::OtherNetwork => "Other...",
+            QuickRow::NetStatus => "Status",
+            QuickRow::NetSignal => "Signal",
+            QuickRow::NetSecurity => "Security",
+            QuickRow::NetAddress => "Address",
+            QuickRow::NetForget => "Forget This Network",
             QuickRow::RomManager => "GRAVY Manager",
             QuickRow::ScreenNes => "NES",
             QuickRow::ScreenSnes => "Super Nintendo",
@@ -679,11 +782,25 @@ impl QuickRow {
             QuickRow::Clock24 => "Off shows the time as 6:00 PM.",
             QuickRow::HomeWifi => "Join your saved networks. Sets the clock too.",
             QuickRow::AddNetwork => "Find a network nearby and type its password.",
-            QuickRow::SavedNetworks => "The device joins these by itself. Y forgets one.",
+            QuickRow::SavedNetworks => "A joins one now. Y forgets one.",
+            QuickRow::Nearby0
+            | QuickRow::Nearby1
+            | QuickRow::Nearby2
+            | QuickRow::Nearby3
+            | QuickRow::Nearby4
+            | QuickRow::Nearby5
+            | QuickRow::Nearby6
+            | QuickRow::Nearby7 => "A joins it. A saved one needs no password.",
+            QuickRow::OtherNetwork => "Not in the list? Type its name.",
+            QuickRow::NetStatus
+            | QuickRow::NetSignal
+            | QuickRow::NetSecurity
+            | QuickRow::NetAddress => "The network you are on now.",
+            QuickRow::NetForget => "Its password is removed from the card.",
             QuickRow::Wps => "Join by pressing the WPS button on your router.",
             QuickRow::RomManager => "Games, screenshots and more from a web browser.",
             QuickRow::Network => "Home Wi-Fi and the network you are on.",
-            QuickRow::ConnectedTo => "Connected. A shows its details.",
+            QuickRow::ConnectedTo => "The network you are on. A shows its details.",
             QuickRow::AutoSleep => {
                 "Screen off after this long idle. Wi-Fi stays on."
             }
@@ -711,7 +828,20 @@ impl QuickRow {
 
     /// A row that shows a value and takes no input.
     pub fn read_only(self) -> bool {
-        false
+        matches!(
+            self,
+            QuickRow::NetStatus | QuickRow::NetSignal | QuickRow::NetSecurity | QuickRow::NetAddress
+        )
+    }
+
+    /// A row that joins a network: the legend says so.
+    pub fn joins(self) -> bool {
+        self.nearby_slot().is_some() || self == QuickRow::OtherNetwork
+    }
+
+    /// A row that does what it says at once: the legend says Select.
+    pub fn acts(self) -> bool {
+        self == QuickRow::NetForget
     }
 
     pub fn opens(self) -> bool {
@@ -720,6 +850,7 @@ impl QuickRow {
             QuickRow::DateTime
                 | QuickRow::ConnectedTo
                 | QuickRow::AddNetwork
+                | QuickRow::OtherNetwork
                 | QuickRow::SavedNetworks
                 | QuickRow::Wps
                 | QuickRow::RomManager
@@ -750,13 +881,25 @@ impl QuickRow {
     }
 
     pub fn up(self, hidden: &[QuickRow]) -> QuickRow {
-        let rows = self.shown(hidden);
-        rows[(self.position(hidden) + rows.len() - 1) % rows.len()]
+        self.step(hidden, false)
     }
 
     pub fn down(self, hidden: &[QuickRow]) -> QuickRow {
+        self.step(hidden, true)
+    }
+
+    /// The next row up or down, round the end, passing headings by.
+    fn step(self, hidden: &[QuickRow], down: bool) -> QuickRow {
         let rows = self.shown(hidden);
-        rows[(self.position(hidden) + 1) % rows.len()]
+        let n = rows.len();
+        let mut at = self.position(hidden);
+        for _ in 0..n {
+            at = if down { (at + 1) % n } else { (at + n - 1) % n };
+            if !rows[at].heading() {
+                return rows[at];
+            }
+        }
+        self
     }
 }
 
@@ -1080,7 +1223,88 @@ pub const SWITCH_H: u32 = 30;
 const SWITCH_STROKE: f32 = 2.5;
 
 pub fn quick_label_face(row: QuickRow, _lit: bool) -> UndoFace {
+    if row.heading() {
+        return heading_face(row.label());
+    }
     quick_text_face(row.label(), FACE_INK)
+}
+
+/// A list heading on a menu page: the help line's size, low in a row's face so it sits just
+/// over the rows it names.
+fn heading_face(label: &str) -> UndoFace {
+    let Some(font) = text::label_font() else {
+        return UndoFace { rgba: Vec::new(), w: 0, h: 0 };
+    };
+    let layout = text::fit(font, label, OUT_W as f32, 1, HELP_PX, HELP_PX);
+    let set = layout
+        .lines
+        .iter()
+        .map(|l| text::line_width(font, l, layout.px, layout.tracking))
+        .fold(0.0, f32::max);
+    let w = set.ceil() as u32 + 2 * MENU_PAD;
+    let mut rgba = vec![0u8; (w * MENU_H * 4) as usize];
+    text::draw_centred(&mut rgba, w, MENU_H, &layout, FACE_INK);
+    // Down so it sits over the next row rather than in the middle of its own.
+    let drop = (MENU_H as usize / 5) * (w as usize) * 4;
+    let mut low = vec![0u8; rgba.len()];
+    low[drop..].copy_from_slice(&rgba[..rgba.len() - drop]);
+    UndoFace { rgba: low, w, h: MENU_H }
+}
+
+/// A network's name as a menu row: its own capitals kept, cut with an ellipsis at `max_w`.
+pub fn quick_name_face(name: &str, max_w: u32) -> UndoFace {
+    let Some(font) = text::label_font() else {
+        return UndoFace { rgba: Vec::new(), w: 0, h: 0 };
+    };
+    let fit = |s: &str| text::fit_keep_case(font, s, OUT_W as f32, 1, QUICK_PX, QUICK_PX);
+    let width = |l: &text::Layout| {
+        l.lines
+            .iter()
+            .map(|t| text::line_width(font, t, l.px, l.tracking))
+            .fold(0.0, f32::max)
+    };
+    let mut layout = fit(name);
+    let mut chars: Vec<char> = name.chars().collect();
+    while width(&layout) > max_w as f32 && !chars.is_empty() {
+        chars.pop();
+        layout = fit(&format!("{}…", chars.iter().collect::<String>().trim_end()));
+    }
+    let w = width(&layout).ceil() as u32 + 2 * MENU_PAD;
+    let mut rgba = vec![0u8; (w * MENU_H * 4) as usize];
+    text::draw_centred(&mut rgba, w, MENU_H, &layout, FACE_INK);
+    UndoFace { rgba, w, h: MENU_H }
+}
+
+/// A small padlock, drawn smooth, white to be tinted: a network that wants a password.
+pub fn lock_face() -> UndoFace {
+    const SS: u32 = 4;
+    let (w, h) = (12u32, 15u32);
+    let lit = |x: f32, y: f32| -> bool {
+        // The body, rounded a little.
+        let body = x >= 0.5 && x <= 11.5 && y >= 6.5 && y <= 14.5;
+        // The shackle: a ring's top half and its legs, 2 px thick.
+        let (cx, cy, r) = (6.0, 6.5, 4.0);
+        let d = ((x - cx).powi(2) + (y - cy).powi(2)).sqrt();
+        let ring = y <= cy && d >= r - 1.0 && d <= r + 1.0;
+        let legs = y > cy - 0.5 && y < 7.0 && ((x - 2.0).abs() <= 1.0 || (x - 10.0).abs() <= 1.0);
+        body || ring || legs
+    };
+    let mut rgba = Vec::with_capacity((w * h * 4) as usize);
+    for py in 0..h {
+        for px in 0..w {
+            let mut hits = 0;
+            for sy in 0..SS {
+                for sx in 0..SS {
+                    let x = px as f32 + (sx as f32 + 0.5) / SS as f32;
+                    let y = py as f32 + (sy as f32 + 0.5) / SS as f32;
+                    hits += u32::from(lit(x, y));
+                }
+            }
+            let a = (hits * 255 / (SS * SS)) as u8;
+            rgba.extend_from_slice(&[255, 255, 255, a]);
+        }
+    }
+    UndoFace { rgba, w, h }
 }
 
 fn cap_centre(label: &fontdue::Font, h: u32) -> f32 {
@@ -1243,7 +1467,7 @@ pub fn quick_caret_face(right: bool) -> UndoFace {
     UndoFace { rgba, w, h }
 }
 
-pub fn quick_legend_faces() -> [UndoFace; 6] {
+pub fn quick_legend_faces() -> [UndoFace; 8] {
     [
         tint_mask(hint_face("B", "Back")),
         tint_mask(arrows_hint_face("Change")),
@@ -1251,6 +1475,8 @@ pub fn quick_legend_faces() -> [UndoFace; 6] {
         tint_mask(hint_face("B", "Resume")),
         tint_mask(hint_face("A", "Select")),
         tint_mask(hint_face("L1/R1", "Tab")),
+        tint_mask(hint_face("A", "Join")),
+        tint_mask(hint_face("A", "Forget")),
     ]
 }
 
@@ -1268,7 +1494,10 @@ pub struct QuickMenuFaces {
     pub pointer: (TexId, u32, u32),
     pub values: Vec<[(TexId, u32, u32); 2]>,
     pub carets: [(TexId, u32, u32); 2],
-    pub legend: [(TexId, u32); 6],
+    pub legend: [(TexId, u32); 8],
+    /// The Wi-Fi mark and a padlock, white, for the network rows.
+    pub wifi: (TexId, u32, u32),
+    pub lock: (TexId, u32, u32),
     /// Every tab's name in white, in TAB_GROUPS order.
     pub tabs: Vec<(TexId, u32, u32)>,
     /// Off, on.
@@ -1278,8 +1507,39 @@ pub struct QuickMenuFaces {
     pub more: [(TexId, u32, u32); 2],
 }
 
+/// A network heard nearby, as its row shows it.
+pub struct NearbyRow {
+    pub name: [(TexId, u32, u32); 2],
+    pub secure: bool,
+    /// One to three bars.
+    pub bars: u8,
+}
+
+/// What the joined network's row says while Wi-Fi is on.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum Joined {
+    /// Looking for a saved network to join.
+    Searching,
+    /// None of the saved networks is near, or none is saved.
+    NotConnected,
+    /// The password was taken; waiting for an address.
+    Connecting,
+    Connected,
+}
+
 pub struct QuickMenu<'a> {
     pub row: QuickRow,
+    /// The networks nearby, Nearby0 first.
+    pub nearby: &'a [NearbyRow],
+    pub joined: Joined,
+    /// The joined network's signal, one to three bars; 0 when unknown.
+    pub signal: u8,
+    /// Values made for this moment, like an address or CONNECTING, by row.
+    pub texts: &'a [(QuickRow, [(TexId, u32, u32); 2])],
+    /// Over a page that is about one thing: the joined network's name over its details.
+    pub title: Option<(TexId, u32, u32)>,
+    /// For what turns: the spinner.
+    pub now: u64,
     pub hidden: &'a [QuickRow],
     pub values: [Option<QuickValue>; QuickRow::ALL.len()],
     pub clock: Option<[(TexId, u32, u32); 2]>,
@@ -1411,8 +1671,9 @@ impl QuickMenu<'_> {
                 .find(|(r, _)| *r == row)
                 .map_or(row, |&(_, as_row)| as_row);
             // The network joined: its own name is the row, like a phone's Wi-Fi list.
-            let label = match (row, self.network) {
-                (QuickRow::ConnectedTo, Some(n)) => Some(n[lit as usize]),
+            let label = match (row, self.network, row.nearby_slot()) {
+                (QuickRow::ConnectedTo, Some(n), _) => Some(n[lit as usize]),
+                (_, _, Some(k)) => self.nearby.get(k).map(|n| n.name[lit as usize]),
                 _ => faces.labels.get(named.index()).map(|l| l[lit as usize]),
             };
             if let Some((tex, w, h)) = label {
@@ -1422,7 +1683,59 @@ impl QuickMenu<'_> {
                 };
                 tint(out, tex, x, y, w, h, colour);
             }
-            if row.centred() {
+            if row.centred() || row.heading() {
+                continue;
+            }
+            let mid = y + centre;
+            // A network nearby: a padlock when it wants a password, and its signal.
+            if let Some(n) = row.nearby_slot().and_then(|k| self.nearby.get(k)) {
+                let bx = right - BARS_W;
+                draw_bars(out, bx, mid, n.bars, colour);
+                if n.secure {
+                    let (tex, w, h) = faces.lock;
+                    let lx = bx - ICON_GAP - w as f32;
+                    tint(out, tex, lx, mid - h as f32 / 2.0 + 1.0, w, h, colour);
+                }
+                continue;
+            }
+            let text = self
+                .texts
+                .iter()
+                .find(|(r, _)| *r == row)
+                .map(|(_, t)| t[lit as usize]);
+            if row == QuickRow::ConnectedTo {
+                let [_, (right_tex, rw, rh)] = faces.carets;
+                match self.joined {
+                    Joined::Connected => {
+                        let rx = right - rw as f32;
+                        tint(out, right_tex, rx, y, rw, rh, colour);
+                        let (tex, w, h) = faces.wifi;
+                        let wx = rx - CARET_GAP - w as f32;
+                        tint(out, tex, wx, mid - h as f32 / 2.0, w, h, colour);
+                    }
+                    Joined::Connecting => {
+                        let mut x = right + pad;
+                        // A small word, at the help line's size, centred on the row.
+                        if let Some((tex, w, h)) = text {
+                            x -= w as f32 + pad;
+                            tint(out, tex, x, mid - h as f32 / 2.0, w, h, colour);
+                        }
+                        draw_spinner(out, x - ICON_GAP - SPIN_R, mid, self.now, colour);
+                    }
+                    Joined::Searching => {
+                        draw_spinner(out, right - SPIN_R, mid, self.now, colour)
+                    }
+                    Joined::NotConnected => {}
+                }
+                continue;
+            }
+            if let Some((tex, w, h)) = text {
+                let x = right + pad - w as f32;
+                tint(out, tex, x, y, w, h, colour);
+                // Signal: its bars ahead of the word.
+                if row == QuickRow::NetSignal && self.signal > 0 {
+                    draw_bars(out, x + pad - ICON_GAP - BARS_W, mid, self.signal, colour);
+                }
                 continue;
             }
             let picked = self.values[row.index()];
@@ -1471,6 +1784,9 @@ impl QuickMenu<'_> {
                 colour,
             );
         }
+        if let Some((tex, w, h)) = self.title {
+            tint(out, tex, self.canvas.centred(w as f32), TITLE_Y, w, h, ink.text);
+        }
         let help_row = self
             .named_as
             .iter()
@@ -1487,12 +1803,14 @@ impl QuickMenu<'_> {
                 ink.dim,
             );
         }
-        let [back, change, open, resume, select, tab] = faces.legend;
+        let [back, change, open, resume, select, tab, join, forget] = faces.legend;
         let back = match self.row.page() == QuickRow::PLAY {
             true => resume,
             false => back,
         };
         let other = match (self.row.page() == QuickRow::POWER, self.row.opens()) {
+            _ if self.row.joins() => join,
+            _ if self.row.acts() => forget,
             (true, _) => select,
             (false, true) => open,
             (false, false) => change,
@@ -1553,6 +1871,52 @@ pub fn quick_pitch(_rows: usize) -> f32 {
 pub fn quick_row_top(row: QuickRow, hidden: &[QuickRow]) -> f32 {
     let (top, _) = page_layout(row, hidden);
     top + QUICK_PITCH * row.position(hidden) as f32
+}
+
+/// A page's title, over its rows, where the tabs sit on a tabbed page.
+const TITLE_Y: f32 = 12.0;
+/// Signal bars: three, rising, as wide as this together.
+const BAR_W: f32 = 4.0;
+const BAR_STEP: f32 = 7.0;
+const BARS_W: f32 = BAR_STEP * 2.0 + BAR_W;
+/// Room between a row's icons.
+const ICON_GAP: f32 = 10.0;
+/// The spinner's reach from its centre.
+const SPIN_R: f32 = 9.0;
+
+/// Up to three signal bars, rising left to right, the rest faint; `mid` is the row's centre.
+pub fn draw_bars(out: &mut Vec<Draw>, x: f32, mid: f32, bars: u8, colour: [f32; 4]) {
+    for i in 0..3u8 {
+        let h = 6.0 + 4.0 * i as f32;
+        let c = match i < bars {
+            true => colour,
+            false => [colour[0], colour[1], colour[2], colour[3] * 0.3],
+        };
+        out.push(Draw::Rect {
+            x: (x + BAR_STEP * i as f32).round(),
+            y: (mid + 7.0 - h).round(),
+            w: BAR_W,
+            h,
+            colour: c,
+        });
+    }
+}
+
+/// Eight dots round a ring, the lit one going round once a second with a fading tail.
+pub fn draw_spinner(out: &mut Vec<Draw>, cx: f32, cy: f32, now: u64, colour: [f32; 4]) {
+    let head = ((now % 1000) * 8 / 1000) as usize;
+    for i in 0..8usize {
+        let a = i as f32 * std::f32::consts::FRAC_PI_4 - std::f32::consts::FRAC_PI_2;
+        let age = (head + 8 - i) % 8;
+        let fade = 1.0 - age as f32 / 8.0;
+        out.push(Draw::Rect {
+            x: (cx + a.cos() * (SPIN_R - 1.5) - 1.5).round(),
+            y: (cy + a.sin() * (SPIN_R - 1.5) - 1.5).round(),
+            w: 3.0,
+            h: 3.0,
+            colour: [colour[0], colour[1], colour[2], colour[3] * (0.15 + 0.85 * fade)],
+        });
+    }
 }
 
 fn tint(out: &mut Vec<Draw>, tex: TexId, x: f32, y: f32, w: u32, h: u32, colour: [f32; 4]) {

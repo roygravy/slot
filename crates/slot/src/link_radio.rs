@@ -86,7 +86,27 @@ pub enum WifiAnswer {
     RomManager(Option<(String, String)>),
 }
 
+/// How joining a network is going, from the service.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Progress {
+    /// The supplicant's state: SCANNING, 4WAY_HANDSHAKE, COMPLETED and so on.
+    pub state: String,
+    /// The network being joined.
+    pub trying: Option<String>,
+    /// A network whose password was turned down.
+    pub wrong: Option<String>,
+}
+
 pub trait RadioJobs: Send {
+    /// How the join is going.
+    fn home_progress(&self) -> Progress {
+        Progress::default()
+    }
+
+    /// While a join is watched, the service is asked how it is going every second instead of
+    /// every few.
+    fn fast_status(&mut self, _on: bool) {}
+
     fn ask(&mut self, job: RadioJob);
 
     fn wifi(&mut self, _job: WifiJob) {}
@@ -188,6 +208,18 @@ impl RadioJobs for RadioQueue {
             .filter(|_| self.home_connected())
     }
 
+    fn home_progress(&self) -> Progress {
+        HOME_PROGRESS
+            .lock()
+            .ok()
+            .and_then(|p| p.clone())
+            .unwrap_or_default()
+    }
+
+    fn fast_status(&mut self, on: bool) {
+        FAST.store(on, Ordering::SeqCst);
+    }
+
     fn deep_sleep(&mut self, asleep: bool) {
         if !HOME_WANTED.load(Ordering::SeqCst) {
             return;
@@ -210,6 +242,10 @@ static HOME_CONNECTED: AtomicBool = AtomicBool::new(false);
 static HOME_WANTED: AtomicBool = AtomicBool::new(false);
 #[cfg(feature = "device")]
 static HOME_SSID: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+#[cfg(feature = "device")]
+static HOME_PROGRESS: std::sync::Mutex<Option<Progress>> = std::sync::Mutex::new(None);
+#[cfg(feature = "device")]
+static FAST: AtomicBool = AtomicBool::new(false);
 
 #[cfg(feature = "device")]
 fn queue() -> &'static Sender<RadioJob> {
@@ -217,7 +253,8 @@ fn queue() -> &'static Sender<RadioJob> {
     Q.get_or_init(|| {
         let (tx, rx) = channel::<RadioJob>();
         std::thread::spawn(move || loop {
-            let job = match rx.recv_timeout(std::time::Duration::from_secs(3)) {
+            let wait = if FAST.load(Ordering::SeqCst) { 1 } else { 3 };
+            let job = match rx.recv_timeout(std::time::Duration::from_secs(wait)) {
                 Ok(job) => job,
                 Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
                 Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
@@ -238,6 +275,17 @@ fn queue() -> &'static Sender<RadioJob> {
                         .any(|v| v == "home_connected=true");
                     if let Ok(mut ssid) = HOME_SSID.lock() {
                         *ssid = connected.then(|| status_ssid(&status)).flatten();
+                    }
+                    if let Ok(mut p) = HOME_PROGRESS.lock() {
+                        *p = Some(Progress {
+                            state: status
+                                .split_whitespace()
+                                .find_map(|w| w.strip_prefix("home_state="))
+                                .unwrap_or("")
+                                .to_owned(),
+                            trying: status_hex(&status, "home_trying="),
+                            wrong: status_hex(&status, "home_wrong="),
+                        });
                     }
                     HOME_CONNECTED.store(connected, Ordering::SeqCst);
                     continue;
@@ -362,9 +410,12 @@ pub fn parse_rom_manager(reply: &str) -> Option<(String, String)> {
 /// The network name from `service status`, which sends it hex-encoded as `home_ssid=` so a
 /// name with spaces stays one word.
 pub fn status_ssid(status: &str) -> Option<String> {
-    let hex = status
-        .split_whitespace()
-        .find_map(|w| w.strip_prefix("home_ssid="))?;
+    status_hex(status, "home_ssid=")
+}
+
+/// A hex-encoded name after `key` on the status line; None when empty.
+pub fn status_hex(status: &str, key: &str) -> Option<String> {
+    let hex = status.split_whitespace().find_map(|w| w.strip_prefix(key))?;
     let bytes: Option<Vec<u8>> = (0..hex.len())
         .step_by(2)
         .map(|i| u8::from_str_radix(hex.get(i..i + 2)?, 16).ok())
@@ -429,6 +480,11 @@ pub fn up(_role: LinkRole, _cancel: &Cancel) -> Result<LinkNet, RadioFail> {
 pub fn down() {}
 
 #[cfg(not(feature = "device"))]
+#[allow(clippy::type_complexity)]
+static FAKE_JOIN: std::sync::Mutex<Option<(String, std::time::Instant, bool)>> =
+    std::sync::Mutex::new(None);
+
+#[cfg(not(feature = "device"))]
 static FAKE_WIFI: std::sync::Mutex<Vec<WifiAnswer>> = std::sync::Mutex::new(Vec::new());
 
 #[cfg(not(feature = "device"))]
@@ -459,6 +515,19 @@ impl RadioJobs for RadioQueue {
             WifiJob::RomManagerOn => {
                 WifiAnswer::RomManager(Some(("http://192.168.1.23".into(), "4821".into())))
             }
+            // A join: the first saved network, turned down when its password is "wrong" or w×8.
+            WifiJob::Reload => {
+                let root = std::env::var_os("SLOT_ROOT").map(std::path::PathBuf::from);
+                let first = root
+                    .as_deref()
+                    .map(slot_store::wifi::read)
+                    .and_then(|n| n.into_iter().next());
+                if let (Some(n), Ok(mut j)) = (first, FAKE_JOIN.lock()) {
+                    let wrong = matches!(n.password.as_deref(), Some("wrong" | "wwwwwwww"));
+                    *j = Some((n.ssid, std::time::Instant::now(), wrong));
+                }
+                return;
+            }
             _ => return,
         };
         if let Ok(mut q) = FAKE_WIFI.lock() {
@@ -477,13 +546,38 @@ impl RadioJobs for RadioQueue {
 
     /// Off-device there is no home network; SLOT_FAKE_HOME pretends there is, for previews.
     fn home_connected(&self) -> bool {
-        std::env::var_os("SLOT_FAKE_HOME").is_some()
+        std::env::var_os("SLOT_FAKE_HOME").is_some() && self.home_ssid().is_some()
     }
 
     fn home_ssid(&self) -> Option<String> {
+        if let Some((ssid, at, wrong)) = FAKE_JOIN.lock().ok().and_then(|j| j.clone()) {
+            let t = at.elapsed().as_secs_f32();
+            return match (wrong, t) {
+                (false, t) if t >= 5.0 => Some(ssid),
+                _ => None,
+            };
+        }
         std::env::var("SLOT_FAKE_HOME")
             .ok()
             .filter(|s| !s.is_empty())
+    }
+
+    /// The join played out: the handshake, then the password taken or turned down.
+    fn home_progress(&self) -> Progress {
+        let Some((ssid, at, wrong)) = FAKE_JOIN.lock().ok().and_then(|j| j.clone()) else {
+            return Progress::default();
+        };
+        let t = at.elapsed().as_secs_f32();
+        let state = match (wrong, t) {
+            (_, t) if t < 2.5 => "4WAY_HANDSHAKE",
+            (true, _) => "SCANNING",
+            _ => "COMPLETED",
+        };
+        Progress {
+            state: state.into(),
+            trying: Some(ssid.clone()),
+            wrong: (wrong && t >= 2.5).then_some(ssid),
+        }
     }
 }
 

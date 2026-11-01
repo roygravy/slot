@@ -38,11 +38,12 @@ pub enum Toast {
     WifiForgotten,
     PasswordLength,
     WpsFailed,
+    WrongPassword,
     Palette(GbPalette),
 }
 
 impl Toast {
-    const FIXED: [Toast; 30] = [
+    const FIXED: [Toast; 31] = [
         Toast::StateSaved,
         Toast::StateLoaded,
         Toast::NeedsGpsp,
@@ -73,6 +74,7 @@ impl Toast {
         Toast::WifiForgotten,
         Toast::PasswordLength,
         Toast::WpsFailed,
+        Toast::WrongPassword,
     ];
 
     pub fn all() -> Vec<Toast> {
@@ -132,6 +134,7 @@ impl Toast {
             Toast::WifiForgotten => "Network Forgotten",
             Toast::PasswordLength => "8 to 63 Characters",
             Toast::WpsFailed => "WPS Timed Out",
+            Toast::WrongPassword => "Wrong Password",
             Toast::Palette(p) => p.label(),
         }
     }

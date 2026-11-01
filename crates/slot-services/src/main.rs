@@ -350,6 +350,8 @@ fn serve(root: &Path, run: &Path) -> std::io::Result<()> {
                         respond(&mut stream, 0, "ACCEPTED");
                     }
                     ("home", "reload") => {
+                        // The list changed: a password turned down before may be fixed now.
+                        home.wrong_key = None;
                         if home.enabled {
                             home.reload(root);
                         }
@@ -372,12 +374,16 @@ fn serve(root: &Path, run: &Path) -> std::io::Result<()> {
                         } else {
                             String::new()
                         };
+                        // How a join is going, for the menu: the supplicant's state, the
+                        // network tried, and one whose password was turned down.
+                        let state = system::field(&status, "wpa_state").unwrap_or("NONE");
+                        let hex = |s: &Option<String>| s.as_deref().map(config::hex).unwrap_or_default();
                         respond(
                             &mut stream,
                             0,
                             &format!(
-                                "home_enabled={} home_connected={} home_error={} link={} freq={:?} home_ssid={}",
-                                home.enabled, up, home.error, link.role, link.freq, ssid
+                                "home_enabled={} home_connected={} home_error={} link={} freq={:?} home_ssid={} home_state={} home_trying={} home_wrong={}",
+                                home.enabled, up, home.error, link.role, link.freq, ssid, state, hex(&home.trying), hex(&home.wrong_key)
                             ),
                         );
                     }

@@ -133,6 +133,13 @@ impl LabelSearch {
         k
     }
 
+    /// The keyboard for a password again, with what was typed before still in the field.
+    pub fn password_again(text: &str, now: Millis) -> Self {
+        let mut k = LabelSearch::password(now);
+        k.text = text.to_owned();
+        k
+    }
+
     pub fn text(&self) -> &str {
         &self.text
     }

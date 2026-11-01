@@ -82,7 +82,7 @@ pub use icon::{
     star_mark_face, warm_fonts, Badge, Icon,
 };
 pub use keyboard::{
-    accents, draw_label_search, key_rows, list_row_faces, search_heading_face, search_row_faces,
+    accents, draw_label_search, key_rows, list_row_faces, search_heading_face, search_placeholder_face, search_row_faces,
     Purpose, WifiLegend,
     qr_face, search_big_face, search_status_face, search_address_face, search_lead_face, search_sub_face, search_typed_face, Cap, Key, KeyboardFaces, SearchScreen, SearchTexts,
     SearchView, Shape, Up,
@@ -106,7 +106,7 @@ pub use quick_menu::{
     HELP_MIN_PX, HELP_PX,
     draw_menu_ground, quick_caret_face, quick_first, quick_help_face, quick_label_face,
     quick_legend_faces, quick_tab_faces, quick_pitch, quick_pointer_face, quick_row_top, quick_switch_face,
-    quick_value_face, window_first, QuickMenu, QuickMenuFaces, QuickRow, QuickValue, QUICK_EDGE,
+    quick_value_face, quick_name_face, lock_face, draw_spinner, draw_bars, window_first, Joined, NearbyRow, QuickMenu, QuickMenuFaces, QuickRow, QuickValue, QUICK_EDGE,
     QUICK_LABEL_X, QUICK_PITCH, SUB_ROWS,
 };
 pub use rebuild::{rebuild_banner_box, rebuild_banner_face, RebuildBanner};
