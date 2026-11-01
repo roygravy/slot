@@ -28,6 +28,10 @@ if [ -f "$SD/System.new/.complete" ] && [ -f "$SD/System.new/.install" ]; then
 	if mv "$SD/System" "$SD/System.old"; then
 		if mv "$SD/System.new" "$SD/System"; then
 			rm -f "$SYS/.complete" "$SYS/.install"
+			# Label, cheat and face caches belong to the card, not to a version: they
+			# move along, so the shelf doesn't recache every label after an update.
+			[ -d "$SD/System.old/Cache" ] && [ ! -e "$SYS/Cache" ] &&
+				mv "$SD/System.old/Cache" "$SYS/Cache"
 			touch "$SYS/.trial"
 			log "update: $(cat "$SYS/version.txt" 2>/dev/null) swapped in"
 		else
@@ -37,6 +41,8 @@ if [ -f "$SD/System.new/.complete" ] && [ -f "$SD/System.new/.install" ]; then
 	sync
 elif [ -f "$SYS/.trial" ] && [ -d "$SD/System.old" ]; then
 	if mv "$SD/System" "$SD/System.bad" && mv "$SD/System.old" "$SD/System"; then
+		[ -d "$SD/System.bad/Cache" ] && [ ! -e "$SYS/Cache" ] &&
+			mv "$SD/System.bad/Cache" "$SYS/Cache"
 		rm -rf "$SD/System.bad"
 		log "update: never reached the shelf, back to $(cat "$SYS/version.txt" 2>/dev/null)"
 	fi

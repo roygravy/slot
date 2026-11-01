@@ -750,6 +750,16 @@ impl Platform for DevicePlatform {
         let woke = loop {
             let before = self.battery_line();
             let alarm = self.set_alarm(BATTERY_LOOK);
+            // A whole night once went by without the alarm: note what the RTC was told.
+            if let Some(rtc) = &self.rtc {
+                let read = |f: &str| fs::read_to_string(rtc.join(f)).unwrap_or_default();
+                self.sleep_log(&format!(
+                    "alarm {} at {} (rtc now {})",
+                    if alarm { "set" } else { "not set" },
+                    read("wakealarm").trim(),
+                    read("since_epoch").trim()
+                ));
+            }
             let (wall, mono) = (SystemTime::now(), Instant::now());
             let wrote = fs::write(power.join("state"), "mem");
             let awake = mono.elapsed();
