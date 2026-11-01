@@ -7,7 +7,9 @@ Everything since slot. x GRAVY v1.2.
 ### New
 
 - **Settings, tidied**: General has three tabs, Shelf, Clock and Power, and Game Settings has Screen and Gameplay tabs (L1 / R1). GRAVY Manager has its own row.
-- **Network page like a phone's**: Wi-Fi on top, the network you joined as its own row with its details, then My Networks and Other Networks. The WPS screen shows a Wi-Fi sign and counts down under the instruction.
+- **Network page like a phone's**: Wi-Fi on top, the network you joined as its own row (Searching, Connecting or connected) with its details, then the networks nearby with padlock and signal bars, refreshed every 10 seconds, and Other... for a hidden network. A typed password is tried on its own screen and a wrong one is reported within seconds. Saved and open networks join at once. The WPS screen shows a Wi-Fi sign and counts down under the instruction.
+- **GRAVY Manager looks for updates by itself**: a dot on the Update tab and a notice bar when a new version is out.
+- **Fast Forward 1.5x**, for games where 2x is too fast.
 - One help line size everywhere, with the legend on one line, in the menus, the keyboard, the Wi-Fi lists and the cartridge studio.
 - The Screenshots page has no clock, battery or Wi-Fi in its corners.
 
@@ -15,6 +17,12 @@ Everything since slot. x GRAVY v1.2.
 
 - An update through GRAVY Manager keeps the label, cheat and face caches, so the shelf no longer recaches every label after it. This works from the next update on.
 - Deep sleep notes in its log what the battery-check alarm was set to.
+- GRAVY Manager uploads always finish and show up in the list, also from Safari.
+- Turning Wi-Fi off stops a join that was still going.
+- The lowest brightness step no longer turns the screen off.
+- A game's own save reaches the card every minute; the resume state every 5 minutes, so the card is written less.
+- Power off and Restart close the sound first.
+- Game Boy games on mGBA (Super Game Boy) no longer flash a frame of stray tiles when the screen comes back on, as in Pokémon Pinball.
 
 ## slot. x GRAVY v1.2
 

@@ -185,7 +185,7 @@ slot. x GRAVY builds the same way slot. does; see `taskfile.yml`. The cartridge 
 
 ## Credits
 
-- **[slot.](https://github.com/BrandonKowalski/slot)** by Brandon Kowalski, with artwork by Markus and contributions from its community: everything slot. x GRAVY is built on, and most of what it does
+- **[slot.](https://github.com/BrandonKowalski/slot)** by Brandon Kowalski, with artwork by Markus and contributions from its community: everything slot. x GRAVY is built on, and most of what it does. Fixes from slot. are taken over up to its v1.12
 - **mGBA**, **gpSP**, **Gambatte**, **FCEUmm** and **Snes9x**, the emulator cores (their licenses and sources ship in `System/licenses`)
 - **Permanent Marker** by Font Diner (Apache 2.0) for the handwritten titles
 - **Liberation Sans** by Red Hat (SIL OFL 1.1), subset as "slot Serial", for the serial sticker on the About page
