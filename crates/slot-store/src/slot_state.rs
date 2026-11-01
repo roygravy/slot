@@ -11,9 +11,12 @@ pub const VOLUME_MAX: u8 = 100;
 pub const UTC_OFFSET_MIN: i16 = -720;
 pub const UTC_OFFSET_MAX: i16 = 840;
 
-pub const FF_SPEEDS: [u8; 4] = [2, 3, 4, 6];
+/// Fast-forward speeds in quarter frames per frame: 1.5×, 2×, 3×, 4×, 6×.
+pub const FF_SPEEDS: [u8; 5] = [6, 8, 12, 16, 24];
 
-pub const FF_SPEED_DEFAULT: u8 = 6;
+const FF_SPEED_TEXT: [&str; 5] = ["1.5", "2", "3", "4", "6"];
+
+pub const FF_SPEED_DEFAULT: u8 = 24;
 
 pub const RECENTS_MAX: usize = 10;
 pub const AUTO_SLEEP_OPTIONS_SECS: [u16; 4] = [0, 30, 60, 300];
@@ -669,7 +672,7 @@ pub fn write_slot_state(root: &Path, s: &SlotState) -> std::io::Result<()> {
         s.clock_set as u8,
         s.utc_offset_min,
         s.rumble as u8,
-        s.ff_speed,
+        ff_speed_text(s.ff_speed),
         s.ff_sound as u8,
         s.shader_gba.name(),
         s.shader_gb.name(),
@@ -1028,7 +1031,15 @@ fn offset(value: &str) -> Option<i16> {
 }
 
 fn ff_speed_value(value: &str) -> Option<u8> {
-    value.parse().ok().filter(|n| FF_SPEEDS.contains(n))
+    FF_SPEED_TEXT
+        .iter()
+        .position(|t| *t == value)
+        .map(|i| FF_SPEEDS[i])
+}
+
+fn ff_speed_text(speed: u8) -> &'static str {
+    let at = |speed| FF_SPEEDS.iter().position(|s| *s == speed);
+    FF_SPEED_TEXT[at(speed).or(at(FF_SPEED_DEFAULT)).unwrap_or(0)]
 }
 
 fn auto_sleep_value(value: &str) -> Option<u16> {
