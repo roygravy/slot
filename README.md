@@ -8,7 +8,7 @@ slot.'s real cartridges on a shelf and its real cartridge slot, with a little ex
 
 <img src=".github/resources/gravy/carousel.gif" width="640" alt="Browsing the NES and SNES shelves, pushing the Super Game Boy into the SNES slot and playing Hauntsfield with the slot. x GRAVY border">
 
-[**Download slot-x-gravy-v1.2**](https://github.com/roygravy/slot/releases/download/slot-x-gravy-v1.2/slot-x-gravy-v1.2.zip) · [GRAVY Manager](#gravy-manager) · [Install](#install) · [What's in the gravy](#whats-in-the-gravy) · [Controls](#controls)
+[**Download slot-x-gravy-v1.2.1**](https://github.com/roygravy/slot/releases/download/slot-x-gravy-v1.2.1/slot-x-gravy-v1.2.1.zip) · [GRAVY Manager](#gravy-manager) · [Install](#install) · [What's in the gravy](#whats-in-the-gravy) · [Controls](#controls)
 
 </div>
 
@@ -135,14 +135,14 @@ Star a cart with **Y** and it stands a little taller in a warm light. **VOL+ and
 
 ## Install
 
-1. Download **[slot-x-gravy-v1.2.zip](https://github.com/roygravy/slot/releases/download/slot-x-gravy-v1.2/slot-x-gravy-v1.2.zip)** from the [releases](https://github.com/roygravy/slot/releases/tag/slot-x-gravy-v1.2).
-2. Unzip it and copy the **contents** of the `slot-x-gravy-v1.2` folder onto the second SD card of your RG35XX Plus.
+1. Download **[slot-x-gravy-v1.2.1.zip](https://github.com/roygravy/slot/releases/download/slot-x-gravy-v1.2.1/slot-x-gravy-v1.2.1.zip)** from the [releases](https://github.com/roygravy/slot/releases/tag/slot-x-gravy-v1.2.1).
+2. Unzip it and copy the **contents** of the `slot-x-gravy-v1.2.1` folder onto the second SD card of your RG35XX Plus.
 3. Put your games in `Games/GB`, `Games/GBC`, `Games/GBA`, `Games/NES` and `Games/SNES`, and optional label art (PNG, named like the ROM) in the matching `Labels` folders.
 4. Put the BIOS files (`gb_bios.bin`, `gbc_bios.bin`, `gba_bios.bin`) in `BIOS/` if you have them. For the real Super Game Boy borders, put your own `SGB1.sfc` and/or `SGB2.sfc` in `BIOS/` too (any name works).
 
 ROMs must be unzipped; `.zip` and `.7z` are not read.
 
-Coming from v1.1.1 or older? Copy v1.2 onto the card this once. From v1.2 on, **GRAVY Manager** installs new versions over Wi-Fi.
+Coming from v1.1.1 or older? Copy this version onto the card once. From v1.2 on, **GRAVY Manager** installs new versions over Wi-Fi.
 
 ---
 

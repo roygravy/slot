@@ -1,5 +1,21 @@
 # Changelog
 
+## slot. x GRAVY v1.2.1
+
+Everything since slot. x GRAVY v1.2.
+
+### New
+
+- **Settings, tidied**: General has three tabs, Shelf, Clock and Power, and Game Settings has Screen and Gameplay tabs (L1 / R1). GRAVY Manager has its own row.
+- **Network page like a phone's**: Wi-Fi on top, the network you joined as its own row with its details, then My Networks and Other Networks. The WPS screen shows a Wi-Fi sign and counts down under the instruction.
+- One help line size everywhere, with the legend on one line, in the menus, the keyboard, the Wi-Fi lists and the cartridge studio.
+- The Screenshots page has no clock, battery or Wi-Fi in its corners.
+
+### Fixed
+
+- An update through GRAVY Manager keeps the label, cheat and face caches, so the shelf no longer recaches every label after it. This works from the next update on.
+- Deep sleep notes in its log what the battery-check alarm was set to.
+
 ## slot. x GRAVY v1.2
 
 Everything since slot. x GRAVY v1.1.1.
