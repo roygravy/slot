@@ -1315,11 +1315,13 @@ impl Frontend {
 
     pub fn restart(&mut self) {
         self.leave_boot_picture();
+        self.session.close_audio();
         self.session.app_mut().restart();
     }
 
     pub fn poweroff(&mut self) {
         self.leave_boot_picture();
+        self.session.close_audio();
         self.session.app_mut().poweroff();
     }
 
