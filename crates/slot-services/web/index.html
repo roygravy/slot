@@ -71,6 +71,12 @@ li img.thumb { width: 80px; height: 60px; object-fit: cover; border-radius: 4px;
 .notes li { display: list-item; margin: 0 0 6px; padding: 0; border: 0; }
 .notes code { font-size: 12px; }
 .notes a, .update .gh { color: inherit; }
+nav button.new::after { content: ""; display: inline-block; width: 7px; height: 7px; margin: 0 0 2px 6px; border-radius: 50%; background: var(--fg); vertical-align: middle; }
+.news { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 14px; padding: 10px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; font-size: 14px; }
+.news[hidden] { display: none; }
+.news span { color: var(--dim); }
+.news b { color: var(--fg); font-weight: 600; }
+.news button { background: var(--fg); color: var(--bg); border: 0; border-radius: 8px; font: inherit; font-size: 13px; font-weight: 600; padding: 6px 14px; cursor: pointer; flex: none; }
 .update .gh { display: inline-block; margin-top: 14px; font-size: 13px; color: var(--dim); }
 </style>
 </head>
@@ -84,6 +90,7 @@ li img.thumb { width: 80px; height: 60px; object-fit: cover; border-radius: 4px;
     <img class="logo" src="logo.png" alt="slot. x GRAVY">
     <div class="sub">Manager</div>
   </header>
+  <div class="news" id="news" hidden><span><b id="newsv"></b> is out</span><button id="newsgo">Update</button></div>
   <nav id="tabs"></nav>
   <div class="update" id="update" hidden></div>
   <label class="drop" id="drop"><b>Drop files here</b> or tap to choose<input type="file" multiple hidden id="pick">
@@ -147,7 +154,7 @@ $("pin").oninput = async () => {
   if (v.length < 4) return;
   pin = v;
   try {
-    await load(); $("lock").hidden = true; try { sessionStorage.setItem("pin", pin); } catch (e) {}
+    await load(); $("lock").hidden = true; lookOnce(); try { sessionStorage.setItem("pin", pin); } catch (e) {}
     if ($("keep").checked) {
       try { key = await (await api("POST", "/api/remember")).text(); localStorage.setItem("key", key); } catch (e) {}
     }
@@ -169,6 +176,7 @@ function render() {
   $("update").hidden = !UPDATE(sys);
   $("drop").querySelector("b").textContent = UPDATE(sys) ? "Drop a slot. x GRAVY zip here" : "Drop files here";
   $("list").hidden = $("count").hidden = UPDATE(sys);
+  badge();
   if (UPDATE(sys)) { updated(); return; }
   $("list").className = SHOTS(sys) ? "shots" : "";
   if (SHOTS(sys)) $("list").innerHTML = games.length ? games.map(([n, b], i) => {
@@ -296,9 +304,12 @@ function send(file, to, path) {
 }
 // The update tab: the newest release on GitHub, or a zip dropped on the page, is put beside
 // the running version; Install restarts the console into it.
-let update = null, polling = null;
+let update = null, polling = null, quiet = false;
 async function checkUpdate() {
   try { update = await (await api("GET", "/api/update")).json(); } catch (e) { return; }
+  // A look of our own that failed (no internet) is nobody's business: the tab stays as it was.
+  if (quiet && update.state == "failed") update.state = "idle";
+  badge();
   updated();
   clearTimeout(polling);
   if (UPDATE(sys) && (update.state == "checking" || update.state == "downloading")) polling = setTimeout(checkUpdate, 1000);
@@ -334,6 +345,31 @@ function updated() {
     checkUpdate();
   };
 }
+// Each visit looks on GitHub once by itself, so a newer release shows as a dot on the Update tab
+// and a line above the tabs, without opening the tab first.
+async function lookOnce() {
+  try {
+    let u = await (await api("GET", "/api/update")).json();
+    if (u.state != "idle") return checkUpdate();
+    quiet = true;
+    await api("POST", "/api/update/check");
+    for (let i = 0; i < 30; i++) {
+      await new Promise(r => setTimeout(r, 1000));
+      u = await (await api("GET", "/api/update")).json();
+      if (u.state != "checking") break;
+    }
+  } catch (e) {}
+  await checkUpdate();
+  quiet = false;
+}
+function badge() {
+  const u = update || {}, news = ["available", "downloading", "ready"].includes(u.state);
+  const tab = $("tabs").querySelector('[data-s="UPDATE"]');
+  if (tab) tab.classList.toggle("new", news);
+  $("news").hidden = !news || UPDATE(sys);
+  $("newsv").textContent = "slot. x GRAVY " + (u.version || "");
+}
+$("newsgo").onclick = () => $("tabs").querySelector('[data-s="UPDATE"]').click();
 // The release's own notes from GitHub, as a small readme under the update, and its page.
 function notes(u) {
   const link = u.link || "https://github.com/roygravy/slot/releases";
@@ -394,7 +430,7 @@ $("theme").onclick = () => {
   try { localStorage.setItem("theme", light ? "light" : "dark"); } catch (e) {}
 };
 render();
-load().then(() => UPDATE(sys) && checkUpdate()).catch(() => {});
+load().then(lookOnce).catch(() => {});
 </script>
 </body>
 </html>
