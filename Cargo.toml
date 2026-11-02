@@ -24,6 +24,7 @@ tempfile = "3"
 unicode-normalization = "0.1"
 resvg = { version = "0.48", default-features = false }
 usvg = { version = "0.48", default-features = false }
+flate2 = "1"
 
 [profile.device]
 inherits = "release"

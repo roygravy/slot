@@ -2385,6 +2385,7 @@ name = "slot"
 version = "0.1.0"
 dependencies = [
  "cpal",
+ "flate2",
  "gilrs",
  "libc",
  "libloading",
