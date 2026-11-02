@@ -1,5 +1,15 @@
 # Changelog
 
+## slot. x GRAVY v1.2.2
+
+Fixes only, everything since slot. x GRAVY v1.2.1.
+
+### Fixed
+
+- Pokémon Emerald's cart has the green of the real shell.
+- Saves that RetroArch wrote compressed are read instead of overwritten.
+- GRAVY Manager says on the Update tab when a newer BaseOS is out. It only tells you; nothing is installed.
+
 ## slot. x GRAVY v1.2.1
 
 Everything since slot. x GRAVY v1.2.
