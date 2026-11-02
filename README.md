@@ -2,7 +2,7 @@
 
 # slot. x GRAVY
 
-**My own take on [slot.](https://github.com/BrandonKowalski/slot), Brandon Kowalski's Game Boy–centric frontend, for the Anbernic RG35XX Plus (and 3:2 panels like the RG34XX SP)**
+**My own take on [slot.](https://github.com/BrandonKowalski/slot), Brandon Kowalski's Game Boy–centric frontend, designed with the Anbernic RG35XX Plus in mind, and it runs on every device the original slot. supports (3:2 panels like the RG34XX SP included)**
 
 slot.'s real cartridges on a shelf and its real cartridge slot, with a little extra gravy on top.
 
@@ -18,7 +18,7 @@ slot.'s real cartridges on a shelf and its real cartridge slot, with a little ex
 
 [slot.](https://github.com/BrandonKowalski/slot) is Brandon Kowalski's Game Boy frontend: a shelf of real cartridges, a real slot to push them into, save states, rewind, a link cable, Markus's lovely artwork, and a shelf that's there **3 to 5 seconds** after you power on. New to it? Start at **[slot-cfw.fyi](https://slot-cfw.fyi)**.
 
-slot. x GRAVY is that, with my own gravy poured over it, made for the Anbernic RG35XX Plus. Same slot. underneath; a screen, a slot and a set of menus that feel a bit more like mine. It plays GB, GBC, GBA, NES and SNES games (unzipped ROMs) on mGBA, gpSP, Gambatte, FCEUmm and Snes9x, and Game Boy games on a Super Game Boy.
+slot. x GRAVY is that, with my own gravy poured over it, designed with the Anbernic RG35XX Plus in mind, and it runs on every device the original slot. supports. Same slot. underneath; a screen, a slot and a set of menus that feel a bit more like mine. It plays GB, GBC, GBA, NES and SNES games (unzipped ROMs) on mGBA, gpSP, Gambatte, FCEUmm and Snes9x, and Game Boy games on a Super Game Boy.
 
 ---
 
@@ -136,7 +136,7 @@ Star a cart with **Y** and it stands a little taller in a warm light. **VOL+ and
 ## Install
 
 1. Download **[slot-x-gravy-v1.2.2.zip](https://github.com/roygravy/slot/releases/download/slot-x-gravy-v1.2.2/slot-x-gravy-v1.2.2.zip)** from the [releases](https://github.com/roygravy/slot/releases/tag/slot-x-gravy-v1.2.2).
-2. Unzip it and copy the **contents** of the `slot-x-gravy-v1.2.2` folder onto the second SD card of your RG35XX Plus.
+2. Unzip it and copy the **contents** of the `slot-x-gravy-v1.2.2` folder onto the second SD card of your device.
 3. Put your games in `Games/GB`, `Games/GBC`, `Games/GBA`, `Games/NES` and `Games/SNES`, and optional label art (PNG, named like the ROM) in the matching `Labels` folders.
 4. Put the BIOS files (`gb_bios.bin`, `gbc_bios.bin`, `gba_bios.bin`) in `BIOS/` if you have them. For the real Super Game Boy borders, put your own `SGB1.sfc` and/or `SGB2.sfc` in `BIOS/` too (any name works).
 
