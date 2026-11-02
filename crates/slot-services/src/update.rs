@@ -33,7 +33,20 @@ pub struct Update {
     uploading: AtomicBool,
     /// What the newest GitHub release says about itself, shown under the update.
     notes: Mutex<Notes>,
+    /// A newer BaseOS than the console runs: only told, the user installs it.
+    baseos: Mutex<Option<BaseOs>>,
 }
+
+#[derive(Clone, PartialEq, Debug)]
+struct BaseOs {
+    installed: String,
+    version: String,
+    link: String,
+}
+
+/// BaseOS releases, the same place slot.'s own updater looks.
+const BASEOS_LATEST: &str = "https://api.github.com/repos/pvaibhav/BaseOS/releases/latest";
+const BASEOS_RELEASE: &str = "/etc/baseos-release";
 
 /// A release's own notes (its Markdown body) and its page on GitHub.
 #[derive(Clone, Default, PartialEq, Debug)]
@@ -55,6 +68,7 @@ pub static UPDATE: Update = Update {
         text: String::new(),
         link: String::new(),
     }),
+    baseos: Mutex::new(None),
 };
 
 /// Left in System.new by Install on the page; the console sees it and restarts.
@@ -98,8 +112,17 @@ impl Update {
         } else {
             (notes.text, notes.link)
         };
+        let baseos = match self.baseos.lock().unwrap().clone() {
+            Some(b) => format!(
+                "{{\"installed\":{},\"version\":{},\"link\":{}}}",
+                crate::web::quote(&b.installed),
+                crate::web::quote(&b.version),
+                crate::web::quote(&b.link),
+            ),
+            None => "null".to_string(),
+        };
         format!(
-            "{{\"installed\":{},\"state\":\"{state}\",\"version\":{},\"done\":{done},\"total\":{total},\"error\":{},\"notes\":{},\"link\":{}}}",
+            "{{\"installed\":{},\"state\":\"{state}\",\"version\":{},\"done\":{done},\"total\":{total},\"error\":{},\"notes\":{},\"link\":{},\"baseos\":{baseos}}}",
             crate::web::quote(&installed),
             crate::web::quote(&version),
             crate::web::quote(&error),
@@ -116,6 +139,7 @@ impl Update {
         self.set(Status::Checking);
         let installed = installed(root);
         std::thread::spawn(move || {
+            *self.baseos.lock().unwrap() = newer_baseos();
             let found = newest();
             if let Ok((version, _, notes)) = &found {
                 *self.notes.lock().unwrap() = Notes {
@@ -268,6 +292,46 @@ fn newest() -> Result<(String, String, Notes), &'static str> {
         .map_err(|_| "GitHub can't be reached")?;
     let (version, url) = release_zip(&body).ok_or("The newest release has no slot. x GRAVY zip")?;
     Ok((version, url, release_notes(&body)))
+}
+
+/// A BaseOS release newer than the one running, or None when it can't be told.
+fn newer_baseos() -> Option<BaseOs> {
+    let installed = std::env::var("BASEOS_VERSION")
+        .ok()
+        .or_else(|| baseos_version(&fs::read_to_string(BASEOS_RELEASE).ok()?))?;
+    let body = agent()
+        .get(BASEOS_LATEST)
+        .header("Accept", "application/vnd.github+json")
+        .config()
+        .timeout_global(Some(Duration::from_secs(20)))
+        .build()
+        .call()
+        .ok()?
+        .body_mut()
+        .with_config()
+        .limit(1 << 20)
+        .read_to_string()
+        .ok()?;
+    baseos_offer(&body, &installed)
+}
+
+fn baseos_version(release: &str) -> Option<String> {
+    release.lines().find_map(|line| {
+        let (k, v) = line.trim().split_once('=')?;
+        (k == "BASEOS_VERSION").then(|| v.trim_matches('"').to_string())
+    })
+}
+
+fn baseos_offer(json: &str, installed: &str) -> Option<BaseOs> {
+    let version = string(json, "tag_name")?.trim_start_matches('v').to_string();
+    if !newer(&version, installed) || installed.is_empty() {
+        return None;
+    }
+    Some(BaseOs {
+        installed: installed.to_string(),
+        version,
+        link: string(json, "html_url")?,
+    })
 }
 
 /// The release's Markdown body and its page, from the tag it was made on.
@@ -460,6 +524,20 @@ fn unpack(zip: &Path, root: &Path) -> Result<String, &'static str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_newer_baseos_is_only_told() {
+        let json = r#"{"html_url":"https://github.com/pvaibhav/BaseOS/releases/tag/v1.6.0","tag_name":"v1.6.0"}"#;
+        let b = baseos_offer(json, "1.5.2").unwrap();
+        assert_eq!((b.version.as_str(), b.installed.as_str()), ("1.6.0", "1.5.2"));
+        assert!(b.link.ends_with("/v1.6.0"));
+        assert!(baseos_offer(json, "1.6.0").is_none());
+        assert!(baseos_offer(json, "").is_none());
+        assert_eq!(
+            baseos_version("BASEOS_TARGET=rg35xxplus\nBASEOS_VERSION=\"1.5.2\"\n").as_deref(),
+            Some("1.5.2")
+        );
+    }
 
     #[test]
     fn only_a_newer_release_is_offered() {

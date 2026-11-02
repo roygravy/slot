@@ -330,7 +330,7 @@ function updated() {
   $("update").innerHTML = `<h2>${esc(title.trim())}</h2><p>${esc(note || "")}</p>` +
     (u.state == "downloading" ? `<div class="bar"><i style="width:${p}%"></i></div>` : "") +
     (button ? `<button id="go" data-state="${u.state}">${button}</button>` : "") +
-    notes(u);
+    notes(u) + baseos(u);
   const go = $("go");
   if (go) go.onclick = async () => {
     try {
@@ -344,6 +344,13 @@ function updated() {
     } catch (err) { if (err.message) say(err.message); }
     checkUpdate();
   };
+}
+// A newer BaseOS is only told: it is installed the BaseOS way, not from here.
+function baseos(u) {
+  const b = u.baseos;
+  if (!b) return "";
+  return `<div class="notes"><h3>BaseOS ${esc(b.version)} is out</h3><p>Your console runs BaseOS ${esc(b.installed)}. BaseOS is updated on its own, not from here.</p></div>` +
+    `<div><a class="gh" href="${esc(b.link)}" target="_blank" rel="noopener">BaseOS on GitHub</a></div>`;
 }
 // Each visit looks on GitHub once by itself, so a newer release shows as a dot on the Update tab
 // and a line above the tabs, without opening the tab first.
