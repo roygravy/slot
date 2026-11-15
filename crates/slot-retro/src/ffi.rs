@@ -14,6 +14,7 @@ pub const SET_VARIABLES: c_uint = 16;
 pub const GET_VARIABLE_UPDATE: c_uint = 17;
 pub const GET_RUMBLE_INTERFACE: c_uint = 23;
 pub const GET_LOG_INTERFACE: c_uint = 27;
+pub const SET_MEMORY_MAPS: c_uint = 36 | 0x10000;
 pub const GET_SAVE_DIRECTORY: c_uint = 31;
 pub const GET_AUDIO_VIDEO_ENABLE: c_uint = 47 | 0x10000;
 pub const SET_AUDIO_BUFFER_STATUS_CALLBACK: c_uint = 62;
@@ -188,3 +189,47 @@ impl Api {
         })
     }
 }
+
+/// `retro_memory_descriptor`, as the core lays it out.
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct MemoryDescriptor {
+    pub flags: u64,
+    pub ptr: *mut c_void,
+    pub offset: usize,
+    pub start: usize,
+    pub select: usize,
+    pub disconnect: usize,
+    pub len: usize,
+    pub addrspace: *const c_char,
+}
+
+/// `retro_memory_map`.
+#[repr(C)]
+pub struct MemoryMap {
+    pub descriptors: *const MemoryDescriptor,
+    pub num_descriptors: c_uint,
+}
+
+/// Our own copy of a core's memory map, so it outlives the core's call.
+pub struct MapCopy {
+    pub map: MemoryMap,
+    _descs: Vec<MemoryDescriptor>,
+}
+
+impl MapCopy {
+    pub unsafe fn copy(src: *const MemoryMap) -> Option<Box<MapCopy>> {
+        if src.is_null() {
+            return None;
+        }
+        let n = (*src).num_descriptors as usize;
+        let descs = if n == 0 || (*src).descriptors.is_null() {
+            Vec::new()
+        } else {
+            std::slice::from_raw_parts((*src).descriptors, n).to_vec()
+        };
+        let map = MemoryMap { descriptors: descs.as_ptr(), num_descriptors: n as c_uint };
+        Some(Box::new(MapCopy { map, _descs: descs }))
+    }
+}
+unsafe impl Send for MapCopy {}

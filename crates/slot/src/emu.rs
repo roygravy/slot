@@ -24,6 +24,8 @@ pub const FAST_STEPS: u32 = 6;
 
 pub const FAST_STEPS_MAX: u32 = 6;
 
+/// How often the game speed goes to the log while playing at normal speed.
+const SPEED_LOG_SECS: f64 = 60.0;
 const FAST_TARGET: Duration = Duration::from_micros(14_000);
 
 const COST_BLEND: u32 = 4;
@@ -647,11 +649,16 @@ impl Worker {
         ring.clear_faults();
         ring.set_playing(true);
         let _playing = Playing(&ring);
+        // A new game starts without the last game's cheats: its own come after Ready.
+        #[cfg(feature = "retroachievements")]
+        crate::ra::CHEATS.store(false, Ordering::Relaxed);
         self.shared
             .state
             .store(CoreState::Ready as u8, Ordering::Release);
         eprintln!("slot: emu: ready at {:.1} ms", crate::boot_time::ms());
 
+        #[cfg(feature = "retroachievements")]
+        let mut ra = crate::ra::Runner::start(core.as_ref(), &rom);
         let mut out = Vec::new();
         let mut gated = (false, false);
         let rewind = RewindThread::spawn(REWIND_BYTES);
@@ -662,6 +669,8 @@ impl Worker {
         let mut deadline = Instant::now();
         let mut served = 0u64;
         let mut ticked = false;
+        // Screen frames that went by while the core was still busy with the last one.
+        let mut behind = 0u64;
         let mut paced = 0u64;
         let mut scale = 0.0f64;
         let mut rate = TickRate::new(Instant::now(), 0);
@@ -675,6 +684,10 @@ impl Worker {
         let mut cable_core = Duration::ZERO;
         let mut cable_wait = Duration::ZERO;
         let mut ff = (0u32, 0u32, Duration::ZERO, Instant::now());
+        // Game speed at normal play: frames, core time, slowest frame, since.
+        let mut pace = (0u32, Duration::ZERO, Duration::ZERO, Instant::now());
+        // RetroAchievements' share of the core time, total and slowest, for the speed line.
+        let mut ra_cost = (Duration::ZERO, Duration::ZERO);
         // Quarter frames still owed at 1.5×: 1, 2, 1, 2...
         let mut owed = 0u32;
         while !self.shared.stop.load(Ordering::Relaxed) {
@@ -780,6 +793,16 @@ impl Worker {
                 if speed == Speed::Fast {
                     span = cost.span(one, ceiling);
                 }
+                // A core that missed a screen frame (a GBA frame in mGBA takes 12-15 ms of the
+                // 16.7) catches up with one more, the first not drawn: the game and its sound
+                // keep their speed instead of slowing down and crackling (Roy).
+                // Always both: the cost guess follows every slow frame at once, and so it often
+                // stopped after the first, the missed frame never made up (Roy's log: 45-50 fps).
+                let catch_up = lock && speed == Speed::Normal && behind > 0;
+                if catch_up {
+                    span = 2;
+                }
+                behind = 0;
                 let ceiling = ceiling * span;
                 let budget = one + PRESENT * (span - 1);
                 let began = Instant::now();
@@ -787,7 +810,7 @@ impl Worker {
                 let (mut skipped, mut drawn) = (None::<Duration>, Duration::ZERO);
                 loop {
                     ran += 1;
-                    let last = ran >= ceiling || cost.last(began.elapsed(), budget);
+                    let last = ran >= ceiling || (!catch_up && cost.last(began.elapsed(), budget));
                     let input = match (
                         self.shared.native_xy.load(Ordering::Relaxed),
                         self.shared.turbo.load(Ordering::Relaxed),
@@ -839,6 +862,16 @@ impl Worker {
                         }
                         None => core.run_frame(input),
                     }
+                    #[cfg(feature = "retroachievements")]
+                    if let Some(ra) = ra.as_mut() {
+                        let at = Instant::now();
+                        ra.frame(!crate::ra::CHEATS.load(Ordering::Relaxed));
+                        let spent = at.elapsed();
+                        if spent > Duration::from_millis(200) {
+                            eprintln!("slot: ra: one frame took {:.1} ms", spent.as_secs_f64() * 1000.0);
+                        }
+                        ra_cost = (ra_cost.0 + spent, ra_cost.1.max(spent));
+                    }
                     let took = frame_began.elapsed();
                     if last {
                         drawn = took;
@@ -873,6 +906,25 @@ impl Worker {
                     }
                 }
                 fast_span = Some((began, core_time));
+                if speed == Speed::Normal && cable.is_none() {
+                    pace = (pace.0 + ran, pace.1 + core_time, pace.2.max(core_time), pace.3);
+                    let secs = pace.3.elapsed().as_secs_f64();
+                    if secs >= SPEED_LOG_SECS {
+                        eprintln!(
+                            "slot: speed: {:.2} fps of {:.2}, core {:.1} ms a frame, slowest {:.1} ms (achievements {:.1} ms a frame, slowest {:.1} ms)",
+                            f64::from(pace.0) / secs,
+                            av.fps,
+                            pace.1.as_secs_f64() * 1000.0 / f64::from(pace.0.max(1)),
+                            pace.2.as_secs_f64() * 1000.0,
+                            ra_cost.0.as_secs_f64() * 1000.0 / f64::from(pace.0.max(1)),
+                            ra_cost.1.as_secs_f64() * 1000.0,
+                        );
+                        ra_cost = (Duration::ZERO, Duration::ZERO);
+                        pace = (0, Duration::ZERO, Duration::ZERO, Instant::now());
+                    }
+                } else {
+                    pace = (0, Duration::ZERO, Duration::ZERO, Instant::now());
+                }
                 if speed != Speed::Fast {
                     ff = (0, 0, Duration::ZERO, Instant::now());
                 } else if crate::session::trace() {
@@ -949,6 +1001,7 @@ impl Worker {
                 loop {
                     match self.next_tick(served, until) {
                         Wait::Tick(tick) => {
+                            behind = tick.saturating_sub(served + 1);
                             served = tick;
                             stalled = false;
                             if let Some(measured) = rate.served(Instant::now(), tick) {
@@ -1071,6 +1124,8 @@ impl Worker {
                 core.set_option(&key, &value);
             }
             Cmd::SetCheats(codes) => {
+                #[cfg(feature = "retroachievements")]
+                crate::ra::CHEATS.store(!codes.is_empty(), Ordering::Relaxed);
                 core.set_cheats(&codes);
             }
             Cmd::Reset => core.reset(),

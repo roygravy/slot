@@ -6,6 +6,7 @@ macro_rules! eprintln {
 }
 
 mod bezel;
+mod displaycal;
 mod draw;
 mod fbdev;
 mod fbo;
@@ -27,10 +28,14 @@ mod shaders;
 mod surface;
 
 pub use bezel::{framed, lifted_rect, screen_rect};
+pub use displaycal::{Calibration, SATURATION_DEFAULT, SATURATION_RANGE};
 pub use draw::{Draw, TexId};
+pub mod calibration {
+    pub use crate::displaycal::{apply, load, release};
+}
 pub use fbdev::{egl_error, panel_mode, panel_size, FbdevSurface};
 pub use fbo::{canvas_size, Compositor, BACKDROP};
-pub use grade::{blue_light_gain, BLUE_LIGHT_MAX};
+pub use grade::{blue_light_gain, dim_gain, BLUE_LIGHT_MAX};
 #[cfg(any(target_os = "macos", all(target_os = "linux", not(feature = "device"))))]
 pub use headless::HeadlessSurface;
 #[cfg(feature = "host")]

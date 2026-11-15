@@ -2,13 +2,15 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 
 use slot_store::Cart;
-use slot_ui::{board_face, cart_face, cart_interior, gb_shell_of, padded, CartFace, TURN_PAD};
+use slot_ui::{board_face, cart_interior, gb_shell_of, padded, shrunk, CartFace, LID_REST_SCALE, TURN_PAD};
 
 pub struct BuiltFaces {
     pub stem: String,
     pub interior: CartFace,
     pub board: CartFace,
     pub lid: CartFace,
+    /// The lid at the size it is held up at (xe2).
+    pub lid_small: CartFace,
 }
 
 pub struct FaceBuilder {
@@ -17,7 +19,7 @@ pub struct FaceBuilder {
 }
 
 impl FaceBuilder {
-    pub fn spawn() -> Self {
+    pub fn spawn(root: std::path::PathBuf) -> Self {
         let (requests, inbox) = mpsc::channel::<Cart>();
         let (outbox, built) = mpsc::channel();
         let spawned = thread::Builder::new()
@@ -27,6 +29,10 @@ impl FaceBuilder {
                     while let Ok(newer) = inbox.try_recv() {
                         cart = newer;
                     }
+                    // From the label cache, as on the shelf: no picture decoded again.
+                    let art = crate::label_cache::label_art(&root, &cart);
+                    let lid = padded(&crate::aging::face(&root, &cart, art), TURN_PAD);
+                    let small = |n: u32| ((n as f32 * LID_REST_SCALE).round() as u32).max(1);
                     let faces = BuiltFaces {
                         stem: cart.stem.clone(),
                         interior: if gb_shell_of(&cart).is_none() {
@@ -39,7 +45,8 @@ impl FaceBuilder {
                             }
                         },
                         board: board_face(&cart),
-                        lid: padded(&cart_face(&cart), TURN_PAD),
+                        lid_small: shrunk(&lid, small(lid.w), small(lid.h)),
+                        lid,
                     };
                     if outbox.send(faces).is_err() {
                         return;

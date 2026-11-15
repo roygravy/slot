@@ -8,6 +8,10 @@ use crate::theme::{self, Ink};
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum QuickRow {
+    /// RetroAchievements: the big button on top of the in-game menu (test build).
+    Achievements,
+    /// Game Settings' Gameplay tab: RetroAchievements on or off (main menu only).
+    RaToggle,
     FastForward,
     FastForwardSound,
     Screen,
@@ -15,6 +19,7 @@ pub enum QuickRow {
     CheatIcon,
     GbcBlackBorder,
     GbBlackBorder,
+    GbaBlackBorder,
     BlackBorder,
     GbcLight,
     ScreenLight,
@@ -37,7 +42,9 @@ pub enum QuickRow {
     Wallpaper,
     General,
     Recents,
+    Deck,
     ShowTitles,
+    DustWear,
     WallpaperTint,
     GbcShader,
     Resume,
@@ -67,6 +74,8 @@ pub enum QuickRow {
     ResumeGame,
     BootPicture,
     FavoriteMark,
+    FavoriteGold,
+    Vibration,
     Buttons,
     Sleep,
     Restart,
@@ -89,6 +98,7 @@ pub enum QuickRow {
     NesMask,
     NesAfterglow,
     SnesCable,
+    SnesColors,
     SnesScanlines,
     SnesMask,
     SnesAfterglow,
@@ -113,10 +123,35 @@ pub enum QuickRow {
     NetSecurity,
     NetAddress,
     NetForget,
+    GbSharp,
+    GbcSharp,
+    GbaSharp,
+    GbaShape,
+    SharpPixels,
+    /// In game: the GBA's Screen Shape row (other systems have none).
+    ScreenShape,
+    /// General: Screen Calibration, the panel's colours set by eye on the console itself.
+    ScreenColors,
+    /// Wi-Fi & Bluetooth's second tab: the radio, the headphones paired, and others nearby.
+    Bluetooth,
+    BtMineHeading,
+    BtMine0,
+    BtMine1,
+    BtMine2,
+    BtMine3,
+    BtOtherHeading,
+    BtOther0,
+    BtOther1,
+    BtOther2,
+    BtOther3,
+    BtOther4,
+    BtOther5,
 }
 
 impl QuickRow {
-    pub const ALL: [QuickRow; 105] = [
+    pub const ALL: [QuickRow; 133] = [
+        QuickRow::Achievements,
+        QuickRow::RaToggle,
         QuickRow::FastForward,
         QuickRow::FastForwardSound,
         QuickRow::Screen,
@@ -124,6 +159,7 @@ impl QuickRow {
         QuickRow::CheatIcon,
         QuickRow::GbcBlackBorder,
         QuickRow::GbBlackBorder,
+        QuickRow::GbaBlackBorder,
         QuickRow::BlackBorder,
         QuickRow::GbcLight,
         QuickRow::ScreenLight,
@@ -146,7 +182,9 @@ impl QuickRow {
         QuickRow::Wallpaper,
         QuickRow::General,
         QuickRow::Recents,
+        QuickRow::Deck,
         QuickRow::ShowTitles,
+        QuickRow::DustWear,
         QuickRow::WallpaperTint,
         QuickRow::GbcShader,
         QuickRow::Resume,
@@ -176,6 +214,8 @@ impl QuickRow {
         QuickRow::ResumeGame,
         QuickRow::BootPicture,
         QuickRow::FavoriteMark,
+        QuickRow::FavoriteGold,
+        QuickRow::Vibration,
         QuickRow::Buttons,
         QuickRow::Sleep,
         QuickRow::Restart,
@@ -198,6 +238,7 @@ impl QuickRow {
         QuickRow::NesMask,
         QuickRow::NesAfterglow,
         QuickRow::SnesCable,
+        QuickRow::SnesColors,
         QuickRow::SnesScanlines,
         QuickRow::SnesMask,
         QuickRow::SnesAfterglow,
@@ -222,6 +263,26 @@ impl QuickRow {
         QuickRow::NetSecurity,
         QuickRow::NetAddress,
         QuickRow::NetForget,
+        QuickRow::GbSharp,
+        QuickRow::GbcSharp,
+        QuickRow::GbaSharp,
+        QuickRow::GbaShape,
+        QuickRow::SharpPixels,
+        QuickRow::ScreenShape,
+        QuickRow::ScreenColors,
+        QuickRow::Bluetooth,
+        QuickRow::BtMineHeading,
+        QuickRow::BtMine0,
+        QuickRow::BtMine1,
+        QuickRow::BtMine2,
+        QuickRow::BtMine3,
+        QuickRow::BtOtherHeading,
+        QuickRow::BtOther0,
+        QuickRow::BtOther1,
+        QuickRow::BtOther2,
+        QuickRow::BtOther3,
+        QuickRow::BtOther4,
+        QuickRow::BtOther5,
     ];
 
     /// The power menu, held POWER.
@@ -239,12 +300,18 @@ impl QuickRow {
     ];
 
     /// General's first tab, Shelf: how the shelf looks.
-    pub const GENERAL: [QuickRow; 5] = [
+    pub const GENERAL: [QuickRow; 9] = [
         QuickRow::Wallpaper,
         QuickRow::Theme,
-        QuickRow::Recents,
+        // Right under Slot Color, then Vibration, then the shelves (Roy, 2026-11-13).
+        QuickRow::ScreenColors,
+        QuickRow::Vibration,
+        QuickRow::Deck,
         QuickRow::FavoriteMark,
+        QuickRow::FavoriteGold,
+        QuickRow::Recents,
         QuickRow::ShowTitles,
+        // Dust & Wear has no row: wear is a hidden easter egg, dust is gone (Roy, xg1 xg2).
     ];
 
     /// General's Clock tab.
@@ -264,13 +331,14 @@ impl QuickRow {
     ];
 
     /// The pages shown as tabs of one row, each with its tab's name.
-    pub const TAB_GROUPS: [&'static [(&'static [QuickRow], &'static str)]; 2] = [
+    pub const TAB_GROUPS: [&'static [(&'static [QuickRow], &'static str)]; 3] = [
         &[(&QuickRow::SCREEN, "Screen"), (&QuickRow::GAME, "Gameplay")],
         &[
             (&QuickRow::GENERAL, "Shelf"),
             (&QuickRow::CLOCK, "Clock"),
             (&QuickRow::SLEEP, "Power"),
         ],
+        &[(&QuickRow::NETWORK, "Wi-Fi"), (&QuickRow::BLUETOOTH, "Bluetooth")],
     ];
 
     /// Home Wi-Fi, the network joined, the networks nearby under it as on a phone, Other... to
@@ -291,6 +359,48 @@ impl QuickRow {
         QuickRow::SavedNetworks,
         QuickRow::Wps,
     ];
+
+    /// Bluetooth: the switch, the headphones paired before, then others nearby.
+    pub const BLUETOOTH: [QuickRow; 13] = [
+        QuickRow::Bluetooth,
+        QuickRow::BtMineHeading,
+        QuickRow::BtMine0,
+        QuickRow::BtMine1,
+        QuickRow::BtMine2,
+        QuickRow::BtMine3,
+        QuickRow::BtOtherHeading,
+        QuickRow::BtOther0,
+        QuickRow::BtOther1,
+        QuickRow::BtOther2,
+        QuickRow::BtOther3,
+        QuickRow::BtOther4,
+        QuickRow::BtOther5,
+    ];
+
+    pub const BT_MINE: [QuickRow; 4] = [
+        QuickRow::BtMine0,
+        QuickRow::BtMine1,
+        QuickRow::BtMine2,
+        QuickRow::BtMine3,
+    ];
+
+    pub const BT_OTHER: [QuickRow; 6] = [
+        QuickRow::BtOther0,
+        QuickRow::BtOther1,
+        QuickRow::BtOther2,
+        QuickRow::BtOther3,
+        QuickRow::BtOther4,
+        QuickRow::BtOther5,
+    ];
+
+    /// Which paired device, or which device nearby, this row stands for.
+    pub fn bt_mine(self) -> Option<usize> {
+        QuickRow::BT_MINE.iter().position(|r| *r == self)
+    }
+
+    pub fn bt_other(self) -> Option<usize> {
+        QuickRow::BT_OTHER.iter().position(|r| *r == self)
+    }
 
     /// The rows that stand for the networks heard nearby, in the order they were heard.
     pub const NEARBY: [QuickRow; 8] = [
@@ -320,7 +430,10 @@ impl QuickRow {
 
     /// A line of the page that only names what is under it: the cursor passes it by.
     pub fn heading(self) -> bool {
-        self == QuickRow::NearbyHeading
+        matches!(
+            self,
+            QuickRow::NearbyHeading | QuickRow::BtMineHeading | QuickRow::BtOtherHeading
+        )
     }
 
     /// Every screen setting belongs to one system: nothing here reaches across all three.
@@ -340,36 +453,42 @@ impl QuickRow {
         QuickRow::NesAfterglow,
     ];
 
-    pub const SCREEN_SNES: [QuickRow; 4] = [
+    pub const SCREEN_SNES: [QuickRow; 5] = [
         QuickRow::SnesCable,
+        QuickRow::SnesColors,
         QuickRow::SnesScanlines,
         QuickRow::SnesMask,
         QuickRow::SnesAfterglow,
     ];
 
-    pub const SCREEN_GBA: [QuickRow; 3] = [
+    pub const SCREEN_GBA: [QuickRow; 6] = [
         QuickRow::GbaShader,
         QuickRow::GbaTransparency,
         QuickRow::GbaGhosting,
+        QuickRow::GbaSharp,
+        QuickRow::GbaShape,
+        QuickRow::GbaBlackBorder,
     ];
 
-    pub const SCREEN_GBC: [QuickRow; 5] = [
+    pub const SCREEN_GBC: [QuickRow; 6] = [
         QuickRow::GbcShader,
         QuickRow::GbcLight,
         QuickRow::GbcTransparency,
         QuickRow::GbcGhosting,
+        QuickRow::GbcSharp,
         QuickRow::GbcBlackBorder,
     ];
 
-    pub const SCREEN_GB: [QuickRow; 5] = [
+    pub const SCREEN_GB: [QuickRow; 6] = [
         QuickRow::GbShader,
         QuickRow::GbPalettes,
         QuickRow::GbTransparency,
         QuickRow::GbGhosting,
+        QuickRow::GbSharp,
         QuickRow::GbBlackBorder,
     ];
 
-    pub const GAME: [QuickRow; 8] = [
+    pub const GAME: [QuickRow; 9] = [
         QuickRow::FastForward,
         QuickRow::FastForwardSound,
         QuickRow::Rewind,
@@ -378,9 +497,11 @@ impl QuickRow {
         QuickRow::InGameMenu,
         QuickRow::EjectSave,
         QuickRow::CheatIcon,
+        QuickRow::RaToggle,
     ];
 
-    pub const PLAY: [QuickRow; 6] = [
+    pub const PLAY: [QuickRow; 7] = [
+        QuickRow::Achievements,
         QuickRow::Resume,
         QuickRow::States,
         QuickRow::GameScreenshots,
@@ -394,13 +515,15 @@ impl QuickRow {
     /// The in-game Screen page: the playing system's own settings, through rows that stand
     /// for whichever system is in the slot.
     /// The TV consoles' rows come after the handhelds' and only one set is shown.
-    pub const PLAY_SCREEN: [QuickRow; 12] = [
+    pub const PLAY_SCREEN: [QuickRow; 14] = [
         QuickRow::SgbBorder,
         QuickRow::Shader,
         QuickRow::ScreenLight,
         QuickRow::Palette,
         QuickRow::PixelTransparency,
         QuickRow::LcdGhosting,
+        QuickRow::SharpPixels,
+        QuickRow::ScreenShape,
         QuickRow::BlackBorder,
         QuickRow::Cable,
         QuickRow::Colors,
@@ -426,22 +549,28 @@ impl QuickRow {
             | QuickRow::NesMask
             | QuickRow::NesAfterglow => &QuickRow::SCREEN_NES,
             QuickRow::SnesCable
+            | QuickRow::SnesColors
             | QuickRow::SnesScanlines
             | QuickRow::SnesMask
             | QuickRow::SnesAfterglow => &QuickRow::SCREEN_SNES,
             QuickRow::GbaShader
             | QuickRow::GbaTransparency
             | QuickRow::GbaGhosting
+            | QuickRow::GbaSharp
+            | QuickRow::GbaShape
+            | QuickRow::GbaBlackBorder
             | QuickRow::GbaBezel => &QuickRow::SCREEN_GBA,
             QuickRow::GbcShader
             | QuickRow::GbcTransparency
             | QuickRow::GbcGhosting
+            | QuickRow::GbcSharp
             | QuickRow::GbcBlackBorder
             | QuickRow::GbcLight
             | QuickRow::GbcBezel => &QuickRow::SCREEN_GBC,
             QuickRow::GbShader
             | QuickRow::GbTransparency
             | QuickRow::GbGhosting
+            | QuickRow::GbSharp
             | QuickRow::GbPalettes
             | QuickRow::GbBlackBorder
             | QuickRow::GbBezel => &QuickRow::SCREEN_GB,
@@ -451,15 +580,21 @@ impl QuickRow {
             | QuickRow::Turbo
             | QuickRow::Rumble
             | QuickRow::CheatIcon
+            | QuickRow::RaToggle
             | QuickRow::InGameMenu
             | QuickRow::EjectSave => &QuickRow::GAME,
             QuickRow::Wallpaper
             | QuickRow::WallpaperTint
             | QuickRow::Theme
             | QuickRow::Recents
+            | QuickRow::Deck
             | QuickRow::FavoriteMark
+            | QuickRow::FavoriteGold
             | QuickRow::ShowTitles
-            | QuickRow::BootPicture => &QuickRow::GENERAL,
+            | QuickRow::Vibration
+            | QuickRow::DustWear
+            | QuickRow::BootPicture
+            | QuickRow::ScreenColors => &QuickRow::GENERAL,
             QuickRow::DateTime | QuickRow::AutoTime | QuickRow::TimeZone | QuickRow::Clock24 => {
                 &QuickRow::CLOCK
             }
@@ -482,6 +617,20 @@ impl QuickRow {
             | QuickRow::Nearby5
             | QuickRow::Nearby6
             | QuickRow::Nearby7 => &QuickRow::NETWORK,
+            QuickRow::Bluetooth
+            | QuickRow::BtMineHeading
+            | QuickRow::BtMine0
+            | QuickRow::BtMine1
+            | QuickRow::BtMine2
+            | QuickRow::BtMine3
+            | QuickRow::BtOtherHeading
+            | QuickRow::BtOther0
+            | QuickRow::BtOther1
+            | QuickRow::BtOther2
+            | QuickRow::BtOther3
+            | QuickRow::BtOther4
+            | QuickRow::BtOther5
+                => &QuickRow::BLUETOOTH,
             QuickRow::NetStatus
             | QuickRow::NetSignal
             | QuickRow::NetSecurity
@@ -490,6 +639,7 @@ impl QuickRow {
             QuickRow::Resume
             | QuickRow::States
             | QuickRow::Cheats
+            | QuickRow::Achievements
             | QuickRow::GameScreenshots
             | QuickRow::Settings
             | QuickRow::ExitGame => &QuickRow::PLAY,
@@ -499,6 +649,7 @@ impl QuickRow {
             | QuickRow::ScreenLight
             | QuickRow::PixelTransparency
             | QuickRow::LcdGhosting
+            | QuickRow::SharpPixels
             | QuickRow::Palette
             | QuickRow::BlackBorder
             | QuickRow::Bezel
@@ -507,6 +658,7 @@ impl QuickRow {
             | QuickRow::Scanlines
             | QuickRow::Mask
             | QuickRow::Afterglow
+            | QuickRow::ScreenShape
             | QuickRow::SgbBorder => &QuickRow::PLAY_SCREEN,
             _ => &QuickRow::MAIN,
         }
@@ -523,13 +675,13 @@ impl QuickRow {
             // Gameplay is Game Settings' second tab.
             QuickRow::FastForward => Some(QuickRow::Screen),
             QuickRow::Wallpaper => Some(QuickRow::General),
-            QuickRow::HomeWifi => Some(QuickRow::Network),
+            QuickRow::HomeWifi | QuickRow::Bluetooth => Some(QuickRow::Network),
             QuickRow::NetStatus => Some(QuickRow::ConnectedTo),
             QuickRow::AutoSleep => Some(QuickRow::General),
             QuickRow::AutoTime => Some(QuickRow::General),
             QuickRow::RememberPosition => Some(QuickRow::General),
             QuickRow::PlayScreen => Some(QuickRow::Settings),
-            QuickRow::Shader => Some(QuickRow::PlayScreen),
+            QuickRow::SgbBorder | QuickRow::Shader => Some(QuickRow::PlayScreen),
             _ => None,
         }
     }
@@ -615,9 +767,14 @@ impl QuickRow {
             QuickRow::FastForward => "Fast Forward",
             QuickRow::FastForwardSound => "Fast Forward Sound",
             QuickRow::Screen => "Game Settings",
+            QuickRow::ScreenColors => "Screen Calibration",
             QuickRow::Rumble => "Rumble",
             QuickRow::CheatIcon => "Cheat Icon",
-            QuickRow::GbcBlackBorder | QuickRow::GbBlackBorder | QuickRow::BlackBorder => {
+            QuickRow::RaToggle => "RetroAchievements",
+            QuickRow::GbcBlackBorder
+            | QuickRow::GbBlackBorder
+            | QuickRow::GbaBlackBorder
+            | QuickRow::BlackBorder => {
                 "Black Border"
             }
             QuickRow::GbcLight | QuickRow::ScreenLight => "Screen Light",
@@ -639,11 +796,15 @@ impl QuickRow {
             QuickRow::Wallpaper => "Theme",
             QuickRow::General => "General",
             QuickRow::Recents => "Recents",
+            QuickRow::Deck => "Deck",
             QuickRow::FavoriteMark => "Favorites",
+            QuickRow::FavoriteGold => "Gold Slots",
             QuickRow::ShowTitles => "Game Titles",
+            QuickRow::DustWear => "Dust & Wear",
             QuickRow::WallpaperTint => "Theme Tint",
             QuickRow::AutoSleep => "Light Sleep",
             QuickRow::DeepSleep => "Deep Sleep",
+            QuickRow::Vibration => "Vibration",
             QuickRow::PixelTransparency
             | QuickRow::GbTransparency
             | QuickRow::GbcTransparency
@@ -652,6 +813,11 @@ impl QuickRow {
             | QuickRow::GbGhosting
             | QuickRow::GbcGhosting
             | QuickRow::GbaGhosting => "Ghosting",
+            QuickRow::SharpPixels
+            | QuickRow::GbSharp
+            | QuickRow::GbcSharp
+            | QuickRow::GbaSharp => "Sharp Pixels",
+            QuickRow::GbaShape | QuickRow::ScreenShape => "Screen Size",
             QuickRow::InGameMenu => "In-Game Menu",
             QuickRow::RememberPosition => "Remember Shelf Position",
             QuickRow::ResumeGame => "Resume Game",
@@ -659,6 +825,7 @@ impl QuickRow {
             QuickRow::Resume => "Resume",
             QuickRow::States => "States",
             QuickRow::Cheats => "Cheats",
+            QuickRow::Achievements => "Achievements",
             QuickRow::Settings => "Settings",
             QuickRow::ExitGame => "Exit Game",
             QuickRow::PlayScreen => "Screen",
@@ -675,7 +842,21 @@ impl QuickRow {
             QuickRow::Restart => "Restart",
             QuickRow::PowerOff => "Power Off",
             QuickRow::HomeWifi => "Wi-Fi",
-            QuickRow::Network => "Network",
+            QuickRow::Network => "Wi-Fi & Bluetooth",
+            QuickRow::Bluetooth => "Bluetooth",
+            QuickRow::BtMineHeading => "My Devices",
+            QuickRow::BtOtherHeading => "Other Devices",
+            // Each device row carries the device's own name instead.
+            QuickRow::BtMine0
+            | QuickRow::BtMine1
+            | QuickRow::BtMine2
+            | QuickRow::BtMine3
+            | QuickRow::BtOther0
+            | QuickRow::BtOther1
+            | QuickRow::BtOther2
+            | QuickRow::BtOther3
+            | QuickRow::BtOther4
+            | QuickRow::BtOther5 => "",
             // Shown as the network's own name; this stands in where a name is wanted.
             QuickRow::ConnectedTo => "Connected To",
             QuickRow::AddNetwork => "Other Networks",
@@ -701,7 +882,7 @@ impl QuickRow {
             QuickRow::ScreenNes => "NES",
             QuickRow::ScreenSnes => "Super Nintendo",
             QuickRow::NesCable | QuickRow::SnesCable | QuickRow::Cable => "Cable",
-            QuickRow::NesColors | QuickRow::Colors => "Colors",
+            QuickRow::NesColors | QuickRow::SnesColors | QuickRow::Colors => "Colors",
             QuickRow::NesScanlines | QuickRow::SnesScanlines | QuickRow::Scanlines => "Scanlines",
             QuickRow::NesMask | QuickRow::SnesMask | QuickRow::Mask => "Mask",
             QuickRow::NesAfterglow | QuickRow::SnesAfterglow | QuickRow::Afterglow => "Afterglow",
@@ -714,6 +895,7 @@ impl QuickRow {
         Some(match self {
             QuickRow::General => "Theme, slot color, shelves and sleep.",
             QuickRow::Screen => "How games look and play.",
+            QuickRow::ScreenColors => "This screen's colors, set by eye.",
             QuickRow::Game => "Speed, rewind, turbo and saving.",
             QuickRow::Buttons => "Every button and shortcut, explained.",
             QuickRow::About => "Who made this, and what it runs on.",
@@ -722,7 +904,9 @@ impl QuickRow {
             QuickRow::NesCable | QuickRow::SnesCable | QuickRow::Cable => {
                 "The cable to the TV. SELECT + B turns effects off."
             }
-            QuickRow::NesColors | QuickRow::Colors => "The colors a TV made of the NES's picture.",
+            QuickRow::NesColors | QuickRow::SnesColors | QuickRow::Colors => {
+                "The colors a TV made of the picture."
+            }
             QuickRow::SgbBorder => {
                 "The Super Game Boy frame. Auto: the game's own."
             }
@@ -757,13 +941,24 @@ impl QuickRow {
             | QuickRow::GbGhosting
             | QuickRow::GbcGhosting
             | QuickRow::GbaGhosting => "Moving pixels fade out slowly, like an old LCD.",
+            QuickRow::SharpPixels
+            | QuickRow::GbSharp
+            | QuickRow::GbcSharp
+            | QuickRow::GbaSharp => "Every pixel the same size at any screen size.",
+            QuickRow::GbaShape | QuickRow::ScreenShape => {
+                "4:3 fills the screen, 3:2 is the GBA's own. SELECT + L2/R2."
+            }
             QuickRow::FastForward => "How fast the game runs while you hold R2.",
             QuickRow::FastForwardSound => "Hear the game while it fast-forwards.",
             QuickRow::Rewind => "Hold L2 in a game to go back in time.",
             QuickRow::Turbo => "Hold X for rapid A, hold Y for rapid B.",
             QuickRow::Rumble => "Let games that support it shake the device.",
             QuickRow::CheatIcon => "Show a masked robber while any cheat is on.",
-            QuickRow::GbcBlackBorder | QuickRow::GbBlackBorder | QuickRow::BlackBorder => {
+            QuickRow::RaToggle => "Log in via GRAVY Manager to earn achievements.",
+            QuickRow::GbcBlackBorder
+            | QuickRow::GbBlackBorder
+            | QuickRow::GbaBlackBorder
+            | QuickRow::BlackBorder => {
                 "Black around the picture instead of the glass."
             }
             QuickRow::GbcLight | QuickRow::ScreenLight => {
@@ -773,9 +968,12 @@ impl QuickRow {
             QuickRow::EjectSave => "Save your place when you eject a cart.",
             QuickRow::Wallpaper => "Dark, Light, or your own from the Wallpapers folder.",
             QuickRow::Theme => "Dark, light or each console's own color.",
-            QuickRow::Recents => "A shelf with the last 10 games you played.",
+            QuickRow::Recents => "The last 10 games you played. X takes one off.",
+            QuickRow::Deck => "Games laid out to play next. B lays one on or off.",
             QuickRow::FavoriteMark => "How favorites stand out. Press Y on a cart to mark it.",
-            QuickRow::ShowTitles => "Show the selected game's name under the shelf.",
+            QuickRow::FavoriteGold => "The Favorites shelf gets its own golden slots.",
+            QuickRow::ShowTitles => "The game's name under the shelf, always or fading.",
+            QuickRow::DustWear => "Carts gather dust and wear as you play.",
             QuickRow::DateTime => "Set the date and time yourself.",
             QuickRow::AutoTime => "Set by the internet over Home Wi-Fi.",
             QuickRow::TimeZone => "Your city, for summer time. A shows them all.",
@@ -799,15 +997,27 @@ impl QuickRow {
             QuickRow::NetForget => "Its password is removed from the card.",
             QuickRow::Wps => "Join by pressing the WPS button on your router.",
             QuickRow::RomManager => "Games, screenshots and more from a web browser.",
-            QuickRow::Network => "Home Wi-Fi and the network you are on.",
+            QuickRow::Network => "Home Wi-Fi, and headphones over Bluetooth.",
+            QuickRow::Bluetooth => "Play the sound on wireless headphones.",
+            QuickRow::BtMine0 | QuickRow::BtMine1 | QuickRow::BtMine2 | QuickRow::BtMine3 => {
+                "Headphones paired before. A connects, X forgets."
+            }
+            QuickRow::BtOther0
+            | QuickRow::BtOther1
+            | QuickRow::BtOther2
+            | QuickRow::BtOther3
+            | QuickRow::BtOther4
+            | QuickRow::BtOther5 => "Put your headphones in pairing mode, then A.",
+            QuickRow::BtMineHeading | QuickRow::BtOtherHeading => return None,
             QuickRow::ConnectedTo => "The network you are on. A shows its details.",
             QuickRow::AutoSleep => {
-                "Screen off after this long idle. Wi-Fi stays on."
+                "Screen off after this long idle. Any button wakes it."
             }
             QuickRow::DeepSleep => {
                 "Deep Sleep after this long. Saves the most battery."
             }
             QuickRow::RememberPosition => "Start where you left off on the shelf.",
+            QuickRow::Vibration => "A buzz when charging, on warnings and achievements.",
             QuickRow::ResumeGame => {
                 "Power on straight back into your game."
             }
@@ -815,6 +1025,7 @@ impl QuickRow {
             QuickRow::Resume => "Back to the game, right where you paused.",
             QuickRow::States => "Save, load and flick through save states.",
             QuickRow::Cheats => "Turn this game's cheats on and off.",
+            QuickRow::Achievements => "Your RetroAchievements for this game.",
             QuickRow::Settings => "Screen and gameplay settings, while you play.",
             QuickRow::ExitGame => "Save and put the cart back on the shelf.",
             QuickRow::PlayScreen => "How the game picture looks.",
@@ -857,12 +1068,14 @@ impl QuickRow {
                 | QuickRow::About
                 | QuickRow::Screenshots
                 | QuickRow::Screen
+                | QuickRow::ScreenColors
                 | QuickRow::Game
                 | QuickRow::General
                 | QuickRow::Network
                 | QuickRow::Resume
                 | QuickRow::States
                 | QuickRow::Cheats
+                | QuickRow::Achievements
                 | QuickRow::GameScreenshots
                 | QuickRow::Settings
                 | QuickRow::ExitGame
@@ -929,10 +1142,8 @@ pub enum QuickValue {
     Sleep30s,
     Sleep1m,
     Sleep5m,
-    SleepNow,
     Sleep10m,
     Sleep30m,
-    GoldGlow,
     WhiteGlow,
     StarMark,
     Authentic,
@@ -946,7 +1157,7 @@ pub enum QuickValue {
     Sony,
     BorderAuto,
     BorderGravy,
-    /// No border: a word on the row, not a switch, since the row goes round its borders.
+    /// "Off" as a word on the row, not a switch: for rows that go round more than on and off.
     BorderOff,
     Border1,
     Border2,
@@ -968,10 +1179,23 @@ pub enum QuickValue {
     Bright,
     Soft,
     Dim,
+    /// The GBA picture's shape: filling the 4:3 screen, or the GBA's own 3:2.
+    Ratio4x3,
+    Ratio3x2,
+    /// Game titles: always under the shelf, or fading in and out with each pick.
+    Always,
+    Fade,
+    /// The Recents shelf: off, in colour, or as a memory (black and white, a dark hazy edge).
+    OffChoice,
+    RecentsColor,
+    Memory,
+    /// The Deck: in its spotlight, or plain.
+    Spotlight,
+    NoSpotlight,
 }
 
 impl QuickValue {
-    pub const ALL: [QuickValue; 60] = [
+    pub const ALL: [QuickValue; 67] = [
         QuickValue::Speed1_5,
         QuickValue::Speed2,
         QuickValue::Speed3,
@@ -996,10 +1220,8 @@ impl QuickValue {
         QuickValue::Sleep30s,
         QuickValue::Sleep1m,
         QuickValue::Sleep5m,
-        QuickValue::SleepNow,
         QuickValue::Sleep10m,
         QuickValue::Sleep30m,
-        QuickValue::GoldGlow,
         QuickValue::WhiteGlow,
         QuickValue::StarMark,
         QuickValue::Authentic,
@@ -1032,6 +1254,15 @@ impl QuickValue {
         QuickValue::Bright,
         QuickValue::Soft,
         QuickValue::Dim,
+        QuickValue::Ratio4x3,
+        QuickValue::Ratio3x2,
+        QuickValue::Always,
+        QuickValue::Fade,
+        QuickValue::OffChoice,
+        QuickValue::RecentsColor,
+        QuickValue::Memory,
+        QuickValue::Spotlight,
+        QuickValue::NoSpotlight,
     ];
 
     pub fn index(self) -> usize {
@@ -1058,16 +1289,17 @@ impl QuickValue {
             QuickValue::Originals => "Originals",
             QuickValue::Show => "On",
             QuickValue::Hide => "Off",
+            QuickValue::OffChoice => "Off",
+            QuickValue::RecentsColor => "Color",
+            QuickValue::Memory => "Memory",
             QuickValue::Low => "25%",
             QuickValue::Medium => "45%",
             QuickValue::High => "65%",
             QuickValue::Sleep30s => "30 sec",
             QuickValue::Sleep1m => "1 min",
             QuickValue::Sleep5m => "5 min",
-            QuickValue::SleepNow => "Direct",
             QuickValue::Sleep10m => "10 min",
             QuickValue::Sleep30m => "30 min",
-            QuickValue::GoldGlow => "Spotlight",
             QuickValue::WhiteGlow => "Highlight",
             QuickValue::StarMark => "Star",
             QuickValue::Authentic => "Authentic",
@@ -1083,6 +1315,12 @@ impl QuickValue {
             QuickValue::Bright => "Bright",
             QuickValue::Soft => "Soft",
             QuickValue::Dim => "Dim",
+            QuickValue::Ratio4x3 => "4:3",
+            QuickValue::Ratio3x2 => "3:2",
+            QuickValue::Always => "Always",
+            QuickValue::Fade => "Fade",
+            QuickValue::Spotlight => "Spotlight",
+            QuickValue::NoSpotlight => "No Spotlight",
             QuickValue::BorderAuto => "Auto",
             QuickValue::BorderGravy => "GRAVY",
             QuickValue::BorderOff => "Off",
@@ -1124,11 +1362,14 @@ impl QuickValue {
         }
     }
 
-    /// Values that read as a switch rather than a word.
+    /// Values that read as a switch rather than a word. Every "Off" is the switch off, also on
+    /// rows whose other choices are words (Roy).
     pub fn switch(self) -> Option<bool> {
         match self {
             QuickValue::On | QuickValue::Show => Some(true),
-            QuickValue::Off | QuickValue::Hide => Some(false),
+            QuickValue::Off | QuickValue::Hide | QuickValue::OffChoice | QuickValue::BorderOff => {
+                Some(false)
+            }
             _ => None,
         }
     }
@@ -1143,6 +1384,18 @@ impl QuickValue {
 }
 
 pub const QUICK_PITCH: f32 = 52.0;
+
+/// RetroAchievements is on for the playing game: the in-game menu's first row is a big flat
+/// button, 116 px tall, with the other rows below it (set by the app each frame).
+pub static TOP_BUTTON: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+pub const BUTTON_TOP: f32 = 56.0;
+pub const BUTTON_H: f32 = 116.0;
+const BUTTON_ROWS_TOP: f32 = 184.0;
+const BUTTON_ROWS: usize = 4;
+
+fn top_button(row: QuickRow) -> bool {
+    row.page() == QuickRow::PLAY && TOP_BUTTON.load(std::sync::atomic::Ordering::Relaxed)
+}
 pub const QUICK_EDGE: f32 = 32.0;
 pub const QUICK_LABEL_X: f32 = QUICK_EDGE;
 
@@ -1160,7 +1413,7 @@ const CARET_GAP: f32 = 14.0;
 const CARET_PX: f32 = 24.0;
 pub(crate) const LEGEND_Y: f32 = 427.0;
 /// The help line sits between the rows and the legend.
-const HELP_Y: f32 = 392.0;
+pub const HELP_Y: f32 = 392.0;
 const HELP_H: u32 = 24;
 pub const HELP_PX: f32 = 16.0;
 /// One size everywhere: help texts are written to fit; only an odd dynamic line shrinks.
@@ -1198,6 +1451,11 @@ pub fn window_first(sel: usize, count: usize, first: usize, rows: usize) -> usiz
 
 /// Which row of `row`'s page shows first, given the one shown first last time.
 pub fn quick_first(row: QuickRow, hidden: &[QuickRow], prev: usize) -> usize {
+    if top_button(row) {
+        let n = row.shown(hidden).len().saturating_sub(1);
+        let sel = row.position(hidden).saturating_sub(1);
+        return window_first(sel, n, prev, BUTTON_ROWS);
+    }
     if row.centred() || row.page() == QuickRow::PLAY_SCREEN {
         return 0;
     }
@@ -1209,6 +1467,9 @@ pub fn quick_first(row: QuickRow, hidden: &[QuickRow], prev: usize) -> usize {
 /// The top of the first row shown, and how many rows show, for `row`'s page.
 fn page_layout(row: QuickRow, hidden: &[QuickRow]) -> (f32, usize) {
     let n = row.shown(hidden).len();
+    if top_button(row) {
+        return (BUTTON_ROWS_TOP, n.saturating_sub(1).min(BUTTON_ROWS));
+    }
     let page = row.page();
     if page == QuickRow::PLAY_SCREEN {
         return (HELP_Y - PANEL_GAP - QUICK_PITCH * n as f32, n);
@@ -1385,7 +1646,12 @@ fn quick_text_face(label: &str, colour: [u8; 3]) -> UndoFace {
 
 /// The help line for a row, in white for tinting. Rows with nothing to say have none.
 pub fn quick_help_face(row: QuickRow) -> Option<UndoFace> {
-    let line = row.help()?;
+    help_line_face(row.help()?)
+}
+
+/// A help line in white for tinting, as the menus' under their rows: for the pages that say
+/// what is going on over their legend.
+pub fn help_line_face(line: &str) -> Option<UndoFace> {
     let font = text::label_font()?;
     let layout = text::fit(font, line, HELP_MAX_W, 1, HELP_PX, HELP_MIN_PX);
     let set = layout
@@ -1472,16 +1738,19 @@ pub fn quick_caret_face(right: bool) -> UndoFace {
     UndoFace { rgba, w, h }
 }
 
-pub fn quick_legend_faces() -> [UndoFace; 8] {
+pub fn quick_legend_faces() -> [UndoFace; 11] {
     [
         tint_mask(hint_face("B", "Back")),
         tint_mask(arrows_hint_face("Change")),
         tint_mask(hint_face("A", "Open")),
         tint_mask(hint_face("B", "Resume")),
         tint_mask(hint_face("A", "Select")),
-        tint_mask(hint_face("L1/R1", "Tab")),
+        tint_mask(crate::plate::keys_hint_face(&["L1", "R1"], "Tab")),
         tint_mask(hint_face("A", "Join")),
         tint_mask(hint_face("A", "Forget")),
+        tint_mask(hint_face("A", "Connect")),
+        tint_mask(hint_face("A", "Disconnect")),
+        tint_mask(hint_face("X", "Forget")),
     ]
 }
 
@@ -1499,7 +1768,7 @@ pub struct QuickMenuFaces {
     pub pointer: (TexId, u32, u32),
     pub values: Vec<[(TexId, u32, u32); 2]>,
     pub carets: [(TexId, u32, u32); 2],
-    pub legend: [(TexId, u32); 8],
+    pub legend: [(TexId, u32); 11],
     /// The Wi-Fi mark and a padlock, white, for the network rows.
     pub wifi: (TexId, u32, u32),
     pub lock: (TexId, u32, u32),
@@ -1541,6 +1810,12 @@ pub struct QuickMenu<'a> {
     pub signal: u8,
     /// Values made for this moment, like an address or CONNECTING, by row.
     pub texts: &'a [(QuickRow, [(TexId, u32, u32); 2])],
+    /// Rows named for this moment, like a Bluetooth device's own name.
+    pub names: &'a [(QuickRow, [(TexId, u32, u32); 2])],
+    /// A row whose work is under way: a spinner where its value goes.
+    pub busy: Option<QuickRow>,
+    /// The Bluetooth device under the cursor is connected: A disconnects it.
+    pub bt_connected: bool,
     /// Over a page that is about one thing: the joined network's name over its details.
     pub title: Option<(TexId, u32, u32)>,
     /// For what turns: the spinner.
@@ -1578,6 +1853,8 @@ impl QuickMenu<'_> {
         } else {
             self.ink
         };
+        // Over a wallpaper (or a game) the menu's words carry the shelf's soft shadow (Roy).
+        SHADE.with(|c| c.set((ink.wash[3] < 1.0).then_some(ink.on_bar)));
         match (self.over_game, self.row.page() == QuickRow::PLAY_SCREEN) {
             (false, _) => draw_menu_ground(self.canvas, self.ground, ink, out),
             (true, panel) => {
@@ -1594,18 +1871,36 @@ impl QuickMenu<'_> {
                 });
             }
         }
-        let shown_rows = self.row.shown(self.hidden);
+        let all_rows = self.row.shown(self.hidden);
+        let mut shown_rows: &[QuickRow] = &all_rows;
         let pitch = QUICK_PITCH;
         let (top, visible) = page_layout(self.row, self.hidden);
         let first = quick_first(self.row, self.hidden, self.first);
-        let sel = self.row.position(self.hidden);
-        out.push(Draw::Rect {
-            x: 0.0,
-            y: top + pitch * (sel - first) as f32 + BAR_INSET,
-            w: self.canvas.w,
-            h: pitch - 2.0 * BAR_INSET,
-            colour: ink.bar,
-        });
+        let mut sel = self.row.position(self.hidden);
+        let button = top_button(self.row);
+        if button {
+            // The big button is drawn by the app on top; its rows start under it.
+            shown_rows = &shown_rows[1..];
+            sel = sel.saturating_sub(1);
+            if self.row == QuickRow::Achievements {
+                out.push(Draw::Rect {
+                    x: 0.0,
+                    y: BUTTON_TOP,
+                    w: self.canvas.w,
+                    h: BUTTON_H,
+                    colour: ink.bar,
+                });
+            }
+        }
+        if self.row != QuickRow::Achievements || !button {
+            out.push(Draw::Rect {
+                x: 0.0,
+                y: top + pitch * (sel - first) as f32 + BAR_INSET,
+                w: self.canvas.w,
+                h: pitch - 2.0 * BAR_INSET,
+                colour: ink.bar,
+            });
+        }
         let Some(faces) = self.faces else {
             return;
         };
@@ -1676,7 +1971,9 @@ impl QuickMenu<'_> {
                 .find(|(r, _)| *r == row)
                 .map_or(row, |&(_, as_row)| as_row);
             // The network joined: its own name is the row, like a phone's Wi-Fi list.
+            let named_now = self.names.iter().find(|(r, _)| *r == row).map(|(_, n)| n[lit as usize]);
             let label = match (row, self.network, row.nearby_slot()) {
+                _ if named_now.is_some() => named_now,
                 (QuickRow::ConnectedTo, Some(n), _) => Some(n[lit as usize]),
                 (_, _, Some(k)) => self.nearby.get(k).map(|n| n.name[lit as usize]),
                 _ => faces.labels.get(named.index()).map(|l| l[lit as usize]),
@@ -1708,6 +2005,10 @@ impl QuickMenu<'_> {
                 .iter()
                 .find(|(r, _)| *r == row)
                 .map(|(_, t)| t[lit as usize]);
+            if self.busy == Some(row) {
+                draw_spinner(out, right - SPIN_R, mid, self.now, colour);
+                continue;
+            }
             if row == QuickRow::ConnectedTo {
                 let [_, (right_tex, rw, rh)] = faces.carets;
                 match self.joined {
@@ -1798,22 +2099,18 @@ impl QuickMenu<'_> {
             .find(|(r, _)| *r == self.row)
             .map_or(self.row, |&(_, as_row)| as_row);
         if let Some(&Some((tex, w, h))) = faces.help.get(help_row.index()) {
-            tint(
-                out,
-                tex,
-                self.canvas.centred(w as f32),
-                HELP_Y,
-                w,
-                h,
-                ink.dim,
-            );
+            let x = self.canvas.centred(w as f32).round();
+            crate::plate::shaded_hint(out, tex, x, HELP_Y.round(), w as f32, h as f32, ink.dim, ink.wash);
         }
-        let [back, change, open, resume, select, tab, join, forget] = faces.legend;
+        let [back, change, open, resume, select, tab, join, forget, connect, disconnect, bt_forget] =
+            faces.legend;
         let back = match self.row.page() == QuickRow::PLAY {
             true => resume,
             false => back,
         };
         let other = match (self.row.page() == QuickRow::POWER, self.row.opens()) {
+            _ if self.row.bt_mine().is_some() && self.bt_connected => disconnect,
+            _ if self.row.bt_mine().is_some() || self.row.bt_other().is_some() => connect,
             _ if self.row.joins() => join,
             _ if self.row.acts() => forget,
             (true, _) => select,
@@ -1824,12 +2121,15 @@ impl QuickMenu<'_> {
         let tabbed = self.row.tab(self.hidden).is_some();
         let hints: &[(TexId, u32)] = match (self.row.read_only() || self.locked == Some(self.row), tabbed) {
             (true, false) => &[back],
-            (true, true) => &[tab, back],
-            (false, false) => &[back, other],
-            (false, true) => &[tab, back, other],
+            // Arrows or A first, Back after, L1 R1 last (Roy 2026-11-14).
+            (true, true) => &[back, tab],
+            (false, false) => &[other, back],
+            // A paired device can be forgotten: X, beside A.
+            (false, true) if self.row.bt_mine().is_some() => &[other, bt_forget, back, tab],
+            (false, true) => &[other, back, tab],
         };
         for (tex, w, x) in centred_hints(self.canvas, hints, LEGEND_GAP) {
-            tint(out, tex, x, LEGEND_Y, w, HINT_H, ink.text);
+            crate::plate::shaded_hint(out, tex, x.round(), LEGEND_Y.round(), w as f32, HINT_H as f32, ink.text, ink.wash);
         }
     }
 }
@@ -1874,6 +2174,9 @@ pub fn quick_pitch(_rows: usize) -> f32 {
 
 /// Where `row` sits with its page scrolled to the top.
 pub fn quick_row_top(row: QuickRow, hidden: &[QuickRow]) -> f32 {
+    if top_button(row) && row == QuickRow::Achievements {
+        return BUTTON_TOP - 4.0;
+    }
     let (top, _) = page_layout(row, hidden);
     top + QUICK_PITCH * row.position(hidden) as f32
 }
@@ -1909,25 +2212,76 @@ pub fn draw_bars(out: &mut Vec<Draw>, x: f32, mid: f32, bars: u8, colour: [f32; 
 
 /// Eight dots round a ring, the lit one going round once a second with a fading tail.
 pub fn draw_spinner(out: &mut Vec<Draw>, cx: f32, cy: f32, now: u64, colour: [f32; 4]) {
+    draw_spinner_sized(out, cx, cy, SPIN_R, 4.0, now, colour);
+}
+
+/// The spinner at any size: `r` its radius, `dot` each dot's width.
+pub fn draw_spinner_sized(
+    out: &mut Vec<Draw>,
+    cx: f32,
+    cy: f32,
+    r: f32,
+    dot: f32,
+    now: u64,
+    colour: [f32; 4],
+) {
     let head = ((now % 1000) * 8 / 1000) as usize;
     for i in 0..8usize {
         let a = i as f32 * std::f32::consts::FRAC_PI_4 - std::f32::consts::FRAC_PI_2;
         let age = (head + 8 - i) % 8;
         let fade = 1.0 - age as f32 / 8.0;
-        out.push(Draw::Rect {
-            x: (cx + a.cos() * (SPIN_R - 1.5) - 1.5).round(),
-            y: (cy + a.sin() * (SPIN_R - 1.5) - 1.5).round(),
-            w: 3.0,
-            h: 3.0,
-            colour: [colour[0], colour[1], colour[2], colour[3] * (0.15 + 0.85 * fade)],
-        });
+        let x = (cx + a.cos() * (r - dot / 2.0) - dot / 2.0).round();
+        let y = (cy + a.sin() * (r - dot / 2.0) - dot / 2.0).round();
+        round_dot(out, x, y, dot, [colour[0], colour[1], colour[2], colour[3] * (0.15 + 0.85 * fade)]);
     }
 }
 
+/// A round dot `d` across with its top left at (x, y): each pixel lit as much as the disc
+/// covers it, so the edge is smooth and the dot reads round, not square.
+pub(crate) fn round_dot(out: &mut Vec<Draw>, x: f32, y: f32, d: f32, colour: [f32; 4]) {
+    const SUB: usize = 4;
+    let r = d / 2.0;
+    let n = d.ceil() as usize;
+    for py in 0..n {
+        for px in 0..n {
+            let mut hit = 0;
+            for sy in 0..SUB {
+                for sx in 0..SUB {
+                    let fx = px as f32 + (sx as f32 + 0.5) / SUB as f32 - r;
+                    let fy = py as f32 + (sy as f32 + 0.5) / SUB as f32 - r;
+                    if fx * fx + fy * fy <= r * r {
+                        hit += 1;
+                    }
+                }
+            }
+            if hit > 0 {
+                let cover = hit as f32 / (SUB * SUB) as f32;
+                out.push(Draw::Rect {
+                    x: x + px as f32,
+                    y: y + py as f32,
+                    w: 1.0,
+                    h: 1.0,
+                    colour: [colour[0], colour[1], colour[2], colour[3] * cover],
+                });
+            }
+        }
+    }
+}
+
+thread_local! {
+    /// While a menu draws over the wallpaper: the ink of the words on the selection bar, which
+    /// sit on the bar and need no shadow. None on a flat ground.
+    static SHADE: std::cell::Cell<Option<[f32; 4]>> = const { std::cell::Cell::new(None) };
+}
+
 fn tint(out: &mut Vec<Draw>, tex: TexId, x: f32, y: f32, w: u32, h: u32, colour: [f32; 4]) {
+    let (x, y) = (x.round(), y.round());
+    if SHADE.with(|c| c.get()).is_some_and(|on_bar| on_bar != colour) {
+        crate::slot_chrome::soft_shadow(tex, x, y, w as f32, h as f32, colour, 1.0, out);
+    }
     out.push(Draw::Tint {
-        x: x.round(),
-        y: y.round(),
+        x,
+        y,
         w: w as f32,
         h: h as f32,
         tex,

@@ -234,6 +234,7 @@ fn a_card_from_before_the_settings_keeps_all_its_values() {
             wallpaper_tint: WallpaperTint::Off,
             show_recents: false,
             show_titles: false,
+            dust_wear: true,
             bezel_gba: BezelPick::Ags102,
             bezel_gb: BezelPick::Ags102,
             bezel_gbc: BezelPick::Ags102,
@@ -331,7 +332,9 @@ fn every_speed_the_row_offers_round_trips_as_its_own_number() {
         write_slot_state(d.path(), &s).unwrap();
         assert_eq!(read_slot_state(d.path()), s, "{speed}x did not come back");
         let text = std::fs::read_to_string(d.path().join("Config/slot.state")).unwrap();
-        let want = format!("ff_speed={speed}");
+        // Written as the times faster it plays: quarters 6 is 1.5, 8 is 2.
+        let x = f32::from(speed) / 4.0;
+        let want = format!("ff_speed={x}");
         assert!(text.lines().any(|l| l == want), "no {want} in {text:?}");
     }
 }

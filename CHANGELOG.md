@@ -1,5 +1,107 @@
 # Changelog
 
+## slot. x GRAVY v1.3
+
+Everything since slot. x GRAVY v1.2.2.
+
+### New
+
+- Slot Studio: colour, finish and model for every slot.
+- Original cart: each game starts in the colour of its real cart.
+- RetroAchievements for GB, GBC, GBA (mGBA), NES, SNES and Super Game Boy. Overview in the in-game menu, sign-in in GRAVY Manager, play time from the site.
+- Deck shelf for games you want to play next, with a spotlight (Spotlight / No Spotlight / Off). B adds or removes a game.
+- Favorites: Highlight, Star or Off. Gold slots on the Favorites shelf.
+- Recents: Memory (faded colour), Color or Off. X removes a game.
+- Custom labels: upload, replace or remove a label in GRAVY Manager.
+- Screen Calibration (General): Warmth, Tint, Curve and Colour.
+- Sharp Pixels scaling per system.
+- GBA screen 4:3 or 3:2.
+- NES and SNES: RF cable option and Colors Authentic / Trinitron.
+- Game Boy palettes: DMG, Pocket and Light.
+- Vibration: charger, warnings and achievements.
+- Game Titles: Off, Always or Fade.
+- Game Boy link cable on Gambatte; redesigned Game Link screen.
+- Bluetooth headphones (AirPods and others): Wi-Fi & Bluetooth page with My Devices / Other Devices, Bluetooth mark in the status bar, pairings kept after a restart.
+- GRAVY Manager: gravy.local address, BaseOS updates, screenshot gallery, console notifications.
+
+### Visual and UI
+
+- New shelf animations: carts hop and sway, shelf change, inserting a cart.
+- Game Boy power switch slides shut while playing.
+- New GBA core picker animation.
+- Redrawn NES, SNES and Super Game Boy slots and carts.
+- Drop shadows on shelf names, menu text, legends and status icons.
+- Softer GBC/GBA LCD filter; GB Dot Matrix at 0.35.
+- GBC Screen Light: Bright, Soft or Dim.
+- Sharper Super Game Boy zoom.
+- GRAVY Manager: tabs in two rows, new icons, new RetroAchievements page.
+- Same legend style in every menu.
+- About page in DMG grey.
+- Light themes: readable legends, spinners and keyboard.
+- New Wi-Fi password check animation.
+- All notifications as a black bar at the top.
+
+### Quality of life
+
+- Cheats are downloaded when a game starts.
+- Labels and cheats are looked up right after uploading games.
+- A save state is made when you close a game.
+- Keyboard: #+= page, caps lock (shift twice), L1 / R1 move the cursor.
+- Wi-Fi scan works without a saved network.
+- New order in General.
+- GRAVY Manager shows free SD space and which games have a label.
+- GRAVY Manager: sort games A-Z, newest, most played or label.
+- GRAVY Manager turns away zip and 7z files before uploading.
+- Fast-forward 1.5x to 6x.
+- In-game menu at 95% opacity; A flips a switch, like Left / Right.
+- Sleep: Light Sleep 30 s / 1 / 5 min, Deep Sleep 5 / 10 / 30 min. In a game Light Sleep waits at least 10 minutes.
+- Sleep with POWER locks the buttons; only POWER wakes.
+- Separate messages for Wi-Fi Failed, Bluetooth Failed and Bluetooth Not Ready.
+- New wallpaper Retro Vibes; an update adds new wallpapers to the card.
+
+### Tweaks
+
+- SELECT + B toggles the chosen screen effects per system.
+- GB games always run as Game Boy.
+- NES and SNES default to RF cable and Authentic colours.
+- Better label detection (Pokémon Ruby, Batman, Drill Dozer).
+- No studio on the Game Boy shelf in the Super Game Boy.
+- Buttons pages updated.
+- GBA screen shortcut: SELECT + L2 / R2.
+- Game link: plain black port; on the Game Boy the whole cable and both plugs are black.
+- Slot studio: Kiwi, Cobalt and Graphite removed; Glacier a little deeper blue-violet.
+- Light clear slots show a dark battery and clock.
+- DMG switch hole edge softer.
+- Clear carts 80% opaque.
+- Screen colour 140% by default.
+- Fresh install: GBC and GBA slots in their Original colour.
+- Stickers sit inside the label well with a small shadow; SNES slot in Super Famicom grey.
+
+### Fixed
+
+- Rewind brightness with LCD Ghosting on.
+- GB screen colour during fades and dark scenes.
+- Game link legend went dark on light slots.
+- Game link Cancel closed at once instead of pulling the plug out.
+- GBA games could slow down or lose sound (CPU now at full speed in a game, missed frames made up).
+- GBA slow with Pixel Transparency on.
+- GBA kept a yellow tint with all screen effects off.
+- GBC/GBA LCD flickered in dark scenes.
+
+### From upstream slot
+
+Taken over from Brandon's slot v1.14 and v1.15.
+
+- Six extra dim steps below the lowest brightness (v1.14).
+- No audio pops on Game Boy games (v1.14).
+- Shelf no longer moves off screen after a long frame.
+- GBA cart clock uses your city's time zone (v1.15).
+- Rumble in Gambatte games (v1.15).
+
+### From other forks
+
+- Screen Calibration uses the display gamma table from pvaibhav's slot fork (his version needs a colorimeter; GRAVY's is set by eye).
+
 ## slot. x GRAVY v1.2.2
 
 Fixes only, everything since slot. x GRAVY v1.2.1.

@@ -104,16 +104,61 @@ pub fn shell_for(cart: &Cart) -> Shell {
             return shell(choice.colour, finish);
         }
     }
-    // Original is the console's own standard cart, whatever the game shipped in.
+    original_shell(cart)
+}
+
+/// Original: the cart the game itself shipped in. Pokémon, Kirby and the like had their own
+/// plastic; a dual-mode Game Boy Color game came in black, a Color-only one in clear; the rest
+/// get their console's standard cart.
+pub fn original_shell(cart: &Cart) -> Shell {
     match cart.platform {
-        Platform::Gba => DEFAULT_SHELL,
-        Platform::Gb => DMG_SHELL,
-        Platform::Gbc => GBC_CLEAR_SHELL,
+        Platform::Gba if cart.code.is_empty() => {
+            gba_shell_for(&slot_store::gba_cached_code(&cart.rom))
+        }
+        Platform::Gba => gba_shell_for(&cart.code),
+        Platform::Gb | Platform::Gbc => gb_original(cart),
+        Platform::Nes if is_gold_zelda(&cart.stem) => GOLD_SHELL,
         Platform::Nes => TV_GREY_SHELL,
         Platform::Snes => match crate::cart::mould_of(cart) {
             crate::Mould::SnesPal => SFC_SHELL,
             _ => TV_GREY_SHELL,
         },
+    }
+}
+
+/// The Legend of Zelda and Zelda II came in gold carts on the NES.
+pub const GOLD_SHELL: Shell = shell([0xc9, 0xa2, 0x3f], Finish::Metallic);
+
+fn is_gold_zelda(stem: &str) -> bool {
+    let s = stem.to_ascii_lowercase();
+    s.contains("zelda") && !s.contains("link's awakening")
+}
+
+fn gb_original(cart: &Cart) -> Shell {
+    let standard = if cart.platform == Platform::Gbc {
+        GBC_CLEAR_SHELL
+    } else {
+        DMG_SHELL
+    };
+    let Some(h) = slot_store::gb::cached_header(&cart.rom) else {
+        return standard;
+    };
+    // Only Color-era headers carry a game code; an older title runs on into those bytes.
+    if h.cgb & 0x80 != 0 {
+        if let Some(s) = by_code(&h.code, GB_CODES) {
+            return s;
+        }
+    }
+    if !h.japan {
+        if let Some((_, s)) = GB_OVERSEAS_TITLES.iter().find(|(t, _)| h.title.starts_with(t)) {
+            return *s;
+        }
+    }
+    match h.cgb {
+        0x80 => DUAL_MODE_SHELL,
+        // A Game Boy shelf plays everything as a Game Boy game, whatever the header claims.
+        0xc0 if cart.platform == Platform::Gbc => GBC_CLEAR_SHELL,
+        _ => DMG_SHELL,
     }
 }
 

@@ -69,6 +69,9 @@ fn quads(out: &[Draw]) -> Vec<Quad> {
             } => Quad { x, y, w, h, alpha },
             Draw::Tint {
                 x, y, w, h, colour, ..
+            }
+            | Draw::Shade {
+                x, y, w, h, colour, ..
             } => Quad {
                 x,
                 y,

@@ -1,6 +1,6 @@
 use slot_ui::{
     ease, Draw, Millis, TexId, ADAPTER_BASE_X, ADAPTER_BASE_Y, ARCS, ARROW_LEFT_X, ARROW_RIGHT_X,
-    ARROW_Y, CLICKS_X, CLICKS_Y, NET_X, NET_Y, OUT_W, PLUG_H, PLUG_TIP_X, PORT_Y,
+    ARROW_Y, CLICKS_X, LINK_LIFT, CLICKS_Y, NET_X, NET_Y, OUT_W, PLUG_H, PLUG_TIP_X, PORT_Y,
 };
 
 use crate::app::{GameMenu, LinkRow};
@@ -16,8 +16,11 @@ pub struct Sprite {
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct LinkSprites {
     pub port: Sprite,
+    pub port_shade: Sprite,
     pub plug_host: Sprite,
     pub plug_join: Sprite,
+    pub plug_gb: Sprite,
+    pub plug_gb_join: Sprite,
     pub adapter: Sprite,
     pub arcs_right: [Sprite; 3],
     pub arcs_left: [Sprite; 3],
@@ -32,21 +35,21 @@ pub struct LinkSprites {
 /// How far the seated tip sits below the top of the port. The port used to start at y=388 with the tip at 419.
 const PLUG_IN_PORT: f32 = 31.0;
 const SEATED_TIP: f32 = PORT_Y + PLUG_IN_PORT;
-const FAILED_TIP: f32 = 276.0;
+const FAILED_TIP: f32 = 276.0 - LINK_LIFT;
 const FAILED_TURN_DEG: f32 = 14.0;
 const FAILED_ALPHA: f32 = 0.45;
 const DROP_MS: Millis = 200;
 const SEAT_MS: Millis = 160;
 const LIFT_MS: Millis = 250;
 const UNPLUG_MS: Millis = 260;
-const PICK_BASE: f32 = 336.0;
+const PICK_BASE: f32 = 336.0 - LINK_LIFT;
 /// The plug's bottom is its tip. The adapter's connector hangs `PLUG_IN_PORT` below its base, so this puts the two bottoms level.
 const PICK_TIP: f32 = PICK_BASE + PLUG_IN_PORT;
 const ARC_MS: f32 = 1200.0;
 const ARC_STAGGER_MS: f32 = 300.0;
-const ARROW_ALPHA: f32 = 0.7;
 /// Printed, not lit: a little under the arrows' own weight, since it tells rather than asks.
-const NET_ALPHA: f32 = 0.85;
+const ARROW_ALPHA: f32 = 0.7;
+const NET_ALPHA: f32 = 0.7;
 
 fn lerp(a: f32, b: f32, t: f32) -> f32 {
     if t >= 1.0 {
@@ -183,9 +186,17 @@ fn tex(out: &mut Vec<Draw>, s: Sprite, x: f32, y: f32, alpha: f32) {
     });
 }
 
+/// The port: a smooth piece of the slot's side in black with its socket (Roy 2026-11-13),
+/// drawn as it is.
+fn port(out: &mut Vec<Draw>, s: &LinkSprites) {
+    let x = (OUT_W as f32 / 2.0 - s.port.w as f32 / 2.0).round();
+    tex(out, s.port, x, PORT_Y, 1.0);
+}
+
 pub fn draw_link_art(
     menu: GameMenu,
     kind: LinkKind,
+    gb: bool,
     now: Millis,
     s: &LinkSprites,
     out: &mut Vec<Draw>,
@@ -196,7 +207,12 @@ pub fn draw_link_art(
     match kind {
         LinkKind::Cable => {
             let tip = plug_tip(menu, now);
-            let plug = if host { s.plug_host } else { s.plug_join };
+            let plug = match (host, gb) {
+                (true, true) => s.plug_gb,
+                (true, false) => s.plug_host,
+                (false, true) => s.plug_gb_join,
+                (false, false) => s.plug_join,
+            };
             let (x, y) = ((centre - PLUG_TIP_X).round(), (tip - PLUG_H as f32).round());
             let turn = plug_turn(menu, now);
             if turn == 0.0 {
@@ -212,7 +228,7 @@ pub fn draw_link_art(
                     turn,
                 });
             }
-            tex(out, s.port, 0.0, PORT_Y, 1.0);
+            port(out, s);
             let clicks = clicks_alpha(menu, now);
             if clicks > 0.0 {
                 tex(out, s.clicks, CLICKS_X, CLICKS_Y, clicks);
@@ -227,7 +243,7 @@ pub fn draw_link_art(
                 base - ADAPTER_BASE_Y,
                 alpha,
             );
-            tex(out, s.port, 0.0, PORT_Y, 1.0);
+            port(out, s);
             let dy = base - PORT_Y;
             for (i, a) in arc_alphas(menu, now).into_iter().enumerate() {
                 if a <= 0.0 {

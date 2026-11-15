@@ -472,7 +472,7 @@ tasks:
         vars:
           CMD: >-
             cargo build --profile device --target-dir target-device
-            -p slot -p slot-services --no-default-features --features slot/device
+            -p slot -p slot-services --no-default-features --features {{.FEATURES | default "slot/device"}}
       - file target-device/device/slot | grep -q aarch64
       - 'echo "built target-device/device/slot"'
 
@@ -503,6 +503,7 @@ tasks:
       - mkdir {{.OUT}}/System/slot-net
       - cp vendor/slot-net/iw vendor/slot-net/*.so.* {{.OUT}}/System/slot-net/
       - cp -R card/System/* {{.OUT}}/System/
+      - cp -R card/Wallpapers/. {{.OUT}}/Wallpapers/
       - rm -rf {{.OUT}}/System/bezels
       - file vendor/mgba_libretro.so | grep -q aarch64
       - file vendor/gpsp_libretro.so | grep -q aarch64

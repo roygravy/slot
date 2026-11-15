@@ -10,6 +10,8 @@ const STATE_EXT: &str = "state";
 const THUMB_EXT: &str = "png";
 const RESUME: &str = "resume";
 const REFUSED: &str = "resume-refused";
+/// Names the state the last time the game was put away left, the one the next replaces.
+const EXIT: &str = "exit";
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct StateEntry {
@@ -38,6 +40,20 @@ impl StateRing {
         atomic_write(&self.path(stamp, THUMB_EXT), thumb_png)?;
         atomic_write(&self.path(stamp, STATE_EXT), state)?;
         self.evict()
+    }
+
+    /// The state a game leaves when it is put away: it takes the place of the one the last
+    /// time left, so putting a game away never pushes out a state saved by hand.
+    pub fn push_exit(&self, state: &[u8], thumb_png: &[u8], stamp: &str) -> std::io::Result<()> {
+        let marker = self.dir.join(EXIT);
+        if let Ok(last) = std::fs::read_to_string(&marker) {
+            let last = last.trim();
+            if last != stamp && is_stamp(last) {
+                let _ = self.remove(last);
+            }
+        }
+        self.push(state, thumb_png, stamp)?;
+        atomic_write(&marker, stamp.as_bytes())
     }
 
     pub fn list(&self) -> std::io::Result<Vec<StateEntry>> {

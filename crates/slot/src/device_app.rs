@@ -122,6 +122,7 @@ pub fn run() {
     }
     let platform = DevicePlatform::new(root.clone());
     eprintln!("slot: {}", platform.report());
+    eprintln!("slot: {}", bluetooth_report());
     platform.trace_boot();
     slot::boot_time::mark("platform");
     let sink = match audio.map(|h| h.join()) {
@@ -148,6 +149,7 @@ pub fn run() {
         .name("slot-logsync".into())
         .spawn(sync_log_writes);
     let mut drawn = false;
+    let mut cpu = CpuClock::new();
     frontend.drive_emulator();
     let mut pacer = Pacer::new();
     let (mut frames, mut missed, mut early) = (0u32, 0u32, 0u32);
@@ -169,9 +171,11 @@ pub fn run() {
         }
         // The light sleep draws nothing: the screen is dark, and the downloads go on.
         if frontend.dozing() {
+            cpu.game(false);
             std::thread::sleep(DOZE_POLL);
             continue;
         }
+        cpu.game(frontend.game_open());
         frontend.step_emulator(pacer.period, STEP_TIMEOUT);
         frontend.render(&mut compositor, window);
         let swap = Instant::now();
@@ -208,6 +212,67 @@ pub fn run() {
     }
 }
 
+/// The CPU at full speed while a game is open: the stock governor clocks it down between
+/// frames, and a GBA frame in mGBA then took 12-15 ms of the 16.7, too slow with the screen
+/// effects on top (Roy). Back to the governor it had once the game closes or the screen sleeps.
+struct CpuClock {
+    dir: Option<PathBuf>,
+    stock: String,
+    fast: bool,
+}
+
+impl CpuClock {
+    fn new() -> Self {
+        let dir = [
+            "/sys/devices/system/cpu/cpufreq/policy0",
+            "/sys/devices/system/cpu/cpu0/cpufreq",
+        ]
+        .iter()
+        .map(PathBuf::from)
+        .find(|d| d.join("scaling_governor").is_file());
+        let read = |name: &str| {
+            dir.as_ref()
+                .and_then(|d| std::fs::read_to_string(d.join(name)).ok())
+                .map(|s| s.trim().to_string())
+                .unwrap_or_default()
+        };
+        let stock = read("scaling_governor");
+        eprintln!(
+            "slot: cpu: governor {stock} of [{}], {}-{} kHz",
+            read("scaling_available_governors"),
+            read("scaling_min_freq"),
+            read("scaling_max_freq"),
+        );
+        CpuClock {
+            dir,
+            stock,
+            fast: false,
+        }
+    }
+
+    fn game(&mut self, open: bool) {
+        if open == self.fast {
+            return;
+        }
+        self.fast = open;
+        let Some(dir) = &self.dir else { return };
+        if self.stock.is_empty() || self.stock == "performance" {
+            return;
+        }
+        let to = if open { "performance" } else { self.stock.as_str() };
+        match std::fs::write(dir.join("scaling_governor"), to) {
+            Ok(()) => eprintln!("slot: cpu: {to}"),
+            Err(e) => eprintln!("slot: cpu: {to}: {e}"),
+        }
+    }
+}
+
+impl Drop for CpuClock {
+    fn drop(&mut self) {
+        self.game(false);
+    }
+}
+
 fn sync_log_writes() {
     let mut synced = 0;
     loop {
@@ -224,4 +289,66 @@ fn sync_log_writes() {
             synced = st.st_size;
         }
     }
+}
+
+/// One line in slot.log on what this device offers for Bluetooth, so
+/// Bluetooth audio can be planned from real devices. Only reads.
+fn bluetooth_report() -> String {
+    let names = |dir: &str| -> Vec<String> {
+        let mut v: Vec<String> = std::fs::read_dir(dir)
+            .map(|d| {
+                d.flatten()
+                    .map(|e| e.file_name().to_string_lossy().into_owned())
+                    .collect()
+            })
+            .unwrap_or_default();
+        v.sort();
+        v
+    };
+    let rfkill: Vec<String> = names("/sys/class/rfkill")
+        .into_iter()
+        .filter_map(|r| {
+            let t = std::fs::read_to_string(format!("/sys/class/rfkill/{r}/type")).ok()?;
+            let soft =
+                std::fs::read_to_string(format!("/sys/class/rfkill/{r}/soft")).unwrap_or_default();
+            Some(format!(
+                "{}{}",
+                t.trim(),
+                if soft.trim() == "1" { "(off)" } else { "" }
+            ))
+        })
+        .collect();
+    let found = |paths: &[&str]| paths.iter().any(|p| std::path::Path::new(p).exists());
+    let tools = [
+        (
+            "bluetoothd",
+            found(&[
+                "/usr/libexec/bluetooth/bluetoothd",
+                "/usr/lib/bluetooth/bluetoothd",
+                "/usr/sbin/bluetoothd",
+                "/usr/bin/bluetoothd",
+            ]),
+        ),
+        ("bluetoothctl", found(&["/usr/bin/bluetoothctl"])),
+        (
+            "bluealsa",
+            found(&["/usr/bin/bluealsa", "/usr/bin/bluealsad"]),
+        ),
+        (
+            "rtk_hciattach",
+            found(&["/usr/bin/rtk_hciattach", "/usr/sbin/rtk_hciattach"]),
+        ),
+    ];
+    let tools: Vec<&str> = tools.iter().filter(|t| t.1).map(|t| t.0).collect();
+    let fw: Vec<String> = names("/lib/firmware/rtlbt")
+        .into_iter()
+        .chain(names("/lib/firmware/rtl_bt"))
+        .collect();
+    format!(
+        "bluetooth hci [{}], rfkill [{}], tools [{}], firmware [{}]",
+        names("/sys/class/bluetooth").join(" "),
+        rfkill.join(" "),
+        tools.join(" "),
+        fw.join(" ")
+    )
 }

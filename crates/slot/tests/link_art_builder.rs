@@ -34,8 +34,11 @@ fn an_app_with_sprites_is_ready_to_draw_the_art() {
     };
     app.set_link_sprites(LinkSprites {
         port: s(1),
+        port_shade: s(31),
         plug_host: s(2),
         plug_join: s(3),
+        plug_gb: s(30),
+        plug_gb_join: s(30),
         adapter: s(4),
         arcs_right: [s(7), s(8), s(9)],
         arcs_left: [s(10), s(11), s(12)],

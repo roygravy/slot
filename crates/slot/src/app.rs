@@ -5,19 +5,21 @@ use std::sync::Arc;
 use slot_gfx::{Canvas, Layout, OUT_H, OUT_W};
 use slot_input::{Action, Btn, MENU_DOUBLE_TAP_MS, MUTE_CHORD_MS};
 use slot_power::{Battery, Charge, LedState, LidPolicy, Power, Woke};
+
+use crate::buzz::Buzz;
 use slot_retro::LinkChannel;
 use slot_store::{
     format_stamp, read_slot_state, scan, write_slot_state, BezelPick, Cart, Core, FavoriteMark,
     GbPalette, NesColors, Platform, Recent, Shader, SlotState, StateEntry, StateRing, TvCable,
-    WallpaperPick, WallpaperTint, AUTO_SLEEP_OPTIONS_SECS, BLUE_LIGHT_MAX, BRIGHTNESS_MAX,
+    WallpaperPick, WallpaperTint, AUTO_SLEEP_OPTIONS_SECS, BLUE_LIGHT_MAX, BRIGHTNESS_MAX, DIM_MAX,
     DEEP_SLEEP_OPTIONS_MINS, FF_SPEEDS, VOLUME_MAX,
 };
 use slot_ui::{
-    board_from, board_x, board_zoom, cart_box, draw_empty_slot, draw_footer, draw_ground,
-    draw_slot_name, ease, foot_y, footer_ink, grown, lid_at, lid_from, lift_of, on_board,
+    board_from, board_x, board_zoom, cart_box, draw_footer, draw_ground,
+    draw_slot_name, ease, foot_y, footer_ink, grown, lid_from, lift_of, on_board,
     repeat_gap, shelf_cart_at, ClockPicker, Draw, FfState, Hud, HudKind, Icon, LinkBadge, Millis,
     Mould, Placed, Polaroids, QuickMenu, QuickMenuFaces, QuickRow, QuickValue, Refusal, Shelf,
-    SlotChrome, TexId, TimeZone, Toast, BOARD_W, CART_W, CHIP_H, CHIP_U, CHIP_V, CHIP_W, FOOTER_Y,
+    SlotChrome, TexId, TimeZone, Toast, BOARD_W, CART_W, CHIP_H, CHIP_U, CHIP_V, CHIP_W,
     HINT_EDGE, HINT_H, HOP_LIFT, REPEAT_DELAY_MS, SHADOW_H, SHADOW_W, SOCKET_H, SOCKET_U, SOCKET_V,
     SOCKET_W, TURN_PAD,
 };
@@ -26,7 +28,9 @@ use crate::audio::Sfx;
 use crate::core_picker::{Chip, CorePicker, Outcome, Press};
 use crate::label_search::{self, LabelSearch};
 use crate::link_kind::{link_carried, link_kind, serial_option, LinkKind};
-use crate::link_radio::{radio_jobs, LinkRole, RadioJob, RadioJobs, Seen, WifiAnswer, WifiJob};
+use crate::link_radio::{
+    radio_jobs, BtAnswer, BtDevice, BtJob, LinkRole, RadioJob, RadioJobs, Seen, WifiAnswer, WifiJob,
+};
 use crate::list_page::{self, ListPage};
 use crate::link_screen::LinkSprites;
 use crate::link_start::{link_port, LinkFail, LinkProgress, LinkStarter, LinkStep};
@@ -36,6 +40,15 @@ use crate::shell_picker::{self, ShellPicker};
 use crate::video_mode::{self, VideoMode};
 
 pub const INSERT_S: f32 = 0.73;
+/// The GBA's lid, held up in the core picker, breathes as the shelf's middle cart does.
+const LID_SWAY: f32 = 0.016;
+const LID_SWAY_S: f32 = 3.4;
+const LID_BOB: f32 = 2.0;
+/// The open cart's own float under it: a little deeper, a beat behind (xe1).
+const BOARD_BOB: f32 = 2.5;
+const BOARD_LAG: f32 = 1.9;
+/// How far the open cart's shadow falls on the studio ground.
+const BOARD_DROP_RISE: f32 = 10.0;
 /// How long the screenshot flash takes to fade, and how close a volume step must come
 /// before POWER to be undone.
 const SHOT_FLASH_MS: Millis = 280;
@@ -49,10 +62,17 @@ pub const SEATED_AT: f32 = INSERT_S - INSERT_HOLD_S;
 pub const EJECT_S: f32 = SEATED_AT;
 
 const EJECT_HOLD_S: f32 = 0.35;
+/// The power switch slides on, locking the pak, just after it is seated, well before the
+/// screen comes on; it slides off again in the hold before the pak comes out.
+const POWER_LOCK_AFTER_S: f32 = 0.03;
+const POWER_LOCK_S: f32 = 0.2;
+const POWER_UNLOCK_BEFORE_S: f32 = 0.3;
 
 pub const IN_GAME_MENU: Layout = Layout::Native;
 /// Room between the battery's percentage and the cheats robber in the menu corner.
 const MENU_BADGE_GAP: f32 = 4.0;
+/// How long an achievement's unlock bar stays.
+const RA_TOAST_MS: Millis = 4000;
 
 const POWER_ON_S: f32 = 0.22;
 
@@ -61,6 +81,8 @@ const POWER_OFF_S: f32 = 0.16;
 const VOLUME_STEP: u8 = 5;
 
 const AUTOSAVE_MS: Millis = 60_000;
+/// Light Sleep never comes sooner than this while a game is playing.
+const GAME_SLEEP_MIN_MS: Millis = 10 * 60_000;
 const SETTLED_MS: Millis = 10_000;
 const RESUME_MS: Millis = 300_000;
 const CARD_CHECK_MS: Millis = 2_000;
@@ -98,27 +120,30 @@ const DEEP_SLEEP_AFTER_MS: Millis = 500;
 /// Just back from the deep sleep: the press that woke it may still arrive as input.
 const WAKE_QUIET_MS: Millis = 1_500;
 
-const CORE_PICKER_RECEDE: f32 = 0.26;
 
 const SLOT_NAME_IN_MS: Millis = 200;
 const SLOT_NAME_HOLD_MS: Millis = 1200;
 const SLOT_NAME_OUT_MS: Millis = 800;
 const SLOT_NAME_ALPHA: f32 = 1.0;
-const CORE_PICKER_DIM: f32 = 0.25 / (1.0 - CORE_PICKER_RECEDE);
+
+/// The console name's fade (in, hold, out), unshaped: the letters and fading titles share it.
+fn name_level(t: Millis) -> f32 {
+    if t < SLOT_NAME_IN_MS {
+        t as f32 / SLOT_NAME_IN_MS as f32
+    } else if t < SLOT_NAME_IN_MS + SLOT_NAME_HOLD_MS {
+        1.0
+    } else {
+        let out = t - SLOT_NAME_IN_MS - SLOT_NAME_HOLD_MS;
+        1.0 - (out as f32 / SLOT_NAME_OUT_MS as f32).min(1.0)
+    }
+}
 const CORE_LEGEND_Y: f32 = 386.0;
 const LINK_TEXT_Y: f32 = 44.0;
-const LINK_LEGEND_Y: f32 = FOOTER_Y;
 pub const LINK_SCRIM: [f32; 4] = [0.0, 0.0, 0.0, 0.5];
-const LINK_LEGEND_GAP: f32 = 40.0;
-const LINK_LEGEND_EDGE: f32 = 24.0;
-const LID_SHADOW_W: f32 = 168.0;
-const LID_SHADOW_H: f32 = 18.0;
-const LID_SHADOW_DROP: f32 = 27.1;
-const LID_SHADOW_ALPHA: f32 = 0.8;
+/// How far the held-up lid's shadow falls, as a cart lifted this high on the shelf.
+const LID_DROP_RISE: f32 = 26.0;
 const FACES_WAIT_MS: Millis = 1500;
 
-const ALERT_HOLD: f32 = 0.45;
-const ALERT_GONE: f32 = 0.9;
 
 const CLOCK_FLOOR: i64 = 1_577_836_800;
 
@@ -277,6 +302,8 @@ pub enum Phase {
         cart: String,
     },
     About,
+    /// Screen Calibration: the panel's colours set by eye with the buttons.
+    ScreenColors,
     Buttons {
         page: usize,
     },
@@ -288,6 +315,8 @@ pub enum Phase {
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 enum Rack {
     Recents,
+    /// Games laid out ready to play (sh2), under a spotlight (sh10).
+    Deck,
     Favorites,
     Of(Platform),
 }
@@ -296,13 +325,14 @@ impl Rack {
     fn platform(self) -> Option<Platform> {
         match self {
             Rack::Of(p) => Some(p),
-            Rack::Recents | Rack::Favorites => None,
+            Rack::Recents | Rack::Deck | Rack::Favorites => None,
         }
     }
 
     fn key(self) -> String {
         match self {
             Rack::Recents => "recents".into(),
+            Rack::Deck => "deck".into(),
             Rack::Favorites => "favorites".into(),
             Rack::Of(p) => p.dir_name().to_ascii_lowercase(),
         }
@@ -311,6 +341,7 @@ impl Rack {
     fn name(self) -> &'static str {
         match self {
             Rack::Recents => "Recents",
+            Rack::Deck => "Deck",
             Rack::Favorites => "Favorites",
             Rack::Of(p) => p.name(),
         }
@@ -318,18 +349,28 @@ impl Rack {
 }
 
 const RECENTS_AT: usize = 0;
-const FAVORITES_AT: usize = 1;
+/// How long the Recents shelf takes to turn into a memory, and back: a shelf change's length.
+const MEMORY_FADE_S: f32 = 0.35;
+/// How much colour the Recents memory keeps: faded, not black and white (Roy 2026-11-14).
+const MEMORY_COLOUR: f32 = 0.2;
+const DECK_AT: usize = 1;
+const FAVORITES_AT: usize = 2;
 
 pub struct App {
     phase: Phase,
     shelves: Vec<(Rack, Shelf)>,
     shelf_at: usize,
+    /// The shelf just changed away from, while its carts are still going off.
+    shelf_leaving: Option<usize>,
     orphaned: Vec<TexId>,
     play_held: Option<Millis>,
     held_dir: Option<(Btn, Millis, usize)>,
     refusal: Option<Refusal>,
+    /// The panel's colours set by eye (General > Screen Calibration).
+    calibrate: crate::calibrate::Calibrate,
     refused_from: Option<f32>,
-    alert_face: Option<TexId>,
+    /// Per mould, in `Mould::ALL` order: a pak's drop shadow on a shallow slot.
+    perch_shadows: Option<[TexId; Mould::ALL.len()]>,
     /// When POWER went down, while it is held towards powering off.
     power_held_since: Option<Millis>,
     core_picker: Option<CorePicker>,
@@ -364,6 +405,14 @@ pub struct App {
     wifi_on_at: Millis,
     quick_nearby: Vec<slot_ui::NearbyRow>,
     quick_texts: Vec<(QuickRow, [(TexId, u32, u32); 2])>,
+    /// The Bluetooth rows' device names, as their rows show them.
+    quick_names: Vec<(QuickRow, [(TexId, u32, u32); 2])>,
+    /// Bluetooth headphones paired and nearby, as the service last listed them.
+    bt_devices: Vec<BtDevice>,
+    /// The device being paired, connected, disconnected or forgotten.
+    bt_busy: Option<String>,
+    bt_list_at: Millis,
+    bt_scan_at: Millis,
     quick_title: Option<(TexId, u32, u32)>,
     /// This device's address, read when the details open.
     address: Option<String>,
@@ -385,15 +434,20 @@ pub struct App {
     core_board_face: Option<TexId>,
     core_interior_face: Option<TexId>,
     core_lid_face: Option<TexId>,
+    /// The lid shrunk to its held-up size, smooth there (xe2).
+    core_lid_small_face: Option<TexId>,
     core_faces_stem: Option<String>,
     core_socket_faces: Vec<TexId>,
     core_chip_faces: Vec<TexId>,
     core_blank_chip_face: Option<TexId>,
     core_chip_shadow_face: Option<TexId>,
-    core_legend_faces: Vec<(TexId, u32)>,
+    core_legend_faces: Vec<(TexId, u32, u32)>,
     game_menu: Option<GameMenu>,
     link_sprites: Option<LinkSprites>,
     link_shot: Option<TexId>,
+    /// The plug coming out of a cancel goes back to the role picker, not to the game: a second
+    /// B closes the Game Link (Roy 2026-11-13).
+    unplug_to_pick: bool,
     link_hardware: LinkKind,
     last_role: LinkRow,
     link_choices: HashMap<String, LinkKind>,
@@ -407,6 +461,8 @@ pub struct App {
     link_legend_faces: Vec<(TexId, u32)>,
     starting: Option<LinkStarting>,
     link_transport: Option<(u16, Box<dyn LinkChannel>)>,
+    /// The other Game Boy's address once linked: gambatte dials it itself.
+    link_gb_peer: Option<std::net::IpAddr>,
     restarting: bool,
     act_at: Millis,
     root: Option<PathBuf>,
@@ -429,6 +485,8 @@ pub struct App {
     sgb: bool,
     /// When the Super Game Boy went in: the camera closes in on it from then.
     sgb_zoom_at: Option<Millis>,
+    /// The Super Game Boy's face at the band's size, per model, for the camera (xh2).
+    sgb_zoom_faces: Option<[TexId; 4]>,
     /// The camera pulling back out of the Super Game Boy, from the Game Boy shelf it showed.
     sgb_unzoom: Option<(Millis, usize)>,
     named_core: bool,
@@ -439,6 +497,7 @@ pub struct App {
     clock_faces: Option<(TexId, TexId)>,
     quick_menu_faces: Option<QuickMenuFaces>,
     buttons_faces: Option<slot_ui::ButtonsFaces>,
+    screen_cal_faces: Option<slot_ui::ScreenCalFaces>,
     quick_clock_faces: Option<[(TexId, u32, u32); 2]>,
     quick_network_faces: Option<[(TexId, u32, u32); 2]>,
     quick_zone_faces: Option<[(TexId, u32, u32); 2]>,
@@ -455,9 +514,30 @@ pub struct App {
     cheats: Vec<crate::cheats::Cheat>,
     cheats_for: Option<(Platform, String)>,
     cheat_page: Option<(usize, usize)>,
+    /// The achievements screens: chosen card, and whether its detail is open (test build).
+    ra_view: Option<(usize, usize, bool)>,
+    ra_tex: Option<(TexId, u32, u32)>,
+    ra_dirty: bool,
+    /// The in-game menu's big achievements button.
+    ra_button: Option<(TexId, u32, u32)>,
+    /// The unlock bar and when it came down.
+    ra_toast: Option<(TexId, u32, u32)>,
+    ra_toast_at: Option<Millis>,
+    /// The Recents shelf as a memory: 0 in colour, 1 faded (MEMORY_COLOUR) under its veil.
+    memory: f32,
+    memory_veil: Option<TexId>,
+    /// A buzz waiting for the session to play it.
+    buzz: Option<Buzz>,
+    /// The charger as last read, to buzz when it goes in.
+    charge_seen: Option<Charge>,
+    /// The toast last buzzed for, by when it was said.
+    toast_buzzed: Option<Millis>,
     cheats_pending: Option<Vec<String>>,
     /// Bumped whenever the list of names changes, so the frontend rebuilds their faces.
     cheats_rev: u64,
+    /// Counts the shelves filled afresh after the ROM Manager: new games get their labels
+    /// and cheats looked for at once.
+    games_rev: u64,
     cheat_faces: Option<slot_ui::CheatFaces>,
     /// The robber: in the menu corner, and in play.
     cheat_badges: Option<[(TexId, u32, u32); 2]>,
@@ -488,20 +568,31 @@ pub struct App {
     ground: Option<TexId>,
     ground_light: Option<TexId>,
     wallpaper: Option<TexId>,
+    /// Each wallpaper face's burnt tones, for the shadows over it (ui6).
+    shadow_grounds: Vec<(TexId, std::rc::Rc<slot_ui::ShadowGround>)>,
     random_wallpaper: Option<Option<String>>,
     battery_percent: slot_ui::Printed,
     bolt: Option<TexId>,
     wifi: Option<TexId>,
     hud_wifi: Option<TexId>,
+    /// The Bluetooth mark beside the Wi-Fi one, and whether headphones are connected over it.
+    bt_face: Option<TexId>,
+    hud_bt: Option<TexId>,
+    bt_connected: bool,
     hud_bolt: Option<TexId>,
     /// GBA dark, GBA light, Game Boy dark, Game Boy light.
-    slot_sets: Option<[(TexId, TexId); 17]>,
-    nes_lids: Option<[TexId; 3]>,
+    slot_sets: Option<Vec<(TexId, TexId)>>,
+    slot_colours: Vec<[f32; 4]>,
+    nes_lids: Option<[TexId; 5]>,
+    /// The original Game Boy's power switch, knob and tab, in the dark and the light grey.
+    power_faces: Option<[(TexId, TexId); 2]>,
     shelf_platform: slot_ui::Printed,
     shelf_title: slot_ui::Printed,
     name_pending: bool,
     slot_letter: Option<char>,
     shelf_named: Option<Millis>,
+    /// The game the title is about (shelf, cart) and when its fade began.
+    title_picked: Option<(usize, usize, Millis)>,
     shelf_clock: slot_ui::Printed,
     hud: Hud,
     screen: f32,
@@ -509,11 +600,23 @@ pub struct App {
     eject_overlay: f32,
     panel: (u32, u32),
     game_ready: bool,
+    /// Play time and dust bookkeeping (Config/wear.tsv), and the last tick it counted.
+    wear: slot_store::wear::WearBook,
+    play_tick: Option<Millis>,
+    play_unsaved_ms: u64,
+    wear_dirty: bool,
+    /// A blow under way: the cart's wear-book key and when its dust is really gone.
+    blow_due: Option<(String, Millis)>,
+    /// A dusty cart picked to play: blown first, then it goes in (clean start or not).
+    insert_after_blow: Option<bool>,
     clock: f64,
     last_activity: Millis,
     power: Option<Power>,
     dozed_at: Millis,
     deep_tried: bool,
+    /// Put to sleep with POWER (or the lid): only POWER wakes it, the other buttons are
+    /// locked. Asleep on the idle timer, any button wakes it (Roy 2026-11-13).
+    doze_locked: bool,
     power_quiet_until: Millis,
     woke_on_press: bool,
     autosave_at: Millis,
@@ -547,8 +650,14 @@ pub struct FaceWant {
     pub on_screen: bool,
 }
 
+/// The header index keeps only the games still on the card.
+fn retain_headers(carts: &[Cart]) {
+    let roms: Vec<std::path::PathBuf> = carts.iter().map(|c| c.rom.clone()).collect();
+    slot_store::header_index::retain(&roms);
+}
+
 fn shelves_of(carts: Vec<Cart>) -> Vec<(Rack, Shelf)> {
-    let mut rows: Vec<(Rack, Vec<Cart>)> = [Rack::Recents, Rack::Favorites]
+    let mut rows: Vec<(Rack, Vec<Cart>)> = [Rack::Recents, Rack::Deck, Rack::Favorites]
         .into_iter()
         .chain(Platform::ALL.iter().map(|p| Rack::Of(*p)))
         .map(|r| (r, Vec::new()))
@@ -583,12 +692,14 @@ impl App {
             phase: Phase::Shelf,
             shelves,
             shelf_at,
+            shelf_leaving: None,
             orphaned: Vec::new(),
             play_held: None,
             held_dir: None,
             refusal: None,
+            calibrate: Default::default(),
             refused_from: None,
-            alert_face: None,
+            perch_shadows: None,
             power_held_since: None,
             core_picker: None,
             shell_picker: None,
@@ -608,6 +719,11 @@ impl App {
             wifi_on_at: 0,
             quick_nearby: Vec::new(),
             quick_texts: Vec::new(),
+            quick_names: Vec::new(),
+            bt_devices: Vec::new(),
+            bt_busy: None,
+            bt_list_at: 0,
+            bt_scan_at: 0,
             quick_title: None,
             address: None,
             wps_poll_at: 0,
@@ -622,6 +738,7 @@ impl App {
             core_board_face: None,
             core_interior_face: None,
             core_lid_face: None,
+            core_lid_small_face: None,
             core_faces_stem: None,
             core_socket_faces: Vec::new(),
             core_chip_faces: Vec::new(),
@@ -631,6 +748,7 @@ impl App {
             game_menu: None,
             link_sprites: None,
             link_shot: None,
+            unplug_to_pick: false,
             link_hardware: LinkKind::Cable,
             last_role: LinkRow::Host,
             link_choices: HashMap::new(),
@@ -644,6 +762,7 @@ impl App {
             link_legend_faces: Vec::new(),
             starting: None,
             link_transport: None,
+            link_gb_peer: None,
             restarting: false,
             act_at: 0,
             root: None,
@@ -661,6 +780,7 @@ impl App {
             platform: Platform::default(),
             sgb: false,
             sgb_zoom_at: None,
+            sgb_zoom_faces: None,
             sgb_unzoom: None,
             named_core: false,
             link: None,
@@ -674,6 +794,7 @@ impl App {
             quick_zone_faces: None,
             quick_wallpaper_faces: None,
             buttons_faces: None,
+            screen_cal_faces: None,
             quick_palette_faces: None,
             quick_bezel_faces: [None, None, None],
             game_bezel: None,
@@ -684,8 +805,20 @@ impl App {
             cheats: Vec::new(),
             cheats_for: None,
             cheat_page: None,
+            ra_view: None,
+            ra_tex: None,
+            ra_dirty: false,
+            ra_button: None,
+            ra_toast: None,
+            ra_toast_at: None,
+            memory: 0.0,
+            memory_veil: None,
+            buzz: None,
+            charge_seen: None,
+            toast_buzzed: None,
             cheats_pending: None,
             cheats_rev: 0,
+            games_rev: 0,
             cheat_faces: None,
             cheat_badges: None,
             menu_scroll: std::cell::Cell::new((usize::MAX, 0)),
@@ -705,19 +838,26 @@ impl App {
             ground: None,
             ground_light: None,
             wallpaper: None,
+            shadow_grounds: Vec::new(),
             random_wallpaper: None,
             battery_percent: slot_ui::Printed::default(),
             bolt: None,
             wifi: None,
             hud_wifi: None,
+            bt_face: None,
+            hud_bt: None,
+            bt_connected: false,
             hud_bolt: None,
             slot_sets: None,
+            slot_colours: Vec::new(),
             nes_lids: None,
+            power_faces: None,
             shelf_platform: slot_ui::Printed::default(),
             shelf_title: slot_ui::Printed::default(),
             name_pending: false,
             slot_letter: None,
             shelf_named: None,
+            title_picked: None,
             shelf_clock: slot_ui::Printed::default(),
             hud: Hud::new(),
             screen: 0.0,
@@ -725,11 +865,18 @@ impl App {
             eject_overlay: 0.0,
             panel: (0, 0),
             game_ready: false,
+            wear: Default::default(),
+            play_tick: None,
+            play_unsaved_ms: 0,
+            wear_dirty: false,
+            blow_due: None,
+            insert_after_blow: None,
             clock: 0.0,
             last_activity: 0,
             power: None,
             dozed_at: 0,
             deep_tried: false,
+            doze_locked: false,
             power_quiet_until: 0,
             woke_on_press: false,
             autosave_at: AUTOSAVE_MS,
@@ -758,24 +905,32 @@ impl App {
 
     pub fn boot_marked(root: &Path, loading: Option<LoadingMark>) -> Self {
         crate::root::ensure(root);
+        slot_store::header_index::load(root);
         crate::boot_time::mark("root");
+        slot_store::tidy_game_names(root);
         let carts = scan(root).unwrap_or_default();
+        retain_headers(&carts);
         crate::boot_time::mark("scan");
         let mut app = App::new(carts);
         app.root = Some(root.to_path_buf());
         app.loading = loading;
         app.state = read_slot_state(root);
+        tell_libc_the_zone(app.time_zone());
+        app.wear = slot_store::wear::WearBook::read(root);
         // Renames from a GRAVY Manager the console went off with, still open.
         app.follow_renames(root);
         app.radio.ask(RadioJob::Home(app.state.home_wifi_enabled));
         app.radio.ask(RadioJob::Time(app.auto_time_on()));
         app.restock_recents();
         app.restock_favorites();
+        app.restock_deck();
         if app.state.remember_position {
             if let Some((at, i)) = app.remembered_seat() {
                 app.shelf_at = at;
                 app.shelves[at].1.select(i);
             }
+        } else if !app.shelves[DECK_AT].1.carts.is_empty() {
+            app.shelf_at = DECK_AT;
         } else if !app.shelves[FAVORITES_AT].1.carts.is_empty() {
             app.shelf_at = FAVORITES_AT;
         } else if app.state.show_recents && !app.shelves[RECENTS_AT].1.carts.is_empty() {
@@ -789,7 +944,26 @@ impl App {
         app
     }
 
+    /// A game's dust counts from the day it first stood on the shelf. Without a set clock there
+    /// is no day to count from.
+    fn note_seen(&mut self) {
+        if !self.state.clock_set {
+            return;
+        }
+        let now = self.utc_secs().max(0) as u64;
+        let before = self.wear.clone();
+        for (_, shelf) in &self.shelves {
+            for cart in &shelf.carts {
+                self.wear.see(&slot_store::wear::key(cart.platform, &cart.stem), now);
+            }
+        }
+        if self.wear != before {
+            self.save_wear();
+        }
+    }
+
     fn start(&mut self) {
+        self.note_seen();
         if let Some(stem) = self.loading.as_ref().and_then(LoadingMark::left) {
             return self.start_after_a_crash(&stem);
         }
@@ -907,25 +1081,10 @@ impl App {
     }
 
     fn switch_shelf(&mut self, by: i32) {
-        // With the Super Game Boy in, the Game Boy shelf is the only one; B takes it out. The
-        // Super Game Boy 2 has a secret: the Game Boy Color shelf beside it.
+        // With the Super Game Boy in, the Game Boy shelf is the only one; B takes it out. Like
+        // the real ones, the Super Game Boy 2 plays Game Boy games only (Roy).
         let to = match self.sgb {
-            true => {
-                let here = self.shelves[self.shelf_at].0;
-                let other = match here {
-                    Rack::Of(Platform::Gb) => Platform::Gbc,
-                    _ => Platform::Gb,
-                };
-                let at = self
-                    .shelves
-                    .iter()
-                    .position(|(r, _)| *r == Rack::Of(other))
-                    .filter(|_| self.sgb_two());
-                match at {
-                    Some(at) => at,
-                    None => return self.refuse(),
-                }
-            }
+            true => return self.refuse(),
             false => match self.next_shelf(by) {
                 Some(to) => to,
                 None => return,
@@ -933,6 +1092,14 @@ impl App {
         };
         self.shelf_mut().release_hold();
         self.play_held = None;
+        // The old carts go off one way, the new ones come in from the other.
+        let side = if by < 0 { 1.0 } else { -1.0 };
+        let from = self.shelf_at;
+        if from != to {
+            self.shelves[from].1.depart(side);
+            self.shelves[to].1.arrive(-side);
+            self.shelf_leaving = Some(from);
+        }
         self.shelf_at = to;
         self.shelf_platform = slot_ui::Printed::default();
         self.slot_letter = None;
@@ -979,6 +1146,7 @@ impl App {
             Phase::QuickMenu { .. } => vertical,
             Phase::Shelf => vertical && self.core_picker.is_none() && self.shell_picker.is_none(),
             Phase::Polaroids { .. } => !vertical,
+            Phase::ScreenColors => !vertical,
             Phase::Playing { .. } => vertical && self.in_game_menu.is_some(),
             _ => false,
         }
@@ -1008,16 +1176,30 @@ impl App {
         let Some(at) = self.shelf_named else {
             return 0.0;
         };
-        let t = self.now().saturating_sub(at);
-        let level = if t < SLOT_NAME_IN_MS {
-            t as f32 / SLOT_NAME_IN_MS as f32
-        } else if t < SLOT_NAME_IN_MS + SLOT_NAME_HOLD_MS {
-            1.0
-        } else {
-            let out = t - SLOT_NAME_IN_MS - SLOT_NAME_HOLD_MS;
-            1.0 - (out as f32 / SLOT_NAME_OUT_MS as f32).min(1.0)
-        };
-        SLOT_NAME_ALPHA * ease(level)
+        SLOT_NAME_ALPHA * ease(name_level(self.now().saturating_sub(at)))
+    }
+
+    /// Fading titles: a new pick starts the title's fade again, carrying on from how far
+    /// in the old one was, so moving along a lit title keeps it lit.
+    fn track_title_pick(&mut self) {
+        let pick = (self.shelf_at, self.shelf().index);
+        if self.title_picked.is_some_and(|(at, i, _)| (at, i) == pick) {
+            return;
+        }
+        let lit = self.title_fade_t().map_or(0.0, name_level);
+        let back = (lit * SLOT_NAME_IN_MS as f32) as Millis;
+        self.title_picked = Some((pick.0, pick.1, self.now().saturating_sub(back)));
+    }
+
+    /// How far the title is into its fade: it waits for the console name to hand over.
+    fn title_fade_t(&self) -> Option<Millis> {
+        let (_, _, picked) = self.title_picked?;
+        // Fully up as the console name is fully gone, then a whole hold of its own.
+        let gone = self.shelf_named.map_or(0, |at| {
+            at + SLOT_NAME_IN_MS + SLOT_NAME_HOLD_MS + SLOT_NAME_OUT_MS
+        });
+        let from = picked.max(gone.saturating_sub(SLOT_NAME_IN_MS));
+        Some(self.now().saturating_sub(from))
     }
 
     fn next_shelf(&self, by: i32) -> Option<usize> {
@@ -1088,6 +1270,7 @@ impl App {
             self.state.utc_offset_min = offset as i16;
         }
         self.state.time_zone = zone.city();
+        tell_libc_the_zone(zone);
         self.state.clock_set = true;
         self.persist();
         if from_menu {
@@ -1137,16 +1320,25 @@ impl App {
     /// The in-game rows this game has no use for.
     pub fn in_game_hidden(&self) -> Vec<QuickRow> {
         let platform = self.playing_platform();
+        let mut early = Vec::new();
+        slot_ui::TOP_BUTTON.store(Self::ra_on(), std::sync::atomic::Ordering::Relaxed);
+        if !Self::ra_on() {
+            early.push(QuickRow::Achievements);
+        }
         // The shelf's Game Settings row: in game, Settings opens Screen and Gameplay as rows,
         // so their pages show no tabs.
-        let mut hidden = vec![QuickRow::Screen];
+        // B resumes and the main menu has the screenshots, so the in-game menu leaves them
+        // out (Roy, 2026-11-07).
+        let mut hidden = vec![QuickRow::Screen, QuickRow::Resume, QuickRow::GameScreenshots, QuickRow::RaToggle];
+        hidden.extend(early);
         if !self.palette_capable {
             hidden.push(QuickRow::Palette);
         }
         if platform == Platform::Gba && !self.framed_panel() {
             hidden.push(QuickRow::Bezel);
         }
-        if platform == Platform::Gba {
+        // The GBA fills a 3:2 panel: nothing round its picture to colour.
+        if platform == Platform::Gba && self.framed_panel() {
             hidden.push(QuickRow::BlackBorder);
         }
         // A TV console has no LCD to dress up: none of the handhelds' screen rows apply, so
@@ -1158,11 +1350,15 @@ impl App {
                 QuickRow::Bezel,
                 QuickRow::PixelTransparency,
                 QuickRow::LcdGhosting,
+                QuickRow::SharpPixels,
                 QuickRow::BlackBorder,
             ]);
         }
         if !platform.tv() {
             hidden.extend(TV_ROWS);
+        }
+        if platform != Platform::Gba || self.framed_panel() {
+            hidden.push(QuickRow::ScreenShape);
         }
         if !self.sgb_playing() {
             hidden.push(QuickRow::SgbBorder);
@@ -1174,8 +1370,8 @@ impl App {
         if !gbc_screen {
             hidden.push(QuickRow::ScreenLight);
         }
-        // Only the NES's picture has colours a TV made up.
-        if platform != Platform::Nes {
+        // Only a TV console's picture has colours a TV made up.
+        if !matches!(platform, Platform::Nes | Platform::Snes) {
             hidden.push(QuickRow::Colors);
         }
         if self.single_cart() {
@@ -1209,12 +1405,17 @@ impl App {
             (QuickRow::LcdGhosting, Platform::Gb) => QuickRow::GbGhosting,
             (QuickRow::LcdGhosting, Platform::Gbc) => QuickRow::GbcGhosting,
             (QuickRow::LcdGhosting, Platform::Gba) => QuickRow::GbaGhosting,
+            (QuickRow::SharpPixels, Platform::Gb) => QuickRow::GbSharp,
+            (QuickRow::SharpPixels, Platform::Gbc) => QuickRow::GbcSharp,
+            (QuickRow::SharpPixels, Platform::Gba) => QuickRow::GbaSharp,
             (QuickRow::BlackBorder, Platform::Gb) => QuickRow::GbBlackBorder,
             (QuickRow::BlackBorder, Platform::Gbc) => QuickRow::GbcBlackBorder,
+            (QuickRow::BlackBorder, Platform::Gba) => QuickRow::GbaBlackBorder,
             (QuickRow::ScreenLight, Platform::Gbc | Platform::Gb) => QuickRow::GbcLight,
             (QuickRow::Cable, Platform::Nes) => QuickRow::NesCable,
             (QuickRow::Cable, Platform::Snes) => QuickRow::SnesCable,
             (QuickRow::Colors, Platform::Nes) => QuickRow::NesColors,
+            (QuickRow::Colors, Platform::Snes) => QuickRow::SnesColors,
             (QuickRow::Scanlines, Platform::Nes) => QuickRow::NesScanlines,
             (QuickRow::Scanlines, Platform::Snes) => QuickRow::SnesScanlines,
             (QuickRow::Mask, Platform::Nes) => QuickRow::NesMask,
@@ -1231,6 +1432,7 @@ impl App {
             | QuickRow::ScreenLight
             | QuickRow::PixelTransparency
             | QuickRow::LcdGhosting
+            | QuickRow::SharpPixels
             | QuickRow::BlackBorder
             | QuickRow::Cable
             | QuickRow::Colors
@@ -1252,11 +1454,8 @@ impl App {
             }),
             QuickRow::NesCable => Some(cable_value(self.state.tv_cable_nes)),
             QuickRow::SnesCable => Some(cable_value(self.state.tv_cable_snes)),
-            QuickRow::NesColors => Some(match self.state.nes_colors {
-                NesColors::Standard => QuickValue::Standard,
-                NesColors::Sony => QuickValue::Sony,
-                NesColors::Authentic => QuickValue::Authentic,
-            }),
+            QuickRow::NesColors => Some(colors_value(self.state.nes_colors)),
+            QuickRow::SnesColors => Some(colors_value(self.state.snes_colors)),
             QuickRow::NesScanlines => Some(QuickValue::flag(self.state.tv_scanlines_nes)),
             QuickRow::SnesScanlines => Some(QuickValue::flag(self.state.tv_scanlines_snes)),
             QuickRow::NesMask => Some(QuickValue::flag(self.state.tv_mask_nes)),
@@ -1272,30 +1471,59 @@ impl App {
             QuickRow::GbGhosting => Some(QuickValue::flag(self.state.lcd_ghosting_gb)),
             QuickRow::GbcGhosting => Some(QuickValue::flag(self.state.lcd_ghosting_gbc)),
             QuickRow::GbaGhosting => Some(QuickValue::flag(self.state.lcd_ghosting_gba)),
+            QuickRow::GbSharp => Some(QuickValue::flag(self.state.sharp_pixels_gb)),
+            QuickRow::GbcSharp => Some(QuickValue::flag(self.state.sharp_pixels_gbc)),
+            QuickRow::GbaSharp => Some(QuickValue::flag(self.state.sharp_pixels_gba)),
+            QuickRow::GbaShape | QuickRow::ScreenShape => Some(if self.state.gba_shape {
+                QuickValue::Ratio3x2
+            } else {
+                QuickValue::Ratio4x3
+            }),
             QuickRow::GbaShader => Some(QuickValue::flag(self.state.shader_gba != Shader::Off)),
             QuickRow::GbShader => Some(QuickValue::flag(self.state.shader_gb != Shader::Off)),
             QuickRow::GbcShader => Some(QuickValue::flag(self.state.shader_gbc != Shader::Off)),
-            QuickRow::Rumble => Some(QuickValue::flag(self.state.rumble)),
+            QuickRow::Rumble => Some(QuickValue::flag(self.rumble_enabled())),
             QuickRow::HomeWifi => Some(QuickValue::flag(self.state.home_wifi_enabled)),
+            QuickRow::Bluetooth => Some(QuickValue::flag(self.state.bluetooth_enabled)),
+            QuickRow::BtMineHeading
+            | QuickRow::BtOtherHeading
+            | QuickRow::BtMine0
+            | QuickRow::BtMine1
+            | QuickRow::BtMine2
+            | QuickRow::BtMine3
+            | QuickRow::BtOther0
+            | QuickRow::BtOther1
+            | QuickRow::BtOther2
+            | QuickRow::BtOther3
+            | QuickRow::BtOther4
+            | QuickRow::BtOther5 => None,
             QuickRow::AutoTime => Some(QuickValue::flag(self.auto_time_on())),
             QuickRow::Clock24 => Some(QuickValue::flag(self.state.clock_24h)),
             QuickRow::CheatIcon => Some(QuickValue::flag(self.state.cheat_icon)),
+            QuickRow::RaToggle => Some(QuickValue::flag(self.state.achievements && self.ra_login())),
             QuickRow::GbcBlackBorder => Some(QuickValue::flag(self.state.gbc_black_border)),
             QuickRow::GbcLight => Some(GBC_LIGHTS[usize::from(self.state.gbc_light.min(2))]),
             QuickRow::GbBlackBorder => Some(QuickValue::flag(self.state.gb_black_border)),
+            QuickRow::GbaBlackBorder => Some(QuickValue::flag(self.state.gba_black_border)),
             QuickRow::EjectSave => Some(QuickValue::flag(self.state.eject_save)),
             QuickRow::Turbo => Some(QuickValue::flag(self.state.turbo)),
             QuickRow::Rewind => Some(QuickValue::flag(self.state.rewind)),
 
-            QuickRow::Recents => Some(if self.state.show_recents {
-                QuickValue::Show
-            } else {
-                QuickValue::Hide
+            QuickRow::Recents => Some(match (self.state.show_recents, self.state.recents_memory) {
+                (false, _) => QuickValue::OffChoice,
+                (true, false) => QuickValue::RecentsColor,
+                (true, true) => QuickValue::Memory,
             }),
-            QuickRow::ShowTitles => Some(if self.state.show_titles {
-                QuickValue::Show
-            } else {
-                QuickValue::Hide
+            QuickRow::Deck => Some(match (self.state.show_deck, self.state.deck_spotlight) {
+                (false, _) => QuickValue::OffChoice,
+                (true, true) => QuickValue::Spotlight,
+                (true, false) => QuickValue::NoSpotlight,
+            }),
+            QuickRow::DustWear => Some(QuickValue::flag(self.state.dust_wear)),
+            QuickRow::ShowTitles => Some(match (self.state.show_titles, self.state.fade_titles) {
+                (false, _) => QuickValue::BorderOff,
+                (true, false) => QuickValue::Always,
+                (true, true) => QuickValue::Fade,
             }),
             QuickRow::WallpaperTint => Some(match self.state.wallpaper_tint {
                 WallpaperTint::Off => QuickValue::Off,
@@ -1303,10 +1531,11 @@ impl App {
                 WallpaperTint::Medium => QuickValue::Medium,
                 WallpaperTint::High => QuickValue::High,
             }),
+            QuickRow::FavoriteGold => Some(QuickValue::flag(self.gold_slots_on())),
             QuickRow::FavoriteMark => Some(match self.state.favorite_mark {
-                FavoriteMark::GoldGlow => QuickValue::GoldGlow,
                 FavoriteMark::Highlight => QuickValue::WhiteGlow,
                 FavoriteMark::Star => QuickValue::StarMark,
+                FavoriteMark::Off => QuickValue::OffChoice,
             }),
             QuickRow::Theme => Some(match self.state.appearance {
                 slot_store::Appearance::Dark => QuickValue::Dark,
@@ -1335,6 +1564,7 @@ impl App {
             | QuickRow::NetForget
             | QuickRow::TimeZone
             | QuickRow::About
+            | QuickRow::ScreenColors
             | QuickRow::Screenshots
             | QuickRow::Screen
             | QuickRow::Game
@@ -1345,6 +1575,7 @@ impl App {
             | QuickRow::Resume
             | QuickRow::States
             | QuickRow::Cheats
+            | QuickRow::Achievements
             | QuickRow::GameScreenshots
             | QuickRow::Settings
             | QuickRow::ExitGame
@@ -1371,6 +1602,7 @@ impl App {
                 QuickValue::Hide
             }),
             QuickRow::ResumeGame => Some(QuickValue::flag(self.state.resume_game)),
+            QuickRow::Vibration => Some(QuickValue::flag(self.state.vibration)),
             QuickRow::BootPicture => Some(QuickValue::flag(self.state.boot_picture)),
             QuickRow::RememberPosition => Some(if self.state.remember_position {
                 QuickValue::Show
@@ -1378,6 +1610,35 @@ impl App {
                 QuickValue::Hide
             }),
         }
+    }
+
+    pub fn set_screen_cal_faces(&mut self, faces: slot_ui::ScreenCalFaces) {
+        self.screen_cal_faces = Some(faces);
+    }
+
+    fn open_screen_colors(&mut self) {
+        let now = self.now() as u64;
+        self.calibrate.open_console(self.root.as_deref(), now);
+        self.phase = Phase::ScreenColors;
+    }
+
+    /// A on Screen Calibration: the colours kept on the card, the screen stays open.
+    fn save_screen_colors(&mut self) {
+        match self.calibrate.save_console(self.root.as_deref()) {
+            Ok(()) => self.show_toast(Toast::ScreenSaved),
+            Err(e) => {
+                eprintln!("slot: display calibration: could not save: {e}");
+                self.show_toast(Toast::CardUnwritable);
+            }
+        }
+    }
+
+    /// B closes Screen Calibration: the saved colours back, unsaved changes go.
+    fn close_screen_colors(&mut self) {
+        self.calibrate.close_console(self.root.as_deref());
+        self.phase = Phase::QuickMenu {
+            row: QuickRow::ScreenColors,
+        };
     }
 
     pub fn set_buttons_faces(&mut self, faces: slot_ui::ButtonsFaces) {
@@ -1581,12 +1842,6 @@ impl App {
         self.light_ground()
     }
 
-    /// Which About back the About page itself shows: with Originals always the light one, the
-    /// original DMG's grey (Roy); otherwise as `about_light`.
-    pub fn about_back_light(&self) -> bool {
-        self.originals() || self.about_light()
-    }
-
     /// Whether the wallpaper behind the shelf and menus is a light one, so text and shadows on
     /// it go dark. Over your own wallpaper the menus are always the black ones, whatever the
     /// Slot Color (Roy).
@@ -1606,15 +1861,9 @@ impl App {
 
     /// Dark ink on a light wallpaper, light ink on a dark one or on black (Wallpaper Off).
     pub fn menu_ink(&self) -> slot_ui::theme::Ink {
-        let mut ink = slot_ui::theme::ink(self.light_ground());
-        // On the Dark or Light wallpaper the menus sit on a flat ground of its own tone.
-        if matches!(
-            self.resolved_wallpaper(),
-            WallpaperPick::Dark | WallpaperPick::Light
-        ) {
-            ink.wash = slot_ui::theme::menu_flat(self.light_ground());
-        }
-        ink
+        // One menu for every wallpaper: the Dark and Light ones get the same wash, shadow and
+        // see-through as your own wallpapers (Roy 2026-11-12, ui9).
+        slot_ui::theme::ink(self.light_ground())
     }
 
     fn draw_background(&self, out: &mut Vec<Draw>) {
@@ -1656,8 +1905,14 @@ impl App {
         if !own {
             hidden.push(QuickRow::WallpaperTint);
         }
+        if cfg!(not(feature = "retroachievements")) {
+            hidden.push(QuickRow::RaToggle);
+        }
         if !self.framed_panel() {
             hidden.push(QuickRow::GbaBezel);
+        } else {
+            // A 3:2 panel is the GBA's own shape: its picture is always 3:2 there (Roy).
+            hidden.push(QuickRow::GbaShape);
         }
         // With Wi-Fi on the joined network's row is always there, saying how it is going; the
         // networks nearby show as many rows as were heard.
@@ -1671,7 +1926,122 @@ impl App {
             ]);
             hidden.extend_from_slice(&QuickRow::NEARBY);
         }
+        // Bluetooth on: the headphones paired, then those nearby, as many rows as there are.
+        if self.state.bluetooth_enabled {
+            let (mine, other) = self.bt_split();
+            hidden.extend_from_slice(&QuickRow::BT_MINE[mine.len()..]);
+            hidden.extend_from_slice(&QuickRow::BT_OTHER[other.len()..]);
+            if mine.is_empty() {
+                hidden.push(QuickRow::BtMineHeading);
+            }
+        } else {
+            hidden.extend_from_slice(&QuickRow::BLUETOOTH[1..]);
+        }
         hidden
+    }
+
+    /// The paired devices (at most four) and the others nearby (at most six), in list order.
+    fn bt_split(&self) -> (Vec<&BtDevice>, Vec<&BtDevice>) {
+        let mut mine: Vec<&BtDevice> = self.bt_devices.iter().filter(|d| d.paired).collect();
+        let mut other: Vec<&BtDevice> = self.bt_devices.iter().filter(|d| !d.paired).collect();
+        mine.truncate(QuickRow::BT_MINE.len());
+        other.truncate(QuickRow::BT_OTHER.len());
+        (mine, other)
+    }
+
+    fn bt_device(&self, row: QuickRow) -> Option<BtDevice> {
+        let (mine, other) = self.bt_split();
+        match (row.bt_mine(), row.bt_other()) {
+            (Some(k), _) => mine.get(k).map(|d| (*d).clone()),
+            (_, Some(k)) => other.get(k).map(|d| (*d).clone()),
+            _ => None,
+        }
+    }
+
+    /// A on a device: one nearby pairs and connects, a paired one connects or disconnects.
+    fn choose_bt(&mut self, row: QuickRow) {
+        let Some(d) = self.bt_device(row) else { return };
+        if self.bt_busy.is_some() {
+            return;
+        }
+        let verb = match (d.paired, d.connected) {
+            (false, _) => "pair",
+            (true, true) => "disconnect",
+            (true, false) => "connect",
+        };
+        self.bt_busy = Some(d.mac.clone());
+        self.radio.bt(BtJob::Act(verb, d.mac));
+    }
+
+    /// X on a paired device: forgotten, pairing again needs its pairing mode.
+    fn forget_bt(&mut self, row: QuickRow) {
+        let Some(d) = self.bt_device(row) else { return };
+        if self.bt_busy.is_some() {
+            return;
+        }
+        self.bt_busy = Some(d.mac.clone());
+        self.radio.bt(BtJob::Act("forget", d.mac));
+    }
+
+    /// While the Bluetooth page is open: the list every second, a new search every 15 s,
+    /// and how a pair or connect is going.
+    fn follow_bt(&mut self, now: Millis) {
+        while let Some(answer) = self.radio.bt_answer() {
+            match answer {
+                BtAnswer::Listed(Some(devices)) => {
+                    // The cursor stays on the device it was on, as far as it can.
+                    let was = match self.phase {
+                        Phase::QuickMenu { row } => self.bt_device(row).map(|d| d.mac),
+                        _ => None,
+                    };
+                    self.bt_devices = devices;
+                    if let Some(mac) = was {
+                        let (mine, other) = self.bt_split();
+                        let row = mine
+                            .iter()
+                            .position(|d| d.mac == mac)
+                            .map(|k| QuickRow::BT_MINE[k])
+                            .or_else(|| other.iter().position(|d| d.mac == mac).map(|k| QuickRow::BT_OTHER[k]));
+                        if let Some(row) = row {
+                            self.phase = Phase::QuickMenu { row };
+                        }
+                    }
+                }
+                BtAnswer::Listed(None) => {}
+                BtAnswer::Job(j) if j == "FAILED" => {
+                    if self.bt_busy.take().is_some() {
+                        self.hud.toast(Toast::BtFailed, now);
+                    }
+                }
+                BtAnswer::Job(j) if j == "DONE" || j == "NONE" => {
+                    self.bt_busy = None;
+                    self.bt_list_at = 0;
+                }
+                BtAnswer::Job(_) => {}
+                BtAnswer::PowerFailed(_) => {
+                    // The switch stays on, as on a phone: the service keeps trying.
+                    self.hud.toast(Toast::BtNotReady, now);
+                }
+            }
+        }
+        let open = matches!(self.phase, Phase::QuickMenu { row } if row.page() == QuickRow::BLUETOOTH);
+        if !open || !self.state.bluetooth_enabled {
+            self.bt_scan_at = 0;
+            return;
+        }
+        if now >= self.bt_list_at {
+            self.bt_list_at = now + 1000;
+            if self.bt_busy.is_some() {
+                // While connecting: only how it goes, no search and no list in its way.
+                self.radio.bt(BtJob::Status);
+                return;
+            }
+            self.radio.bt(BtJob::List);
+        }
+        if self.bt_busy.is_none() && now >= self.bt_scan_at {
+            self.bt_scan_at = now + 15_000;
+            self.radio.bt(BtJob::Scan);
+        }
     }
 
     fn random_drawn(&self) -> bool {
@@ -1686,37 +2056,55 @@ impl App {
         self.clock_faces = Some((line, hint));
     }
 
+    /// The spotlight's beam, and its light on a cart's top per mould in `Mould::ALL` order.
+    pub fn set_spot_faces(
+        &mut self,
+        beam: TexId,
+        rays: [TexId; 3],
+        room: TexId,
+        under: TexId,
+        edges: [TexId; Mould::ALL.len()],
+    ) {
+        for (_, shelf) in &mut self.shelves {
+            shelf.set_spot_faces(beam, rays, room, under, edges);
+        }
+    }
+
     /// Per mould, in `Mould::ALL` order.
     pub fn set_mark_faces(
         &mut self,
-        gold: [TexId; Mould::ALL.len()],
         halo: [TexId; Mould::ALL.len()],
+        rims: [TexId; Mould::ALL.len()],
         star: (TexId, u32, u32),
+        puff_dot: TexId,
+        sparkle: TexId,
     ) {
         for (_, shelf) in &mut self.shelves {
-            for (style, faces) in [
-                (FavoriteMark::GoldGlow, gold),
-                (FavoriteMark::Highlight, halo),
-            ] {
-                for (mould, face) in Mould::ALL.into_iter().zip(faces) {
-                    shelf.set_glow(style, mould, face);
-                }
+            for (mould, face) in Mould::ALL.into_iter().zip(halo) {
+                shelf.set_glow(mould, face);
             }
+            for (mould, face) in Mould::ALL.into_iter().zip(rims) {
+                shelf.set_rim(mould, face);
+            }
+            shelf.set_sparkle(sparkle);
             shelf.set_star(star.0, star.1, star.2);
+            shelf.set_puff_dot(puff_dot);
         }
     }
 
     fn mark_stars(&mut self) {
         let light_ground = self.light_ground();
+        let own_ground = self.own_wallpaper_shown();
         slot_ui::set_light_ground(light_ground);
         let state = &self.state;
         for (rack, shelf) in &mut self.shelves {
             shelf.set_mark(state.favorite_mark);
-            // The Favorites shelf is all favourites already: marking each one only adds noise.
+            // Every cart on the Favorites shelf is a favourite and carries its own mark (Roy).
             let on_favorites = *rack == Rack::Favorites;
-            shelf.mark_starred(|c| !on_favorites && state.is_favorite(c.platform, &c.stem));
-            shelf.set_spotlight(on_favorites);
+            shelf.mark_starred(|c| on_favorites || state.is_favorite(c.platform, &c.stem));
+            shelf.set_spotlight(*rack == Rack::Deck && state.deck_spotlight);
             shelf.set_light_ground(light_ground);
+            shelf.set_own_ground(own_ground);
         }
     }
 
@@ -1757,11 +2145,25 @@ impl App {
 
     pub fn set_wallpaper(&mut self, face: TexId) {
         self.wallpaper = Some(face);
+        // The shelves learn it is your own wallpaper now it is there (the Deck's beam).
+        self.mark_stars();
+    }
+
+    /// The colours of a wallpaper face (`rgba`, OUT_W x OUT_H), so shadows over it take them.
+    pub fn set_shadow_ground(&mut self, face: TexId, rgba: &[u8]) {
+        let ground = std::rc::Rc::new(slot_ui::ShadowGround::new(rgba, OUT_W, OUT_H));
+        self.shadow_grounds.retain(|(f, _)| *f != face);
+        self.shadow_grounds.push((face, ground));
     }
 
     pub fn set_wifi_face(&mut self, face: TexId, hud: TexId) {
         self.hud_wifi = Some(hud);
         self.wifi = Some(face);
+    }
+
+    pub fn set_bt_face(&mut self, face: TexId, hud: TexId) {
+        self.hud_bt = Some(hud);
+        self.bt_face = Some(face);
     }
 
     /// The menu's Home Wi-Fi setting, whether or not a network is up yet.
@@ -1778,17 +2180,99 @@ impl App {
     }
 
     /// The Wi-Fi mark, only while home Wi-Fi is on and connected.
-    fn wifi_shown(&self, face: Option<TexId>) -> Option<TexId> {
-        (self.state.home_wifi_enabled && self.radio.home_connected())
-            .then_some(face)
-            .flatten()
+    /// Wi-Fi off: no fan. On and joined: solid; on but not joined: see-through (Roy, ui11).
+    fn wifi_shown(&self, face: Option<TexId>) -> slot_ui::Marks {
+        let wifi = face
+            .filter(|_| self.state.home_wifi_enabled)
+            .map(|face| (face, if self.radio.home_connected() { 1.0 } else { 0.35 }));
+        // The Bluetooth mark in the same ink as the Wi-Fi mark beside it.
+        let bt_face = if face == self.hud_wifi { self.hud_bt } else { self.bt_face };
+        let bt = bt_face
+            .filter(|_| self.state.bluetooth_enabled)
+            .map(|face| (face, if self.bt_connected { 1.0 } else { 0.35 }));
+        slot_ui::Marks { wifi, bt }
     }
 
     pub fn set_hud_bolt_face(&mut self, bolt: TexId) {
         self.hud_bolt = Some(bolt);
     }
 
-    pub fn set_slot_sets(&mut self, sets: [(TexId, TexId); 17], nes_lids: [TexId; 3]) {
+    pub fn set_power_faces(&mut self, faces: [(TexId, TexId); 2]) {
+        self.power_faces = Some(faces);
+    }
+
+    /// The original Game Boy's power switch, on the Game Boy slot only (not the Color's, not
+    /// the Super Game Boy's): off on the shelf, slid on once the pak is in, which locks it, and
+    /// off again before it comes out (Roy).
+    fn power_switch(&self) -> Option<slot_ui::PowerSwitch> {
+        let faces = self.power_faces?;
+        if self.slot_platform() != Platform::Gb || self.sgb_band() || self.sgb {
+            return None;
+        }
+        let light = self.slot_light();
+        let clear = self.gb_case_clear();
+        // In Originals the switch is dark grey on every case; on the clear one knob, tab and
+        // slider are one dark grey part (Roy).
+        let (knob, tab) = faces[usize::from(light && !self.originals())];
+        Some(slot_ui::PowerSwitch {
+            knob,
+            tab,
+            on: self.power_on(),
+            light: light || clear,
+            clear,
+            lock: !self.originals() || slot_ui::GB_SLOT_CASES[self.gb_slot_case()].lock,
+        })
+    }
+
+    /// The empty slot of the shelf with its switch, off, its tab in the wall.
+    fn draw_idle_slot(&self, out: &mut Vec<Draw>) {
+        slot_ui::draw_empty_slot_power(self.canvas(), self.slot_faces(), self.power_switch(), out);
+    }
+
+    fn power_on(&self) -> f32 {
+        match &self.phase {
+            Phase::Shelf => 0.0,
+            Phase::Inserting { t, resumed, .. } => match resumed {
+                true => 1.0,
+                false => {
+                    ease(((t - SEATED_AT - POWER_LOCK_AFTER_S) / POWER_LOCK_S).clamp(0.0, 1.0))
+                }
+            },
+            // Off first, the tab out of the notch, then the pak comes out.
+            Phase::Ejecting { t, .. } => {
+                1.0 - ease(((t + POWER_UNLOCK_BEFORE_S) / POWER_LOCK_S).clamp(0.0, 1.0))
+            }
+            _ => 1.0,
+        }
+    }
+
+    pub fn set_slot_colours(&mut self, colours: Vec<[f32; 4]>) {
+        self.slot_colours = colours;
+    }
+
+    /// The colour of the slot on the shelf: a studio case's own colour code, else the panel of
+    /// the slot showing. The link screen's port wears it (Roy 2026-11-12).
+    pub fn slot_colour(&self) -> [f32; 4] {
+        let rgb = |c: [u8; 3]| [c[0] as f32 / 255.0, c[1] as f32 / 255.0, c[2] as f32 / 255.0, 1.0];
+        if self.originals()
+            && matches!(self.slot_platform(), Platform::Gb | Platform::Gbc | Platform::Gba)
+        {
+            let case = self.gb_slot_case();
+            if (1..slot_ui::GB_SLOT_CASES.len()).contains(&case) {
+                return rgb(slot_ui::GB_SLOT_CASES[case].swatch);
+            }
+        }
+        self.slot_colours
+            .get(self.slot_index())
+            .copied()
+            .unwrap_or([0.16, 0.16, 0.17, 1.0])
+    }
+
+    pub fn set_sgb_zoom_faces(&mut self, faces: [TexId; 4]) {
+        self.sgb_zoom_faces = Some(faces);
+    }
+
+    pub fn set_slot_sets(&mut self, sets: Vec<(TexId, TexId)>, nes_lids: [TexId; 5]) {
         self.slot_sets = Some(sets);
         self.nes_lids = Some(nes_lids);
     }
@@ -1832,7 +2316,11 @@ impl App {
         if named.is_some_and(|t| t < SLOT_NAME_IN_MS + SLOT_NAME_HOLD_MS) {
             return 0.0;
         }
-        1.0 - self.slot_name_alpha() / SLOT_NAME_ALPHA
+        let shown = 1.0 - self.slot_name_alpha() / SLOT_NAME_ALPHA;
+        if !self.state.fade_titles {
+            return shown;
+        }
+        shown * self.title_fade_t().map_or(0.0, |t| ease(name_level(t)))
     }
 
     pub fn shelf_platform_name(&self) -> Option<&'static str> {
@@ -2128,7 +2616,7 @@ impl App {
     pub fn sgb_playing(&self) -> bool {
         self.sgb
             && self.seated_cart().is_some_and(|c| {
-                c.platform == Platform::Gb || (c.platform == Platform::Gbc && self.sgb_two())
+                c.platform == Platform::Gb
             })
     }
 
@@ -2186,7 +2674,7 @@ impl App {
     /// `come` of the way down into place, the sharp band showing from `u` 0.55 on.
     fn draw_sgb_camera(&self, e: f32, come: f32, u: f32, gb_shelf: usize, out: &mut Vec<Draw>) {
         self.draw_background(out);
-        let (Some(model), Some(sets)) = (self.sgb_model(), self.slot_sets) else {
+        let (Some(model), Some(sets)) = (self.sgb_model(), self.slot_sets.as_ref()) else {
             return;
         };
         let canvas = self.canvas();
@@ -2198,15 +2686,11 @@ impl App {
         let (dx, dy) = (x - k * a.0, y - k * a.1);
         // The Game Boy shelf comes down from above over the second half.
         if come > 0.0 {
-            let from = out.len();
             slot_ui::set_sgb_band(true);
+            // Cart by cart, the outer ones first, as on a shelf change (Roy).
             self.shelves[gb_shelf]
                 .1
-                .draw_row(canvas, None, 0.0, 0.0, 1.0, out);
-            let drop = -(1.0 - come) * canvas.h;
-            for d in &mut out[from..] {
-                zoom_draw(d, 1.0, 0.0, drop, 1.0);
-            }
+                .draw_row_coming_down(canvas, come, out);
         }
         // The SNES around it, the SGB standing in its slot, the clock: all under the camera.
         slot_ui::set_sgb_band(false);
@@ -2214,7 +2698,7 @@ impl App {
             true => sets[12 + orig_kind(Platform::Snes)],
             false => sets[3 * 2 + usize::from(self.light())],
         });
-        let from = out.len();
+        let snes_from = out.len();
         slot_ui::draw_slot_part(canvas, snes, false, out);
         let face = self
             .shelves
@@ -2240,19 +2724,31 @@ impl App {
             true => ((1.0 - (1.0 - COVER) / (1.0 - COVER * sharp)) / COVER).clamp(0.0, 1.0),
             false => 1.0,
         };
-        if let Some(tex) = face {
-            out.push(Draw::Tex {
-                x: a.0,
-                y: a.1,
-                w: a.2,
-                h: a.3,
-                tex,
-                alpha: face_alpha,
-            });
+        // As the camera closes in, the shelf face gives way to the same face drawn at the band's
+        // size, its top the band's own art: the zoom stays as sharp as the slots instead of
+        // growing soft, and the band lands on what is already there (Roy, xh2). Same place,
+        // same shape, so the two never show double; the clear one keeps its plastic's cover
+        // while they cross, as with the band.
+        let hd = ease((e / 0.45).clamp(0.0, 1.0));
+        let cover = if clear { COVER } else { 1.0 };
+        let under = ((1.0 - (1.0 - cover) / (1.0 - cover * hd)) / cover).clamp(0.0, 1.0);
+        let big = self.sgb_zoom_faces.map(|t| t[model as usize]);
+        let layers = [(face, if big.is_some() { under } else { 1.0 }), (big, hd)];
+        for (tex, k) in layers {
+            if let (Some(tex), true) = (tex, k * face_alpha > 0.0) {
+                out.push(Draw::Tex {
+                    x: a.0,
+                    y: a.1,
+                    w: a.2,
+                    h: a.3,
+                    tex,
+                    alpha: face_alpha * k,
+                });
+            }
         }
         slot_ui::draw_slot_part(canvas, snes, true, out);
         self.draw_shelf_footer(out);
-        for d in &mut out[from..] {
+        for d in &mut out[snes_from..] {
             zoom_draw(d, k, dx, dy, 1.0);
         }
         // Over the second half the band's own sharp art fades in over the enlarged face, under
@@ -2271,6 +2767,15 @@ impl App {
             for d in &mut out[from..] {
                 zoom_draw(d, r, dx - dx1 * r, dy - dy1 * r, sharp);
             }
+            // The band's shadow goes under the SNES and the face, on the wallpaper only: over
+            // them it showed through the band while that faded in, a dark veil on the
+            // Super Game Boy (Roy, xh1).
+            let (shades, band): (Vec<Draw>, Vec<Draw>) = out
+                .split_off(from)
+                .into_iter()
+                .partition(|d| matches!(d, Draw::Shade { .. }));
+            out.extend(band);
+            out.splice(snes_from..snes_from, shades);
         }
         slot_ui::set_sgb_band(self.sgb_band());
     }
@@ -2430,7 +2935,9 @@ impl App {
 
     pub fn set_power(&mut self, mut power: Power) {
         power.set_backlight(self.state.brightness + 1);
-        self.headphones = power.headphones();
+        // Bluetooth headphones count as headphones: their own volume and the headphone icon.
+        self.bt_connected = crate::audio::bt_route().is_some();
+        self.headphones = power.headphones() || self.bt_connected;
         self.hud.set_headphones(self.headphones);
         let secs = power.now();
         if matches!(self.phase, Phase::SetClock { .. }) || secs < CLOCK_FLOOR {
@@ -2485,7 +2992,38 @@ impl App {
     }
 
     pub fn rumble_enabled(&self) -> bool {
-        self.state.rumble
+        self.state.rumble && self.state.vibration
+    }
+
+    /// Ask for a buzz; the session plays it. Nothing with Vibration off or while asleep.
+    pub fn buzz(&mut self, buzz: Buzz) {
+        // Asleep the console stays still, except for the charger: plugging it in for the night
+        // is when the tap is wanted most.
+        let asleep = matches!(self.phase, Phase::Doze { .. }) && buzz != Buzz::Charger;
+        if self.state.vibration && !asleep {
+            self.buzz = Some(buzz);
+        }
+    }
+
+    /// The charger going in: one tap. Looked at every second with the charge light, so the
+    /// tap comes as the plug goes in, not up to ten seconds later with the percentage. A read
+    /// that failed (Unknown) is skipped, so it never counts as the plug coming out.
+    fn buzz_on_charger(&mut self) {
+        let Some(charge) = self.battery.map(|b| b.charge) else {
+            return;
+        };
+        if charge == Charge::Unknown {
+            return;
+        }
+        let plugged = |c: Charge| matches!(c, Charge::Charging | Charge::Full);
+        if self.charge_seen.is_some_and(|c| !plugged(c)) && plugged(charge) {
+            self.buzz(Buzz::Charger);
+        }
+        self.charge_seen = Some(charge);
+    }
+
+    pub fn take_buzz(&mut self) -> Option<Buzz> {
+        self.buzz.take()
     }
 
     pub fn ff_speed(&self) -> u8 {
@@ -2508,8 +3046,9 @@ impl App {
     /// SELECT + B switched every screen effect of a Game Boy off: the emulator's own picture,
     /// without slot.'s dimming, saturation, panel tone or palette either. Switching them off
     /// one by one in the menu leaves the rest as it is: Ghosting off keeps the palette (Roy).
+    /// The GBA has no palette to keep: every effect off in the menu is bare too, as SELECT + B.
     pub fn screen_bare(&self) -> bool {
-        self.effects_off && self.effects_all_off()
+        self.effects_all_off() && (self.effects_off || self.playing_platform() == Platform::Gba)
     }
 
     /// Every screen effect of the playing Game Boy is off, however that came to be.
@@ -2540,7 +3079,8 @@ impl App {
         match self.playing_platform() {
             Platform::Gb => self.state.gb_black_border,
             Platform::Gbc => self.state.gbc_black_border,
-            Platform::Gba | Platform::Nes | Platform::Snes => false,
+            Platform::Gba => self.state.gba_black_border,
+            Platform::Nes | Platform::Snes => false,
         }
     }
 
@@ -2566,16 +3106,38 @@ impl App {
     /// The slot art for the platform showing: the GBA slot, the Game Boy's for GB and GBC
     /// carts, the NES band with its lid or the SNES band, in the theme's housing.
     fn slot_faces(&self) -> Option<(TexId, TexId)> {
-        let sets = self.slot_sets?;
+        let sets = self.slot_sets.as_ref()?;
+        sets.get(self.slot_index()).copied()
+    }
+
+    fn slot_index(&self) -> usize {
         // With the Super Game Boy in, the Game Boy carts go into its top: its own colours,
         // whatever the theme.
         if let (true, Platform::Gb | Platform::Gbc) = (self.sgb, self.slot_platform()) {
             if let Some(model) = self.sgb_model() {
-                return Some(sets[8 + model as usize]);
+                return 8 + model as usize;
             }
         }
+        if let Some(kind) = self.fav_gold() {
+            return 16 + slot_ui::GB_SLOT_CASES.len() + 4 + kind;
+        }
         if self.originals() {
-            return Some(sets[12 + orig_kind(self.slot_platform())]);
+            if let (Platform::Gb | Platform::Gbc | Platform::Gba, case @ 1..) = (self.slot_platform(), self.gb_slot_case()) {
+                return 16 + case;
+            }
+            // the NES's and SNES's Dark, or DMG Grey (after the GBC's theme slots)
+            let snes = usize::from(self.slot_platform() == Platform::Snes);
+            match (self.slot_platform(), self.tv_slot_case()) {
+                (Platform::Nes | Platform::Snes, 1) => return (2 + snes) * 2,
+                (Platform::Nes | Platform::Snes, 2) => {
+                    return 16 + slot_ui::GB_SLOT_CASES.len() + 2 + snes
+                }
+                _ => {}
+            }
+            return 12 + orig_kind(self.slot_platform());
+        }
+        if self.slot_platform() == Platform::Gbc {
+            return 16 + slot_ui::GB_SLOT_CASES.len() + usize::from(self.light());
         }
         let kind = match self.slot_platform() {
             Platform::Gba => 0,
@@ -2583,7 +3145,104 @@ impl App {
             Platform::Nes => 2,
             Platform::Snes => 3,
         };
-        Some(sets[kind * 2 + usize::from(self.light())])
+        kind * 2 + usize::from(self.light())
+    }
+
+    /// The Game Boy slot's case in Originals, as an index into slot_ui::GB_SLOT_CASES: the
+    /// studio's while it is open on the Slot tab, else the one kept.
+    /// On the Game Boy Color shelf it is one of the Color's own (from GBC_SLOT_FIRST), on the
+    /// Advance's one of its own (from GBA_SLOT_FIRST).
+    /// The NES's or SNES's slot case kept, in slot_ui::TV_SLOT_CASES.
+    fn tv_slot_kept(&self) -> u8 {
+        match self.slot_platform() {
+            Platform::Snes => self.state.slot_case_snes,
+            _ => self.state.slot_case_nes,
+        }
+    }
+
+    /// The NES's or SNES's slot case shown: the studio's while it is open, else the one kept.
+    fn tv_slot_case(&self) -> usize {
+        let case = self
+            .shell_picker
+            .as_ref()
+            .and_then(|p| p.slot_case())
+            .unwrap_or(usize::from(self.tv_slot_kept()));
+        if case < slot_ui::TV_SLOT_CASES.len() { case } else { 0 }
+    }
+
+    /// The Game Boy slot case the shelf shows (1.. in slot_ui::GB_SLOT_CASES), for the
+    /// frontend to paint when it is first shown.
+    pub fn slot_case_wanted(&self) -> Option<usize> {
+        let gb = matches!(self.slot_platform(), Platform::Gb | Platform::Gbc | Platform::Gba);
+        (gb && self.originals()).then(|| self.gb_slot_case()).filter(|c| *c > 0)
+    }
+
+    fn gb_slot_case(&self) -> usize {
+        let platform = self.slot_platform();
+        if matches!(platform, Platform::Nes | Platform::Snes) {
+            return 0;
+        }
+        let kept = match platform {
+            Platform::Gbc => self.state.slot_case_gbc,
+            Platform::Gba => self.state.slot_case_gba,
+            _ => self.state.slot_case_gb,
+        };
+        let case = self
+            .shell_picker
+            .as_ref()
+            .and_then(|p| p.slot_case())
+            .unwrap_or(usize::from(kept));
+        let gba_count: usize = slot_ui::GBA_SLOT_MODELS.iter().sum();
+        match platform {
+            Platform::Gbc if case < slot_ui::GBC_SLOT_MODELS[0] => slot_ui::GBC_SLOT_FIRST + case,
+            Platform::Gbc => slot_ui::GBC_SLOT_FIRST,
+            Platform::Gba if case < gba_count => slot_ui::GBA_SLOT_FIRST + case,
+            Platform::Gba => slot_ui::GBA_SLOT_FIRST,
+            _ if case < slot_ui::GBC_SLOT_FIRST => case,
+            _ => 0,
+        }
+    }
+
+    /// Whether the slot's mouth is the shallow one (Pocket, Light, Game Boy Color in
+    /// Originals; the Game Boy Color in the dark and light themes too), so the pak lies on it
+    /// and casts a shadow.
+    fn slot_perched(&self) -> bool {
+        if self.sgb {
+            return false;
+        }
+        match (self.originals(), self.slot_platform()) {
+            (true, Platform::Gb | Platform::Gbc) => !slot_ui::GB_SLOT_CASES[self.gb_slot_case()].lock,
+            (false, Platform::Gbc) => true,
+            _ => false,
+        }
+    }
+
+    /// On the Favorites shelf the slots are gold (Roy, sh11), unless switched off or the studio
+    /// is showing its own: which gold slot, in slot_ui::slot_fav_gold's kinds.
+    /// Gold Slots, unless favourites are marked Off: then no gold either.
+    fn gold_slots_on(&self) -> bool {
+        self.state.favorite_gold && self.state.favorite_mark != FavoriteMark::Off
+    }
+
+    fn fav_gold(&self) -> Option<usize> {
+        if !self.gold_slots_on()
+            || self.shelves[self.shelf_at].0 != Rack::Favorites
+            || self.shell_picker.is_some()
+        {
+            return None;
+        }
+        Some(match self.slot_platform() {
+            Platform::Gb if self.originals() => slot_ui::slot_model(self.gb_slot_case()).min(1),
+            Platform::Gb => 0,
+            Platform::Gbc => 2,
+            Platform::Gba => 3,
+            Platform::Nes => 4,
+            Platform::Snes => 5,
+        })
+    }
+
+    fn gb_case_clear(&self) -> bool {
+        self.fav_gold().is_none() && self.originals() && (slot_ui::GB_SLOT_CASES[self.gb_slot_case()].finish == slot_ui::SlotFinish::Clear)
     }
 
     fn originals(&self) -> bool {
@@ -2594,11 +3253,14 @@ impl App {
     /// dark: the theme's, or with Originals the console's own (the GBC's and GBA's purples
     /// are dark).
     pub fn slot_light(&self) -> bool {
+        if self.fav_gold().is_some() {
+            return true;
+        }
         match self.originals() {
-            true => matches!(
-                self.slot_platform(),
-                Platform::Gb | Platform::Nes | Platform::Snes
-            ),
+            true => match self.slot_platform() {
+                Platform::Gb | Platform::Gbc | Platform::Gba => slot_ui::GB_SLOT_CASES[self.gb_slot_case()].light,
+                Platform::Nes | Platform::Snes => slot_ui::TV_SLOT_CASES[self.tv_slot_case()].light,
+            },
             false => self.light(),
         }
     }
@@ -2641,7 +3303,23 @@ impl App {
         }
     }
 
-    /// The playing system's Ghosting.
+    /// The GBA in its own 3:2 shape instead of stretched to the screen (row or SELECT + L2/R2);
+    /// only a 4:3 panel has the choice, a 3:2 one shows the GBA as it is.
+    pub fn gba_shape(&self) -> bool {
+        self.playing_platform() == Platform::Gba && self.state.gba_shape && !self.framed_panel()
+    }
+
+    /// Whether the playing picture is drawn with every pixel the same size when it is not
+    /// scaled a whole number of times; a TV console's picture goes through its own CRT.
+    pub fn sharp_pixels(&self) -> bool {
+        match self.playing_platform() {
+            Platform::Gb => self.state.sharp_pixels_gb,
+            Platform::Gbc => self.state.sharp_pixels_gbc,
+            Platform::Gba => self.state.sharp_pixels_gba,
+            Platform::Nes | Platform::Snes => false,
+        }
+    }
+
     pub fn lcd_ghosting(&self) -> bool {
         self.lcd_ghosting_for(self.playing_platform())
     }
@@ -2669,7 +3347,7 @@ impl App {
             },
             Platform::Snes if s.tv_filter_snes => TvLook {
                 cable: s.tv_cable_snes,
-                colors: NesColors::Standard,
+                colors: s.snes_colors,
                 scanlines: s.tv_scanlines_snes,
                 mask: s.tv_mask_snes,
                 afterglow: s.tv_afterglow_snes,
@@ -2683,18 +3361,10 @@ impl App {
     fn change_tv_setting(&mut self, row: QuickRow, right: bool) -> bool {
         let s = &mut self.state;
         match row {
-            QuickRow::NesCable => s.tv_cable_nes = step_cable(s.tv_cable_nes, right, false),
-            QuickRow::SnesCable => s.tv_cable_snes = step_cable(s.tv_cable_snes, right, true),
-            QuickRow::NesColors => {
-                let all = NesColors::ALL;
-                let at = all.iter().position(|c| *c == s.nes_colors).unwrap_or(0);
-                let n = all.len();
-                s.nes_colors = all[if right {
-                    (at + 1) % n
-                } else {
-                    (at + n - 1) % n
-                }];
-            }
+            QuickRow::NesCable => s.tv_cable_nes = step_cable(s.tv_cable_nes, right),
+            QuickRow::SnesCable => s.tv_cable_snes = step_cable(s.tv_cable_snes, right),
+            QuickRow::NesColors => s.nes_colors = step_colors(s.nes_colors, right),
+            QuickRow::SnesColors => s.snes_colors = step_colors(s.snes_colors, right),
             QuickRow::NesScanlines => s.tv_scanlines_nes = !s.tv_scanlines_nes,
             QuickRow::SnesScanlines => s.tv_scanlines_snes = !s.tv_scanlines_snes,
             QuickRow::NesMask => s.tv_mask_nes = !s.tv_mask_nes,
@@ -2762,6 +3432,10 @@ impl App {
 
     pub fn game_menu(&self) -> Option<GameMenu> {
         self.game_menu
+    }
+
+    pub fn take_link_gb_peer(&mut self) -> Option<std::net::IpAddr> {
+        self.link_gb_peer.take()
     }
 
     pub fn take_link_transport(&mut self) -> Option<(u16, Box<dyn LinkChannel>)> {
@@ -2846,7 +3520,17 @@ impl App {
             return self.refuse();
         }
         if reload.cancelled {
-            return self.close_game_menu();
+            // cancelled with B while it loaded: the plug comes back out first (Roy 2026-11-13)
+            let working = match self.game_menu {
+                Some(GameMenu::Working { role, .. }) => Some(role),
+                _ => None,
+            };
+            self.close_game_menu();
+            if let Some(role) = working {
+                self.unplug(role);
+                self.unplug_to_pick = true;
+            }
+            return;
         }
         let since = match self.game_menu {
             Some(GameMenu::Working { since, .. }) => since,
@@ -2888,6 +3572,22 @@ impl App {
     }
 
     pub fn apply(&mut self, action: Action) {
+        // Asleep by POWER: the buttons are locked, only POWER (or the lid) wakes it.
+        if self.doze_locked
+            && matches!(self.phase, Phase::Doze { .. })
+            && !matches!(
+                action,
+                Action::PowerPress
+                    | Action::PowerTap
+                    | Action::PowerHold
+                    | Action::PowerCancel
+                    | Action::PowerOff
+                    | Action::LidOpen
+                    | Action::LidClose
+            )
+        {
+            return;
+        }
         self.track_held_dir(action);
         self.last_activity = self.now();
         match action {
@@ -2983,6 +3683,14 @@ impl App {
         }
         if self.in_game_menu.is_none() {
             self.cheat_page = None;
+            self.ra_view = None;
+        }
+        if let (Some(_), Some(_), Phase::Playing { .. }) =
+            (self.in_game_menu, self.ra_view, &self.phase)
+        {
+            if action != Action::Eject {
+                return self.ra_input(action);
+            }
         }
         if let (Some(_), Some(_), Phase::Playing { .. }) =
             (self.in_game_menu, self.cheat_page, &self.phase)
@@ -3023,14 +3731,18 @@ impl App {
                 Action::GbaDown(Btn::A) => self.play_held = Some(now),
                 Action::GbaUp(Btn::A) => {
                     if self.play_held.take().is_some() {
-                        self.insert(!self.state.eject_save);
+                        self.blow_then_insert(!self.state.eject_save);
                     }
                 }
                 Action::Insert => self.insert(!self.state.eject_save),
                 Action::GbaDown(Btn::L1) => self.switch_shelf(-1),
                 Action::GbaDown(Btn::R1) => self.switch_shelf(1),
                 Action::GbaDown(Btn::Y) => self.toggle_favorite(),
+                Action::GbaDown(Btn::X) if self.shelf_at == RECENTS_AT => self.forget_recent(),
                 Action::GbaDown(Btn::B) | Action::Eject if self.sgb => self.eject_sgb(),
+                // B lays the cart on the Deck or takes it off (Roy); in the Super Game Boy it
+                // still takes the SGB out.
+                Action::GbaDown(Btn::B) if self.state.show_deck => self.toggle_deck(),
                 _ => {}
             },
             Phase::Inserting { .. } if action == Action::Eject => self.eject(),
@@ -3044,7 +3756,10 @@ impl App {
                 Action::Eject => self.eject(),
                 Action::GameMenu => self.game_menu_shortcut(),
                 Action::QuickMenu if self.state.in_game_menu => {
-                    self.tap_in_game_menu(Some(QuickRow::PLAY[0]))
+                    // The menu opens on its first row: the achievements button when it shows.
+                    let hidden = self.in_game_hidden();
+                    let first = QuickRow::Achievements.shown(&hidden).first().copied();
+                    self.tap_in_game_menu(Some(first.unwrap_or(QuickRow::States)))
                 }
                 Action::Polaroids => self.double_tap_states(),
                 Action::SaveState => self.save_state(),
@@ -3076,6 +3791,27 @@ impl App {
             Phase::About if action == Action::GbaDown(Btn::B) || action == Action::QuickMenu => {
                 self.phase = Phase::QuickMenu {
                     row: QuickRow::About,
+                }
+            }
+            Phase::ScreenColors => {
+                let now = self.now() as u64;
+                let cal = &mut self.calibrate;
+                match action {
+                    Action::GbaDown(Btn::Left) | Action::ShelfLeft => cal.console_input(now, |c| c.nudge(-1)),
+                    Action::GbaDown(Btn::Right) | Action::ShelfRight => cal.console_input(now, |c| c.nudge(1)),
+                    Action::GbaDown(Btn::Up) => cal.console_input(now, |c| c.row_by(-1)),
+                    Action::GbaDown(Btn::Down) => cal.console_input(now, |c| c.row_by(1)),
+                    Action::GbaDown(Btn::L1) => cal.console_input(now, |c| c.step_by(-1)),
+                    Action::GbaDown(Btn::R1) => cal.console_input(now, |c| c.step_by(1)),
+                    Action::GbaDown(Btn::Y) => cal.console_input(now, |c| c.reset()),
+                    Action::GbaDown(Btn::A) => {
+                        cal.console_input(now, |_| {});
+                        self.save_screen_colors();
+                    }
+                    Action::GbaDown(Btn::B) | Action::QuickMenu => self.close_screen_colors(),
+                    // Any other button only brings the bars back.
+                    Action::GbaDown(_) => cal.console_input(now, |_| {}),
+                    _ => {}
                 }
             }
             Phase::Buttons { page } => {
@@ -3121,6 +3857,7 @@ impl App {
                 None => return,
             },
             Action::GbaDown(Btn::A) => return self.open_quick_row(row),
+            Action::GbaDown(Btn::X) if row.bt_mine().is_some() => return self.forget_bt(row),
             Action::GbaDown(Btn::B) | Action::QuickMenu => {
                 self.phase = match row.parent() {
                     Some(row) => Phase::QuickMenu { row },
@@ -3153,6 +3890,13 @@ impl App {
             QuickRow::Resume => self.in_game_menu = None,
             QuickRow::States => self.open_states(),
             QuickRow::Cheats => self.open_cheats(),
+            // Cheats on: achievements wait, so the button is off and shakes no, like States
+            // with nothing saved (Roy 2026-11-12).
+            QuickRow::Achievements if Self::ra_paused() => self.refuse(),
+            QuickRow::Achievements => {
+                self.ra_view = Some((0, 0, false));
+                self.ra_dirty = true;
+            }
             QuickRow::GameScreenshots => self.open_shots(true),
             QuickRow::ExitGame => self.eject(),
             _ => {
@@ -3161,13 +3905,16 @@ impl App {
                 let hidden = self.in_game_hidden();
                 if let Some(child) = row.child().and_then(|c| c.shown(&hidden).first().copied()) {
                     self.in_game_menu = Some(child);
+                } else if self.quick_value(row).and_then(QuickValue::switch).is_some() {
+                    // A on a switch flips it, as Left / Right do, like the main menu.
+                    self.change_setting(row, true);
                 }
             }
         }
     }
 
     /// The seated or playing cart, and its platform.
-    fn cart_in_slot(&self) -> Option<(Platform, String)> {
+    pub fn cart_in_slot(&self) -> Option<(Platform, String)> {
         let stem = match &self.phase {
             Phase::Playing { cart } | Phase::Inserting { cart, .. } => cart.clone(),
             Phase::Polaroids { cart } => cart.clone(),
@@ -3253,12 +4000,188 @@ impl App {
         self.cheat_badges = Some(badges);
     }
 
+    /// Achievements switched on in Game Settings (the login is checked when a game starts).
+    pub fn achievements_on(&self) -> bool {
+        self.state.achievements
+    }
+
+    /// GRAVY Manager left a RetroAchievements login on the card.
+    fn ra_login(&self) -> bool {
+        #[cfg(feature = "retroachievements")]
+        {
+            self.root.as_deref().is_some_and(|r| crate::ra::read_login(r).is_some())
+        }
+        #[cfg(not(feature = "retroachievements"))]
+        {
+            false
+        }
+    }
+
+    /// RetroAchievements counts for the playing game (test build only).
+    fn ra_on() -> bool {
+        #[cfg(feature = "retroachievements")]
+        {
+            crate::ra::active()
+        }
+        #[cfg(not(feature = "retroachievements"))]
+        {
+            false
+        }
+    }
+
+    /// The chosen card, whether its detail shows, and whether the picture needs drawing again.
+    pub fn ra_view(&self) -> Option<(usize, usize, bool)> {
+        self.ra_view
+    }
+
+    pub fn ra_playing_on(&self) -> bool {
+        Self::ra_on()
+    }
+
+    pub fn ra_button_chosen(&self) -> bool {
+        self.in_game_menu == Some(QuickRow::Achievements)
+    }
+
+    pub fn ra_button(&self) -> Option<(TexId, u32, u32)> {
+        self.ra_button
+    }
+
+    pub fn set_ra_button(&mut self, t: (TexId, u32, u32)) {
+        self.ra_button = Some(t);
+    }
+
+    /// Achievements wait while cheats are on.
+    pub fn ra_paused() -> bool {
+        #[cfg(feature = "retroachievements")]
+        {
+            crate::ra::CHEATS.load(std::sync::atomic::Ordering::Relaxed)
+        }
+        #[cfg(not(feature = "retroachievements"))]
+        {
+            false
+        }
+    }
+
+    /// An unlock bar is still on screen.
+    pub fn ra_toast_busy(&self) -> bool {
+        self.ra_toast_at.is_some_and(|at| self.now().saturating_sub(at) < RA_TOAST_MS)
+    }
+
+    pub fn ra_toast_tex(&self) -> Option<(TexId, u32, u32)> {
+        self.ra_toast
+    }
+
+    /// Show the unlock bar drawn into `tex`.
+    pub fn show_ra_toast(&mut self, tex: (TexId, u32, u32)) {
+        self.ra_toast = Some(tex);
+        self.ra_toast_at = Some(self.now());
+        self.buzz(Buzz::Achievement);
+    }
+
+    /// The bar drops in from above with a little overshoot, waits, and slides back up.
+    fn draw_ra_toast(&self, out: &mut Vec<Draw>) {
+        let (Some((tex, w, h)), Some(at)) = (self.ra_toast, self.ra_toast_at) else {
+            return;
+        };
+        let t = self.now().saturating_sub(at);
+        if t >= RA_TOAST_MS {
+            return;
+        }
+        let h = h as f32;
+        let ease_back = |x: f32| {
+            let (c1, c3) = (1.70158, 2.70158);
+            1.0 + c3 * (x - 1.0).powi(3) + c1 * (x - 1.0).powi(2)
+        };
+        let shown = match t {
+            t if t < 320 => ease_back(t as f32 / 320.0),
+            t if t > RA_TOAST_MS - 260 => 1.0 - ((t - (RA_TOAST_MS - 260)) as f32 / 260.0).powi(2),
+            _ => 1.0,
+        };
+        out.push(Draw::Tex {
+            x: self.canvas().centred(w as f32),
+            y: (-h + h * shown).round(),
+            w: w as f32,
+            h,
+            tex,
+            alpha: 1.0,
+        });
+    }
+
+    pub fn ra_take_dirty(&mut self) -> bool {
+        std::mem::take(&mut self.ra_dirty)
+    }
+
+    pub fn set_ra_tex(&mut self, tex: (TexId, u32, u32)) {
+        self.ra_tex = Some(tex);
+    }
+
+    pub fn ra_tex(&self) -> Option<(TexId, u32, u32)> {
+        self.ra_tex
+    }
+
+    fn ra_input(&mut self, action: Action) {
+        let Some((page, sel, detail)) = self.ra_view else {
+            return;
+        };
+        let dir = match (action, detail) {
+            (Action::GbaDown(Btn::Left), false) => 'l',
+            (Action::GbaDown(Btn::Right), false) => 'r',
+            (Action::GbaDown(Btn::Up), false) => 'u',
+            (Action::GbaDown(Btn::Down), false) => 'd',
+            (Action::GbaDown(Btn::Left | Btn::L1), true) => 'p',
+            (Action::GbaDown(Btn::Right | Btn::R1), true) => 'n',
+            (Action::GbaDown(Btn::A), false) => 'a',
+            (Action::GbaDown(Btn::B), true) => 'b',
+            (Action::GbaDown(Btn::B), false) => {
+                self.ra_view = None;
+                return;
+            }
+            (Action::QuickMenu, _) => {
+                self.ra_view = None;
+                self.tap_in_game_menu(None);
+                return;
+            }
+            _ => return,
+        };
+        let (page, sel, detail) = match dir {
+            'a' => (page, sel, Self::ra_step(page, sel, 'x') != (usize::MAX, 0)),
+            'b' => (page, sel, false),
+            d => {
+                let (p, s) = Self::ra_step(page, sel, d);
+                (p, s, detail)
+            }
+        };
+        self.ra_view = Some((page, sel, detail));
+        self.ra_dirty = true;
+    }
+
+    /// One step on the achievements pages (test build); 'x' only asks whether there is any.
+    fn ra_step(page: usize, sel: usize, dir: char) -> (usize, usize) {
+        #[cfg(feature = "retroachievements")]
+        {
+            let st = crate::ra::STATUS.lock().unwrap();
+            if dir == 'x' {
+                return if st.list.is_empty() { (usize::MAX, 0) } else { (page, sel) };
+            }
+            crate::ra_page::step(&st.list, page, sel, dir)
+        }
+        #[cfg(not(feature = "retroachievements"))]
+        {
+            let _ = dir;
+            (page, sel)
+        }
+    }
+
     pub fn cheat_page_open(&self) -> bool {
         self.cheat_page.is_some()
     }
 
     fn open_cheats(&mut self) {
         self.load_cheats();
+        // No cheats for this game (yet): shake no, like States with nothing saved (Roy).
+        if self.cheats.is_empty() {
+            return self.refuse();
+        }
         self.cheat_page = Some((0, 0));
     }
 
@@ -3365,6 +4288,17 @@ impl App {
             | QuickRow::Nearby6
             | QuickRow::Nearby7 => self.choose_nearby(row),
             QuickRow::OtherNetwork => self.open_other_network(),
+            QuickRow::BtMine0
+            | QuickRow::BtMine1
+            | QuickRow::BtMine2
+            | QuickRow::BtMine3
+            | QuickRow::BtOther0
+            | QuickRow::BtOther1
+            | QuickRow::BtOther2
+            | QuickRow::BtOther3
+            | QuickRow::BtOther4
+            | QuickRow::BtOther5 => self.choose_bt(row),
+            QuickRow::BtMineHeading | QuickRow::BtOtherHeading => {}
             QuickRow::NetForget => self.forget_joined(),
             QuickRow::NearbyHeading
             | QuickRow::NetStatus
@@ -3375,6 +4309,7 @@ impl App {
             QuickRow::ConnectedTo => self.open_network_details(),
             QuickRow::TimeZone => self.open_zones(),
             QuickRow::About => self.phase = Phase::About,
+            QuickRow::ScreenColors => self.open_screen_colors(),
             QuickRow::Screenshots => self.open_shots(false),
             QuickRow::Buttons => self.phase = Phase::Buttons { page: 0 },
             QuickRow::Screen
@@ -3403,20 +4338,27 @@ impl App {
             | QuickRow::GbPalettes
             | QuickRow::Rumble
             | QuickRow::HomeWifi
+            | QuickRow::Bluetooth
             | QuickRow::AutoTime
             | QuickRow::Clock24
             | QuickRow::CheatIcon
+            | QuickRow::RaToggle
             | QuickRow::GbcBlackBorder
             | QuickRow::GbBlackBorder
+            | QuickRow::GbaBlackBorder
             | QuickRow::Theme
             | QuickRow::Recents
+            | QuickRow::Deck
             | QuickRow::FavoriteMark
+            | QuickRow::FavoriteGold
             | QuickRow::ShowTitles
+            | QuickRow::DustWear
             | QuickRow::Wallpaper
             | QuickRow::WallpaperTint
             | QuickRow::Resume
             | QuickRow::States
             | QuickRow::Cheats
+            | QuickRow::Achievements
             | QuickRow::GameScreenshots
             | QuickRow::Settings
             | QuickRow::ExitGame
@@ -3432,6 +4374,7 @@ impl App {
             | QuickRow::GbcLight
             | QuickRow::PixelTransparency
             | QuickRow::LcdGhosting
+            | QuickRow::SharpPixels
             | QuickRow::BlackBorder
             | QuickRow::GbTransparency
             | QuickRow::GbcTransparency
@@ -3439,11 +4382,17 @@ impl App {
             | QuickRow::GbGhosting
             | QuickRow::GbcGhosting
             | QuickRow::GbaGhosting
+            | QuickRow::GbSharp
+            | QuickRow::GbcSharp
+            | QuickRow::GbaSharp
+            | QuickRow::GbaShape
+            | QuickRow::ScreenShape
             | QuickRow::AutoSleep
             | QuickRow::DeepSleep
             | QuickRow::InGameMenu
             | QuickRow::RememberPosition
             | QuickRow::ResumeGame
+            | QuickRow::Vibration
             | QuickRow::BootPicture
             | QuickRow::Sleep
             | QuickRow::Restart
@@ -3451,6 +4400,7 @@ impl App {
             | QuickRow::NesCable
             | QuickRow::SnesCable
             | QuickRow::NesColors
+            | QuickRow::SnesColors
             | QuickRow::NesScanlines
             | QuickRow::SnesScanlines
             | QuickRow::NesMask
@@ -3501,9 +4451,9 @@ impl App {
         if row == QuickRow::GbcLight {
             let s = &mut self.state;
             s.gbc_light = if right {
-                (s.gbc_light + 1) % 3
+                (s.gbc_light.min(2) + 1) % 3
             } else {
-                (s.gbc_light + 2) % 3
+                (s.gbc_light.min(2) + 2) % 3
             };
             self.persist();
             return;
@@ -3554,26 +4504,83 @@ impl App {
             return;
         }
         if row == QuickRow::Recents {
-            self.state.show_recents = !self.state.show_recents;
+            // Memory, Color, Off, round and round: Memory first (Roy 2026-11-13).
+            let s = &mut self.state;
+            let at = match (s.show_recents, s.recents_memory) {
+                (true, true) => 0,
+                (true, false) => 1,
+                (false, _) => 2,
+            };
+            let next = if right { (at + 1) % 3 } else { (at + 2) % 3 };
+            s.show_recents = next < 2;
+            if next < 2 {
+                s.recents_memory = next == 0;
+            }
             self.restock_recents();
+            self.persist();
+            return;
+        }
+        if row == QuickRow::Deck {
+            // Spotlight, No Spotlight, Off, round and round, as the Favorites row goes.
+            let s = &mut self.state;
+            let at = match (s.show_deck, s.deck_spotlight) {
+                (true, true) => 0,
+                (true, false) => 1,
+                (false, _) => 2,
+            };
+            let next = if right { (at + 1) % 3 } else { (at + 2) % 3 };
+            s.show_deck = next < 2;
+            if next < 2 {
+                s.deck_spotlight = next == 0;
+            }
+            self.restock_deck();
+            self.persist();
+            return;
+        }
+        if row == QuickRow::FavoriteGold && self.state.favorite_mark == FavoriteMark::Off {
+            return;
+        }
+        if row == QuickRow::FavoriteGold {
+            self.state.favorite_gold = !self.state.favorite_gold;
             self.persist();
             return;
         }
         if row == QuickRow::FavoriteMark {
             self.state.favorite_mark = self.state.favorite_mark.step(right);
-            self.mark_stars();
+            // Favourites off: the Favorites shelf goes too (Roy 2026-11-13).
+            self.restock_favorites();
+            self.persist();
+            return;
+        }
+        if row == QuickRow::DustWear {
+            self.state.dust_wear = !self.state.dust_wear;
+            self.reface_all();
             self.persist();
             return;
         }
         if row == QuickRow::ShowTitles {
-            self.state.show_titles = !self.state.show_titles;
+            // Fade, Always, Off, round either way: Fade first (Roy 2026-11-13).
+            let at = match (self.state.show_titles, self.state.fade_titles) {
+                (true, true) => 0,
+                (true, false) => 1,
+                (false, _) => 2,
+            };
+            let to = (at + if right { 1 } else { 2 }) % 3;
+            self.state.show_titles = to != 2;
+            self.state.fade_titles = to == 0;
+            self.title_picked = None;
             self.persist();
             return;
         }
         if row == QuickRow::TimeZone {
             self.state.time_zone = self.time_zone().next(right).city();
+            tell_libc_the_zone(self.time_zone());
             self.persist();
             return;
+        }
+        // No login from GRAVY Manager: nothing to switch on, the row shakes no.
+        if row == QuickRow::RaToggle && !self.ra_login() {
+            return self.refuse();
         }
         let s = &mut self.state;
         match row {
@@ -3606,6 +4613,8 @@ impl App {
                 }
                 s.shader_gbc = to;
             }
+            // Vibration off is off for the games too: Rumble stays off and locked.
+            QuickRow::Rumble if !s.vibration => return,
             QuickRow::Rumble => s.rumble = !s.rumble,
             QuickRow::HomeWifi => {
                 s.home_wifi_enabled = !s.home_wifi_enabled;
@@ -3619,6 +4628,14 @@ impl App {
                 self.radio.ask(RadioJob::Home(s.home_wifi_enabled));
                 self.radio.ask(RadioJob::Time(s.auto_time && s.home_wifi_enabled));
             }
+            QuickRow::Bluetooth => {
+                s.bluetooth_enabled = !s.bluetooth_enabled;
+                self.bt_devices.clear();
+                self.bt_busy = None;
+                self.bt_list_at = 0;
+                self.bt_scan_at = 0;
+                self.radio.bt(BtJob::Power(s.bluetooth_enabled));
+            }
             // Without Wi-Fi there is no time to fetch: Auto Time stays off.
             QuickRow::AutoTime if !s.home_wifi_enabled => return,
             QuickRow::AutoTime => {
@@ -3627,8 +4644,10 @@ impl App {
             }
             QuickRow::Clock24 => s.clock_24h = !s.clock_24h,
             QuickRow::CheatIcon => s.cheat_icon = !s.cheat_icon,
+            QuickRow::RaToggle => s.achievements = !s.achievements,
             QuickRow::GbcBlackBorder => s.gbc_black_border = !s.gbc_black_border,
             QuickRow::GbBlackBorder => s.gb_black_border = !s.gb_black_border,
+            QuickRow::GbaBlackBorder => s.gba_black_border = !s.gba_black_border,
             QuickRow::EjectSave => s.eject_save = !s.eject_save,
             QuickRow::Turbo => s.turbo = !s.turbo,
             QuickRow::Rewind => s.rewind = !s.rewind,
@@ -3637,8 +4656,11 @@ impl App {
             QuickRow::WallpaperTint => s.wallpaper_tint = s.wallpaper_tint.step(right),
             QuickRow::Wallpaper
             | QuickRow::Recents
+            | QuickRow::Deck
             | QuickRow::FavoriteMark
+            | QuickRow::FavoriteGold
             | QuickRow::ShowTitles
+            | QuickRow::DustWear
             | QuickRow::DateTime
             | QuickRow::TimeZone
             | QuickRow::AddNetwork
@@ -3646,6 +4668,7 @@ impl App {
             | QuickRow::Wps
             | QuickRow::RomManager
             | QuickRow::About
+            | QuickRow::ScreenColors
             | QuickRow::SgbBorder
             | QuickRow::Nearby0
             | QuickRow::Nearby1
@@ -3662,6 +4685,18 @@ impl App {
             | QuickRow::NetSecurity
             | QuickRow::NetAddress
             | QuickRow::NetForget
+            | QuickRow::BtMineHeading
+            | QuickRow::BtOtherHeading
+            | QuickRow::BtMine0
+            | QuickRow::BtMine1
+            | QuickRow::BtMine2
+            | QuickRow::BtMine3
+            | QuickRow::BtOther0
+            | QuickRow::BtOther1
+            | QuickRow::BtOther2
+            | QuickRow::BtOther3
+            | QuickRow::BtOther4
+            | QuickRow::BtOther5
             | QuickRow::Screenshots
             | QuickRow::Screen
             | QuickRow::Game
@@ -3671,6 +4706,7 @@ impl App {
             | QuickRow::Resume
             | QuickRow::States
             | QuickRow::Cheats
+            | QuickRow::Achievements
             | QuickRow::GameScreenshots
             | QuickRow::Settings
             | QuickRow::ExitGame
@@ -3690,17 +4726,19 @@ impl App {
             | QuickRow::Restart
             | QuickRow::PowerOff
             | QuickRow::GbPalettes
-            // Mapped to this system's own row above; on the GBA there is no border.
+            // Mapped to this system's own row above.
             | QuickRow::ScreenLight
             | QuickRow::GbcLight
             | QuickRow::PixelTransparency
             | QuickRow::LcdGhosting
+            | QuickRow::SharpPixels
             | QuickRow::BlackBorder
             | QuickRow::ScreenNes
             | QuickRow::ScreenSnes
             | QuickRow::NesCable
             | QuickRow::SnesCable
             | QuickRow::NesColors
+            | QuickRow::SnesColors
             | QuickRow::NesScanlines
             | QuickRow::SnesScanlines
             | QuickRow::NesMask
@@ -3716,6 +4754,10 @@ impl App {
             QuickRow::GbTransparency => s.pixel_transparency_gb = !s.pixel_transparency_gb,
             QuickRow::GbcTransparency => s.pixel_transparency_gbc = !s.pixel_transparency_gbc,
             QuickRow::GbaTransparency => s.pixel_transparency_gba = !s.pixel_transparency_gba,
+            QuickRow::GbSharp => s.sharp_pixels_gb = !s.sharp_pixels_gb,
+            QuickRow::GbcSharp => s.sharp_pixels_gbc = !s.sharp_pixels_gbc,
+            QuickRow::GbaSharp => s.sharp_pixels_gba = !s.sharp_pixels_gba,
+            QuickRow::GbaShape | QuickRow::ScreenShape => s.gba_shape = !s.gba_shape,
             QuickRow::GbGhosting | QuickRow::GbcGhosting | QuickRow::GbaGhosting => {
                 let on = match row {
                     QuickRow::GbGhosting => &mut s.lcd_ghosting_gb,
@@ -3748,6 +4790,7 @@ impl App {
             }
             QuickRow::InGameMenu => s.in_game_menu = !s.in_game_menu,
             QuickRow::RememberPosition => s.remember_position = !s.remember_position,
+            QuickRow::Vibration => s.vibration = !s.vibration,
             QuickRow::ResumeGame => s.resume_game = !s.resume_game,
             QuickRow::BootPicture => s.boot_picture = !s.boot_picture,
         }
@@ -3795,6 +4838,7 @@ impl App {
                 }
                 false => {
                     s.tv_cable_snes != TvCable::Off
+                        || s.snes_colors != NesColors::Authentic
                         || s.tv_scanlines_snes
                         || s.tv_mask_snes
                         || s.tv_afterglow_snes
@@ -3815,6 +4859,7 @@ impl App {
                     false => {
                         s.tv_filter_snes = true;
                         s.tv_cable_snes = d.tv_cable_snes;
+                        s.snes_colors = d.snes_colors;
                         s.tv_scanlines_snes = d.tv_scanlines_snes;
                         s.tv_mask_snes = d.tv_mask_snes;
                         s.tv_afterglow_snes = d.tv_afterglow_snes;
@@ -3853,7 +4898,15 @@ impl App {
                 &mut s.effects_saved_gbc,
                 Shader::GbcLcd,
             ),
-            Platform::Gba | Platform::Nes | Platform::Snes => (
+            Platform::Gba => (
+                &mut s.shader_gba,
+                &mut s.pixel_transparency_gba,
+                &mut s.lcd_ghosting_gba,
+                &mut s.gba_black_border,
+                &mut s.effects_saved_gba,
+                Shader::GbaLcd,
+            ),
+            Platform::Nes | Platform::Snes => (
                 &mut s.shader_gba,
                 &mut s.pixel_transparency_gba,
                 &mut s.lcd_ghosting_gba,
@@ -3887,7 +4940,7 @@ impl App {
         };
         *transparency = to & TRANSPARENCY != 0;
         *ghosting = to & GHOSTING != 0;
-        *border = to & BORDER != 0 && platform != Platform::Gba;
+        *border = to & BORDER != 0 && !platform.tv();
         self.lcd_ghosting_pending = Some(*ghosting);
         self.effects_off = !on;
         if standard && platform == Platform::Gb && !self.state.gb_palettes {
@@ -3920,6 +4973,13 @@ impl App {
         {
             return true;
         }
+        // On the GBA there are no palettes: SELECT + L2 / R2 switches its screen size instead.
+        let action = match action {
+            Action::PaletteNext | Action::PalettePrev if self.playing_platform() == Platform::Gba => {
+                Action::ScreenShape
+            }
+            _ => action,
+        };
         if action == Action::ShaderPrev {
             self.toggle_effects();
             return true;
@@ -3937,10 +4997,22 @@ impl App {
             }
             return true;
         }
+        if action == Action::ScreenShape {
+            if self.playing_platform() == Platform::Gba
+                && !self.framed_panel()
+                && matches!(self.phase, Phase::Playing { .. })
+            {
+                self.state.gba_shape = !self.state.gba_shape;
+                self.persist_soon();
+            }
+            return true;
+        }
+        if let Action::BrightnessUp | Action::BrightnessDown = action {
+            self.step_brightness(action == Action::BrightnessUp);
+            return true;
+        }
         let s = &self.state;
         let (kind, value) = match action {
-            Action::BrightnessUp => (HudKind::Brightness, up(s.brightness, 1, BRIGHTNESS_MAX)),
-            Action::BrightnessDown => (HudKind::Brightness, s.brightness.saturating_sub(1)),
             Action::BlueLightUp => (HudKind::BlueLight, up(s.blue_light, 1, BLUE_LIGHT_MAX)),
             Action::BlueLightDown => (HudKind::BlueLight, s.blue_light.saturating_sub(1)),
             Action::VolumeUp => (HudKind::Volume, up(self.level(), VOLUME_STEP, VOLUME_MAX)),
@@ -3998,6 +5070,80 @@ impl App {
         self.persist_soon();
     }
 
+    /// Below the lowest backlight step the picture dims in software, six steps down. The
+    /// HUD shows both as one bar: dim steps first, then the backlight.
+    fn step_brightness(&mut self, brighter: bool) {
+        let s = &self.state;
+        let dim = match brighter {
+            true => s.dim.saturating_sub(1),
+            false if s.brightness == 0 => up(s.dim, 1, DIM_MAX),
+            false => s.dim,
+        };
+        let brightness = match (brighter, dim != s.dim) {
+            (_, true) => s.brightness,
+            (true, false) => up(s.brightness, 1, BRIGHTNESS_MAX),
+            (false, false) => s.brightness.saturating_sub(1),
+        };
+        let moved = (dim, brightness) != (s.dim, s.brightness);
+        self.state.dim = dim;
+        self.state.brightness = brightness;
+        let now = self.now();
+        self.hud
+            .show(HudKind::Brightness, self.brightness_level(), self.muted(), now);
+        if let Some(power) = &mut self.power {
+            power.set_backlight(brightness + 1);
+        }
+        if moved {
+            self.persist_soon();
+        }
+    }
+
+    /// The whole screen's colour, set in Screen Calibration.
+    pub fn screen_saturation(&self) -> f32 {
+        // The Recents memory takes most of the colour out of the whole screen.
+        self.calibrate.saturation() * (1.0 - ease(self.memory) * (1.0 - MEMORY_COLOUR))
+    }
+
+    pub fn set_memory_veil(&mut self, tex: TexId) {
+        self.memory_veil = Some(tex);
+    }
+
+    /// On the Recents shelf (as a memory) the colour drains away; going to another shelf, a
+    /// game or the studio, it comes back. The fade runs with the shelf change, as long as it.
+    fn fade_memory(&mut self, dt: f32) {
+        let on = self.state.show_recents
+            && self.state.recents_memory
+            && self.shelf_at == RECENTS_AT
+            // The menu comes up in colour, as the studio does (Roy 2026-11-13).
+            && matches!(self.phase, Phase::Shelf)
+            // Only the shelf itself: menus, studios and the core picker stay in colour.
+            && self.shell_picker.is_none()
+            && self.core_picker.is_none();
+        let step = dt / MEMORY_FADE_S;
+        self.memory = if on { (self.memory + step).min(1.0) } else { (self.memory - step).max(0.0) };
+    }
+
+    fn draw_memory_veil(&self, out: &mut Vec<Draw>) {
+        let (Some(tex), a) = (self.memory_veil, ease(self.memory)) else {
+            return;
+        };
+        if a > 0.0 {
+            out.push(Draw::Tex { x: 0.0, y: 0.0, w: OUT_W as f32, h: OUT_H as f32, tex, alpha: a });
+        }
+    }
+
+    pub fn dim(&self) -> u8 {
+        // The test pictures are judged without software dimming or warming.
+        if self.calibrate.picture().is_some() {
+            return 0;
+        }
+        self.state.dim
+    }
+
+    fn brightness_level(&self) -> u8 {
+        DIM_MAX - self.state.dim.min(DIM_MAX) + self.state.brightness
+    }
+
     fn hud_value(&self, kind: HudKind, value: u8) -> u8 {
         match kind {
             HudKind::Volume => self.output_volume(),
@@ -4023,6 +5169,9 @@ impl App {
     }
 
     pub fn blue_light(&self) -> u8 {
+        if self.calibrate.picture().is_some() {
+            return 0;
+        }
         self.state.blue_light
     }
 
@@ -4090,6 +5239,7 @@ impl App {
 
     pub fn update(&mut self, dt: f32) {
         self.clock += dt as f64 * 1000.0;
+        self.fade_memory(dt);
         if self.effects_off && !self.effects_all_off() {
             self.effects_off = false;
         }
@@ -4098,7 +5248,15 @@ impl App {
             self.name_pending = false;
             self.shelf_named = Some(self.now());
         }
+        if matches!(self.phase, Phase::Shelf) {
+            self.track_title_pick();
+        }
         self.timers();
+        // The saved screen calibration onto the panel at start.
+        self.calibrate.tick(self.root.as_deref());
+        if self.calibrate.picture().is_some() {
+            self.keep_awake();
+        }
         self.poll_link();
         let now = self.now();
         let ready = self.core_faces_ready();
@@ -4137,6 +5295,17 @@ impl App {
         let mut sgb_in = false;
         let next = match &mut self.phase {
             Phase::Shelf => {
+                if let Some(i) = self.shelf_leaving {
+                    match self.shelves.get_mut(i) {
+                        Some((_, old)) => {
+                            old.run_swap(dt);
+                            if !old.departing() {
+                                self.shelf_leaving = None;
+                            }
+                        }
+                        None => self.shelf_leaving = None,
+                    }
+                }
                 let shelf = &mut self.shelves[at].1;
                 shelf.tick(now);
                 shelf.update(dt);
@@ -4314,6 +5483,47 @@ impl App {
         self.timers();
     }
 
+    /// Count the seconds a game is really running towards its wear, and save them now and then
+    /// (every minute while playing, and at once when play stops: eject, doze, power off).
+    fn track_play(&mut self) {
+        let now = self.now();
+        let playing = matches!(self.phase, Phase::Playing { .. }) && self.game_ready;
+        let last = self.play_tick.replace(now);
+        if playing {
+            if let (Some(last), Some((platform, stem))) = (last, self.cart_in_slot()) {
+                // A long gap (sleep, a stalled frame) is not play time.
+                let dt = now.saturating_sub(last).min(1000) as u64;
+                let key = slot_store::wear::key(platform, &stem);
+                // A game that is played had its dust blown off first: it comes back clean (Roy).
+                if self.wear.dust_level(&key, self.utc_secs().max(0) as u64) > 0 {
+                    self.clear_dust(&key);
+                }
+                let before = self.wear.get(&key).play_secs;
+                self.play_unsaved_ms += dt;
+                let whole = self.play_unsaved_ms / 1000;
+                if whole > 0 {
+                    self.play_unsaved_ms -= whole * 1000;
+                    self.wear.add_play(&key, whole);
+                    self.wear_dirty = true;
+                }
+                if self.wear.get(&key).play_secs / 60 != before / 60 {
+                    self.save_wear();
+                }
+            }
+        } else if self.wear_dirty {
+            self.save_wear();
+        }
+    }
+
+    fn save_wear(&mut self) {
+        self.wear_dirty = false;
+        if let Some(root) = &self.root {
+            if let Err(e) = self.wear.write(root) {
+                eprintln!("slot: wear: could not save: {e}");
+            }
+        }
+    }
+
     fn timers(&mut self) {
         if let Some(since) = self.power_held_since {
             // A tap sleeps; held past it, the bar counts down to powering off.
@@ -4325,9 +5535,12 @@ impl App {
             }
         }
         self.play_hold();
+        self.track_play();
+        self.finish_blow();
         self.repeat_held_dir();
         if self.auto_sleep_expired() {
             self.doze();
+            self.doze_locked = false;
         }
         if self.deep_sleep_due() {
             self.deep_sleep();
@@ -4356,13 +5569,23 @@ impl App {
         if self.now() >= self.battery_at {
             self.battery_at = self.now() + BATTERY_POLL_MS;
             self.battery = self.power.as_ref().and_then(|p| p.battery());
+            self.buzz_on_charger();
             if let Some(b) = self.battery {
                 self.on_battery(b);
             }
         }
+        if let Some((toast, at)) = self.hud.said_at() {
+            if self.toast_buzzed != Some(at) {
+                self.toast_buzzed = Some(at);
+                if let Some(b) = Buzz::for_toast(toast) {
+                    self.buzz(b);
+                }
+            }
+        }
         if self.now() >= self.headphones_at {
             self.headphones_at = self.now() + HEADPHONES_POLL_MS;
-            let on = self.power.as_ref().is_some_and(|p| p.headphones());
+            self.bt_connected = crate::audio::bt_route().is_some();
+            let on = self.power.as_ref().is_some_and(|p| p.headphones()) || self.bt_connected;
             if on != self.headphones {
                 self.headphones = on;
                 self.hud.set_headphones(on);
@@ -4376,6 +5599,7 @@ impl App {
             if let (Some(power), Some(b)) = (self.power.as_ref(), self.battery.as_mut()) {
                 b.charge = power.charge();
             }
+            self.buzz_on_charger();
             let state = self.led_state();
             self.set_led(state);
         }
@@ -4389,9 +5613,12 @@ impl App {
                 self.game_menu = None;
             }
         }
-        if let Some(GameMenu::Unplug { since, .. }) = self.game_menu {
+        if let Some(GameMenu::Unplug { role, since }) = self.game_menu {
             if self.now().saturating_sub(since) >= UNPLUG_HOLD_MS {
-                self.game_menu = None;
+                self.game_menu = match std::mem::take(&mut self.unplug_to_pick) {
+                    true => Some(GameMenu::Pick(role)),
+                    false => None,
+                };
             }
         }
         if let Some(at) = self.link.as_ref().and_then(|s| s.lost_at) {
@@ -4445,9 +5672,10 @@ impl App {
     }
 
     fn restock_favorites(&mut self) {
+        let favorites_on = self.state.favorite_mark != FavoriteMark::Off;
         let mut carts: Vec<Cart> = self
             .carts()
-            .filter(|c| self.state.is_favorite(c.platform, &c.stem))
+            .filter(|c| favorites_on && self.state.is_favorite(c.platform, &c.stem))
             .cloned()
             .collect();
         carts.sort_by(|a, b| {
@@ -4461,6 +5689,49 @@ impl App {
             shelf.select(index.min(shelf.carts.len() - 1));
         }
         self.mark_stars();
+    }
+
+    /// The Deck in the order the games were laid on it; empty, and so passed by, when hidden.
+    fn restock_deck(&mut self) {
+        let carts: Vec<Cart> = match self.state.show_deck {
+            true => self
+                .state
+                .deck
+                .iter()
+                .filter_map(|d| {
+                    self.carts()
+                        .find(|c| c.platform == d.platform && c.stem == d.stem)
+                })
+                .cloned()
+                .collect(),
+            false => Vec::new(),
+        };
+        let index = self.shelves[DECK_AT].1.index;
+        self.restock(DECK_AT, carts);
+        let shelf = &mut self.shelves[DECK_AT].1;
+        if self.shelf_at == DECK_AT && !shelf.carts.is_empty() {
+            shelf.select(index.min(shelf.carts.len() - 1));
+        }
+        self.mark_stars();
+    }
+
+    /// X on a cart: lay it on the Deck, or take it off; a bar says which.
+    fn toggle_deck(&mut self) {
+        let Some(cart) = self.shelf().carts.get(self.shelf().index) else {
+            return;
+        };
+        let (platform, stem) = (cart.platform, cart.stem.clone());
+        let on = self.state.toggle_deck(platform, &stem);
+        let shelf_at = self.shelf_at;
+        self.restock_deck();
+        self.shelf_emptied(shelf_at);
+        self.say_deck(on);
+        self.persist();
+    }
+
+    fn say_deck(&mut self, on: bool) {
+        let toast = if on { Toast::DeckOn } else { Toast::DeckOff };
+        self.hud.toast(toast, self.now());
     }
 
     fn restock(&mut self, at: usize, carts: Vec<Cart>) {
@@ -4489,13 +5760,106 @@ impl App {
         self.state.toggle_favorite(platform, &stem);
         let shelf_at = self.shelf_at;
         self.restock_favorites();
+        self.shelf_emptied(shelf_at);
+        self.persist();
+    }
+
+    /// B on the shelf: blow the dust off the cart in the middle. The cart takes a small shove
+    /// and the grains fly; halfway through the puff the cart is drawn again clean. Without dust
+    /// it only rocks a little.
+    fn blow(&mut self) {
+        if self.blow_due.is_some() {
+            return;
+        }
+        let shelf = self.shelf();
+        let Some(cart) = shelf.carts.get(shelf.index) else {
+            return;
+        };
+        let key = slot_store::wear::key(cart.platform, &cart.stem);
+        let dusty = self.wear.dust_level(&key, self.utc_secs().max(0) as u64) > 0;
+        self.shelf_mut().start_puff(dusty);
+        if dusty {
+            self.blow_due = Some((key, self.now() + BLOW_CLEAN_MS));
+        }
+    }
+
+    /// The moment in a puff that the dust is really gone: written to the wear book, and every
+    /// copy of the cart on the shelves drawn again.
+    fn finish_blow(&mut self) {
+        let Some((key, due)) = &self.blow_due else {
+            return;
+        };
+        if self.now() < *due {
+            return;
+        }
+        let key = key.clone();
+        self.blow_due = None;
+        self.clear_dust(&key);
+        // in, unless the shelf moved on to another cart meanwhile
+        if let Some(clean) = self.insert_after_blow.take() {
+            let shelf = self.shelf();
+            let same = shelf
+                .carts
+                .get(shelf.index)
+                .is_some_and(|c| slot_store::wear::key(c.platform, &c.stem) == key);
+            if same {
+                self.insert(clean);
+            }
+        }
+    }
+
+    /// The cart's dust gone: written to the wear book, and every copy of the cart on the
+    /// shelves drawn again.
+    fn clear_dust(&mut self, key: &str) {
+        self.wear.blow(key, self.utc_secs().max(0) as u64);
+        self.save_wear();
+        for (_, shelf) in &mut self.shelves {
+            for index in 0..shelf.carts.len() {
+                let cart = &shelf.carts[index];
+                if slot_store::wear::key(cart.platform, &cart.stem) == *key {
+                    self.orphaned.extend(shelf.take_face(index));
+                    self.orphaned.extend(shelf.take_interior(index));
+                }
+            }
+        }
+    }
+
+    /// Every cart drawn again (dust and wear switched on or off).
+    fn reface_all(&mut self) {
+        for (_, shelf) in &mut self.shelves {
+            for index in 0..shelf.carts.len() {
+                self.orphaned.extend(shelf.take_face(index));
+                self.orphaned.extend(shelf.take_interior(index));
+            }
+        }
+    }
+
+    /// X on the Recents shelf takes the selected game off it (Roy, for kids who try many
+    /// games); the cursor stays on the same spot, and an emptied shelf hands over to the next.
+    fn forget_recent(&mut self) {
+        let shelf = &self.shelves[RECENTS_AT].1;
+        let Some(cart) = shelf.carts.get(shelf.index) else {
+            return;
+        };
+        let (platform, stem, index) = (cart.platform, cart.stem.clone(), shelf.index);
+        self.state.forget_recent(platform, &stem);
+        self.restock_recents();
+        let shelf = &mut self.shelves[RECENTS_AT].1;
+        if self.shelf_at == RECENTS_AT && !shelf.carts.is_empty() {
+            shelf.select(index.min(shelf.carts.len() - 1));
+        }
+        self.shelf_emptied(RECENTS_AT);
+        self.persist();
+    }
+
+    /// Renames the shelf on screen when a restock moved the cursor off `shelf_at`.
+    fn shelf_emptied(&mut self, shelf_at: usize) {
         if self.shelf_at != shelf_at {
             self.shelf_platform = slot_ui::Printed::default();
             self.slot_letter = None;
             self.shelf_named = None;
             self.name_pending = true;
         }
-        self.persist();
     }
 
     fn record_cart(&mut self, cart: Option<String>) {
@@ -4597,6 +5961,7 @@ impl App {
         let t = (1.0 - caught) * EJECT_S;
         self.phase = Phase::Ejecting { cart, t };
         self.refused_from = Some(t);
+        self.hud.toast(Toast::GameFailed, self.now());
     }
 
     pub fn refuse(&mut self) {
@@ -4622,17 +5987,55 @@ impl App {
         }
     }
 
+    /// Screen Calibration's bars over its test picture, while buttons are being pressed.
+    fn draw_screen_colors(&self, out: &mut Vec<Draw>) {
+        let (Some(console), Some(faces)) = (self.calibrate.console(), &self.screen_cal_faces) else {
+            return;
+        };
+        let sliders = crate::calibrate::sliders(console.step)
+            .iter()
+            .map(|&label| {
+                let (at, from, value) = console.shown(label);
+                slot_ui::CalSlider { label, at, from, value }
+            })
+            .collect();
+        slot_ui::ScreenCalView {
+            canvas: self.canvas(),
+            step: console.step,
+            row: console.row,
+            sliders,
+            shown: console.bars(self.now() as u64),
+            faces,
+        }
+        .draw(out);
+    }
+
     pub fn draw(&self, out: &mut Vec<Draw>) {
         slot_ui::set_sgb_band(self.sgb_band());
+        let face = self.ground_face();
+        let ground = self.shadow_grounds.iter().find(|(f, _)| Some(*f) == face);
+        slot_ui::set_shadow_ground(ground.map(|(_, g)| g.clone()), self.canvas().w);
+        // Screen Calibration's test picture covers everything.
+        if self.calibrate.picture().is_some() {
+            self.calibrate.draw(out);
+            self.draw_screen_colors(out);
+            // The black top bar over it: "saved" after A, the volume bar.
+            self.hud.draw(self.canvas(), self.now(), out);
+            return;
+        }
         let start = out.len();
         self.draw_every(out);
         // A refusal in a menu (States or Screenshots with nothing in them): its words shake no.
         let in_menu = matches!(self.phase, Phase::QuickMenu { .. }) || self.in_game_menu.is_some();
         let dx = self.refusal.map_or(0.0, |r| r.offset(self.now()));
         if in_menu && dx != 0.0 {
+            let button = self.ra_button.map(|(t, _, _)| t);
             for d in &mut out[start..] {
-                if let Draw::Tint { x, .. } = d {
-                    *x += dx;
+                match d {
+                    Draw::Tint { x, .. } => *x += dx,
+                    // The achievements button shakes with its words.
+                    Draw::Tex { x, tex, .. } if Some(*tex) == button => *x += dx,
+                    _ => {}
                 }
             }
         }
@@ -4723,13 +6126,29 @@ impl App {
                 joined: self.joined().1,
                 signal: self.joined_seen().map_or(0, |s| bars(s.signal)),
                 texts: &self.quick_texts,
+                names: &self.quick_names,
+                busy: self.bt_busy.as_ref().and_then(|mac| {
+                    let (mine, other) = self.bt_split();
+                    mine.iter()
+                        .position(|d| &d.mac == mac)
+                        .map(|k| QuickRow::BT_MINE[k])
+                        .or_else(|| other.iter().position(|d| &d.mac == mac).map(|k| QuickRow::BT_OTHER[k]))
+                }),
+                bt_connected: self.bt_device(*row).is_some_and(|d| d.connected),
                 title: self.quick_title.filter(|_| row.page() == QuickRow::NET_DETAILS),
                 now: self.now(),
                 values: QuickRow::ALL.map(|r| self.quick_value(r)),
                 clock: self.quick_clock_faces,
                 network: self.quick_network_faces,
                 zone: self.quick_zone_faces,
-                locked: if !self.state.home_wifi_enabled {
+                // Each page has at most one locked row: Gameplay's Achievements without a login.
+                locked: if row.page() == QuickRow::GAME {
+                    (!self.ra_login())
+                        .then_some(QuickRow::RaToggle)
+                        .or((!self.state.vibration).then_some(QuickRow::Rumble))
+                } else if row.page() == QuickRow::GENERAL {
+                    (self.state.favorite_mark == FavoriteMark::Off).then_some(QuickRow::FavoriteGold)
+                } else if !self.state.home_wifi_enabled {
                     Some(QuickRow::AutoTime)
                 } else if self.joined().1 == slot_ui::Joined::NotConnected {
                     Some(QuickRow::ConnectedTo)
@@ -4794,7 +6213,7 @@ impl App {
                             1.0 - open,
                             out,
                         );
-                        draw_empty_slot(self.canvas(), self.slot_faces(), out);
+                        self.draw_idle_slot(out);
                         draw_slot_name(
                             self.canvas(),
                             self.shelf_platform,
@@ -4811,25 +6230,28 @@ impl App {
                         );
                     }
                     (Some(picker), Some(stem)) => {
+                        // As the studio: the shelf parts and fades whole under the page's
+                        // ground, no carts left see-through at the sides (Roy 2026-11-07).
                         let open = ease(picker.openness(self.now()));
-                        let dim = 1.0 + (CORE_PICKER_DIM - 1.0) * open;
                         self.shelf().draw_row(
                             self.canvas(),
                             Some(stem),
                             0.0,
-                            CORE_PICKER_RECEDE * open,
-                            dim,
+                            open,
+                            1.0 - open,
                             out,
                         );
-                        draw_empty_slot(self.canvas(), self.slot_faces(), out);
+                        self.draw_idle_slot(out);
                     }
                     _ => {
-                        self.shelf().draw(
-                            self.canvas(),
-                            self.shelf_shake(),
-                            self.slot_faces(),
-                            out,
-                        );
+                        let leaving = self.shelf_leaving.filter(|i| *i != self.shelf_at);
+                        if let Some((_, old)) = leaving.and_then(|i| self.shelves.get(i)) {
+                            old.draw_row(self.canvas(), None, 0.0, 0.0, 1.0, out);
+                        }
+                        self.shelf()
+                            .draw_row(self.canvas(), None, self.shelf_shake(), 0.0, 1.0, out);
+                        self.draw_idle_slot(out);
+                        self.draw_memory_veil(out);
                         draw_slot_name(
                             self.canvas(),
                             self.shelf_platform,
@@ -4871,14 +6293,13 @@ impl App {
                 .draw(out);
                 return;
             }
+            // Its test picture covers everything; see `draw`.
+            Phase::ScreenColors => {}
             Phase::About => {
                 slot_ui::draw_about(self.canvas(), self.sticker_face, out);
-                if let Some(back) = self.buttons_faces.as_ref().map(|f| [f.legend[1]]) {
-                    // The light back always takes the dark Back, whatever the wallpaper (Roy).
-                    let ink = match self.about_back_light() {
-                        true => slot_ui::theme::ink(true),
-                        false => self.menu_ink(),
-                    };
+                if let Some(back) = self.buttons_faces.as_ref().map(|f| [f.legend[0]]) {
+                    // The About back is always the DMG grey, so always the dark Back (Roy).
+                    let ink = slot_ui::theme::ink(true);
                     for (tex, w, x) in
                         slot_ui::centred_hints(self.canvas(), &back, slot_ui::LEGEND_GAP)
                     {
@@ -4962,6 +6383,28 @@ impl App {
                 return;
             }
         }
+        if let (Some(_), Some((tex, w, h)), Phase::Playing { .. }, true) =
+            (self.ra_view, self.ra_tex, &self.phase, self.screen >= 1.0)
+        {
+            if self.in_game_menu_shown().is_some() {
+                out.push(Draw::Rect {
+                    x: 0.0,
+                    y: 0.0,
+                    w: self.canvas().w,
+                    h: OUT_H as f32,
+                    colour: slot_ui::theme::OVER_GAME.wash,
+                });
+                out.push(Draw::Tex {
+                    x: self.canvas().centred(w as f32),
+                    y: 0.0,
+                    w: w as f32,
+                    h: h as f32,
+                    tex,
+                    alpha: 1.0,
+                });
+                return;
+            }
+        }
         let page = self
             .cheat_page
             .filter(|_| self.in_game_menu_shown().is_some());
@@ -4994,6 +6437,9 @@ impl App {
                 joined: slot_ui::Joined::NotConnected,
                 signal: 0,
                 texts: &[],
+                names: &[],
+                busy: None,
+                bt_connected: false,
                 title: None,
                 now: 0,
                 named_as: &named_as,
@@ -5016,6 +6462,13 @@ impl App {
                 first: self.menu_first(row, &hidden),
             }
             .draw(out);
+            if let (true, Some((tex, w, h))) = (Self::ra_on() && row.page() == QuickRow::PLAY.as_slice(), self.ra_button) {
+                let y = slot_ui::BUTTON_TOP;
+                // Cheats on: achievements wait, and the button is off: see-through at rest
+                // (its chosen look is drawn faint in the face itself), Roy 2026-11-12.
+                let alpha = if Self::ra_paused() && !self.ra_button_chosen() { 0.45 } else { 1.0 };
+                out.push(Draw::Tex { x: self.canvas().centred(w as f32), y, w: w as f32, h: h as f32, tex, alpha });
+            }
             // The settings pages fill the screen; only the centred menu leaves room for the
             // battery and clock.
             if row.centred() {
@@ -5061,6 +6514,7 @@ impl App {
         }
         if !self.shot_pending {
             self.hud.draw(self.canvas(), self.now(), out);
+            self.draw_ra_toast(out);
         }
     }
 
@@ -5096,15 +6550,16 @@ impl App {
         let Some((cart, face)) = self.shelf().find(stem) else {
             return;
         };
-        let alpha = self.alert_alpha();
         let (rest, scale) = self.shelf().selected_at(self.canvas());
+        let (lift, turn) = self.shelf().selected_play();
+        slot_ui::set_rest_pose(lift, turn);
         SlotChrome {
             cart,
             face,
             rest,
             scale,
             seat: self.seat(),
-            alert: self.alert_face.filter(|_| alpha > 0.0).map(|t| (t, alpha)),
+            alert: None,
             dim,
             screen: self.screen,
             game: self.game_ready,
@@ -5117,45 +6572,56 @@ impl App {
             behind: self.shelf().behind(stem),
             slot: self.slot_faces(),
             canvas: self.canvas(),
-            // Every cart seats with its top level with the slot's top edge.
-            lift: slot_ui::GB_SEAT_LIFT,
+            // Every cart seats with its top level with the slot's top edge, a Game Boy or
+            // Game Boy Color pak a little deeper in its slot (Roy).
+            lift: match cart.platform {
+                Platform::Gb | Platform::Gbc if self.slot_perched() => {
+                    slot_ui::GB_SEAT_LIFT - slot_ui::GB_SINK_SHALLOW
+                }
+                Platform::Gb | Platform::Gbc => slot_ui::GB_SEAT_LIFT - slot_ui::GB_SINK,
+                _ => slot_ui::GB_SEAT_LIFT,
+            },
             lid: self
                 .nes_lids
                 .filter(|_| cart.platform == Platform::Nes)
-                .map(|l| l[if self.originals() { 2 } else { usize::from(self.light()) }]),
+                .map(|l| {
+                    l[match (self.originals(), self.tv_slot_case()) {
+                        _ if self.fav_gold().is_some() => 4,
+                        (true, 1) => 0,
+                        (true, 2) => 3,
+                        (true, _) => 2,
+                        (false, _) => usize::from(self.light()),
+                    }]
+                }),
             light: self.slot_light(),
             ejecting: matches!(self.phase, Phase::Ejecting { .. }) && self.refused_from.is_none(),
+            power: self.power_switch(),
+            perched: self
+                .perch_shadows
+                .filter(|_| self.slot_perched())
+                .map(|t| t[slot_ui::mould_of(cart).index()]),
+            drop: self.shelf().drop_face(slot_ui::mould_of(cart)),
         }
         .draw(out);
     }
 
+    /// A cart the console would not play says so in the black bar on top, long enough to read.
     pub fn alert_visible(&self) -> bool {
-        self.alert_alpha() > 0.0
+        self.hud.said(self.now()) == Some(Toast::GameFailed)
     }
 
-    pub fn alert_alpha(&self) -> f32 {
-        let (Some(from), Phase::Ejecting { t, .. }) = (self.refused_from, &self.phase) else {
-            return 0.0;
-        };
-        let span = EJECT_S - from;
-        if span <= 0.0 {
-            return 0.0;
-        }
-        let u = ((t - from) / span).clamp(0.0, 1.0);
-        ((ALERT_GONE - u) / (ALERT_GONE - ALERT_HOLD)).clamp(0.0, 1.0)
-    }
-
-    pub fn set_alert_face(&mut self, face: TexId) {
-        self.alert_face = Some(face);
+    pub fn set_perch_shadows(&mut self, faces: [TexId; Mould::ALL.len()]) {
+        self.perch_shadows = Some(faces);
     }
 
     pub fn set_core_interior_face(&mut self, interior: TexId) {
         self.core_interior_face = Some(interior);
     }
 
-    pub fn set_core_board_faces(&mut self, board: TexId, lid: TexId) {
+    pub fn set_core_board_faces(&mut self, board: TexId, lid: TexId, lid_small: TexId) {
         self.core_board_face = Some(board);
         self.core_lid_face = Some(lid);
+        self.core_lid_small_face = Some(lid_small);
         self.core_faces_stem = self.selected_stem().map(str::to_string);
     }
 
@@ -5172,7 +6638,7 @@ impl App {
         self.core_chip_shadow_face = Some(shadow);
     }
 
-    pub fn set_core_legend_faces(&mut self, faces: Vec<(TexId, u32)>) {
+    pub fn set_core_legend_faces(&mut self, faces: Vec<(TexId, u32, u32)>) {
         self.core_legend_faces = faces;
     }
 
@@ -5202,6 +6668,15 @@ impl App {
 
     pub fn set_link_shot(&mut self, tex: Option<TexId>) {
         self.link_shot = tex;
+    }
+
+    /// Which of the slot sets is on the shelf now, for the link screen's port.
+    pub fn slot_set(&self) -> usize {
+        self.slot_index()
+    }
+
+    pub fn link_port_tex(&self) -> Option<TexId> {
+        self.link_sprites.as_ref().map(|s| s.port.tex)
     }
 
     pub fn set_link_port(&mut self, tex: TexId) {
@@ -5241,11 +6716,58 @@ impl App {
         let progress = picker.openness(now);
         let lift = lift_of(progress);
         let (rest, scale) = self.shelf().selected_at(self.canvas());
+        let (rest_lift, rest_turn) = self.shelf().selected_play();
         let shelf = shelf_cart_at(rest, scale);
         let board = board_from(self.canvas(), shelf, progress);
+        // The lid leaves the shelf from where the cart stood (popped up, turned as it breathed)
+        // and, held up, breathes the same way.
+        let shelf = Placed {
+            y: shelf.y - rest_lift * (1.0 - lift),
+            ..shelf
+        };
+        let held = picker.held_for(now);
+        let calm = (held / 0.6).clamp(0.0, 1.0);
+        let phase = std::f32::consts::TAU * held / LID_SWAY_S;
+        // The open cart floats too, a beat behind the lid, as if both hang in water (Roy, xe1).
+        // Smooth, not in whole pixels: stepping a pixel at a time it looked stiff next to the
+        // shelf's and the studio's cart (Roy 2026-11-13). Sockets and chip ride along with it.
+        let float = BOARD_BOB * (1.0 - (2.0 * phase - BOARD_LAG).cos()) * 0.5 * calm;
+        let board = Placed {
+            y: board.y - float,
+            ..board
+        };
+        let lid_pose = || {
+            let (lid, turn) = lid_from(self.canvas(), shelf, progress);
+            let lid = Placed {
+                y: lid.y - LID_BOB * (1.0 - (2.0 * phase).cos()) * 0.5 * calm,
+                ..lid
+            };
+            (lid, turn + rest_turn * (1.0 - lift) + LID_SWAY * phase.sin() * calm)
+        };
         let zoom = board_zoom(board);
         let ready = self.core_faces_ready();
+        // The studios' flat ground, coming up as the lid lifts.
+        let light = self.light_ground();
+        let ground = slot_ui::theme::menu_flat(light);
+        out.push(Draw::Rect {
+            x: 0.0,
+            y: 0.0,
+            w: self.canvas().w,
+            h: OUT_H as f32,
+            colour: [ground[0], ground[1], ground[2], ground[3] * lift],
+        });
 
+        if let (Some(stem), true) = (self.selected_stem(), ready) {
+            // Its shadow on the studio ground, further and softer the higher it floats.
+            self.shelf().draw_drop(
+                stem,
+                board,
+                board.w / CART_W as f32,
+                (BOARD_DROP_RISE + float * 3.0) * lift,
+                lift,
+                out,
+            );
+        }
         if ready {
             if let Some(tex) = self.core_interior_face {
                 out.push(Draw::Tex {
@@ -5273,8 +6795,8 @@ impl App {
                 };
                 let (x, y) = on_board(board, SOCKET_U[side], SOCKET_V);
                 out.push(Draw::Tex {
-                    x: x.round(),
-                    y: y.round(),
+                    x,
+                    y,
                     w: SOCKET_W as f32 * zoom,
                     h: SOCKET_H as f32 * zoom,
                     tex,
@@ -5312,8 +6834,8 @@ impl App {
                 };
                 let at = grown(body, TURN_PAD as f32 * zoom);
                 out.push(Draw::Turned {
-                    x: at.x.round(),
-                    y: at.y.round(),
+                    x: at.x,
+                    y: at.y,
                     w: at.w,
                     h: at.h,
                     tex,
@@ -5323,39 +6845,39 @@ impl App {
             }
         }
 
-        if let Some(tex) = self.core_chip_shadow_face {
-            let (lid, _) = lid_from(self.canvas(), shelf, progress);
-            let k = lid.w / lid_at(self.canvas(), 1.0).0.w;
-            let (w, h) = (LID_SHADOW_W * k, LID_SHADOW_H * k);
-            out.push(Draw::Tex {
-                x: lid.x + (lid.w - w) / 2.0,
-                y: lid.y + lid.h + LID_SHADOW_DROP * k - h / 2.0,
-                w,
-                h,
-                tex,
-                alpha: LID_SHADOW_ALPHA * lift,
-            });
+        if let Some(stem) = self.selected_stem() {
+            // The lid casts its shadow on the wallpaper behind it, falling further the higher
+            // it is held, as a cart's does on the shelf (Roy).
+            let (lid, _) = lid_pose();
+            self.shelf()
+                .draw_drop(stem, lid, lid.w / CART_W as f32, LID_DROP_RISE * lift, 1.0, out);
         }
 
         if ready {
-            if let Some(tex) = self.core_lid_face {
-                let (lid, turn) = lid_from(self.canvas(), shelf, progress);
-                let at = grown(lid, TURN_PAD as f32 * lid.w / CART_W as f32);
-                out.push(Draw::Turned {
-                    x: at.x,
-                    y: at.y,
-                    w: at.w,
-                    h: at.h,
-                    tex,
-                    alpha: 1.0,
-                    turn,
-                });
+            // Full size while it slides off the shelf; held up, the copy shrunk to that size
+            // takes over, smooth instead of pixelated (Roy, xe2). Same place and shape.
+            let small = ease(((lift - 0.55) / 0.45).clamp(0.0, 1.0));
+            let (lid, turn) = lid_pose();
+            let at = grown(lid, TURN_PAD as f32 * lid.w / CART_W as f32);
+            let layers = [(self.core_lid_face, 1.0), (self.core_lid_small_face, small)];
+            for (tex, alpha) in layers {
+                if let (Some(tex), true) = (tex, alpha > 0.0) {
+                    out.push(Draw::Turned {
+                        x: at.x,
+                        y: at.y,
+                        w: at.w,
+                        h: at.h,
+                        tex,
+                        alpha,
+                        turn,
+                    });
+                }
             }
         } else if let Some((_, Some(tex))) = self
             .selected_stem()
             .and_then(|stem| self.shelf().find(stem))
         {
-            let (lid, turn) = lid_from(self.canvas(), shelf, progress);
+            let (lid, turn) = lid_pose();
             out.push(Draw::Turned {
                 x: lid.x,
                 y: lid.y,
@@ -5367,21 +6889,29 @@ impl App {
             });
         }
 
-        if let [cancel, swap, choose] = self.core_legend_faces.as_slice() {
-            let right = board_x(self.canvas()) + BOARD_W as f32;
-            let seen = |w: u32| w.saturating_sub(HINT_EDGE) as f32;
-            for (tex, w, x) in [
-                (cancel.0, cancel.1, board_x(self.canvas())),
-                (swap.0, swap.1, self.canvas().centred(seen(swap.1))),
-                (choose.0, choose.1, right - seen(choose.1)),
-            ] {
-                out.push(Draw::Tex {
-                    x: x.round(),
-                    y: CORE_LEGEND_Y,
+        if let [cancel, swap, choose, help] = self.core_legend_faces.as_slice() {
+            // As the studio's: the legend where every menu has it, the help line over it, in the
+            // studio's ink.
+            let ink = slot_ui::theme::ink(light);
+            let tint = |c: [f32; 4]| [c[0], c[1], c[2], c[3] * lift];
+            out.push(Draw::Tint {
+                x: self.canvas().centred(help.1 as f32).round(),
+                y: slot_ui::HELP_Y,
+                w: help.1 as f32,
+                h: help.2 as f32,
+                tex: help.0,
+                colour: tint(ink.dim),
+            });
+            // Arrows first, Select, Cancel last (Roy 2026-11-14).
+            let legend = [(swap.0, swap.1), (choose.0, choose.1), (cancel.0, cancel.1)];
+            for (tex, w, x) in slot_ui::centred_hints(self.canvas(), &legend, slot_ui::LEGEND_GAP) {
+                out.push(Draw::Tint {
+                    x,
+                    y: slot_ui::MENU_LEGEND_Y,
                     w: w as f32,
                     h: HINT_H as f32,
                     tex,
-                    alpha: lift,
+                    colour: tint(ink.text),
                 });
             }
         }
@@ -5499,22 +7029,25 @@ impl App {
             }
         }
 
-        if let [cancel, swap, choose] = self.core_legend_faces.as_slice() {
+        if let [cancel, swap, choose, ..] = self.core_legend_faces.as_slice() {
+            // Dark keys on a light wallpaper, light ones on a dark one, like the menus' legends.
+            let ink = self.menu_ink().text;
             let board_x = board_x(self.canvas());
             let right = board_x + BOARD_W as f32;
             let seen = |w: u32| w.saturating_sub(HINT_EDGE) as f32;
             for (tex, w, x) in [
-                (cancel.0, cancel.1, board_x),
-                (swap.0, swap.1, self.canvas().centred(seen(swap.1))),
-                (choose.0, choose.1, right - seen(choose.1)),
+                // Arrows left, Select in the middle, Cancel right (Roy 2026-11-14).
+                (swap.0, swap.1, board_x),
+                (choose.0, choose.1, self.canvas().centred(seen(choose.1))),
+                (cancel.0, cancel.1, right - seen(cancel.1)),
             ] {
-                out.push(Draw::Tex {
+                out.push(Draw::Tint {
                     x: x.round(),
                     y: CORE_LEGEND_Y,
                     w: w as f32,
                     h: HINT_H as f32,
                     tex,
-                    alpha: reveal,
+                    colour: [ink[0], ink[1], ink[2], reveal],
                 });
             }
         }
@@ -5539,7 +7072,7 @@ impl App {
             colour: LINK_SCRIM,
         });
         if let Some(sprites) = &self.link_sprites {
-            crate::link_screen::draw_link_art(menu, self.link_hardware, self.now(), sprites, out);
+            crate::link_screen::draw_link_art(menu, self.link_hardware, matches!(self.slot_platform(), Platform::Gb | Platform::Gbc), self.now(), sprites, out);
             // Which network a link started now would use, read the way the service will decide
             // it: a device on the home network links over it.
             crate::link_screen::draw_network_label(menu, self.radio.home_connected(), sprites, out);
@@ -5567,50 +7100,39 @@ impl App {
             });
         }
         let switchable = self.seated().is_some_and(|stem| self.link_switchable(stem));
-        // Cancel and Mode stay on the left of the footer, Swap and Link on the right, so the
-        // socket in the middle of the strip stays clear.
-        let (left, right): (&[LinkLegend], &[LinkLegend]) = match menu {
-            GameMenu::Pick(_) if switchable => (
-                &[LinkLegend::Cancel, LinkLegend::Mode],
-                &[LinkLegend::Swap, LinkLegend::Link],
-            ),
-            GameMenu::Pick(_) => (&[LinkLegend::Cancel], &[LinkLegend::Swap, LinkLegend::Link]),
-            GameMenu::Working { .. } => (&[LinkLegend::Cancel], &[]),
-            GameMenu::Linked { opened: true, .. } => (&[LinkLegend::Back], &[LinkLegend::EndLink]),
-            GameMenu::Linked { .. } => (&[], &[]),
-            GameMenu::Failed { .. } => (&[], &[LinkLegend::Ok]),
-            GameMenu::Unplug { .. } => (&[], &[]),
+        // One legend, centred where every menu has it: the arrows first, then A and SELECT,
+        // B last (Roy 2026-11-14).
+        let keys: &[LinkLegend] = match menu {
+            GameMenu::Pick(_) if switchable => &[
+                LinkLegend::Swap,
+                LinkLegend::Link,
+                LinkLegend::Mode,
+                LinkLegend::Cancel,
+            ],
+            GameMenu::Pick(_) => &[LinkLegend::Swap, LinkLegend::Link, LinkLegend::Cancel],
+            GameMenu::Working { .. } => &[LinkLegend::Cancel],
+            GameMenu::Linked { opened: true, .. } => &[LinkLegend::EndLink, LinkLegend::Back],
+            GameMenu::Linked { .. } => &[],
+            GameMenu::Failed { .. } => &[LinkLegend::Ok],
+            GameMenu::Unplug { .. } => &[],
         };
-        self.draw_link_keys(left, false, out);
-        self.draw_link_keys(right, true, out);
+        self.draw_link_keys(keys, out);
     }
 
-    fn draw_link_keys(&self, keys: &[LinkLegend], right: bool, out: &mut Vec<Draw>) {
+    fn draw_link_keys(&self, keys: &[LinkLegend], out: &mut Vec<Draw>) {
         let faces: Vec<(TexId, u32)> = keys
             .iter()
             .filter_map(|k| self.link_legend_faces.get(k.index()).copied())
             .collect();
-        if faces.is_empty() {
-            return;
-        }
-        let seen = |w: u32| w.saturating_sub(HINT_EDGE) as f32;
-        let total = faces.iter().map(|(_, w)| seen(*w)).sum::<f32>()
-            + LINK_LEGEND_GAP * faces.len().saturating_sub(1) as f32;
-        let mut x = if right {
-            (OUT_W as f32 - LINK_LEGEND_EDGE - total).round()
-        } else {
-            LINK_LEGEND_EDGE
-        };
-        for (tex, w) in faces {
+        for (tex, w, x) in slot_ui::centred_hints(self.canvas(), &faces, slot_ui::LEGEND_GAP) {
             out.push(Draw::Tex {
                 x,
-                y: LINK_LEGEND_Y,
+                y: slot_ui::MENU_LEGEND_Y,
                 w: w as f32,
                 h: HINT_H as f32,
                 tex,
                 alpha: 1.0,
             });
-            x += seen(w) + LINK_LEGEND_GAP;
         }
     }
 
@@ -5630,6 +7152,25 @@ impl App {
         }
         let shelf = self.shelf();
         shelf.carts.get(shelf.index).map(|c| c.rom.as_path())
+    }
+
+    /// A dusty cart is blown clean first, the way one is before it goes in (Roy 2026-11-06):
+    /// the puff starts, and the cart goes in once its dust is gone.
+    fn blow_then_insert(&mut self, clean: bool) {
+        if self.insert_after_blow.is_some() || !self.on_shelf() {
+            return;
+        }
+        // No dust any more (Roy, xg2): only a forced preview still blows first.
+        if crate::aging::forced().is_some_and(|(d, _)| d > 0) && self.blow_due.is_none() {
+            self.blow();
+            if self.blow_due.is_some() {
+                self.insert_after_blow = Some(clean);
+                return;
+            }
+            // nothing to blow off: no shove either, straight in
+            self.shelf_mut().stop_puff();
+        }
+        self.insert(clean);
     }
 
     fn insert(&mut self, clean: bool) {
@@ -5677,7 +7218,7 @@ impl App {
             return;
         }
         if self.now().saturating_sub(at) >= PLAY_HOLD_MS {
-            self.insert(true);
+            self.blow_then_insert(true);
         }
     }
 
@@ -5717,6 +7258,17 @@ impl App {
                 (None, None)
             }
         };
+        // Put away, a game leaves a state with its photo among the saved ones.
+        if let Some(state) = &state {
+            let ring = StateRing::new(root, self.platform, self.core, stem);
+            let thumb = snapshot.thumb().unwrap_or_default();
+            let stamp = free_stamp(&ring, self.wall_secs());
+            let pushed = ring.push_exit(state, &thumb, &stamp);
+            self.card_writes.wrote("exit state", &pushed);
+            if let Err(e) = pushed {
+                eprintln!("slot: eject: exit state: {e}");
+            }
+        }
         let state = state.filter(|_| self.state.eject_save);
         self.state_writer.flush();
         match persist::eject(
@@ -5766,6 +7318,7 @@ impl App {
         self.phase = Phase::Doze { cart };
         self.dozed_at = self.now();
         self.deep_tried = false;
+        self.doze_locked = true;
         self.radio.ask(RadioJob::Cool);
         if let Some(power) = &mut self.power {
             power.on_close();
@@ -5812,9 +7365,11 @@ impl App {
         let Some(power) = &mut self.power else {
             return;
         };
+        self.calibrate.sleep();
         self.radio.deep_sleep(true);
         let woke = power.deep_sleep(BATTERY_CRITICAL);
         self.radio.deep_sleep(false);
+        self.calibrate.wake(self.root.as_deref());
         match woke {
             None => {}
             Some(Woke::LowBattery) => self.begin_power_off(),
@@ -5876,7 +7431,9 @@ impl App {
     }
 
     fn open_shell_picker(&mut self) {
-        if self.shell_picker_faces.is_none() {
+        // The Game Boy shelf over the Super Game Boy has no studio: its slot is the SGB's top
+        // (Roy 2026-11-07). The GB carts get their studio on the Game Boy shelf itself.
+        if self.shell_picker_faces.is_none() || self.sgb_band() {
             return;
         }
         let Some(cart) = self.shelf().carts.get(self.shelf().index) else {
@@ -5898,6 +7455,14 @@ impl App {
             self.now(),
         );
         let label_was = cart.label.clone();
+        let wear_key = slot_store::wear::key(cart.platform, &cart.stem);
+        let mut picker = picker;
+        if let Some((dust, wear)) = crate::aging::forced() {
+            picker.set_wear(dust, wear);
+        } else {
+            // Wear always counts, an easter egg; no dust (Roy, xg1 xg2).
+            picker.set_wear(0, self.wear.wear_level(&wear_key));
+        }
         let picker = match cart.platform {
             Platform::Snes if cart.is_sgb() => picker.with_sgb(slot_ui::sgb_model_of(cart)),
             Platform::Snes => {
@@ -5913,9 +7478,63 @@ impl App {
                     );
                 picker.with_snes_model(if pal { 0 } else { 1 })
             }
-            Platform::Gb => picker.with_model(0),
-            Platform::Gbc => picker.with_model(1),
+            // GB games get no Model row: only the Game Boy cart (Roy 2026-11-06).
+            Platform::Gb => picker.without_model(),
+            // A dual-mode or Game Boy game in the Color folder came in the Game Boy's cart.
+            Platform::Gbc => picker.with_model(match slot_ui::gbc_folder_mould(cart) {
+                slot_ui::Mould::Notched => 0,
+                _ => 1,
+            }),
             Platform::Nes => picker.with_metallic(),
+            _ => picker,
+        };
+        // The studio opens on the cart's own shell; Original is the console's plain cart.
+        let picker = {
+            let plastic = |s: slot_ui::Shell| {
+                let finish = match s.finish {
+                    slot_ui::Finish::Solid => slot_store::ShellFinish::Solid,
+                    slot_ui::Finish::Translucent => slot_store::ShellFinish::Clear,
+                    slot_ui::Finish::Glitter => slot_store::ShellFinish::Glitter,
+                    slot_ui::Finish::SolidGlitter => slot_store::ShellFinish::SolidGlitter,
+                    slot_ui::Finish::Metallic => slot_store::ShellFinish::Metallic,
+                };
+                (s.colour, finish)
+            };
+            let standards = match cart.platform {
+                Platform::Gb | Platform::Gbc => {
+                    vec![plastic(slot_ui::DMG_SHELL), plastic(slot_ui::GBC_CLEAR_SHELL)]
+                }
+                Platform::Gba => vec![plastic(slot_ui::DEFAULT_SHELL)],
+                Platform::Nes => vec![plastic(slot_ui::TV_GREY_SHELL)],
+                Platform::Snes => {
+                    vec![plastic(slot_ui::SFC_SHELL), plastic(slot_ui::TV_GREY_SHELL)]
+                }
+            };
+            picker.with_original(plastic(slot_ui::original_shell(cart)), standards)
+        };
+        // In Originals the Game Boy slot's case is picked on the studio's Slot tab (Roy).
+        let picker = match (self.originals(), self.slot_platform()) {
+            (true, Platform::Gb) => picker.with_slot_case(
+                usize::from(self.state.slot_case_gb),
+                &slot_ui::GB_SLOT_MODELS,
+                &slot_ui::GB_SLOT_CASES[..slot_ui::GBC_SLOT_FIRST].iter().map(|c| studio_finish(c.finish)).collect::<Vec<_>>(),
+            ),
+            (true, Platform::Gbc) => picker.with_slot_case(
+                usize::from(self.state.slot_case_gbc),
+                &slot_ui::GBC_SLOT_MODELS,
+                &slot_ui::GB_SLOT_CASES[slot_ui::GBC_SLOT_FIRST..slot_ui::GBA_SLOT_FIRST].iter().map(|c| studio_finish(c.finish)).collect::<Vec<_>>(),
+            ),
+            (true, Platform::Gba) => picker.with_slot_case(
+                usize::from(self.state.slot_case_gba),
+                &slot_ui::GBA_SLOT_MODELS,
+                &slot_ui::GB_SLOT_CASES[slot_ui::GBA_SLOT_FIRST..].iter().map(|c| studio_finish(c.finish)).collect::<Vec<_>>(),
+            ),
+            // the NES and SNES their own, Dark or DMG Grey (Roy 2026-11-12, st5)
+            (true, Platform::Nes | Platform::Snes) => picker.with_slot_case(
+                usize::from(self.tv_slot_kept()),
+                &[slot_ui::TV_SLOT_CASES.len()],
+                &slot_ui::TV_SLOT_CASES.map(|c| c.finish),
+            ),
             _ => picker,
         };
         self.label_was = label_was;
@@ -5935,8 +7554,11 @@ impl App {
             Action::GbaDown(Btn::Right) | Action::ShelfRight => Press::Right,
             Action::GbaDown(Btn::Up) => Press::Up,
             Action::GbaDown(Btn::Down) => Press::Down,
+            Action::GbaDown(Btn::L1) => Press::TabLeft,
+            Action::GbaDown(Btn::R1) => Press::TabRight,
             Action::GbaDown(Btn::A) => Press::Keep,
             Action::GbaDown(Btn::Y) => Press::Remove,
+            Action::GbaDown(Btn::X) => Press::NewCart,
             Action::GbaDown(Btn::B) | Action::GbaDown(Btn::Select) => Press::Back,
             _ => return,
         };
@@ -5950,6 +7572,7 @@ impl App {
         let pal_was = picker.snes_pal();
         let outcome = picker.press(press, now);
         let version = picker.version();
+        let slot_case = picker.slot_case();
         let reshaped = picker.snes_pal() != pal_was;
         match outcome {
             Outcome::None => {}
@@ -5970,6 +7593,19 @@ impl App {
                 }
             }
             Outcome::Save(choice, ink) => {
+                if let Some(case) = slot_case.and_then(|c| u8::try_from(c).ok()) {
+                    let kept = match self.slot_platform() {
+                        Platform::Gbc => &mut self.state.slot_case_gbc,
+                        Platform::Gba => &mut self.state.slot_case_gba,
+                        Platform::Nes => &mut self.state.slot_case_nes,
+                        Platform::Snes => &mut self.state.slot_case_snes,
+                        _ => &mut self.state.slot_case_gb,
+                    };
+                    if case != *kept {
+                        *kept = case;
+                        self.persist_soon();
+                    }
+                }
                 self.restyle(&rom, choice, ink);
                 if let Some(i) = version {
                     self.keep_version(&rom, i);
@@ -5991,12 +7627,37 @@ impl App {
                     }
                 }
             }
+            Outcome::NewCart => self.new_cart(&rom),
             Outcome::RemoveLabel => self.remove_label(&rom),
             Outcome::Versions => self.ask_versions(&rom),
             Outcome::Search => self.open_label_search(&rom, &stem),
             Outcome::Version(i) => {
                 if let Some(path) = self.version_paths.get(i).cloned() {
                     self.relabel(&rom, Some(path));
+                }
+            }
+        }
+    }
+
+    /// New Cart: the wear (scratches, yellowing, label damage) and the dust start over, the
+    /// play time stays. Every copy of the cart is drawn again.
+    fn new_cart(&mut self, rom: &Path) {
+        let Some(cart) = self.shelf().carts.iter().find(|c| c.rom == rom) else {
+            return;
+        };
+        let key = slot_store::wear::key(cart.platform, &cart.stem);
+        let now_secs = self.utc_secs().max(0) as u64;
+        self.wear.new_cart(&key, now_secs);
+        self.save_wear();
+        let now = self.now();
+        if let Some(picker) = &mut self.shell_picker {
+            picker.hop(now);
+        }
+        for (_, shelf) in &mut self.shelves {
+            for index in 0..shelf.carts.len() {
+                if shelf.carts[index].rom == rom {
+                    self.orphaned.extend(shelf.take_face(index));
+                    self.orphaned.extend(shelf.take_interior(index));
                 }
             }
         }
@@ -6121,6 +7782,8 @@ impl App {
             Action::GbaDown(Btn::X) => Press::Clear,
             Action::GbaDown(Btn::Y) => Press::Space,
             Action::GbaDown(Btn::Select) => Press::Shift,
+            Action::GbaDown(Btn::L1) => Press::CaretLeft,
+            Action::GbaDown(Btn::R1) => Press::CaretRight,
             Action::GbaDown(Btn::Start) => Press::Search,
             Action::QuickMenu => Press::Exit,
             _ => return,
@@ -6251,7 +7914,7 @@ impl App {
                 big: None,
                 qr: None,
                 upper: true,
-                large_status: false,
+                large_status: search.found_none(),
                 wps: false,
                 placeholder: None,
             },
@@ -6277,6 +7940,7 @@ impl App {
             screen: search.screen(now),
             openness: search.openness(now),
             legend: None,
+            icon_alpha: 1.0,
         };
         slot_ui::draw_label_search(self.canvas(), &view, out);
     }
@@ -6299,18 +7963,57 @@ impl App {
                 .legend()
                 .and_then(|l| faces.extra.get(l as usize))
                 .map(Vec::as_slice),
+            icon_alpha: 1.0,
+        };
+        // The password being tried: a spinner where the WPS screen has its Wi-Fi sign, and a
+        // check in its place once the password is taken. Both pop in on a spring.
+        let since = page.checking_since();
+        let view = slot_ui::SearchView {
+            icon_alpha: if page.checking() { 0.0 } else { 1.0 },
+            ..view
         };
         slot_ui::draw_label_search(self.canvas(), &view, out);
-        // The password being tried: a spinner under the words.
-        if page.spinning() {
-            let a = page.openness(now);
-            slot_ui::draw_spinner(
+        let Some(at) = since else {
+            return;
+        };
+        let a = page.openness(now);
+        let (cx, cy) = (self.canvas().w / 2.0, slot_ui::SEARCH_ICON_MID);
+        // The ink of the page round it: dark on a light wallpaper.
+        let ink = view.ink.text;
+        let secs = |from: Millis| now.saturating_sub(from) as f32 / 1000.0;
+        let taken = page.taken().map(secs);
+        // The spinner pops in, overshoots a touch and settles; taken, it is drawn in to its
+        // middle as the check pops out of it.
+        let grow = spring(secs(at));
+        let gone = taken.map_or(0.0, |t| (t / SPIN_OUT_S).min(1.0));
+        let scale = grow * (1.0 - 0.8 * gone);
+        if gone < 1.0 && scale > 0.0 {
+            slot_ui::draw_round_spinner(
                 out,
-                self.canvas().w / 2.0,
-                CHECK_SPIN_Y,
+                faces.disc,
+                cx,
+                cy,
+                CHECK_SPIN_R * scale,
+                CHECK_DOT * scale.clamp(0.5, 1.0),
                 now,
-                [1.0, 1.0, 1.0, a],
+                [ink[0], ink[1], ink[2], a * (secs(at) * 5.0).min(1.0) * (1.0 - gone)],
             );
+        }
+        if let Some(t) = taken {
+            let t = t - CHECK_DELAY_S;
+            if t > 0.0 {
+                let pop = spring(t);
+                slot_ui::draw_round_check(
+                    out,
+                    faces.disc,
+                    cx,
+                    cy,
+                    CHECK_SIZE * pop,
+                    CHECK_STROKE * pop.clamp(0.6, 1.1),
+                    (t / CHECK_DRAW_S).min(1.0),
+                    [ink[0], ink[1], ink[2], a],
+                );
+            }
         }
     }
 
@@ -6321,6 +8024,7 @@ impl App {
 
     /// The ROM Manager listens only while its screen is open, so the PIN is always in sight.
     fn open_rom_manager(&mut self) {
+        let _ = std::fs::remove_file("/tmp/gravy-manager-news");
         self.radio.wifi(WifiJob::RomManagerOn);
         let page = ListPage::rom_manager(self.now());
         self.open_list_page(page);
@@ -6332,15 +8036,46 @@ impl App {
         let Some(root) = self.root.clone() else {
             return;
         };
+        slot_store::tidy_game_names(&root);
         self.follow_renames(&root);
         let carts = scan(&root).unwrap_or_default();
+        retain_headers(&carts);
+        // A label sent from the ROM Manager: the cart on the shelf wears it now, not after a
+        // restart. One whose file was written over is drawn again too.
+        let labels: Vec<_> = carts
+            .iter()
+            .map(|c| {
+                let rewritten = !crate::label_cache::fresh(&root, c);
+                (c.rom.clone(), c.label.clone(), rewritten)
+            })
+            .collect();
         for (at, (_, carts)) in shelves_of(carts).into_iter().enumerate() {
             if self.shelves[at].0.platform().is_some() {
                 self.restock(at, carts.carts);
             }
         }
+        for (rom, label, rewritten) in labels {
+            for (_, shelf) in &mut self.shelves {
+                for index in 0..shelf.carts.len() {
+                    let cart = &mut shelf.carts[index];
+                    if cart.rom != rom || (cart.label == label && !rewritten) {
+                        continue;
+                    }
+                    cart.label = label.clone();
+                    self.orphaned.extend(shelf.take_face(index));
+                    self.orphaned.extend(shelf.take_interior(index));
+                }
+            }
+        }
         self.restock_recents();
         self.restock_favorites();
+        self.restock_deck();
+        self.note_seen();
+        self.games_rev += 1;
+    }
+
+    pub fn games_rev(&self) -> u64 {
+        self.games_rev
     }
 
     /// The GRAVY Manager journals each rename as "PLATFORM\told\tnew"; recents,
@@ -6364,6 +8099,7 @@ impl App {
                 .recents
                 .iter_mut()
                 .chain(state.favorites.iter_mut())
+                .chain(state.deck.iter_mut())
                 .chain(state.shelf_cart.iter_mut())
             {
                 if r.platform == platform && r.stem == old {
@@ -6392,6 +8128,13 @@ impl App {
         if !self.rom_manager_open() {
             return;
         }
+        self.manager_news();
+        // A BaseOS update file is on the card root: BaseOS installs it as the console starts.
+        if root.join(".baseos-install").is_file() {
+            let _ = std::fs::remove_file(root.join(".baseos-install"));
+            self.begin_restart();
+            return;
+        }
         let new = root.join("System.new");
         if !new.join(".complete").is_file() {
             return;
@@ -6402,9 +8145,39 @@ impl App {
             return;
         }
         let version = std::fs::read_to_string(new.join("version.txt")).unwrap_or_default();
-        if let Some(p) = &mut self.list_page {
-            p.rom_manager_update(version.trim());
+        let fresh = self.list_page.as_mut().is_some_and(|p| p.rom_manager_update(version.trim()));
+        if fresh {
+            self.hud.toast(Toast::UpdateReady, self.now());
         }
+    }
+
+    /// What GRAVY Manager's web page just did, said on the console as a toast (Roy). The
+    /// web server (slot-services web.rs NEWS) writes one word a line.
+    fn manager_news(&mut self) {
+        const NEWS: &str = "/tmp/gravy-manager-news";
+        let Ok(text) = std::fs::read_to_string(NEWS) else {
+            return;
+        };
+        let _ = std::fs::remove_file(NEWS);
+        let words: Vec<&str> = text.lines().map(str::trim).filter(|w| !w.is_empty()).collect();
+        let games = words.iter().filter(|w| **w == "game").count();
+        // A failure outranks the rest; several games in one go read as one toast.
+        let toast = if words.contains(&"failed") {
+            Toast::UploadFailed
+        } else if games > 1 {
+            Toast::GamesAdded
+        } else {
+            match words.last().copied() {
+                Some("game") => Toast::GameAdded,
+                Some("bios") => Toast::BiosAdded,
+                Some("wallpaper") => Toast::WallpaperAdded,
+                Some("label") => Toast::LabelAdded,
+                Some("deleted") => Toast::FileDeleted,
+                Some("renamed") => Toast::FileRenamed,
+                _ => return,
+            }
+        };
+        self.hud.toast(toast, self.now());
     }
 
     /// Add Network, My Networks and WPS want Home Wi-Fi on: it is switched on for them.
@@ -6596,8 +8369,22 @@ impl App {
             ));
             title = Some(label.clone());
         }
+        // Bluetooth: each device's own name, and whether it is connected.
+        let (mine, other) = self.bt_split();
+        let mut names = Vec::new();
+        for (k, d) in mine.iter().enumerate() {
+            names.push((QuickRow::BT_MINE[k], d.name.clone()));
+            texts.push((
+                QuickRow::BT_MINE[k],
+                if d.connected { "Connected" } else { "Not Connected" }.to_owned(),
+            ));
+        }
+        for (k, d) in other.iter().enumerate() {
+            names.push((QuickRow::BT_OTHER[k], d.name.clone()));
+        }
         NetworkWords {
             label,
+            names,
             nearby: self
                 .nearby
                 .iter()
@@ -6612,8 +8399,10 @@ impl App {
         &mut self,
         nearby: Vec<slot_ui::NearbyRow>,
         texts: Vec<(QuickRow, [(TexId, u32, u32); 2])>,
+        names: Vec<(QuickRow, [(TexId, u32, u32); 2])>,
         title: Option<(TexId, u32, u32)>,
     ) {
+        self.quick_names = names;
         self.quick_nearby = nearby;
         self.quick_texts = texts;
         self.quick_title = title;
@@ -6685,6 +8474,8 @@ impl App {
             Action::GbaDown(Btn::X) => Press::Clear,
             Action::GbaDown(Btn::Y) => Press::Space,
             Action::GbaDown(Btn::Select) => Press::Shift,
+            Action::GbaDown(Btn::L1) => Press::CaretLeft,
+            Action::GbaDown(Btn::R1) => Press::CaretRight,
             Action::GbaDown(Btn::Start) => Press::Search,
             Action::QuickMenu => Press::Exit,
             _ => return,
@@ -6703,6 +8494,7 @@ impl App {
             }
             list_page::Step::Zone(city) => {
                 self.state.time_zone = slot_store::zone_named(&city).map(|z| z.name);
+                tell_libc_the_zone(self.time_zone());
                 self.persist();
             }
             list_page::Step::Forget(ssid) => {
@@ -6721,7 +8513,9 @@ impl App {
                     .as_deref()
                     .is_some_and(|p| !slot_store::wifi::password_ok(p))
                 {
-                    self.hud.toast(Toast::PasswordLength, now);
+                    let ascii = password.as_deref().is_some_and(|p| p.is_ascii());
+                    let why = if ascii { Toast::PasswordLength } else { Toast::PasswordMarks };
+                    self.hud.toast(why, now);
                     if let Some(p) = &mut self.list_page {
                         p.wrong_password();
                     }
@@ -6811,6 +8605,7 @@ impl App {
             self.update_timers();
         }
         self.follow_join(now);
+        self.follow_bt(now);
         // The Network page looks around while it is open.
         let on_network = matches!(self.phase, Phase::QuickMenu { row } if row.page() == QuickRow::NETWORK);
         if !on_network {
@@ -6850,9 +8645,20 @@ impl App {
                     self.radio.fast_status(false);
                     self.drop_network(&ssid);
                 } else if taken {
-                    // The password was right: back to the Network page, the row says the rest.
-                    if let Some(page) = checking {
-                        page.close(now);
+                    // The password was right: a check on the page first, then back to the
+                    // Network page, where the row says the rest.
+                    match checking {
+                        Some(page) => match page.taken() {
+                            None => {
+                                page.password_taken(now);
+                                return;
+                            }
+                            Some(at) if now < at + TAKEN_MS => return,
+                            Some(_) => {
+                                page.close(now);
+                            }
+                        },
+                        None => {}
                     }
                     self.joining = Some(Join::Connecting {
                         ssid,
@@ -6950,6 +8756,8 @@ impl App {
         let Some(picker) = self.shell_picker.as_mut().filter(|p| p.rom == rom) else {
             return;
         };
+        let sizes: Vec<(u32, u32)> = self.version_thumbs.iter().map(|t| (t.1, t.2)).collect();
+        picker.set_label_lines(slot_ui::label_lines(&sizes));
         let was = picker.version();
         let shown = picker.refound(fits.len(), !worn_fits);
         match shown.and_then(|i| self.version_paths.get(i).cloned()) {
@@ -7054,26 +8862,54 @@ impl App {
         let (rest, scale) = self.shelf().selected_at(self.canvas());
         let from = slot_ui::Placed {
             x: rest,
-            y: slot_ui::foot_y(h as f32) - h as f32 * scale,
+            // From where it stands, popped up as the shelf's middle cart is.
+            y: slot_ui::foot_y(h as f32) - h as f32 * scale - self.shelf().selected_play().0,
             w: w as f32 * scale,
             h: h as f32 * scale,
         };
         let openness = picker.openness(self.now());
-        // Its shadow stays on the shelf as it rises, and goes as it lifts away.
+        // Its shadow fades as the cart rises off the shelf, gone before it flies to the studio
+        // (Roy 2026-11-06: it stayed too long),
         self.shelf().draw_drop(
             &picker.stem,
             from,
             scale,
             slot_ui::shell_picker_hop(openness),
-            1.0 - slot_ui::lift_of(openness),
+            // and while the slot studio has sent the cart up out of sight, it is not there
+            // either: it comes back with the cart, not before it (Roy)
+            (1.0 - slot_ui::slide_of(openness)) * (1.0 - studio_moves(picker, self.now()).0).clamp(0.0, 1.0),
             out,
         );
-        let swatches: Vec<(Option<[u8; 3]>, usize)> = picker
-            .swatches()
-            .iter()
-            .filter(|_| !picker.sgb())
-            .map(|s| (s.colour(), s.name_index()))
-            .collect();
+        let on_slot = picker.slot_mode() == Some(true);
+        let swatches: Vec<(Option<[u8; 3]>, usize)> = match on_slot {
+            // The slot's cases, their names after the cart's colours' in the faces.
+            true => {
+                let off = match self.slot_platform() {
+                    Platform::Gbc => slot_ui::GBC_SLOT_FIRST,
+                    Platform::Gba => slot_ui::GBA_SLOT_FIRST,
+                    _ => 0,
+                };
+                let tv = matches!(self.slot_platform(), Platform::Nes | Platform::Snes);
+                picker
+                    .slot_shown()
+                    .into_iter()
+                    .map(|c| match tv {
+                        // the TV cases' names after the Game Boys' (frontend)
+                        true => (
+                            Some(slot_ui::TV_SLOT_CASES[c].swatch),
+                            shell_picker::swatch_names().len() + slot_ui::GB_SLOT_CASES.len() + c,
+                        ),
+                        false => (Some(slot_ui::GB_SLOT_CASES[off + c].swatch), shell_picker::swatch_names().len() + off + c),
+                    })
+                    .collect()
+            }
+            false => picker
+                .swatches()
+                .iter()
+                .filter(|_| !picker.sgb())
+                .map(|s| (s.colour(), s.name_index()))
+                .collect(),
+        };
         let light = self.light_ground();
         let view = slot_ui::ShellPickerView {
             faces,
@@ -7081,20 +8917,48 @@ impl App {
             ground: slot_ui::theme::menu_flat(light),
             cart: face,
             behind: self.shelf().behind(&picker.stem),
+            studio: picker.slot_mode(),
+            away: studio_moves(picker, self.now()).0,
+            drop: self.shelf().drop_face(slot_ui::mould_of(cart)),
+            light,
             gba: cart.platform == Platform::Gba,
             cart_box: (w, h),
             from,
             openness,
             swatches: &swatches,
-            swatch: picker.swatch(),
-            finish: picker.finish(),
-            finishes: picker.finish_faces(),
-            finish_on: picker.finish_on(),
-            model: picker.model().map(|m| match (picker.sgb(), cart.platform) {
+            swatch: match on_slot {
+                true => {
+                    let picked = picker.slot_case().unwrap_or(0);
+                    picker.slot_shown().iter().position(|&c| c == picked).unwrap_or(0)
+                }
+                false => picker.swatch(),
+            },
+            // the slot's finishes, as the carts' (Roy 2026-11-05, Pearl and Metallic 2026-11-06)
+            finish: match on_slot {
+                true => picker.slot_finish().map_or(0, |f| picker.slot_finishes().iter().position(|k| *k == f).unwrap_or(0)),
+                false => picker.finish(),
+            },
+            finishes: match (on_slot, picker.slot_finish()) {
+                (true, Some(_)) => picker.slot_finishes().iter().map(|f| shell_picker::slot_finish_face(*f)).collect(),
+                (true, None) => Vec::new(),
+                (false, _) => picker.finish_faces(),
+            },
+            finish_on: if on_slot { picker.slot_finish().is_some() } else { picker.finish_on() },
+            model: match on_slot {
+                // The slot's models, after the carts' shapes in the faces.
+                // a model row of one model is not shown (Roy)
+                true => picker.slot_group().filter(|_| picker.slot_models() > 1).map(|(g, _, _)| match self.slot_platform() {
+                    Platform::Gbc => (3, 1, g),
+                    Platform::Gba => (9, 1, g),
+                    _ => (7, 2, g),
+                }),
+                false => picker.model().map(|m| match (picker.sgb(), cart.platform) {
                 (true, _) => (4, shell_picker::SGB_MODELS.len(), m),
                 (false, Platform::Snes) => (0, 2, m),
                 (false, _) => (2, 2, m),
             }),
+            },
+            cursor: picker.cursor(),
             row: match picker.row() {
                 shell_picker::Row::Tabs => slot_ui::PickerRow::Tabs,
                 shell_picker::Row::Colour => slot_ui::PickerRow::Colour,
@@ -7102,6 +8966,9 @@ impl App {
                 shell_picker::Row::Model => slot_ui::PickerRow::Model,
                 shell_picker::Row::Label => slot_ui::PickerRow::Label,
                 shell_picker::Row::Marker => slot_ui::PickerRow::Marker,
+                shell_picker::Row::Slot => slot_ui::PickerRow::Colour,
+                shell_picker::Row::SlotModel => slot_ui::PickerRow::Model,
+                shell_picker::Row::SlotFinish => slot_ui::PickerRow::Finish,
             },
             tabs: picker.tabs().into_iter().map(tab_face).collect(),
             tab: tab_face(picker.tab()),
@@ -7120,10 +8987,40 @@ impl App {
             inks: shell_picker::MARKERS.map(|(_, ink)| ink),
             remove: picker.offers_remove(),
             search: picker.offers_search(),
+            wear: (picker.offers_new_cart() || picker.swapping()).then(|| slot_ui::WearView {
+                dust: picker.wear().0,
+                wear: picker.wear().1,
+                new_cart: picker.offers_new_cart(),
+                asking: picker.swapping(),
+            }),
             confirming: picker.confirming(),
             sgb: picker.sgb(),
+            poke: picker.motion(self.now()).0,
+            clock: picker.motion(self.now()).1,
+            rest_turn: self.shelf().selected_play().1,
         };
         slot_ui::draw_shell_picker(self.canvas(), &view, out);
+        // The slot itself, live in the case picked, where it stands on the shelf: it springs up
+        // into view for the slot's studio, hops at each new case and drops away again (Roy).
+        let (_, rise) = studio_moves(picker, self.now());
+        if rise > 0.01 {
+            let from = out.len();
+            self.draw_idle_slot(out);
+            let mut dy = (1.0 - rise) * SLOT_RISE_PX;
+            if let (_, Some((s, k))) = picker.slot_motion(self.now()) {
+                if s < SLOT_HOP_S {
+                    let u = s / SLOT_HOP_S;
+                    dy -= k * SLOT_HOP_PX * (std::f32::consts::PI * u).sin() * (1.0 - u);
+                }
+            }
+            nudge(&mut out[from..], dy.round());
+            // Hopping up it bares the ground under it: that stays black on every
+            // wallpaper, not the light menu ground (Roy).
+            if dy.round() < 0.0 {
+                let c = self.canvas();
+                out.push(Draw::Rect { x: 0.0, y: c.h + dy.round(), w: c.w, h: -dy.round(), colour: [0.0, 0.0, 0.0, 1.0] });
+            }
+        }
     }
 
     fn core_faces_ready(&self) -> bool {
@@ -7156,6 +9053,13 @@ impl App {
         }
         if self.link_active() {
             return self.refuse();
+        }
+        // Game Boy and Color: gambatte's own network link, over the same screens (Roy 2026-11-12).
+        if self.core == Core::Gambatte {
+            self.link_hardware = LinkKind::Cable;
+            self.radio.ask(RadioJob::Warm);
+            self.game_menu = Some(GameMenu::Pick(self.last_role));
+            return;
         }
         if self.core == Core::Mgba {
             let wireless = self
@@ -7217,6 +9121,7 @@ impl App {
     }
 
     fn unplug(&mut self, role: LinkRow) {
+        self.unplug_to_pick = false;
         self.game_menu = Some(GameMenu::Unplug {
             role,
             since: self.now(),
@@ -7298,7 +9203,7 @@ impl App {
     }
 
     fn link_switchable(&self, stem: &str) -> bool {
-        self.auto_link(stem).is_some_and(|(cart, auto)| {
+        self.platform == Platform::Gba && self.auto_link(stem).is_some_and(|(cart, auto)| {
             serial_option(self.link_hardware.other(), auto, &cart.code, &cart.title)
                 != serial_option(self.link_hardware, auto, &cart.code, &cart.title)
         })
@@ -7425,9 +9330,18 @@ impl App {
                     opened: false,
                 });
                 self.begin_link(starting.client_id);
+                if self.core == Core::Gambatte {
+                    self.link_gb_peer = link.peer_ip();
+                }
                 self.link_transport = Some((starting.client_id, Box::new(link)));
             }
-            Some(LinkProgress::Failed(LinkFail::Cancelled)) => self.game_menu = None,
+            // Cancel is not Close (Roy 2026-11-13): once the cancel lands, the plug comes back
+            // out and the role picker stays up; a second B closes it.
+            Some(LinkProgress::Failed(LinkFail::Cancelled)) => {
+                let (role, _) = self.working_role(starting.client_id);
+                self.unplug(role);
+                self.unplug_to_pick = true;
+            }
             Some(LinkProgress::Failed(fail)) => {
                 let (role, worked) = self.working_role(starting.client_id);
                 self.game_menu = Some(GameMenu::Failed {
@@ -7768,7 +9682,11 @@ impl App {
     }
 
     fn auto_sleep_expired(&self) -> bool {
-        let timeout = Millis::from(self.state.auto_sleep_secs) * 1_000;
+        let mut timeout = Millis::from(self.state.auto_sleep_secs) * 1_000;
+        // Intros and cutscenes play with no press: in a game the screen waits far longer.
+        if timeout > 0 && matches!(self.phase, Phase::Playing { .. }) {
+            timeout = timeout.max(GAME_SLEEP_MIN_MS);
+        }
         timeout > 0
             && !self.powering_off
             && !self.link_active()
@@ -8033,6 +9951,15 @@ impl App {
         self.hud.set_toasts(faces);
     }
 
+    pub fn show_toast(&mut self, toast: Toast) {
+        let now = self.now();
+        self.hud.toast(toast, now);
+    }
+
+    pub fn toast_tex(&self, toast: Toast) -> Option<TexId> {
+        self.hud.toast_tex(toast)
+    }
+
     pub fn toast(&self) -> Option<Toast> {
         self.hud.said(self.now())
     }
@@ -8045,6 +9972,7 @@ impl App {
                 | Phase::Shelf
                 | Phase::QuickMenu { .. }
                 | Phase::About
+                | Phase::ScreenColors
                 | Phase::Buttons { .. }
         )
     }
@@ -8147,7 +10075,7 @@ fn deep_sleep_value(mins: u16) -> QuickValue {
         5 => QuickValue::Sleep5m,
         10 => QuickValue::Sleep10m,
         30 => QuickValue::Sleep30m,
-        _ => QuickValue::SleepNow,
+        _ => QuickValue::Sleep5m,
     }
 }
 
@@ -8156,7 +10084,7 @@ fn auto_sleep_value(secs: u16) -> QuickValue {
         30 => QuickValue::Sleep30s,
         60 => QuickValue::Sleep1m,
         300 => QuickValue::Sleep5m,
-        _ => QuickValue::Off,
+        _ => QuickValue::Sleep1m,
     }
 }
 
@@ -8176,6 +10104,20 @@ fn clock_screen(utc: i64, zone: TimeZone, h24: bool, from_menu: bool) -> Phase {
         seed: utc - utc.rem_euclid(60),
         from_menu,
     }
+}
+
+/// How far into a puff the cart is drawn clean.
+const BLOW_CLEAN_MS: Millis = 450;
+
+extern "C" {
+    fn tzset();
+}
+
+/// The cart clock in a core (Pokémon Ruby/Sapphire/Emerald, Boktai) reads
+/// local time through libc; give it the zone of the menu clock, not UTC.
+fn tell_libc_the_zone(zone: TimeZone) {
+    std::env::set_var("TZ", zone.posix());
+    unsafe { tzset() };
 }
 
 fn system_secs() -> i64 {
@@ -8235,6 +10177,51 @@ mod network_time_tests {
 }
 
 /// A studio tab's name's place among the faces: colour, label, marker.
+/// The slot drops this far out of view below the screen's edge.
+const SLOT_RISE_PX: f32 = 80.0;
+/// A new case: the slot hops this high, settling in SLOT_HOP_S.
+const SLOT_HOP_PX: f32 = 7.0;
+const SLOT_HOP_S: f32 = 0.42;
+
+/// How far the cart has flown off (0 held, 1 gone), and how far the slot has risen into view
+/// (0 down, 1 in place), while the studios switch: the password check's spring (Roy: playful).
+fn studio_moves(picker: &ShellPicker, now: Millis) -> (f32, f32) {
+    let (Some(slot), (since, _)) = (picker.slot_mode(), picker.slot_motion(now)) else {
+        return (0.0, 0.0);
+    };
+    let Some(s) = since else {
+        return (0.0, 0.0);
+    };
+    match slot {
+        // Closed from the slot's studio, the cart comes back down with the closing and glides
+        // home to the shelf, as from the cart's (Roy 2026-11-06: it popped up in the middle).
+        true if picker.closing() => {
+            let back = slot_ui::lift_of(picker.openness(now));
+            (ease((s / 0.28).min(1.0)) * back, spring(s - 0.08))
+        }
+        // the cart flies up quick, the slot springs up a beat behind it
+        true => (ease((s / 0.28).min(1.0)), spring(s - 0.08)),
+        // the slot drops, the cart comes down and springs into place
+        false => (1.0 - spring(s - 0.06), 1.0 - ease((s / 0.22).min(1.0))),
+    }
+}
+
+/// Moves draws up or down.
+fn nudge(draws: &mut [Draw], dy: f32) {
+    for d in draws {
+        match d {
+            Draw::Rect { y, .. }
+            | Draw::Tex { y, .. }
+            | Draw::Part { y, .. }
+            | Draw::Turned { y, .. }
+            | Draw::Tint { y, .. }
+            | Draw::Shade { y, .. }
+            | Draw::Light { y, .. } => *y += dy,
+            Draw::Game | Draw::Shot { .. } => {}
+        }
+    }
+}
+
 fn tab_face(tab: shell_picker::Tab) -> usize {
     match tab {
         shell_picker::Tab::Colour => 0,
@@ -8272,12 +10259,27 @@ fn cable_value(cable: TvCable) -> QuickValue {
     }
 }
 
-/// The next cable along: the SNES's core also draws an aerial's RF signal, the NES's does not.
+fn colors_value(colors: NesColors) -> QuickValue {
+    match colors {
+        NesColors::Standard => QuickValue::Standard,
+        NesColors::Sony => QuickValue::Sony,
+        NesColors::Authentic => QuickValue::Authentic,
+    }
+}
+
+fn step_colors(colors: NesColors, right: bool) -> NesColors {
+    let all = NesColors::ALL;
+    let at = all.iter().position(|c| *c == colors).unwrap_or(0);
+    let n = all.len();
+    all[if right { (at + 1) % n } else { (at + n - 1) % n }]
+}
+
+/// The next cable along, an aerial's RF signal too (the NES's slot. filters itself).
 /// RGB is not offered (Roy).
-fn step_cable(cable: TvCable, right: bool, rf: bool) -> TvCable {
+fn step_cable(cable: TvCable, right: bool) -> TvCable {
     let all: Vec<TvCable> = TvCable::ALL
         .into_iter()
-        .filter(|c| *c != TvCable::Rgb && (rf || *c != TvCable::Rf))
+        .filter(|c| *c != TvCable::Rgb)
         .collect();
     let at = all.iter().position(|c| *c == cable).unwrap_or(0);
     let n = all.len();
@@ -8319,8 +10321,13 @@ fn zoom_draw(d: &mut Draw, k: f32, dx: f32, dy: f32, alpha: f32) {
         *h *= k;
     };
     match d {
+        // The Super Game Boy's shadow (a Shade) goes with the camera too: left out, it stood
+        // full-size and full-strength in the band's place while the zoom ran (Roy, xh1).
         Draw::Rect { x, y, w, h, colour }
         | Draw::Tint {
+            x, y, w, h, colour, ..
+        }
+        | Draw::Shade {
             x, y, w, h, colour, ..
         } => {
             place(x, y, w, h);
@@ -8386,7 +10393,29 @@ fn local_address() -> Option<String> {
 }
 
 /// The spinner on the password screen, between the words and the legend.
-const CHECK_SPIN_Y: f32 = 370.0;
+/// How long the spinner takes to be drawn in once the password is taken, in seconds.
+const SPIN_OUT_S: f32 = 0.16;
+/// The check pops out this long after the spinner starts going.
+const CHECK_DELAY_S: f32 = 0.08;
+/// How long the check takes to draw itself, in seconds.
+const CHECK_DRAW_S: f32 = 0.3;
+
+/// A little spring from 0 to 1: up past 1 by about a fifth, back under, and settled in
+/// about half a second. The playful pop of the password check.
+fn spring(t: f32) -> f32 {
+    if t <= 0.0 {
+        return 0.0;
+    }
+    1.0 - (-7.0 * t).exp() * (14.0 * t).cos()
+}
+
+/// The password check's spinner and check: as large as the Wi-Fi sign they stand in for.
+const CHECK_SPIN_R: f32 = 30.0;
+const CHECK_SIZE: f32 = 34.0;
+const CHECK_DOT: f32 = 9.0;
+const CHECK_STROKE: f32 = 7.0;
+/// How long the check stays on the password screen before the Network page comes back.
+const TAKEN_MS: Millis = 1800;
 
 /// How long a join is waited for before it is given up.
 const JOIN_MS: Millis = 30_000;
@@ -8426,7 +10455,18 @@ fn bars(dbm: i32) -> u8 {
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct NetworkWords {
     pub label: String,
+    /// Rows named for the moment: the Bluetooth devices.
+    pub names: Vec<(QuickRow, String)>,
     pub nearby: Vec<(String, bool, u8)>,
     pub texts: Vec<(QuickRow, String)>,
     pub title: Option<String>,
+}
+
+/// The finish row in the slot studio: the Pearls among the Metallic ones (Roy 2026-11-12),
+/// their sheen still their own.
+fn studio_finish(f: slot_ui::SlotFinish) -> slot_ui::SlotFinish {
+    match f {
+        slot_ui::SlotFinish::Pearl => slot_ui::SlotFinish::Metallic,
+        f => f,
+    }
 }

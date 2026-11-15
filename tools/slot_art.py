@@ -44,7 +44,7 @@ ORIGINALS = [
     ("_gb", "orig", np.array([196, 192, 183], np.float32)),
     ("_gb", "orig_gbc", np.array([104, 78, 146], np.float32)),
     ("_gb", "orig_nes", np.array([188, 186, 180], np.float32)),
-    ("_gb", "orig_snes", np.array([200, 199, 202], np.float32)),
+    ("_gb", "orig_snes", np.array([189, 189, 192], np.float32)),  # the Super Famicom carts' grey as they show (Roy 2026-11-15)
 ]
 
 

@@ -2386,11 +2386,13 @@ version = "0.1.0"
 dependencies = [
  "cpal",
  "flate2",
+ "fontdue",
  "gilrs",
  "libc",
  "libloading",
  "lz4_flex",
  "png 0.17.16",
+ "slot-achievements",
  "slot-gfx",
  "slot-input",
  "slot-labels",
@@ -2399,7 +2401,17 @@ dependencies = [
  "slot-store",
  "slot-ui",
  "tempfile",
+ "ureq",
  "winit",
+]
+
+[[package]]
+name = "slot-achievements"
+version = "0.1.0"
+dependencies = [
+ "cc",
+ "libc",
+ "ureq",
 ]
 
 [[package]]

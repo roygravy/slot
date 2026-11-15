@@ -23,7 +23,7 @@ fn failed(since: u64) -> GameMenu {
 
 #[test]
 fn pick_hangs_the_plug_above_the_port() {
-    assert_eq!(plug_tip(GameMenu::Pick(LinkRow::Host), 0), 367.0);
+    assert_eq!(plug_tip(GameMenu::Pick(LinkRow::Host), 0), 267.0);
     let bottom = adapter_base(GameMenu::Pick(LinkRow::Join), 0) - ADAPTER_BASE_Y + ADAPTER_H as f32;
     assert!(
         (plug_tip(GameMenu::Pick(LinkRow::Host), 0) - bottom).abs() < 0.01,
@@ -34,7 +34,7 @@ fn pick_hangs_the_plug_above_the_port() {
 #[test]
 fn working_seats_the_plug_in_200ms_and_holds_it_there() {
     let m = working(LinkRow::Host, 1000);
-    assert_eq!(plug_tip(m, 1000), 367.0);
+    assert_eq!(plug_tip(m, 1000), 267.0);
     assert!((plug_tip(m, 1200) - (PORT_Y + 31.0)).abs() < 0.01);
     let held: Vec<f32> = (0..3000)
         .step_by(50)
@@ -69,14 +69,14 @@ fn linked_seats_the_plug_from_where_it_was_and_clicks_as_it_lands() {
 fn failed_lifts_tilts_and_dims_over_250ms() {
     let m = failed(5000);
     assert_eq!(plug_turn(m, 5000), 0.0);
-    assert!((plug_tip(m, 5250) - 276.0).abs() < 0.01);
+    assert!((plug_tip(m, 5250) - 176.0).abs() < 0.01);
     assert!((plug_turn(m, 5250) - 14f32.to_radians()).abs() < 1e-4);
     assert!((art_alpha(m, 5250) - 0.45).abs() < 1e-4);
 }
 
 #[test]
 fn the_adapter_seats_while_working_and_stays_seated() {
-    assert_eq!(adapter_base(GameMenu::Pick(LinkRow::Join), 0), 336.0);
+    assert_eq!(adapter_base(GameMenu::Pick(LinkRow::Join), 0), 236.0);
     assert!((adapter_base(working(LinkRow::Join, 0), 200) - PORT_Y).abs() < 0.01);
     assert!((adapter_base(failed(3000), 3250) - PORT_Y).abs() < 0.01);
 }
@@ -109,8 +109,11 @@ fn sprites() -> LinkSprites {
     let arc = |n: usize, i: usize| s(n, ARCS[i].2, ARCS[i].3);
     LinkSprites {
         port: s(1, PORT_W, PORT_H),
+        port_shade: s(31, PORT_W, PORT_H),
         plug_host: s(2, PLUG_W, PLUG_H),
         plug_join: s(3, PLUG_W, PLUG_H),
+        plug_gb: s(30, PLUG_W, PLUG_H),
+        plug_gb_join: s(30, PLUG_W, PLUG_H),
         adapter: s(4, ADAPTER_W, ADAPTER_H),
         arcs_right: [arc(7, 0), arc(8, 1), arc(9, 2)],
         arcs_left: [arc(10, 0), arc(11, 1), arc(12, 2)],
@@ -128,7 +131,7 @@ fn a_searching_plug_sits_in_the_port() {
     let mut out = Vec::new();
     draw_link_art(
         working(LinkRow::Host, 0),
-        LinkKind::Cable,
+        LinkKind::Cable, false,
         1000,
         &s,
         &mut out,
@@ -152,7 +155,7 @@ fn a_searching_plug_sits_in_the_port() {
 fn texes(out: &[Draw]) -> Vec<TexId> {
     out.iter()
         .filter_map(|d| match d {
-            Draw::Tex { tex, .. } | Draw::Part { tex, .. } | Draw::Turned { tex, .. } => Some(*tex),
+            Draw::Tex { tex, .. } | Draw::Tint { tex, .. } | Draw::Part { tex, .. } | Draw::Turned { tex, .. } => Some(*tex),
             _ => None,
         })
         .collect()
@@ -164,7 +167,7 @@ fn cable_carts_draw_the_plug_under_the_port_and_wireless_carts_the_adapter() {
     let mut out = Vec::new();
     draw_link_art(
         GameMenu::Pick(LinkRow::Host),
-        LinkKind::Cable,
+        LinkKind::Cable, false,
         0,
         &s,
         &mut out,
@@ -184,7 +187,7 @@ fn cable_carts_draw_the_plug_under_the_port_and_wireless_carts_the_adapter() {
     out.clear();
     draw_link_art(
         GameMenu::Pick(LinkRow::Host),
-        LinkKind::Wireless,
+        LinkKind::Wireless, false,
         0,
         &s,
         &mut out,
@@ -199,7 +202,7 @@ fn a_joiner_holds_the_gray_plug() {
     let mut out = Vec::new();
     draw_link_art(
         GameMenu::Pick(LinkRow::Join),
-        LinkKind::Cable,
+        LinkKind::Cable, false,
         0,
         &s,
         &mut out,
@@ -214,14 +217,14 @@ fn the_swap_arrows_show_on_pick_only() {
     let mut out = Vec::new();
     draw_link_art(
         GameMenu::Pick(LinkRow::Host),
-        LinkKind::Cable,
+        LinkKind::Cable, false,
         0,
         &s,
         &mut out,
     );
     assert!(texes(&out).contains(&s.arrow_left.tex));
     out.clear();
-    draw_link_art(working(LinkRow::Host, 0), LinkKind::Cable, 50, &s, &mut out);
+    draw_link_art(working(LinkRow::Host, 0), LinkKind::Cable, false, 50, &s, &mut out);
     assert!(!texes(&out).contains(&s.arrow_left.tex));
 }
 
@@ -229,7 +232,7 @@ fn the_swap_arrows_show_on_pick_only() {
 fn a_failed_plug_is_drawn_turned() {
     let s = sprites();
     let mut out = Vec::new();
-    draw_link_art(failed(0), LinkKind::Cable, 250, &s, &mut out);
+    draw_link_art(failed(0), LinkKind::Cable, false, 250, &s, &mut out);
     assert!(out.iter().any(
         |d| matches!(d, Draw::Turned { tex, turn, .. } if *tex == s.plug_host.tex && *turn > 0.2)
     ));
@@ -246,14 +249,14 @@ fn unplug_pulls_the_plug_back_out_of_the_port_and_leaves_it_there() {
         "the unplug did not start from where a seated plug sits"
     );
     assert!(
-        (plug_tip(m, 1260) - 367.0).abs() < 0.01,
+        (plug_tip(m, 1260) - 267.0).abs() < 0.01,
         "the plug is not back where it was picked up"
     );
     let held: Vec<f32> = (0..2000)
         .step_by(100)
         .map(|t| plug_tip(m, 1260 + t))
         .collect();
-    assert!(held.iter().all(|y| (y - 367.0).abs() < 0.01), "{held:?}");
+    assert!(held.iter().all(|y| (y - 267.0).abs() < 0.01), "{held:?}");
 }
 
 #[test]
@@ -263,7 +266,7 @@ fn unplug_lifts_the_adapter_off_the_port_and_dies_its_arcs() {
         since: 0,
     };
     assert!((adapter_base(m, 0) - PORT_Y).abs() < 0.01);
-    assert!((adapter_base(m, 260) - 336.0).abs() < 0.01);
+    assert!((adapter_base(m, 260) - 236.0).abs() < 0.01);
     assert_eq!(
         arc_alphas(m, 0),
         [1.0; 3],
@@ -299,7 +302,7 @@ fn the_adapter_calls_out_with_its_arcs_while_working() {
     let mut out = Vec::new();
     draw_link_art(
         working(LinkRow::Host, 0),
-        LinkKind::Wireless,
+        LinkKind::Wireless, false,
         800,
         &s,
         &mut out,

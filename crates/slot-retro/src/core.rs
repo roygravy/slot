@@ -98,6 +98,14 @@ pub trait RetroCore: Send {
     fn serialize(&mut self) -> Result<Vec<u8>, CoreError>;
     fn unserialize(&mut self, data: &[u8]) -> Result<(), CoreError>;
     fn save_ram(&self) -> Option<Vec<u8>>;
+    /// The core's `retro_memory_map` as it announced it (null if it never did), and its raw
+    /// memory for a libretro memory id (null, 0 if none). For achievements.
+    fn memory_map_ptr(&self) -> *const std::ffi::c_void {
+        std::ptr::null()
+    }
+    fn memory_raw(&self, _id: u32) -> (*mut std::ffi::c_void, usize) {
+        (std::ptr::null_mut(), 0)
+    }
     fn load_save_ram(&mut self, data: &[u8]) -> Result<(), CoreError>;
     fn av_info(&self) -> AvInfo;
     fn rumble(&self) -> Rumble {

@@ -10,6 +10,7 @@ fn bottom_edge(d: &Draw) -> Option<f32> {
         | Draw::Part { y, h, .. }
         | Draw::Turned { y, h, .. }
         | Draw::Tint { y, h, .. }
+        | Draw::Shade { y, h, .. }
         | Draw::Light { y, h, .. } => Some(y + h),
         Draw::Game | Draw::Shot { .. } => None,
     }

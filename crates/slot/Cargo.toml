@@ -9,9 +9,14 @@ license.workspace = true
 default = ["host"]
 host = ["dep:winit", "dep:cpal", "dep:gilrs", "slot-gfx/host"]
 device = ["slot-gfx/device"]
+# TEST BUILD ONLY until Roy approves it for a release: RetroAchievements (crates/slot-achievements).
+retroachievements = ["dep:slot-achievements", "dep:ureq"]
 
 [dependencies]
+fontdue = { workspace = true }
 slot-labels = { path = "../slot-labels" }
+slot-achievements = { path = "../slot-achievements", optional = true }
+ureq = { version = "3", default-features = false, features = ["rustls"], optional = true }
 slot-gfx = { path = "../slot-gfx", default-features = false }
 slot-input = { path = "../slot-input" }
 slot-power = { path = "../slot-power" }

@@ -26,9 +26,6 @@ const KEEP_PIN: Duration = Duration::from_secs(5 * 60);
 static LAST_PIN: Mutex<Option<(String, Instant)>> = Mutex::new(None);
 /// Where a half-sent game waits before it gets its name.
 const PART: &str = ".rom-manager.part";
-/// Games renamed while the page was open, one `GB<tab>old<tab>new` a line, for slot to carry
-/// favorites and recents over when the screen closes.
-pub const RENAMED: &str = "Config/.renamed";
 /// Phones ticked "Remember this phone": one secret key a line, the newest last.
 const KEYS: &str = "Config/.manager-keys";
 const MAX_KEYS: usize = 8;
@@ -37,7 +34,10 @@ pub struct Web {
     pub owner: String,
     pub address: String,
     pub pin: String,
+    /// The same page as `http://gravy.local`, while mDNS answers for it.
+    pub named: Option<String>,
     stop: Arc<AtomicBool>,
+    _mdns: Option<crate::mdns::Responder>,
 }
 
 struct Shared {
@@ -46,6 +46,8 @@ struct Shared {
     stop: Arc<AtomicBool>,
     wrong: AtomicUsize,
     open: AtomicUsize,
+    /// `http://gravy.local` when mDNS answers for it: a page opened by IP moves there.
+    named: Option<String>,
 }
 
 impl Web {
@@ -71,6 +73,12 @@ impl Web {
         listener
             .set_nonblocking(true)
             .map_err(|_| "WEB_PORT_BUSY")?;
+        let at = |host: &str| match port {
+            80 => format!("http://{host}"),
+            p => format!("http://{host}:{p}"),
+        };
+        let mdns = crate::mdns::Responder::start(ip);
+        let named = mdns.as_ref().map(|m| at(&m.name));
         let pin = pin();
         let stop = Arc::new(AtomicBool::new(false));
         let shared = Arc::new(Shared {
@@ -79,22 +87,24 @@ impl Web {
             stop: stop.clone(),
             wrong: AtomicUsize::new(0),
             open: AtomicUsize::new(0),
+            named: named.clone(),
         });
         std::thread::spawn(move || accept(listener, shared));
-        let address = match port {
-            80 => format!("http://{ip}"),
-            p => format!("http://{ip}:{p}"),
-        };
         Ok(Web {
             owner: owner.into(),
-            address,
+            address: at(&ip.to_string()),
             pin,
+            named,
             stop,
+            _mdns: mdns,
         })
     }
 
     pub fn word(&self) -> String {
-        format!("WEB {} {}", self.address, self.pin)
+        match &self.named {
+            Some(n) => format!("WEB {} {} {n}", self.address, self.pin),
+            None => format!("WEB {} {}", self.address, self.pin),
+        }
     }
 }
 
@@ -282,6 +292,10 @@ fn serve(out: &mut TcpStream, reader: &mut BufReader<TcpStream>, shared: &Shared
             )
         }
         ("GET", ["logo.png"]) => return reply(out, "200 OK", "image/png", LOGO),
+        ("GET", ["api", "name"]) => {
+            let name = shared.named.as_deref().unwrap_or("");
+            return reply(out, "200 OK", "text/plain", name.as_bytes());
+        }
         ("GET", ["favicon.ico"]) => return fail(out, "404 Not Found", ""),
         _ => {}
     }
@@ -315,9 +329,40 @@ fn serve(out: &mut TcpStream, reader: &mut BufReader<TcpStream>, shared: &Shared
                 None => fail(out, "409 Conflict", "The card can't be written"),
             };
         }
+        ("GET", ["api", "ra"]) => {
+            let json = match crate::ra::user(root) {
+                Some(u) => format!(
+                    "{{\"user\":\"{}\",\"key\":{}}}",
+                    u.replace(['\\', '"'], ""),
+                    crate::ra::has_key(root)
+                ),
+                None => "{}".to_string(),
+            };
+            return reply(out, "200 OK", "application/json", json.as_bytes());
+        }
+        ("POST", ["api", "ra", "login"]) => {
+            let mut body = String::new();
+            if req.length > 1024 || (&mut *reader).take(req.length).read_to_string(&mut body).is_err() {
+                Err("Bad login")
+            } else {
+                crate::ra::login(root, &body)
+            }
+        }
+        ("POST", ["api", "ra", "key"]) => {
+            let mut body = String::new();
+            if req.length > 256 || (&mut *reader).take(req.length).read_to_string(&mut body).is_err() {
+                Err("Bad key")
+            } else {
+                crate::ra::set_key(root, &body)
+            }
+        }
+        ("DELETE", ["api", "ra"]) => crate::ra::logout(root),
         ("POST", ["api", "update", "check"]) => UPDATE.check(root),
         ("POST", ["api", "update", "download"]) => UPDATE.download(root),
         ("POST", ["api", "update", "install"]) => UPDATE.install(root),
+        ("POST", ["api", "update", "baseos", "check"]) => UPDATE.baseos_check(),
+        ("POST", ["api", "update", "baseos", "download"]) => UPDATE.baseos_download(root),
+        ("POST", ["api", "update", "baseos", "install"]) => UPDATE.baseos_install(root),
         ("PUT", ["api", "update", "zip"]) => UPDATE.upload(root, req.length, reader),
         ("GET", ["api", "list"]) => {
             return reply(
@@ -338,10 +383,25 @@ fn serve(out: &mut TcpStream, reader: &mut BufReader<TcpStream>, shared: &Shared
                 None => fail(out, "404 Not Found", "That file isn't there"),
             };
         }
+        // The hidden Logs tab (tap the logo five times): the console's own logs, to read along.
+        ("GET", ["api", "logs", name]) => {
+            return match log_file(root, name) {
+                Some(text) => reply(out, "200 OK", "text/plain; charset=utf-8", &text),
+                None => fail(out, "404 Not Found", "That log isn't there"),
+            };
+        }
         ("PUT", ["api", "games", system, name]) => {
             upload(root, system, name, req.length, reader)
         }
         ("DELETE", ["api", "games", system, name]) => delete(root, system, name),
+        ("PUT", ["api", "label", system, name]) => label(root, system, name, req.length, reader),
+        ("DELETE", ["api", "label", system, name]) => drop_label(root, system, name),
+        ("GET", ["api", "label", system, name]) => {
+            return match label_file(root, system, name).and_then(|f| fs::read(f).ok()) {
+                Some(png) => reply(out, "200 OK", "image/png", &png),
+                None => fail(out, "404 Not Found", "No label"),
+            };
+        }
         ("POST", ["api", "rename", system, name]) => {
             let mut to = String::new();
             if req.length > 1024
@@ -357,9 +417,33 @@ fn serve(out: &mut TcpStream, reader: &mut BufReader<TcpStream>, shared: &Shared
         }
         _ => return fail(out, "404 Not Found", "Not found"),
     };
+    tell_console(req.method.as_str(), path.as_slice(), result.is_ok());
     match result {
         Ok(()) => reply(out, "200 OK", "text/plain", b"OK"),
         Err(why) => fail(out, "409 Conflict", why),
+    }
+}
+
+/// What the page just did, one word a line, for the console to show as a toast (slot's
+/// app.rs reads and empties it while the Manager is open).
+pub const NEWS: &str = "/tmp/gravy-manager-news";
+
+fn tell_console(method: &str, path: &[&str], ok: bool) {
+    let word = match (method, path, ok) {
+        ("PUT", ["api", "games", system, _], true) => match Place::named(system) {
+            Some(Place::Games(_)) => "game",
+            Some(Place::Bios) => "bios",
+            Some(Place::Wallpapers) => "wallpaper",
+            _ => return,
+        },
+        ("PUT", ["api", "label", ..], true) => "label",
+        ("PUT", ["api", "games" | "label", ..] | ["api", "update", "zip"], false) => "failed",
+        ("DELETE", ["api", "games", ..], true) => "deleted",
+        ("POST", ["api", "rename", ..], true) => "renamed",
+        _ => return,
+    };
+    if let Ok(mut f) = fs::OpenOptions::new().create(true).append(true).open(NEWS) {
+        let _ = writeln!(f, "{word}");
     }
 }
 
@@ -434,6 +518,15 @@ impl Place {
     }
 }
 
+/// A packed file (.zip, .7z, ...): the cores only open bare games, so it never goes on.
+fn packed(name: &str) -> bool {
+    let packs = ["zip", "7z", "rar", "gz", "tar"];
+    Path::new(name)
+        .extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| packs.iter().any(|k| e.eq_ignore_ascii_case(k)))
+}
+
 /// A file name as the card may hold it: one name in its folder, never a path, a hidden file
 /// or a file slot would not use.
 fn checked(system: &str, name: &str) -> Result<(Place, String), &'static str> {
@@ -456,6 +549,9 @@ fn checked(system: &str, name: &str) -> Result<(Place, String), &'static str> {
         || name.chars().any(char::is_control);
     if bad {
         return Err("That name can't be used");
+    }
+    if packed(name) {
+        return Err("Unzip it first: the console can't open .zip or .7z files");
     }
     if !place.accepts(name) {
         return Err(place.wrong_kind());
@@ -491,6 +587,7 @@ fn pictures(dir: &Path, prefix: &str, place: Place, out: &mut Vec<(String, u64, 
 
 fn list(root: &Path) -> String {
     let mut json = String::from("{\"systems\":{");
+    let wear = slot_store::wear::WearBook::read(root);
     for (i, p) in Place::ALL.into_iter().enumerate() {
         let mut found = Vec::new();
         pictures(&p.dir(root), "", p, &mut found);
@@ -503,21 +600,71 @@ fn list(root: &Path) -> String {
         } else {
             found.sort_by_key(|(n, _, _)| slot_store::sort_key(n));
         }
-        let games: Vec<(String, u64)> = found.into_iter().map(|(n, b, _)| (n, b)).collect();
+        let games = found;
         if i > 0 {
             json.push(',');
         }
         json.push_str(&format!("\"{}\":[", p.key()));
-        for (j, (name, size)) in games.iter().enumerate() {
+        // A game says whether it has a label, downloaded or the user's own.
+        let labels = match p {
+            Place::Games(platform) => Some(label_names(root, platform)),
+            _ => None,
+        };
+        for (j, (name, size, when)) in games.iter().enumerate() {
             if j > 0 {
                 json.push(',');
             }
-            json.push_str(&format!("[{},{size}]", quote(name)));
+            match (&labels, p) {
+                (Some(l), Place::Games(platform)) => {
+                    let has = l.contains(&format!("{}.png", stem(name)).to_lowercase());
+                    // For sorting on the page: when it came onto the card (the day the shelf
+                    // first showed it, else the file's own date) and how long it has been played.
+                    let e = wear.get(&slot_store::wear::key(platform, stem(name)));
+                    let added = if e.first_seen > 0 { e.first_seen } else { *when };
+                    json.push_str(&format!(
+                        "[{},{size},{},{added},{}]",
+                        quote(name),
+                        u8::from(has),
+                        e.play_secs
+                    ))
+                }
+                _ => json.push_str(&format!("[{},{size}]", quote(name))),
+            }
         }
         json.push(']');
     }
+    // The console's logs, for the hidden Logs tab; newest change first.
+    let mut logs = Vec::new();
+    for e in fs::read_dir(root.join("Logs")).into_iter().flatten().flatten() {
+        let (Ok(name), Ok(meta)) = (e.file_name().into_string(), e.metadata()) else {
+            continue;
+        };
+        if meta.is_file() && !name.starts_with('.') {
+            logs.push((name, meta.len(), meta.modified().ok()));
+        }
+    }
+    logs.sort_by(|a, b| b.2.cmp(&a.2));
+    let logs: Vec<String> = logs.iter().map(|(n, b, _)| format!("[{},{b}]", quote(n))).collect();
+    json.push_str(&format!(",\"LOGS\":[{}]", logs.join(",")));
     json.push_str(&format!("}},\"free\":{}}}", free(root)));
     json
+}
+
+/// One log from Logs/, only a plain name there; a long one hands out its last 4 MB.
+fn log_file(root: &Path, name: &str) -> Option<Vec<u8>> {
+    if name.is_empty() || name.starts_with('.') || name.contains(['/', '\\']) {
+        return None;
+    }
+    let mut f = File::open(root.join("Logs").join(name)).ok()?;
+    let len = f.metadata().ok().filter(|m| m.is_file())?.len();
+    const MAX: u64 = 4 << 20;
+    if len > MAX {
+        use std::io::Seek;
+        f.seek(std::io::SeekFrom::Start(len - MAX)).ok()?;
+    }
+    let mut text = Vec::new();
+    f.take(MAX).read_to_end(&mut text).ok()?;
+    Some(text)
 }
 
 pub(crate) fn quote(s: &str) -> String {
@@ -588,6 +735,76 @@ fn upload(
     Ok(())
 }
 
+const MAX_LABEL: u64 = 8 << 20;
+
+/// A game's own label, a PNG the page made of the picture picked on the phone: it takes the
+/// place of any label there was, downloaded or not, under the game's name.
+fn label(
+    root: &Path,
+    system: &str,
+    name: &str,
+    length: u64,
+    body: &mut impl Read,
+) -> Result<(), &'static str> {
+    let (p, name) = checked(system, name)?;
+    let Place::Games(platform) = p else {
+        return Err("Only games have labels");
+    };
+    if !p.dir(root).join(&name).is_file() {
+        return Err("That game isn't there");
+    }
+    if length == 0 || length > MAX_LABEL {
+        return Err("That picture is too big");
+    }
+    let mut png = Vec::with_capacity(length as usize);
+    if body.take(length).read_to_end(&mut png).is_err() || png.len() as u64 != length {
+        return Err("The upload stopped halfway");
+    }
+    if !png.starts_with(b"\x89PNG\r\n\x1a\n") {
+        return Err("That isn't a picture");
+    }
+    let dir = root.join("Labels").join(platform.dir_name());
+    fs::create_dir_all(&dir).map_err(|_| "The card can't be written")?;
+    let file = format!("{}.png", stem(&name));
+    // The card is FAT and labels are found in any case: the old one goes, whatever its case.
+    for e in fs::read_dir(&dir).into_iter().flatten().flatten() {
+        if e.file_name().to_str().is_some_and(|n| n.eq_ignore_ascii_case(&file)) {
+            let _ = fs::remove_file(e.path());
+        }
+    }
+    slot_store::atomic_write(&dir.join(&file), &png).map_err(|_| "The card can't be written")
+}
+
+/// The label files of a platform's games, lower case.
+fn label_names(root: &Path, platform: Platform) -> std::collections::HashSet<String> {
+    fs::read_dir(root.join("Labels").join(platform.dir_name()))
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|e| e.file_name().into_string().ok())
+        .map(|n| n.to_lowercase())
+        .collect()
+}
+
+/// A game's label on the card, in whatever case it was written.
+fn label_file(root: &Path, system: &str, name: &str) -> Option<std::path::PathBuf> {
+    let (Place::Games(platform), name) = checked(system, name).ok()? else {
+        return None;
+    };
+    let want = format!("{}.png", stem(&name));
+    fs::read_dir(root.join("Labels").join(platform.dir_name()))
+        .ok()?
+        .flatten()
+        .find(|e| e.file_name().to_str().is_some_and(|n| n.eq_ignore_ascii_case(&want)))
+        .map(|e| e.path())
+}
+
+/// The label goes: the console looks one up online again next time.
+fn drop_label(root: &Path, system: &str, name: &str) -> Result<(), &'static str> {
+    let file = label_file(root, system, name).ok_or("No label")?;
+    fs::remove_file(file).map_err(|_| "The card can't be written")
+}
+
 /// The card is FAT: two names that differ only in case are the same file.
 fn exists_any_case(dir: &Path, name: &str) -> bool {
     fs::read_dir(dir).into_iter().flatten().flatten().any(|e| {
@@ -630,81 +847,12 @@ fn rename(root: &Path, system: &str, name: &str, to: &str) -> Result<(), &'stati
     }
     let (old, new) = (stem(&from), stem(&to));
     if let (Place::Games(p), true) = (p, old != new) {
-        let taken = |path: PathBuf| path.exists() && !old.eq_ignore_ascii_case(new);
-        let saves = root.join("Saves").join(p.dir_name());
-        let labels = root.join("Labels").join(p.dir_name());
-        let states: Vec<PathBuf> = fs::read_dir(root.join("States").join(p.dir_name()))
-            .into_iter()
-            .flatten()
-            .flatten()
-            .map(|e| e.path())
-            .collect();
-        let clash = ["sav", "srm"]
-            .iter()
-            .any(|e| taken(saves.join(format!("{new}.{e}"))))
-            || states.iter().any(|core| taken(core.join(new)));
-        if clash {
-            return Err("Saves for a game with that name are already there");
-        }
-        for ext in ["sav", "srm"] {
-            move_if_there(
-                &saves.join(format!("{old}.{ext}")),
-                &saves.join(format!("{new}.{ext}")),
-            );
-        }
-        for core in &states {
-            move_if_there(&core.join(old), &core.join(new));
-        }
-        if let Some(label) = slot_store::listing(&labels).get(&format!("{old}.png").to_lowercase())
-        {
-            move_if_there(&labels.join(label), &labels.join(format!("{new}.png")));
-        }
-        // The cart's own colour and marker are kept by name too.
-        for file in [
-            slot_store::CART_SHELL_FILE,
-            slot_store::LABELS_SHELL_FILE,
-            slot_store::CART_MARKER_FILE,
-        ] {
-            if let Err(e) = rekey(&root.join(file), old, new) {
-                eprintln!("slot-services: rom manager: {file}: {e}");
-            }
-        }
-        // Favorites and recents live in slot's own state, which slot writes: it is told.
-        let line = format!("{}\t{old}\t{new}\n", p.dir_name());
-        let journal = root.join(RENAMED);
-        let _ = fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(journal)
-            .and_then(|mut f| f.write_all(line.as_bytes()));
+        slot_store::move_game(root, p, old, new)?;
     }
     fs::rename(dir.join(&from), dir.join(&to)).map_err(|_| "The card can't be written")
 }
 
-/// `old`'s line in a `name = value` file, moved to `new`.
-fn rekey(path: &Path, old: &str, new: &str) -> std::io::Result<()> {
-    let Ok(text) = fs::read_to_string(path) else {
-        return Ok(());
-    };
-    let wanted = slot_store::cart_shell::key(old);
-    let Some((was, value)) = slot_store::ini::parse(&text)
-        .into_iter()
-        .find(|(k, _)| slot_store::cart_shell::key(k) == wanted)
-    else {
-        return Ok(());
-    };
-    let text = slot_store::ini::set(&text, &was, None)?;
-    let text = slot_store::ini::set(&text, new, Some(&value))?;
-    slot_store::atomic_write(path, text.as_bytes())
-}
 
-fn move_if_there(from: &Path, to: &Path) {
-    if from.exists() {
-        if let Err(e) = fs::rename(from, to) {
-            eprintln!("slot-services: rom manager: {}: {e}", from.display());
-        }
-    }
-}
 
 #[cfg(test)]
 mod tests {
@@ -729,6 +877,51 @@ mod tests {
         assert!(checked("SCREENSHOTS", "Saves/x.png").is_err());
         assert!(checked("WALLPAPERS", "GB/x.png").is_err());
         assert_eq!(decode("Pok%C3%A9mon%20Red.gb").unwrap(), "Pokémon Red.gb");
+    }
+
+    #[test]
+    fn logs_only_come_from_the_logs_folder() {
+        let d = tempfile::tempdir().unwrap();
+        let r = d.path();
+        fs::create_dir_all(r.join("Logs")).unwrap();
+        fs::create_dir_all(r.join("Config")).unwrap();
+        fs::write(r.join("Logs/slot.log"), b"hello").unwrap();
+        fs::write(r.join("Config/slot.state"), b"secret").unwrap();
+        assert_eq!(log_file(r, "slot.log").unwrap(), b"hello");
+        assert!(log_file(r, "../Config/slot.state").is_none());
+        assert!(log_file(r, "..").is_none());
+        assert!(log_file(r, "nope.log").is_none());
+        assert!(list(r).contains("\"LOGS\":[[\"slot.log\",5]]"));
+    }
+
+    #[test]
+    fn a_label_upload_replaces_the_games_label_in_any_case() {
+        let d = tempfile::tempdir().unwrap();
+        let r = d.path();
+        for (dir, file) in [("Games/GB", "Tetris.gb"), ("Labels/GB", "tetris.png")] {
+            fs::create_dir_all(r.join(dir)).unwrap();
+            fs::write(r.join(dir).join(file), b"x").unwrap();
+        }
+        let png = b"\x89PNG\r\n\x1a\nrest";
+        label(r, "GB", "Tetris.gb", png.len() as u64, &mut &png[..]).unwrap();
+        let names: Vec<_> = fs::read_dir(r.join("Labels/GB"))
+            .unwrap()
+            .flatten()
+            .map(|e| e.file_name().into_string().unwrap())
+            .collect();
+        assert_eq!(names, ["Tetris.png"]);
+        assert_eq!(fs::read(r.join("Labels/GB/Tetris.png")).unwrap(), png);
+        assert!(label(r, "GB", "Tetris.gb", 4, &mut &b"GIF8"[..]).is_err());
+        assert!(label(r, "GB", "Nope.gb", png.len() as u64, &mut &png[..]).is_err());
+        assert!(label(r, "WALLPAPERS", "a.png", png.len() as u64, &mut &png[..]).is_err());
+        assert!(list(r).contains("[\"Tetris.gb\",1,1,"));
+        drop_label(r, "GB", "Tetris.gb").unwrap();
+        assert!(!r.join("Labels/GB/Tetris.png").exists());
+        assert!(list(r).contains("[\"Tetris.gb\",1,0,"));
+        // Sorting on the page: the day the shelf first showed it, and its play time.
+        fs::create_dir_all(r.join("Config")).unwrap();
+        fs::write(r.join("Config/wear.tsv"), "GB/Tetris\t600\t0\t1234\t0\n").unwrap();
+        assert!(list(r).contains("[\"Tetris.gb\",1,0,1234,600]"));
     }
 
     #[test]
@@ -760,7 +953,7 @@ mod tests {
             "Tetris DX = round 3a7bd5 clear\n"
         );
         assert_eq!(
-            fs::read_to_string(r.join(RENAMED)).unwrap(),
+            fs::read_to_string(r.join(slot_store::rename::RENAMED)).unwrap(),
             "GB\tTetris\tTetris DX\n"
         );
         assert!(rename(r, "GB", "Tetris DX.gb", "../x.gb").is_err());

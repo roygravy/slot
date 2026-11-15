@@ -68,10 +68,11 @@ fn upload_faces(app: &mut App, c: &mut Compositor) {
     let legend = [
         hint_face("B", "Cancel"),
         arrows_hint_face("Swap"),
-        hint_face("A", "Choose"),
+        hint_face("A", "Select"),
+        slot_ui::help_line_face("Pick the chip this game runs on").unwrap(),
     ]
     .into_iter()
-    .map(|f| (tex(c, f.w, f.h, &f.rgba), f.w))
+    .map(|f| (tex(c, f.w, f.h, &f.rgba), f.w, f.h))
     .collect();
     app.set_core_legend_faces(legend);
 
@@ -87,7 +88,7 @@ fn upload_faces(app: &mut App, c: &mut Compositor) {
     let board = tex(c, board.w, board.h, &board.rgba);
     let lid = padded(&cart_face(&cart), TURN_PAD);
     let lid = tex(c, lid.w, lid.h, &lid.rgba);
-    app.set_core_board_faces(board, lid);
+    app.set_core_board_faces(board, lid, lid);
 }
 
 fn shelf(d: &TempDir, c: &mut Compositor) -> App {

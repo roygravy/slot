@@ -2,7 +2,7 @@
 plastic as raised letters in the housing's own colour, and a blank paper serial label that slot
 fills in at runtime.
 
-Writes assets/about_dark.png and assets/about_light.png at 640x480.
+Writes assets/about_light.png at 640x480: the original DMG grey, the only About look.
 """
 from pathlib import Path
 
@@ -41,7 +41,6 @@ SMALL_PX, SMALL_STEP, SMALL_W = 12, 15, 372
 # catch it: on the dark housing the raised letters need that sheen, or they sink into the grey.
 LOOKS = {
     "light": (np.array([184, 181, 175], np.float32), 2.6, 0.0),
-    "dark": (np.array([62, 62, 67], np.float32), 3.4, 105.0),
 }
 
 

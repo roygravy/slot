@@ -5,8 +5,10 @@ use std::path::PathBuf;
 use slot_input::Millis;
 use slot_labels::Game;
 use slot_store::Platform;
-use slot_ui::{accents, key_rows, Key, SearchScreen};
+use slot_ui::{accents, key_rows, Board, Key, SearchScreen};
 
+/// Two shift taps this close together are caps lock, as on a phone.
+const CAPS_TAP_MS: Millis = 400;
 const OPEN_MS: f32 = 160.0;
 const CLOSE_MS: f32 = 120.0;
 const BLINK_MS: u64 = 530;
@@ -27,8 +29,12 @@ pub enum Press {
     Clear,
     /// Y: a space.
     Space,
-    /// SELECT: shift.
+    /// SELECT: shift; twice quickly, caps lock.
     Shift,
+    /// L1: the caret a letter to the left.
+    CaretLeft,
+    /// R1: the caret a letter to the right.
+    CaretRight,
     /// START: search.
     Search,
     /// MENU: out of the search at once, whatever is on the screen.
@@ -59,8 +65,16 @@ pub struct LabelSearch {
     text: String,
     row: usize,
     col: usize,
-    numbers: bool,
+    board: Board,
     shift: bool,
+    /// Caps lock: shift tapped twice quickly, every letter a capital until shift again.
+    caps: bool,
+    /// When shift was last turned on, to hear a second tap as caps lock.
+    shift_at: Millis,
+    /// Where the caret is, as a byte in `text`: letters go in and out there.
+    cursor: usize,
+    /// The caret's place in the typed face, made when the text or caret moves.
+    caret_x: Option<u16>,
     /// The chosen letter's accents are showing, this one chosen.
     accent: Option<usize>,
     stage: Stage,
@@ -104,14 +118,19 @@ pub fn typed_title(stem: &str) -> String {
 
 impl LabelSearch {
     pub fn open(rom: PathBuf, platform: Platform, stem: &str, now: Millis) -> Self {
+        let text = typed_title(stem);
         LabelSearch {
             rom,
             platform,
-            text: typed_title(stem),
+            cursor: text.len(),
+            caps: false,
+            shift_at: 0,
+            caret_x: None,
+            text,
             // On the search key, as the title is there to look for already.
             row: 3,
             col: 2,
-            numbers: false,
+            board: Board::Letters,
             shift: false,
             accent: None,
             stage: Stage::Typing,
@@ -128,6 +147,7 @@ impl LabelSearch {
     pub fn password(now: Millis) -> Self {
         let mut k = LabelSearch::open(PathBuf::new(), Platform::Gba, "", now);
         k.text.clear();
+        k.cursor = 0;
         k.row = 0;
         k.col = 0;
         k
@@ -161,8 +181,10 @@ impl LabelSearch {
             Stage::Typing => SearchScreen::Keyboard {
                 row: self.row,
                 col: self.col,
-                numbers: self.numbers,
-                shift: self.shift,
+                board: self.board,
+                shift: self.shift || self.caps,
+                caps: self.caps,
+                caret_x: self.caret_x,
                 caret: (now.saturating_sub(self.typed_at) / BLINK_MS) % 2 == 0,
                 accent: self.accent,
             },
@@ -194,6 +216,37 @@ impl LabelSearch {
     fn changed(&mut self, now: Millis) {
         self.rev += 1;
         self.typed_at = now;
+        self.cursor = self.cursor.min(self.text.len());
+        // At the end the caret follows the face; elsewhere it is measured.
+        self.caret_x = (self.cursor < self.text.len())
+            .then(|| slot_ui::search_caret_x(&self.text, self.cursor));
+    }
+
+    /// Shift: once for one capital, twice quickly for caps lock, and once more to let go.
+    fn shift(&mut self, now: Millis) {
+        if self.caps {
+            self.caps = false;
+            self.shift = false;
+        } else if self.shift && now.saturating_sub(self.shift_at) <= CAPS_TAP_MS {
+            self.caps = true;
+            self.shift = false;
+        } else {
+            self.shift = !self.shift;
+            self.shift_at = now;
+        }
+    }
+
+    /// The caret a letter left or right, as far as the text goes.
+    fn move_caret(&mut self, right: bool, now: Millis) {
+        let to = if right {
+            self.text[self.cursor..].chars().next().map(|c| self.cursor + c.len_utf8())
+        } else {
+            self.text[..self.cursor].chars().next_back().map(|c| self.cursor - c.len_utf8())
+        };
+        if let Some(to) = to {
+            self.cursor = to;
+            self.changed(now);
+        }
     }
 
     /// The games a search found, or None when it could not be made.
@@ -232,24 +285,29 @@ impl LabelSearch {
             return;
         }
         // A capital, then back to small letters, as a phone does.
-        if self.shift {
-            self.text.extend(c.to_uppercase());
-            self.shift = false;
+        let put: String = if self.shift || self.caps {
+            c.to_uppercase().collect()
         } else {
-            self.text.push(c);
-        }
+            c.to_string()
+        };
+        // Caps lock stays on; a single shift is let go.
+        self.shift = false;
+        self.text.insert_str(self.cursor, &put);
+        self.cursor += put.len();
         self.changed(now);
     }
 
     fn delete(&mut self, now: Millis) {
-        if self.text.pop().is_some() {
+        if let Some(c) = self.text[..self.cursor].chars().next_back() {
+            self.cursor -= c.len_utf8();
+            self.text.remove(self.cursor);
             self.changed(now);
         }
     }
 
     /// Up or down a row: the key above or below the middle of the one chosen.
     fn move_row(&mut self, by: isize) {
-        let rows = key_rows(self.numbers);
+        let rows = key_rows(self.board);
         let to = (self.row as isize + by).clamp(0, rows.len() as isize - 1) as usize;
         if to == self.row {
             return;
@@ -326,7 +384,7 @@ impl LabelSearch {
 
     /// The chosen key's accents, when it is a letter that has any.
     fn marks(&self) -> &'static [char] {
-        match key_rows(self.numbers)[self.row][self.col].key {
+        match key_rows(self.board)[self.row][self.col].key {
             Key::Char(c) => accents(c),
             _ => &[],
         }
@@ -358,7 +416,7 @@ impl LabelSearch {
         }
         match press {
             Press::Left | Press::Right => {
-                let n = key_rows(self.numbers)[self.row].len();
+                let n = key_rows(self.board)[self.row].len();
                 self.col = if press == Press::Left {
                     (self.col + n - 1) % n
                 } else {
@@ -367,6 +425,8 @@ impl LabelSearch {
             }
             Press::Up => self.move_row(-1),
             Press::Down => self.move_row(1),
+            Press::CaretLeft => self.move_caret(false, now),
+            Press::CaretRight => self.move_caret(true, now),
             Press::Back => {
                 if self.text.is_empty() {
                     self.close(now);
@@ -378,23 +438,36 @@ impl LabelSearch {
             Press::Clear => {
                 if !self.text.is_empty() {
                     self.text.clear();
+                    self.cursor = 0;
                     self.changed(now);
                 }
             }
             Press::Space => self.type_char(' ', now),
-            Press::Shift => self.shift = !self.shift,
+            Press::Shift => self.shift(now),
             Press::Search => return self.search(),
             Press::Choose => {
-                let key = key_rows(self.numbers)[self.row][self.col].key;
+                let key = key_rows(self.board)[self.row][self.col].key;
                 match key {
                     Key::Char(c) => self.type_char(c, now),
-                    Key::Shift => self.shift = !self.shift,
+                    Key::Shift => self.shift(now),
                     Key::Delete => self.delete(now),
                     Key::Space => self.type_char(' ', now),
                     Key::Search => return self.search(),
+                    Key::Symbols => {
+                        self.board = if self.board == Board::Numbers {
+                            Board::Symbols
+                        } else {
+                            Board::Numbers
+                        };
+                    }
                     Key::Layer => {
-                        self.numbers = !self.numbers;
+                        self.board = if self.board == Board::Letters {
+                            Board::Numbers
+                        } else {
+                            Board::Letters
+                        };
                         self.shift = false;
+                        self.caps = false;
                     }
                 }
             }
@@ -473,6 +546,47 @@ mod tests {
     }
 
     #[test]
+    fn shift_twice_quickly_is_caps_lock_until_shift_again() {
+        let mut s = LabelSearch::password(0);
+        (s.row, s.col) = (0, 0); // q
+        s.press(Press::Shift, 100);
+        s.press(Press::Shift, 300);
+        s.press(Press::Choose, 400);
+        s.press(Press::Choose, 500);
+        s.press(Press::Shift, 600);
+        s.press(Press::Choose, 700);
+        assert_eq!(s.text(), "QQq");
+        // Slower than a double tap: shift on, then off again.
+        s.press(Press::Shift, 1000);
+        s.press(Press::Shift, 2000);
+        s.press(Press::Choose, 2100);
+        assert_eq!(s.text(), "QQqq");
+    }
+
+    #[test]
+    fn l1_and_r1_move_the_caret_and_letters_go_in_there() {
+        let mut s = LabelSearch::password(0);
+        (s.row, s.col) = (0, 0); // q
+        s.press(Press::Choose, 0);
+        (s.row, s.col) = (0, 1); // w
+        s.press(Press::Choose, 0);
+        s.press(Press::CaretLeft, 0);
+        s.press(Press::CaretLeft, 0);
+        s.press(Press::CaretLeft, 0); // stays at the start
+        (s.row, s.col) = (0, 2); // e
+        s.press(Press::Choose, 0);
+        assert_eq!(s.text(), "eqw");
+        s.press(Press::CaretRight, 0);
+        s.press(Press::Back, 0); // the q before the caret
+        assert_eq!(s.text(), "ew");
+        s.press(Press::CaretRight, 0);
+        s.press(Press::CaretRight, 0); // stays at the end
+        (s.row, s.col) = (0, 3); // r
+        s.press(Press::Choose, 0);
+        assert_eq!(s.text(), "ewr");
+    }
+
+    #[test]
     fn left_and_right_wrap_around_the_row() {
         let mut s = search("");
         s.press(Press::Right, 0);
@@ -482,8 +596,10 @@ mod tests {
             SearchScreen::Keyboard {
                 row: 3,
                 col: 0,
-                numbers: true,
+                board: Board::Numbers,
                 shift: false,
+                caps: false,
+                caret_x: None,
                 caret: true,
                 accent: None,
             }

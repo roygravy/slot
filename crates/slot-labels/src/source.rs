@@ -255,6 +255,11 @@ fn ids(doc: &Html, wanted: &str, platform: &str) -> Vec<(u64, u32)> {
     found
 }
 
+#[cfg(test)]
+pub(crate) fn known_id(title: &str) -> Option<u64> {
+    known(title)
+}
+
 fn known(title: &str) -> Option<u64> {
     Some(match title {
         "advance wars" => 2367,
@@ -264,6 +269,8 @@ fn known(title: &str) -> Option<u64> {
         "legend of zelda a link to the past and four swords" => 8376,
         "metal slug advance" => 10743,
         "metroid zero mission" => 3552,
+        // The search lists a Chinese release and a page without carts first (Roy 2026-11-07).
+        "pokemon ruby" | "pokemon ruby version" => 2241,
         "super mario advance" => 2225,
         "tetris worlds" => 3827,
         "tom clancys rainbow six rogue spear" => 3412,

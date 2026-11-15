@@ -104,6 +104,318 @@ pub struct SlotChrome<'a> {
     /// On its way out: an NES cart then comes straight out, without the insert's push and
     /// the lid's bounce played backwards.
     pub ejecting: bool,
+    /// The original Game Boy's power switch, on the Game Boy slot only.
+    pub power: Option<PowerSwitch>,
+    /// The slot's mouth is shallow (Pocket, Light, Game Boy Color): the pak lies on it rather
+    /// than in it, so it casts a soft drop shadow on the slot around it (Roy): the pak's
+    /// `perch_shadow_face`.
+    pub perched: Option<TexId>,
+    /// The cart's drop shadow on the shelf (`drop_shadow_face`): an NES or SNES cart keeps it
+    /// while it hangs over the console, until it sinks into the mouth (Roy 2026-11-12, sh7).
+    pub drop: Option<TexId>,
+}
+
+/// The original Game Boy's power switch: one piece of plastic, a knob on the console's top and
+/// a lock tab that slides out of the slot's right wall over the cart's notch, so the cart can't
+/// come out while it is on (Roy). `on` runs 0 (off) to 1 (on, locked).
+#[derive(Clone, Copy)]
+pub struct PowerSwitch {
+    pub knob: TexId,
+    pub tab: TexId,
+    pub on: f32,
+    pub light: bool,
+    /// The clear slot: the tab's hole is shallow, with the mechanism's dark grey plastic just
+    /// behind it (Roy, after a clear Play It Loud).
+    pub clear: bool,
+    /// The DMG's lock: its tab and the guide hole behind it. The Pocket and Light have the
+    /// same slide switch without them (Roy).
+    pub lock: bool,
+}
+
+/// How much deeper than the band's top a Game Boy or Game Boy Color pak sits in its slot (Roy;
+/// 4 px since 2026-11-05: a touch closer to the top, the power switch's tab moves up with it).
+pub const GB_SINK: f32 = 4.0;
+/// The same in a shallow slot (Pocket, Light, Game Boy Color): just under the top (Roy).
+pub const GB_SINK_SHALLOW: f32 = 2.0;
+/// The Game Boy slot's right wall, from the middle: where the seated pak's notch is.
+const POWER_WALL_DX: f32 = 111.0;
+/// The tab, and the knob with it, travel this far; both are as long.
+const POWER_TRAVEL: f32 = crate::bitmaps::POWER_TAB_W as f32;
+/// The tab fills the lower half of the notch: this far under the seated pak's top.
+const POWER_TAB_DY: f32 = 6.0;
+/// How much of the lock tab shows through the clear slot's wall.
+const CLEAR_WALL_SEEN: f32 = 0.8;
+/// How much further right the clear slot's tab reaches than the knob.
+const CLEAR_TAB_EXTRA: f32 = 10.0;
+const POWER_TAB_ROWS: f32 = 6.0;
+/// The knob stands a little right of the tab's left edge (Roy).
+const POWER_KNOB_DX: f32 = 2.0;
+
+/// How far on the switch is, snapped to whole pixels of its travel: knob, stem, slider and tab
+/// are one solid part and must step together, never a sub-pixel apart (Roy).
+fn slid(power: PowerSwitch) -> f32 {
+    (POWER_TRAVEL * power.on.clamp(0.0, 1.0)).round() / POWER_TRAVEL
+}
+
+fn power_wall(canvas: Canvas, power: PowerSwitch) -> f32 {
+    // The Pocket's and Light's switch sits further in, over the right end of the mouth, as on
+    // Roy's photo of a clear Pocket (it has no lock reaching into the cart's notch)
+    canvas.w / 2.0 + POWER_WALL_DX - if power.lock { 0.0 } else { POCKET_SWITCH_IN }
+}
+/// How much further left the Pocket's and Light's switch sits than the DMG's.
+const POCKET_SWITCH_IN: f32 = 20.0;
+
+/// The guide hole in the slot's back wall that the tab runs in: an opening ~0.8 mm deep in the
+/// plastic, a row of shade under its top edge, and through it the switch's dark grey slider
+/// moving with the knob, on every DMG case, solid or clear (Roy).
+fn draw_power_hole(canvas: Canvas, power: PowerSwitch, alpha: f32, out: &mut Vec<Draw>) {
+    if !power.lock {
+        return;
+    }
+    let wall = power_wall(canvas, power);
+    let (x, y) = (wall - POWER_TRAVEL + 2.0, BAND_Y + GB_SINK + POWER_TAB_DY);
+    let lip: [f32; 3] = match power.light || power.clear {
+        true => [150.0, 148.0, 144.0],
+        false => [70.0, 69.0, 74.0],
+    };
+    let rgb = |c: [f32; 3], a: f32| [c[0] / 255.0, c[1] / 255.0, c[2] / 255.0, a];
+    let (sx0, sx1) = slider_span(power, canvas);
+    for row in 0..POWER_TAB_ROWS as usize {
+        let ry = y + row as f32;
+        // deep behind the slider: dark
+        out.push(Draw::Rect { x, y: ry, w: POWER_TRAVEL, h: 1.0, colour: rgb([14.0, 14.0, 16.0], alpha) });
+        if let Some((inset, v)) = slider_row(ry) {
+            let (a0, a1) = ((sx0 + inset).max(x), (sx1 - inset).min(x + POWER_TRAVEL));
+            if a1 > a0 {
+                // in the hole it catches less light than out on the open board
+                let v = v * 0.82;
+                out.push(Draw::Rect { x: a0, y: ry, w: a1 - a0, h: 1.0, colour: rgb([v, v - 2.0, v - 5.0], alpha) });
+            }
+        }
+        // the hole's top edge shades its first rows: a shallow hole, a short shadow
+        if row < 2 {
+            let k = if row == 0 { 0.55 } else { 0.22 };
+            out.push(Draw::Rect { x, y: ry, w: POWER_TRAVEL, h: 1.0, colour: [0.0, 0.0, 0.0, k * alpha] });
+        }
+    }
+    // the lower edge, quiet (Roy 2026-11-13: it stood out too sharp)
+    out.push(Draw::Rect {
+        x,
+        y: y + POWER_TAB_ROWS,
+        w: POWER_TRAVEL - 1.0,
+        h: 1.0,
+        colour: rgb(lip, alpha * LIP_ALPHA),
+    });
+}
+
+const LIP_ALPHA: f32 = 0.4;
+
+/// The slider bar's left and right ends where it stands now (moving with the knob).
+fn slider_span(power: PowerSwitch, canvas: Canvas) -> (f32, f32) {
+    let cx = power_wall(canvas, power) + 11.5 - POWER_TRAVEL * slid(power);
+    (cx - SLIDER_W / 2.0, cx + SLIDER_W / 2.0)
+}
+
+const SLIDER_W: f32 = 54.0;
+const SLIDER_TOP: f32 = 9.0;
+const SLIDER_BOTTOM: f32 = 18.0;
+
+/// One row of the slider bar at canvas row `y`: how far its ends are cut in (the rail notches)
+/// and its grey, lit on top and falling to a shaded foot.
+fn slider_row(y: f32) -> Option<(f32, f32)> {
+    let (top, bottom) = (BAND_Y + SLIDER_TOP, BAND_Y + SLIDER_BOTTOM);
+    if y < top || y >= bottom {
+        return None;
+    }
+    let rows = (bottom - top) as usize;
+    let row = (y - top) as usize;
+    let u = row as f32 / (rows - 1) as f32;
+    let v = SLIDER_DARK
+        * match row {
+            0 => 196.0,
+            _ if row == rows - 1 => 104.0,
+            _ => 170.0 - 38.0 * u,
+        };
+    let inset = if (0.34..0.6).contains(&u) { 3.0 } else { 0.0 };
+    Some((inset, v))
+}
+
+/// The tab, out of the wall as far as the switch is on.
+fn draw_power_tab(canvas: Canvas, power: PowerSwitch, alpha: f32, out: &mut Vec<Draw>) {
+    draw_power_tab_in(canvas, power, alpha, out);
+}
+
+/// The part of the tab still inside the wall, only seen on the clear slot.
+fn draw_power_tab_in(canvas: Canvas, power: PowerSwitch, alpha: f32, out: &mut Vec<Draw>) {
+    if !power.lock {
+        return;
+    }
+    let on = slid(power);
+    if power.clear && on < 1.0 {
+        // On the clear slot the rest of the tab shows through the wall it hides in (Roy).
+        let w = POWER_TRAVEL * (1.0 - on);
+        out.push(Draw::Part {
+            x: power_wall(canvas, power) + 1.0,
+            y: BAND_Y + GB_SINK + POWER_TAB_DY,
+            w,
+            h: crate::bitmaps::POWER_TAB_H as f32,
+            tex: power.tab,
+            alpha: alpha * CLEAR_WALL_SEEN,
+            uv: [on, 0.0, 1.0 - on, 1.0],
+        });
+    }
+    if power.clear {
+        // The real tab is wider than the knob and reaches further right; that extra length
+        // always stays inside the wall, so it only shows on the clear slot (Roy).
+        out.push(Draw::Part {
+            x: power_wall(canvas, power) + 1.0 + POWER_TRAVEL * (1.0 - on),
+            y: BAND_Y + GB_SINK + POWER_TAB_DY,
+            w: CLEAR_TAB_EXTRA,
+            h: crate::bitmaps::POWER_TAB_H as f32,
+            tex: power.tab,
+            alpha: alpha * CLEAR_WALL_SEEN,
+            uv: [0.7, 0.0, 0.3, 1.0],
+        });
+    }
+    draw_power_tab_out(canvas, power, alpha, out);
+}
+
+/// The part of the tab that has come out of the wall, over the pak's notch.
+fn draw_power_tab_out(canvas: Canvas, power: PowerSwitch, alpha: f32, out: &mut Vec<Draw>) {
+    let on = slid(power);
+    if on <= 0.0 || !power.lock {
+        return;
+    }
+    let w = POWER_TRAVEL * on;
+    out.push(Draw::Part {
+        x: power_wall(canvas, power) + 1.0 - w,
+        y: BAND_Y + GB_SINK + POWER_TAB_DY,
+        w,
+        h: crate::bitmaps::POWER_TAB_H as f32,
+        tex: power.tab,
+        alpha,
+        uv: [0.0, 0.0, on, 1.0],
+    });
+}
+
+/// The clear slot shows the switch's plastic slider (Roy's photo of the part): a wide bar with
+/// notched rail ends, standing on the board's switch, behind the lock tab and under the knob,
+/// sliding with them. Seen through the clear shell.
+/// How much of what lies under it the clear shell's top rim hides, per row from the band's top
+/// (assets/slot_back_gb_orig.png alpha).
+const RIM_ALPHA: [f32; 10] = [0.85, 0.82, 0.71, 0.74, 0.67, 0.64, 0.38, 0.22, 0.18, 0.18];
+
+/// The slider and its stem are dark grey plastic (Roy).
+const SLIDER_DARK: f32 = 0.42;
+/// The Pocket's and Light's: the same dark grey, its bar's rows, and where its stem meets the board's
+/// switch (tools/slot_cases/clear_pocket_preview.py: SW1's top).
+const POCKET_SLIDER_DARK: f32 = SLIDER_DARK;
+const POCKET_SLIDER_TOP: f32 = 7.0;
+const POCKET_SLIDER_BOTTOM: f32 = 17.0;
+const POCKET_STEM_BOTTOM: f32 = POCKET_SLIDER_BOTTOM;
+
+fn draw_power_slider(canvas: Canvas, power: PowerSwitch, alpha: f32, out: &mut Vec<Draw>) {
+    if !power.clear {
+        return;
+    }
+    let on = slid(power);
+    let cx = power_wall(canvas, power) + 11.5 - POWER_TRAVEL * on;
+    // The Pocket's and Light's bar sits right under the shell's top rim and stands straight on
+    // the board's switch, no gap either side (Roy 2026-11-06)
+    let pocket = !power.lock;
+    let (top, bottom) = match pocket {
+        true => (POCKET_SLIDER_TOP, POCKET_SLIDER_BOTTOM),
+        false => (SLIDER_TOP, SLIDER_BOTTOM),
+    };
+    let dark = if pocket { POCKET_SLIDER_DARK } else { SLIDER_DARK };
+    let (w, top, bottom) = (SLIDER_W, BAND_Y + top, BAND_Y + bottom);
+    let x0 = cx - w / 2.0;
+    let rows = (bottom - top) as usize;
+    let a = alpha * CLEAR_WALL_SEEN;
+    // the knob runs on down through the shell into the bar: its square stem
+    let sw = 14.0_f32;
+    for row in 0..(top - BAND_Y) as usize + 1 {
+        let v = (176.0 - 2.0 * row as f32) * dark;
+        // seen through the shell's clear top rim: only what its plastic lets through (Roy)
+        let a = a * (1.0 - RIM_ALPHA.get(row).copied().unwrap_or(0.0));
+        for (x, ww, k) in [(cx - sw / 2.0, sw, 1.0), (cx - sw / 2.0, 1.0, 0.86), (cx + sw / 2.0 - 1.0, 1.0, 0.7)] {
+            out.push(Draw::Rect {
+                x,
+                y: BAND_Y + row as f32,
+                w: ww,
+                h: 1.0,
+                colour: [v * k / 255.0, (v - 2.0) * k / 255.0, (v - 5.0) * k / 255.0, a],
+            });
+        }
+    }
+    for row in 0..rows {
+        let u = row as f32 / (rows - 1) as f32;
+        // lit top edge, a soft fall to the shaded foot, as the moulded part in the photo
+        let v = dark
+            * match row {
+                0 => 196.0,
+                _ if row == rows - 1 => 104.0,
+                _ => 170.0 - 38.0 * u,
+            };
+        // the rail notches cut into both ends, a third of the way down
+        let notch = (0.34..0.6).contains(&u);
+        let (x, ww) = if notch { (x0 + 3.0, w - 6.0) } else { (x0, w) };
+        out.push(Draw::Rect {
+            x,
+            y: top + row as f32,
+            w: ww,
+            h: 1.0,
+            colour: [v / 255.0, (v - 2.0) / 255.0, (v - 5.0) / 255.0, a],
+        });
+        // the ends' edges catch less light
+        for (ex, shade) in [(x, 0.86), (x + ww - 1.0, 0.7)] {
+            out.push(Draw::Rect {
+                x: ex,
+                y: top + row as f32,
+                w: 1.0,
+                h: 1.0,
+                colour: [v * shade / 255.0, (v - 2.0) * shade / 255.0, (v - 5.0) * shade / 255.0, a],
+            });
+        }
+    }
+    if pocket {
+        // the stem from the bar's foot down to the switch on the board
+        let sw = 6.0_f32;
+        for row in bottom as usize..(BAND_Y + POCKET_STEM_BOTTOM) as usize {
+            let v = 150.0 * dark;
+            for (x, ww, k) in [(cx - sw / 2.0, sw, 1.0), (cx - sw / 2.0, 1.0, 1.25), (cx + sw / 2.0 - 1.0, 1.0, 0.7)] {
+                out.push(Draw::Rect {
+                    x,
+                    y: row as f32,
+                    w: ww,
+                    h: 1.0,
+                    colour: [v * k / 255.0, v * k / 255.0, (v + 2.0) * k / 255.0, a],
+                });
+            }
+        }
+    }
+}
+
+fn draw_power_knob(canvas: Canvas, power: PowerSwitch, alpha: f32, out: &mut Vec<Draw>) {
+    let on = slid(power);
+    out.push(Draw::Tex {
+        x: power_wall(canvas, power) + 1.0 + POWER_KNOB_DX
+            - crate::bitmaps::POWER_KNOB_PAD as f32
+            - POWER_TRAVEL * on,
+        y: BAND_Y - crate::bitmaps::POWER_KNOB_H as f32,
+        w: crate::bitmaps::POWER_KNOB_W as f32,
+        h: crate::bitmaps::POWER_KNOB_H as f32,
+        tex: power.knob,
+        alpha,
+    });
+}
+
+/// The switch on an empty Game Boy slot: the guide hole and the knob, off.
+pub fn draw_power_switch(canvas: Canvas, power: PowerSwitch, out: &mut Vec<Draw>) {
+    draw_power_hole(canvas, power, 1.0, out);
+    draw_power_slider(canvas, power, 1.0, out);
+    draw_power_tab(canvas, power, 1.0, out);
+    draw_power_knob(canvas, power, 1.0, out);
 }
 
 /// The Game Boy slot seats a pak this much higher, so its top lines up with the housing's top
@@ -135,6 +447,22 @@ impl SlotChrome<'_> {
         }
 
         draw_slot_back(canvas, self.slot, slot_alpha, out);
+        if let Some(power) = self.power.filter(|p| !p.clear) {
+            draw_power_hole(canvas, power, slot_alpha, out);
+        }
+        let front_alpha = if self.over { chrome } else { slot_alpha };
+        // The clear slot: the slider and the tab in the wall sit under the clear plastic and the
+        // pak goes in front of all of it; only the knob's top and the tab once it comes out over
+        // the pak's notch are drawn over the pak (Roy).
+        let clear = self.power.filter(|p| p.clear);
+        if let Some(power) = clear {
+            draw_power_slider(canvas, power, front_alpha, out);
+            draw_slot_front(canvas, self.slot, front_alpha, out);
+            // the hole is cut in the clear plastic: opaque, over it (Roy)
+            draw_power_hole(canvas, power, front_alpha, out);
+            // the tab inside the wall, seen through the wall's own clear plastic (Roy)
+            draw_power_tab_in(canvas, power, front_alpha, out);
+        }
 
         let mould = crate::cart::mould_of(self.cart);
         let (cw, ch) = cart_box(mould);
@@ -145,13 +473,20 @@ impl SlotChrome<'_> {
         let (sw, sh) = seated_box(mould);
         let (sw, sh) = (sw as f32, sh as f32);
         let foot0 = foot_y(ch);
+        let (rest_lift, rest_turn) = rest_pose();
+        let turn;
         let (x, y, cw, ch, lid) = match tv_pose(mould, seat, self.ejecting, canvas.w / 2.0, (sw, sh)) {
             Some(pose) => {
                 // Off the shelf it shrinks to its seated size on the way to the slot.
                 let k = pose.leave;
-                let (x0, y0) = (self.rest, foot0 - h0);
+                let (x0, y0) = (self.rest, foot0 - h0 - rest_lift);
                 let lerp = |a: f32, b: f32| a + (b - a) * k;
                 let (x, y) = (lerp(x0, pose.x), lerp(y0, pose.y));
+                // Picked up on the way over, as a pak is: up in an arc with a small turn, straight
+                // again by the time it waits over the lid or slot, which then go as they were.
+                let arc = (std::f32::consts::PI * k).sin();
+                let y = y - PICK_UP * arc;
+                turn = rest_turn * (1.0 - k) + PICK_TURN * arc;
                 (x, y, lerp(w0, sw), lerp(h0, sh), pose.lid)
             }
             None => {
@@ -165,16 +500,86 @@ impl SlotChrome<'_> {
                     false => (LIP_Y, SEATED_Y + sh - self.lift),
                 };
                 let catch = catch_at(lip, foot0, seated_foot);
-                let travel = travel(seat, catch);
+                let push = (PUSH_PX / (seated_foot - foot0)).min(1.0 - catch - CREEP);
+                let travel = travel(seat, catch, push, self.ejecting);
                 let k = (travel / catch).min(1.0);
                 let (cw, ch) = (w0 + (sw - w0) * k, h0 + (sh - h0) * k);
                 let centre = self.rest + w0 / 2.0;
                 let x = centre + (canvas.w / 2.0 - centre) * k - cw / 2.0;
                 let y = foot0 + (seated_foot - foot0) * travel - ch;
+                // Picked up off the shelf: an arc up and a small turn, gone by the catch at the
+                // lip, so the pak meets the slot straight and the catch and push stay as they were.
+                let u = (seat / CATCH_IN).min(1.0);
+                let arc = (std::f32::consts::PI * u.sqrt()).sin();
+                let y = y - PICK_UP * arc - rest_lift * (1.0 - u);
+                turn = rest_turn * (1.0 - u) + PICK_TURN * (std::f32::consts::PI * u).sin();
                 (x, y, cw, ch, None)
             }
         };
         let cart_alpha = if seat >= 1.0 && !held { chrome } else { 1.0 };
+        // A shallow slot (Pocket, Light, Game Boy Color): the pak lies on the mouth, over its
+        // rims (Roy 2026-11-05), so the slot's front, the switch and the pak's soft drop shadow
+        // go down first and the pak over them.
+        let perched = self.perched.is_some() && clear.is_none();
+        if perched {
+            match self.power {
+                Some(power) if power.clear => draw_power_tab_out(canvas, power, front_alpha, out),
+                Some(power) => {
+                    draw_power_slider(canvas, power, front_alpha, out);
+                    draw_power_tab(canvas, power, front_alpha, out);
+                }
+                None => {}
+            }
+            draw_slot_front(canvas, self.slot, front_alpha, out);
+        }
+        if let Some(tex) = self.perched.filter(|_| perched) {
+            // A plain soft drop shadow, lit from the top left, growing in as the pak settles.
+            let k = ((seat - 0.6) / 0.4).clamp(0.0, 1.0);
+            let k = k * k * (3.0 - 2.0 * k) * cart_alpha * front_alpha;
+            let (bw, bh) = cart_box(mould);
+            let (sx, sy) = (cw / bw as f32, ch / bh as f32);
+            let m = crate::cart::PERCH_MARGIN as f32;
+            if k > 0.0 {
+                out.push(Draw::Tex {
+                    x: x - m * sx,
+                    y: y - m * sy,
+                    w: cw + 2.0 * m * sx,
+                    h: ch + 2.0 * m * sy,
+                    tex,
+                    alpha: PERCH_ALPHA * k,
+                });
+            }
+        }
+        // Without the DMG's lock (Pocket, Light) the switch is the case's own, beside the mouth:
+        // the pak goes in front of it (Roy 2026-11-06).
+        if let Some(power) = self.power.filter(|p| !p.lock) {
+            draw_power_knob(canvas, power, front_alpha, out);
+        }
+        let tv = matches!(
+            mould,
+            Mould::Nes | Mould::SnesNtsc | Mould::SnesPal | Mould::SgbNtsc | Mould::SgbPal
+        );
+        if let (Some(tex), true) = (self.drop, tv) {
+            // Gone as the cart's foot goes down into the mouth.
+            let sunk = ((y + ch - BAND_Y) / ch).clamp(0.0, 1.0);
+            let k = (1.0 - sunk) * cart_alpha * front_alpha;
+            if k > 0.0 {
+                let (bw, _) = cart_box(mould);
+                let m = crate::shelf::DROP_MARGIN as f32 * cw / bw as f32;
+                let fall = crate::shelf::DROP_FALL * cw / bw as f32;
+                out.push(Draw::Tex {
+                    x: x - m,
+                    y: y - m + fall,
+                    w: cw + 2.0 * m,
+                    h: ch + 2.0 * m,
+                    tex,
+                    alpha: crate::shelf::DROP_ALPHA
+                        * k
+                        * if LIGHT_GROUND.load(std::sync::atomic::Ordering::Relaxed) { 0.55 } else { 1.0 },
+                });
+            }
+        }
+        let cart_from = out.len();
         for tex in self.behind.into_iter().flatten() {
             out.push(Draw::Tex {
                 x,
@@ -211,6 +616,14 @@ impl SlotChrome<'_> {
             }
         });
 
+        if turn.abs() > 1e-4 {
+            for d in &mut out[cart_from..] {
+                if let Draw::Tex { x, y, w, h, tex, alpha } = *d {
+                    *d = Draw::Turned { x, y, w, h, tex, alpha, turn };
+                }
+            }
+        }
+
         if let Some((tex, alpha)) = self.alert {
             let (w, h) = icon_box(ALERT_PX);
             let (w, h) = (w as f32, h as f32);
@@ -224,7 +637,14 @@ impl SlotChrome<'_> {
             });
         }
 
-        let front_alpha = if self.over { chrome } else { slot_alpha };
+        match self.power.filter(|_| !perched) {
+            Some(power) if power.clear => draw_power_tab_out(canvas, power, front_alpha, out),
+            Some(power) => {
+                draw_power_slider(canvas, power, front_alpha, out);
+                draw_power_tab(canvas, power, front_alpha, out);
+            }
+            None => {}
+        }
         if let (Some(theta), Some(tex)) = (lid, self.lid) {
             draw_lid(canvas, tex, theta, self.light, front_alpha, out);
         }
@@ -240,13 +660,21 @@ impl SlotChrome<'_> {
                 });
             });
         }
-        draw_slot_front(canvas, self.slot, front_alpha, out);
+        if clear.is_none() && !perched {
+            draw_slot_front(canvas, self.slot, front_alpha, out);
+        }
+        if let Some(power) = self.power.filter(|p| p.lock) {
+            draw_power_knob(canvas, power, front_alpha, out);
+        }
 
         if self.game && opening && !self.over {
             out.push(Draw::Game);
         }
     }
 }
+
+/// How dark the pak's drop shadow on a shallow slot is at its darkest.
+const PERCH_ALPHA: f32 = 0.38;
 
 fn band(x: f32, y: f32, w: f32, h: f32, c: [f32; 4], alpha: f32) -> Draw {
     Draw::Rect {
@@ -327,6 +755,25 @@ fn strip(canvas: Canvas, tex: TexId, alpha: f32) -> Draw {
 const CONSOLE_SHADOW: f32 = 16.0;
 const CONSOLE_SHADOW_ALPHA: f32 = 0.18;
 
+/// The selected cart's lift and turn on the shelf (bits of two f32s), where an insert picks it up
+/// and an eject sets it down.
+static REST_POSE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+pub fn set_rest_pose(lift: f32, turn: f32) {
+    let bits = (u64::from(lift.to_bits()) << 32) | u64::from(turn.to_bits());
+    REST_POSE.store(bits, std::sync::atomic::Ordering::Relaxed);
+}
+
+fn rest_pose() -> (f32, f32) {
+    let bits = REST_POSE.load(std::sync::atomic::Ordering::Relaxed);
+    (f32::from_bits((bits >> 32) as u32), f32::from_bits(bits as u32))
+}
+
+/// On the way to the slot a pak is picked up: it rises this far over the first part of its way
+/// and turns a little as it is lifted, straight again before it reaches the slot's lip.
+const PICK_UP: f32 = 26.0;
+const PICK_TURN: f32 = 0.06;
+
 static LIGHT_GROUND: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// On a light wallpaper the console's shadow is lighter.
@@ -377,11 +824,41 @@ fn draw_sgb_mouth(canvas: Canvas, alpha: f32, out: &mut Vec<Draw>) {
     }
 }
 
+/// The Super Game Boy's soft shadow on the wallpaper round it: its own outline in rings.
+const SGB_SHADOW_RINGS: [(f32, f32); 3] = [(2.0, 0.10), (5.0, 0.06), (9.0, 0.035)];
+
+fn draw_sgb_shadow(canvas: Canvas, back: TexId, alpha: f32, out: &mut Vec<Draw>) {
+    let alpha = match LIGHT_GROUND.load(std::sync::atomic::Ordering::Relaxed) {
+        true => alpha * 0.55,
+        false => alpha,
+    };
+    let strip_w = crate::bitmaps::SLOT_W as f32;
+    let (x0, y0) = ((canvas.w - strip_w) / 2.0, BAND_Y - rise());
+    let [r, g, b] = shadow_tone(canvas.w / 2.0, y0);
+    for (radius, a) in SGB_SHADOW_RINGS {
+        for k in 0..8 {
+            let turn = k as f32 * std::f32::consts::FRAC_PI_4;
+            out.push(Draw::Shade {
+                x: x0 + radius * turn.cos(),
+                // Lit from above: the shadow leans down a touch.
+                y: y0 + radius * turn.sin() + radius * 0.3,
+                w: strip_w,
+                h: MOUTH_H + rise(),
+                tex: back,
+                colour: [r, g, b, a * alpha],
+            });
+        }
+    }
+}
+
 fn draw_slot_back(canvas: Canvas, slot: Option<(TexId, TexId)>, alpha: f32, out: &mut Vec<Draw>) {
     if let Some((back, _)) = slot {
         // The Super Game Boy stands alone, no console around it to cast the shadow.
-        if rise() == 0.0 {
-            draw_console_shadow(canvas, alpha, out);
+        match rise() == 0.0 {
+            true => draw_console_shadow(canvas, alpha, out),
+            // It still sits a little in the wallpaper: a soft shadow round its own outline
+            // (Roy 2026-11-12, sh7).
+            false => draw_sgb_shadow(canvas, back, alpha, out),
         }
         out.push(strip(canvas, back, alpha));
         if rise() > 0.0 {
@@ -445,7 +922,8 @@ fn for_each_scoop_span(canvas: Canvas, mut span: impl FnMut(f32, f32, f32)) {
     }
 }
 
-const SLOT_NAME_GAP: f32 = 6.0;
+/// Lifts the shelf line so its letters sit midway between the centre cart and the slot (Roy).
+const SLOT_NAME_GAP: f32 = 13.0;
 
 pub fn slot_name_y() -> f32 {
     OUT_H as f32 - MOUTH_H - rise() - HINT_H as f32 - SLOT_NAME_GAP
@@ -462,15 +940,160 @@ pub fn draw_slot_name(
         return;
     };
     let (w, h) = (name.w as f32, HINT_H as f32);
+    shadowed(tex, canvas.centred(w), slot_name_y(), w, h, ink, alpha, out);
+}
+
+/// A soft shadow hugging the shelf's text, then the text: readable over busy and light
+/// wallpapers (Roy). Dark ink (light themes) gets a pale shadow instead, so it lifts off the
+/// wallpaper the same way.
+fn shadowed(tex: TexId, x: f32, y: f32, w: f32, h: f32, ink: [f32; 4], alpha: f32, out: &mut Vec<Draw>) {
+    // On whole pixels: a name of odd width centred lands half a pixel over and goes soft.
+    let (x, y) = (x.round(), y.round());
+    // The shadow is a dozen stacked layers, so at half alpha it still looks nearly whole while
+    // the words are half gone. Cubed, it fades out ahead of the words and comes in after
+    // them: never a shadow without its text (Roy 2026-11-13). At full alpha nothing changes.
+    soft_shadow(tex, x, y, w, h, ink, alpha.clamp(0.0, 1.0).powi(3), out);
     out.push(Draw::Tint {
-        x: canvas.centred(w),
-        y: slot_name_y(),
+        x,
+        y,
         w,
         h,
         tex,
         colour: [ink[0], ink[1], ink[2], ink[3] * alpha],
     });
 }
+
+/// Only the shadow of a white face tinted `ink`: drawn before the face, wherever text sits on
+/// the wallpaper (the shelf's names, the menus' help line and legend). Close and full but soft:
+/// a dense core one pixel down, a ring that fades within two pixels (Roy 2026-11-07).
+pub fn soft_shadow(tex: TexId, x: f32, y: f32, w: f32, h: f32, ink: [f32; 4], alpha: f32, out: &mut Vec<Draw>) {
+    soft_shadow_over(tex, x, y, w, h, ink, alpha, true, out);
+}
+
+/// `soft_shadow`, over the wallpaper (its colour, ui6) or over a flat ground (plain black).
+pub fn soft_shadow_over(
+    tex: TexId,
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    ink: [f32; 4],
+    alpha: f32,
+    wallpaper: bool,
+    out: &mut Vec<Draw>,
+) {
+    let luma = 0.299 * ink[0] + 0.587 * ink[1] + 0.114 * ink[2];
+    // Light words get a shadow in the wallpaper's own colour, burnt deep: no grey haze over
+    // a light or colourful ground (Roy 2026-11-12, ui6). Dark words keep their pale one.
+    let [r, g, b] = match (luma > 0.5, wallpaper) {
+        (true, true) => shadow_tone(x + w / 2.0, y + h / 2.0),
+        (true, false) => [0.0; 3],
+        (false, _) => [1.0; 3],
+    };
+    // On a dark ground a black shadow barely shows: twice as dense there, so the keys' white
+    // caps and the words stand off it in the dark theme too (Roy 2026-11-12, ui7).
+    let dark = luma > 0.5 && 0.299 * r + 0.587 * g + 0.114 * b < 0.06;
+    let a = ink[3] * alpha * if dark { 2.0 } else { 1.0 };
+    if a <= 0.0 {
+        return;
+    }
+    for (dx, dy, k) in SHADOW {
+        out.push(Draw::Tint {
+            x: x + dx,
+            y: y + dy,
+            w,
+            h,
+            tex,
+            colour: [r, g, b, a * k],
+        });
+    }
+}
+
+/// The wallpaper in a coarse grid of burnt colours, for shadows over it (ui6).
+pub struct ShadowGround {
+    tones: Vec<[f32; 3]>,
+    h: f32,
+}
+
+const TONE_COLS: usize = 20;
+const TONE_ROWS: usize = 15;
+/// How deep a burnt tone goes, and how much its colour is pushed.
+const BURN_VALUE: f32 = 0.14;
+const BURN_CHROMA: f32 = 2.0;
+
+impl ShadowGround {
+    /// `rgba` is the wallpaper as drawn, `w` x `h`.
+    pub fn new(rgba: &[u8], w: u32, h: u32) -> Self {
+        let (w, h) = (w as usize, h as usize);
+        let mut sum = vec![[0.0f32; 4]; TONE_COLS * TONE_ROWS];
+        for (i, px) in rgba.chunks_exact(4).enumerate().step_by(3) {
+            let (x, y) = (i % w, i / w);
+            let cell = &mut sum[(y * TONE_ROWS / h) * TONE_COLS + x * TONE_COLS / w];
+            for k in 0..3 {
+                cell[k] += px[k] as f32 / 255.0;
+            }
+            cell[3] += 1.0;
+        }
+        let tones = sum
+            .iter()
+            .map(|c| match c[3] > 0.0 {
+                true => burn([c[0] / c[3], c[1] / c[3], c[2] / c[3]]),
+                false => [0.0; 3],
+            })
+            .collect();
+        Self { tones, h: h as f32 }
+    }
+}
+
+/// A colour taken down to a deep tone of itself, its hue pushed: color burn, not black.
+fn burn(c: [f32; 3]) -> [f32; 3] {
+    let top = c[0].max(c[1]).max(c[2]);
+    if top <= 0.0 {
+        return [0.0; 3];
+    }
+    let v = top * BURN_VALUE;
+    c.map(|k| (1.0 - (1.0 - k / top) * BURN_CHROMA).clamp(0.0, 1.0) * v)
+}
+
+thread_local! {
+    static SHADOW_GROUND: std::cell::RefCell<Option<(std::rc::Rc<ShadowGround>, f32)>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// The wallpaper under this frame's shadows, stretched over `canvas_w`; None on black: black
+/// shadows.
+pub fn set_shadow_ground(ground: Option<std::rc::Rc<ShadowGround>>, canvas_w: f32) {
+    SHADOW_GROUND.with(|g| *g.borrow_mut() = ground.map(|g| (g, canvas_w)));
+}
+
+fn shadow_tone(x: f32, y: f32) -> [f32; 3] {
+    SHADOW_GROUND.with(|g| {
+        let g = g.borrow();
+        let Some((g, canvas_w)) = g.as_ref() else {
+            return [0.0; 3];
+        };
+        let col = ((x / canvas_w * TONE_COLS as f32) as usize).min(TONE_COLS - 1);
+        let row = ((y / g.h * TONE_ROWS as f32) as usize).min(TONE_ROWS - 1);
+        g.tones[row * TONE_COLS + col]
+    })
+}
+
+/// (dx, dy, opacity) of each copy, centred one pixel below the text: outer ring first.
+const SHADOW: [(f32, f32, f32); 13] = [
+    (-2.0, 1.0, 0.10),
+    (2.0, 1.0, 0.10),
+    (0.0, -1.0, 0.10),
+    (0.0, 3.0, 0.10),
+    (-1.0, 0.0, 0.18),
+    (1.0, 0.0, 0.18),
+    (-1.0, 2.0, 0.18),
+    (1.0, 2.0, 0.18),
+    (-1.0, 1.0, 0.26),
+    (1.0, 1.0, 0.26),
+    (0.0, 0.0, 0.26),
+    (0.0, 2.0, 0.26),
+    (0.0, 1.0, 0.45),
+];
 
 pub fn draw_slot_title(
     canvas: Canvas,
@@ -483,14 +1106,8 @@ pub fn draw_slot_title(
         return;
     };
     let (w, h) = (title.w as f32, crate::plate::TITLE_LINE_H as f32);
-    out.push(Draw::Tint {
-        x: canvas.centred(w),
-        y: slot_name_y() + HINT_H as f32 - h,
-        w,
-        h,
-        tex,
-        colour: [ink[0], ink[1], ink[2], ink[3] * alpha],
-    });
+    let y = slot_name_y() + HINT_H as f32 - h;
+    shadowed(tex, canvas.centred(w), y, w, h, ink, alpha, out);
 }
 
 /// The slot's back (behind a cart) or its front (over one), on their own.
@@ -506,16 +1123,64 @@ pub fn draw_empty_slot(canvas: Canvas, slot: Option<(TexId, TexId)>, out: &mut V
     draw_slot_front(canvas, slot, 1.0, out);
 }
 
-fn travel(seat: f32, catch: f32) -> f32 {
-    if seat < CATCH_IN {
-        catch * ease(seat / CATCH_IN)
-    } else if seat < CATCH_OUT {
-        catch + CREEP * (seat - CATCH_IN) / (CATCH_OUT - CATCH_IN)
-    } else {
-        let caught = catch + CREEP;
-        caught + (1.0 - caught) * ease((seat - CATCH_OUT) / (1.0 - CATCH_OUT))
+/// The empty slot with its power switch, off. On the clear slot the slider, the knob's stem and
+/// the tab sit behind the shell's plastic, so they go between its back and front (Roy).
+pub fn draw_empty_slot_power(
+    canvas: Canvas,
+    slot: Option<(TexId, TexId)>,
+    power: Option<PowerSwitch>,
+    out: &mut Vec<Draw>,
+) {
+    let off = power.map(|p| PowerSwitch { on: 0.0, ..p });
+    draw_slot_back(canvas, slot, 1.0, out);
+    if let Some(p) = off.filter(|p| p.clear) {
+        draw_power_slider(canvas, p, 1.0, out);
+    }
+    draw_slot_front(canvas, slot, 1.0, out);
+    if let Some(p) = off.filter(|p| p.clear) {
+        draw_power_hole(canvas, p, 1.0, out);
+    }
+    match off {
+        Some(p) if p.clear => {
+            // the tab inside the wall, seen through the wall's own clear plastic (Roy)
+            draw_power_tab(canvas, p, 1.0, out);
+            draw_power_knob(canvas, p, 1.0, out);
+        }
+        Some(p) => draw_power_switch(canvas, p, out),
+        None => {}
     }
 }
+
+/// Where a Game Boy pak is, 0 at the shelf to 1 seated: in to the catch at the lip, a short
+/// creep, then down against the spring and, the last `push` of the way, the same thumb push
+/// the NES and SNES carts take (Roy). Out again it comes straight up without the push.
+fn travel(seat: f32, catch: f32, push: f32, ejecting: bool) -> f32 {
+    let caught = catch + CREEP;
+    if seat < CATCH_IN {
+        catch * ease(seat / CATCH_IN)
+    } else if ejecting {
+        if seat < CATCH_OUT {
+            catch + CREEP * (seat - CATCH_IN) / (CATCH_OUT - CATCH_IN)
+        } else {
+            caught + (1.0 - caught) * ease((seat - CATCH_OUT) / (1.0 - CATCH_OUT))
+        }
+    } else if seat < SLIDE_IN {
+        catch + CREEP * (seat - CATCH_IN) / (SLIDE_IN - CATCH_IN)
+    } else if seat < PUSH_IN {
+        let slid = 1.0 - push;
+        caught + (slid - caught) * resist((seat - SLIDE_IN) / (PUSH_IN - SLIDE_IN))
+    } else {
+        1.0 - push + push * seat_push((seat - PUSH_IN) / (1.0 - PUSH_IN))
+    }
+}
+
+/// The Game Boy insert's steps: the creep at the catch ends at `SLIDE_IN`, the last push starts
+/// at `PUSH_IN`, over the last `PUSH_PX` as for the NES and SNES carts.
+const SLIDE_IN: f32 = 0.50;
+const PUSH_IN: f32 = 0.70;
+const PUSH_PX: f32 = 14.0;
+/// The board bites the connector: where the push's snap home is, as for NES and SNES.
+const GB_CLICK: f32 = PUSH_IN + (1.0 - PUSH_IN) * 0.8;
 
 pub fn ease(u: f32) -> f32 {
     u * u * u * (u * (u * 6.0 - 15.0) + 10.0)
@@ -538,7 +1203,7 @@ pub fn click_at(mould: Mould) -> f32 {
     match mould {
         Mould::Nes => NES_CLICK / NES_STORY,
         Mould::SnesNtsc | Mould::SnesPal | Mould::SgbNtsc | Mould::SgbPal => SNES_CLICK / SNES_STORY,
-        _ => 1.0,
+        _ => GB_CLICK,
     }
 }
 
@@ -701,11 +1366,35 @@ fn draw_lid(canvas: Canvas, tex: TexId, theta: f32, light: bool, alpha: f32, out
         return;
     }
     let top = fold - fh;
-    // Its shadow on the ground above, a soft band that deepens as it stands up.
+    // Its shadow on the wallpaper above, a soft band that deepens as it stands up. Drawn one whole
+    // pixel row at a time with a smooth fall-off measured from the lid's true edge, so it fades
+    // without steps and glides instead of jumping a row as the lid turns (Roy).
     let shadow = if light { 0.27 } else { 0.43 };
-    for k in 0..4 {
-        let spread = (7.0 * sin + 2.0) * (1.0 - k as f32 / 4.0);
-        out.push(band(x, top - spread, w, spread + 1.0, [0.0, 0.0, 0.0, shadow / 4.0], alpha));
+    let spread = 7.0 * sin + 2.0;
+    let edge = top + 1.0;
+    let first = (edge - spread).floor();
+    let mut r = first;
+    while r < edge {
+        // Coverage-weighted distance of this row's middle from the edge, 0 at the lid, 1 at the
+        // far end of the shadow; the row the lid edge sits in only counts the part above it.
+        let bottom = (r + 1.0).min(edge);
+        let d = ((edge - (r + bottom) / 2.0) / spread).clamp(0.0, 1.0);
+        let fall = 1.0 - d * d * (3.0 - 2.0 * d);
+        let a = shadow * fall * (bottom - r);
+        if a > 0.002 {
+            // Its ends fade out too, softer the further the shadow falls from the lid, so it
+            // never stops in a hard corner on the wallpaper.
+            // The fade starts a little outside the lid and runs well inside it (Roy: the ends
+            // were cut off too sharply).
+            let soft = (14.0 + 14.0 * d).round() as usize;
+            let out_by = soft as f32 * 0.3;
+            for j in 0..soft {
+                let inset = j as f32 - out_by;
+                let k = a / soft as f32;
+                out.push(band(x + inset, r, w - 2.0 * inset, 1.0, [0.0, 0.0, 0.0, k], alpha));
+            }
+        }
+        r += 1.0;
     }
     out.push(Draw::Part {
         x,

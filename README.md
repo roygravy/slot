@@ -1,144 +1,151 @@
 <div align="center">
 
-# slot. x GRAVY
+<img src=".github/resources/gravy/v1.3/logo.png" width="420" alt="slot. x GRAVY">
 
-**My own take on [slot.](https://github.com/BrandonKowalski/slot), Brandon Kowalski's Game Boy–centric frontend, designed with the Anbernic RG35XX Plus in mind, and it runs on every device the original slot. supports (3:2 panels like the RG34XX SP included)**
+**Real carts. Real slots. Real screens.**<br>
+My own take on [slot.](https://github.com/BrandonKowalski/slot), designed for the Anbernic RG35XX Plus. Runs on every device slot. supports.
 
-slot.'s real cartridges on a shelf and its real cartridge slot, with a little extra gravy on top.
+<img src=".github/resources/gravy/v1.3/hero.gif" width="640" alt="Browsing the shelves and pushing a cart into the slot">
 
-<img src=".github/resources/gravy/carousel.gif" width="640" alt="Browsing the NES and SNES shelves, pushing the Super Game Boy into the SNES slot and playing Hauntsfield with the slot. x GRAVY border">
-
-[**Download slot-x-gravy-v1.2.2**](https://github.com/roygravy/slot/releases/download/slot-x-gravy-v1.2.2/slot-x-gravy-v1.2.2.zip) · [GRAVY Manager](#gravy-manager) · [Install](#install) · [What's in the gravy](#whats-in-the-gravy) · [Controls](#controls)
+[**Download v1.3**](https://github.com/roygravy/slot/releases/latest) · [What it adds](#what-it-adds) · [Install](#install) · [Controls](#controls)
 
 </div>
 
 ---
 
-## What is slot. x GRAVY?
+## What it adds
 
-[slot.](https://github.com/BrandonKowalski/slot) is Brandon Kowalski's Game Boy frontend: a shelf of real cartridges, a real slot to push them into, save states, rewind, a link cable, Markus's lovely artwork, and a shelf that's there **3 to 5 seconds** after you power on. New to it? Start at **[slot-cfw.fyi](https://slot-cfw.fyi)**.
-
-slot. x GRAVY is that, with my own gravy poured over it, designed with the Anbernic RG35XX Plus in mind, and it runs on every device the original slot. supports. Same slot. underneath; a screen, a slot and a set of menus that feel a bit more like mine. It plays GB, GBC, GBA, NES and SNES games (unzipped ROMs) on mGBA, gpSP, Gambatte, FCEUmm and Snes9x, and Game Boy games on a Super Game Boy.
+- **More consoles:** NES and SNES with their own carts, plus Super Game Boy
+- **A slot for every console:** including realistic animations
+- **Realistic screens:** from Dot Matrix to CRT, several screen sizes, easy to toggle; Sharp Pixels for perfectly even pixels
+- **Game Boy palettes:** DMG, Pocket and Light
+- **Cart and Slot Studio:** design your own cart and slot
+- **RetroAchievements:** with in-game overviews
+- **Cheats:** automatic download
+- **Labels and cart colours:** downloaded automatically
+- **Screenshots**
+- **Favorites:** highlight with a special glow
+- **The Deck:** a ready-to-play shelf
+- **GRAVY Manager:** your browser for ROMs, screenshots, wallpapers and updates, including BaseOS
+- **Full Wi-Fi:** auto time and in-game time
+- **Bluetooth audio:** play through your wireless headphones or speaker
+- **Deep Sleep**
+- **Screen Calibration:** old-school style
+- **Seamless Resume:** pick up after a shutdown
+- **Animations and visuals:** a new animated shelf, the Game Boy power switch and a lot more
+- **Button guides:** help pages for every screen
 
 ---
 
-## What's in the gravy
+### NES, SNES and Super Game Boy
 
-The big things, at a glance:
+Two new shelves with carts in the real moulds, each with its own slot. Push the Super Game Boy into the SNES slot and the camera dives into the Game Boy shelf inside it.
 
-- **Screens like the real thing**: the Game Boy's dot matrix, the Game Boy Color's LCD, the GBA's panel and a real CRT for the NES and Super Nintendo
-- **A real slot for every console**: Game Boy, Game Boy Color, GBA SP, NES, Super Nintendo and the Super Game Boy, in the colours of the real consoles if you like
-- **NES and Super Nintendo**, on their own shelves, and Game Boy games on a **Super Game Boy**
-- **GRAVY Manager**: manage your games, BIOS, wallpapers and screenshots from any browser, on your phone, tablet or computer, and update slot. x GRAVY over Wi-Fi
-- **Wi-Fi from the console**: join your network in the menu, the clock sets itself
-- **Labels by themselves**: carts get their label art from the internet, and the **cartridge studio** lets you pick another label, a shell colour and a finish
-- **Cheats** for your games, fetched by themselves
-- **Deep sleep**: put your game to sleep and pick it up days later
+<img src=".github/resources/gravy/v1.3/consoles.gif" width="640" alt="The NES and SNES shelves, and the Super Game Boy going into the SNES slot">
 
-### A screen that looks like the real thing
+### A slot for every console
 
-This is the big one. Every console gets its own screen: the Game Boy's green dot matrix, the Game Boy Color's warm LCD, the Game Boy Advance in the same spirit, and a CRT for the NES and Super Nintendo. Rather have it clean? **SELECT + B** turns it all off, and back on.
+Game Boy, Game Boy Color, GBA SP, NES, SNES and Super Game Boy. Every cart slides in, clicks and powers up like the real thing.
 
-<img src=".github/resources/gravy/screen.png" width="100%" alt="Close-ups of the Game Boy, Game Boy Color and Game Boy Advance screens">
+<img src=".github/resources/gravy/v1.3/slots.png" width="100%" alt="All six slots side by side">
 
-<img src=".github/resources/gravy/effects.gif" width="480" alt="SELECT + B switching the screen effects off and on in Goodboy Galaxy">
+### Realistic screens
 
-<img src=".github/resources/gravy/gameplay.png" width="100%" alt="Goodboy Galaxy on the GBA screen and Hauntsfield in Game Boy green">
+From the Game Boy's dot matrix to a living-room CRT. Pick a screen size per console and flip the effects off and on in game. Sharp Pixels keeps every pixel perfectly even.
 
-<img src=".github/resources/gravy/zelda.png" width="100%" alt="Link's Awakening DX on the Game Boy Color screen and The Minish Cap on the GBA screen">
+<img src=".github/resources/gravy/v1.3/screens.png" width="100%" alt="Close-ups of the dot matrix, LCD and CRT screens">
+
+### Game Boy palettes
+
+The three real Game Boy screens: DMG, Pocket and Light.
+
+<img src=".github/resources/gravy/v1.3/palettes.png" width="100%" alt="Hauntsfield in DMG, Pocket and Light">
+
+### Cart and Slot Studio
+
+Design your own cart and slot. Shell colour, finish, label, and the colour of the slot it goes into.
+
+<img src=".github/resources/gravy/v1.3/studio-cart.gif" width="640" alt="The Cart Studio trying shell colours on Mario Kart: Super Circuit">
+
+<img src=".github/resources/gravy/v1.3/studio-slot.gif" width="640" alt="The Slot Studio painting the Game Boy Color slot Berry, Lime Green, Teal and Atomic Purple">
+
+### RetroAchievements
+
+Unlock achievements while you play and see your progress in the in-game menu.
+
+<img src=".github/resources/gravy/v1.3/achievements.png" width="100%" alt="The achievements overview and the full list">
+
+### Cheats, labels and cart colours
+
+Connect to Wi-Fi and the rest comes by itself: cheats for your games, label art for your carts and the colour of the real cart.
+
+<img src=".github/resources/gravy/v1.3/downloads.png" width="100%" alt="Carts with their labels and colours, and the Cheats page">
+
+### Screenshots
+
+**VOL+ and POWER** saves the screen, effects and all.
+
+<img src=".github/resources/gravy/v1.3/screenshots.png" width="100%" alt="The Screenshots page">
+
+### The Deck, Favorites and Recents
+
+Put the games you're playing now on The Deck, a shelf in its own spotlight. Star a cart and it lights up with a special glow. Recents keeps what you played last, faded like a memory.
+
+<img src=".github/resources/gravy/v1.3/favorites-deck.png" width="100%" alt="The Deck in its spotlight, Favorites with their glow, and Recents faded like a memory">
 
 ### GRAVY Manager
 
-No more SD card shuffling. Open **GRAVY Manager** under **Network**, scan the QR code or type the address in any browser, on your phone, tablet or computer, and the whole card is yours: add, rename and delete games, add BIOS files and wallpapers, download your screenshots, and update slot. x GRAVY with one tap.
+Your console in your browser. Add ROMs, grab your screenshots, change wallpapers and update slot. x GRAVY and BaseOS, from your phone, tablet or computer.
 
-<img src=".github/resources/gravy/manager.png" width="100%" alt="The GRAVY Manager screen on the console, and the Games and Update tabs in a browser">
+<img src=".github/resources/gravy/v1.3/manager.png" width="100%" alt="GRAVY Manager on the console and in a browser">
 
-### A slot for every cartridge
+### Full Wi-Fi
 
-Every console gets its own slot, redrawn in moulded plastic, down to the ribs on the back wall. The slots come in Dark, Light or Originals, the colours of the real consoles, with wallpapers to match.
+Join your network from the menu. The clock sets itself, and games with a clock tell the right time.
 
-<img src=".github/resources/gravy/slots.png" width="100%" alt="The Game Boy, Game Boy Color, GBA, NES, Super Nintendo and Super Game Boy slots in their Originals colours">
+<img src=".github/resources/gravy/v1.3/wifi.png" width="100%" alt="The Wi-Fi page and the on-screen keyboard">
 
-<img src=".github/resources/gravy/themes.png" width="100%" alt="The Game Boy Color shelf in the dark and the light theme">
+### Deep Sleep and Seamless Resume
 
-### NES and Super Nintendo
+Put your game to sleep for days. Switch off, switch on, and you're right back in your game.
 
-Two more shelves, each with its own slot and carts in the NTSC and PAL moulds. The picture goes through a CRT and a composite signal, like on the living room TV.
+### Screen Calibration
 
-<img src=".github/resources/gravy/nes-insert.gif" width="640" alt="An NES cart going into the slot under its lid">
+Tune your screen the old-school way, with a test card.
 
-<img src=".github/resources/gravy/tv.png" width="100%" alt="The NES shelf and the Super Nintendo shelf">
+<img src=".github/resources/gravy/v1.3/calibration.png" width="100%" alt="The Screen Calibration test card">
 
-<img src=".github/resources/gravy/tv-games.png" width="100%" alt="The Legend of Zelda on the NES and A Link to the Past on the Super Nintendo, through the CRT">
+### Animations and visuals
 
-### A Super Game Boy
+A new animated shelf, the Game Boy power switch, springy menus and a lot more.
 
-Put the Super Game Boy in the SNES slot and the camera zooms onto the Game Boy shelf inside it. Game Boy games then play in their Super Game Boy colours, with a border around them.
+### Button guides
 
-<img src=".github/resources/gravy/sgb-zoom.gif" width="640" alt="The Super Game Boy pushed into the SNES slot, and the camera zooming in onto the Game Boy shelf inside it">
+Every screen has its own help page with all buttons and shortcuts.
 
-<img src=".github/resources/gravy/sgb.png" width="100%" alt="The Game Boy shelf on the Super Game Boy, and Hauntsfield in Super Game Boy colours with the slot. x GRAVY border">
-
-<img src=".github/resources/gravy/sgb-games.png" width="100%" alt="Pokémon Blue with its own Super Game Boy border, and the Super Game Boy in the cartridge studio">
-
-### Labels and the cartridge studio
-
-Carts without label art get one by themselves over Wi-Fi. Don't like it? Press **SELECT** on a cart to open the cartridge studio: search for another label, pick a shell colour and finish, or write a title on a blank cart in marker.
-
-<img src=".github/resources/gravy/studio.gif" width="640" alt="The cartridge studio opening on Goodboy Galaxy and trying shell colours and finishes">
-
-<img src=".github/resources/gravy/studio.png" width="100%" alt="The cartridge studio: picking a label photo and a shell colour">
-
-### Wi-Fi from the console
-
-Join your network under **Network** in the menu, with an on-screen keyboard or your router's WPS button. From then on the clock sets itself, labels and cheats come in by themselves, and two consoles at home can link over your network. More in [network/README.md](network/README.md).
-
-### Cheats
-
-Switch a game's cheats on and off while you play. With Wi-Fi on, games get their cheats by themselves, and your own `.cht` files work too.
-
-<img src=".github/resources/gravy/cheats.png" width="100%" alt="The in-game menu and the Cheats page">
-
-### Light sleep, deep sleep
-
-Tap **POWER** and the console sleeps; any button wakes it. After a few minutes it goes into a real deep sleep that lasts for days, and you pick up right where you left off.
-
-<img src=".github/resources/gravy/sleep.png" width="100%" alt="The General page with the Retro Vibes theme and the Originals slot colour, and the sleep settings">
-
-### Menus and settings of their own
-
-Quiet, monochrome menus, with one plain line telling you what each option does. Every console keeps its own screen settings, like palettes and effects, from the menu or right in the game. The Game Boy has its three real palettes: DMG, Pocket and Light.
-
-<img src=".github/resources/gravy/menus.png" width="100%" alt="The main menu and the General page">
-
-<img src=".github/resources/gravy/gb-palettes.png" width="100%" alt="Hauntsfield in the DMG, Pocket and Light colours">
-
-### Favorites and screenshots
-
-Star a cart with **Y** and it stands a little taller in a warm light. **VOL+ and POWER** takes a screenshot, effects and all, and they wait for you on the Screenshots page.
-
-<img src=".github/resources/gravy/highlight.png" width="100%" alt="A favorite in the highlight, and the Screenshots page">
-
-<img src=".github/resources/gravy/favorites.png" width="100%" alt="The Favorites shelf in dark and light">
-
-### And a handful of smaller things
-
-- **3:2 screens** too (RG34XX SP): everything fills the whole panel
-- **L1 / R1** step Game Boy games through three sizes, up to full screen
-- **Resume Game** powers straight back into your game
-- Hold **POWER** for a countdown to power off; **START + SELECT** resets the game
-- Every button and shortcut is on the **Buttons** pages
-
-<img src=".github/resources/gravy/marker.png" width="100%" alt="Carts with no label art, titled in marker">
+<img src=".github/resources/gravy/v1.3/buttons.png" width="100%" alt="A Buttons help page">
 
 ---
 
 ## Install
 
-1. Download **[slot-x-gravy-v1.2.2.zip](https://github.com/roygravy/slot/releases/download/slot-x-gravy-v1.2.2/slot-x-gravy-v1.2.2.zip)** from the [releases](https://github.com/roygravy/slot/releases/tag/slot-x-gravy-v1.2.2).
-2. Unzip it and copy the **contents** of the `slot-x-gravy-v1.2.2` folder onto the second SD card of your device.
-3. Put your games in `Games/GB`, `Games/GBC`, `Games/GBA`, `Games/NES` and `Games/SNES`, and optional label art (PNG, named like the ROM) in the matching `Labels` folders.
-4. Put the BIOS files (`gb_bios.bin`, `gbc_bios.bin`, `gba_bios.bin`) in `BIOS/` if you have them. For the real Super Game Boy borders, put your own `SGB1.sfc` and/or `SGB2.sfc` in `BIOS/` too (any name works).
+slot. x GRAVY runs on **BaseOS**, a small Linux that boots from the card in `SD1`. Pick one of two ways:
+
+**One SD card**: everything on the card in `SD1`.
+
+1. Write the latest [BaseOS](https://github.com/pvaibhav/BaseOS/releases/latest) `.img` to an SD card (with [Raspberry Pi Imager](https://www.raspberrypi.com/software/) or [Rufus](https://rufus.ie)) and put it in `SD1`.
+2. Power on once. BaseOS expands the storage and then says no frontend was found. Power off.
+3. Put the card back in your computer and copy the **contents** of the `slot-x-gravy-v1.3` folder from **[slot-x-gravy-v1.3.zip](https://github.com/roygravy/slot/releases/download/slot-x-gravy-v1.3/slot-x-gravy-v1.3.zip)** onto it.
+
+**Two SD cards**: BaseOS in `SD1`, your games on a second card in `SD2`.
+
+1. Write BaseOS to the first card as above and put it in `SD1`.
+2. Format the second card as `FAT32` or `exFAT` (MBR) and copy the **contents** of the `slot-x-gravy-v1.3` folder onto it. Put it in `SD2`.
+
+Then, on the card with slot. x GRAVY:
+
+- Put your games in `Games/GB`, `Games/GBC`, `Games/GBA`, `Games/NES` and `Games/SNES`, and optional label art (PNG, named like the ROM) in the matching `Labels` folders.
+- Put the BIOS files (`gb_bios.bin`, `gbc_bios.bin`, `gba_bios.bin`) in `BIOS/` if you have them. For the real Super Game Boy borders, put your own `SGB1.sfc` and/or `SGB2.sfc` in `BIOS/` too (any name works).
 
 ROMs must be unzipped; `.zip` and `.7z` are not read.
 
@@ -148,7 +155,7 @@ Coming from v1.1.1 or older? Copy this version onto the card once. From v1.2 on,
 
 ## Controls
 
-The full list is on the **Buttons** pages in the menu. The essentials:
+Every screen has its own **Buttons** page. The essentials:
 
 | On the shelf | |
 |---|---|
@@ -156,6 +163,8 @@ The full list is on the **Buttons** pages in the menu. The essentials:
 | L1 / R1 | Switch shelf |
 | Tap A / Hold A | Play from your last save / start fresh |
 | Y | Favorite |
+| B | Put a cart on The Deck |
+| SELECT | Cart and Slot Studio |
 | MENU | Settings |
 
 | In a game | |
@@ -165,21 +174,14 @@ The full list is on the **Buttons** pages in the menu. The essentials:
 | SELECT + R1 / L1 | Save / load a state |
 | Hold L2 / Hold R2 | Rewind / fast-forward |
 | SELECT + B | Screen effects on / off |
-| L1 / R1 | Bigger / smaller picture (GB, GBC) |
+| L1 / R1 | Screen size (GB, GBC) |
 | START + SELECT | Reset the game |
 
 | Everywhere | |
 |---|---|
 | VOL+ and POWER | Screenshot |
 | POWER / Hold POWER | Sleep / power off |
-| Any button | Wake from light sleep |
 | SELECT + Up / Down | Brightness |
-
----
-
-## Building
-
-slot. x GRAVY builds the same way slot. does; see `taskfile.yml`. The cartridge slots are drawn by `tools/slot_art.py`. Screenshots in this page were rendered headless with `cargo run --release -p slot --no-default-features --example shoot`.
 
 ---
 
@@ -190,7 +192,8 @@ slot. x GRAVY builds the same way slot. does; see `taskfile.yml`. The cartridge 
 - **Permanent Marker** by Font Diner (Apache 2.0) for the handwritten titles
 - **Liberation Sans** by Red Hat (SIL OFL 1.1), subset as "slot Serial", for the serial sticker on the About page
 - The CRT shaders and Blargg's NTSC filter from the **[libretro](https://github.com/libretro)** shader collections
-- Cart labels from **LaunchBox**'s games database
+- **[RetroAchievements](https://retroachievements.org)** for the achievements
+- Cart labels and colours from community game databases
 - The cheats from the **[libretro-database](https://github.com/libretro/libretro-database)** by the libretro team and contributors (CC BY-SA 4.0)
 - **Home Wi-Fi**, the label scraping and linking over the home network come from **[Prashant Vaibhav's fork](https://github.com/pvaibhav/slot)** of slot.
 - **Goodboy Galaxy** (demo), **Hauntsfield** and **Mud Warriors**, the free games in the screenshots

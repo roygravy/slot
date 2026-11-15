@@ -106,6 +106,30 @@ impl Zone {
         standard + if summer { 60 } else { 0 }
     }
 
+    /// The zone as a POSIX TZ string, so libc (and the cart clock in a core)
+    /// reads the same wall time as the menu clock.
+    pub fn posix(&self) -> String {
+        let std = i64::from(self.standard_min);
+        let summer = std + 60;
+        let rules = match self.summer {
+            Summer::None => return posix_fixed(std),
+            Summer::America => ",M3.2.0,M11.1.0".to_string(),
+            Summer::Europe => format!(
+                ",M3.5.0/{},M10.5.0/{}",
+                posix_clock(60 + std),
+                posix_clock(60 + summer)
+            ),
+            Summer::Australia => ",M10.1.0,M4.1.0/3".to_string(),
+            Summer::NewZealand => ",M9.5.0,M4.1.0/3".to_string(),
+        };
+        format!(
+            "{}{}{}",
+            posix_fixed(std),
+            posix_name(summer),
+            rules
+        )
+    }
+
     /// The UTC moment a local wall time stands for. In the hour that repeats
     /// when summer time ends, the summer reading wins.
     pub fn utc_of_local(&self, local: i64) -> i64 {
@@ -115,6 +139,37 @@ impl Zone {
         } else {
             local - i64::from(self.standard_min) * 60
         }
+    }
+}
+
+/// A fixed offset in minutes east of UTC as a POSIX TZ string.
+pub fn posix_fixed(min: i64) -> String {
+    let sign = if min > 0 { "-" } else { "" };
+    let (h, m) = (min.abs() / 60, min.abs() % 60);
+    let offset = if m == 0 {
+        format!("{sign}{h}")
+    } else {
+        format!("{sign}{h}:{m:02}")
+    };
+    format!("{}{offset}", posix_name(min))
+}
+
+fn posix_name(min: i64) -> String {
+    let sign = if min < 0 { '-' } else { '+' };
+    let (h, m) = (min.abs() / 60, min.abs() % 60);
+    if m == 0 {
+        format!("<{sign}{h:02}>")
+    } else {
+        format!("<{sign}{h:02}{m:02}>")
+    }
+}
+
+fn posix_clock(min: i64) -> String {
+    let (h, m) = (min / 60, min.rem_euclid(60));
+    if m == 0 {
+        format!("{h}")
+    } else {
+        format!("{h}:{m:02}")
     }
 }
 
@@ -141,6 +196,16 @@ fn last_sunday(year: i64, month: i64) -> i64 {
 mod tests {
     use super::*;
     use crate::stamp::parse_stamp;
+
+    #[test]
+    fn posix_strings_match_the_summer_rules() {
+        let tz = |n: &str| zone_named(n).unwrap().posix();
+        assert_eq!(tz("Amsterdam"), "<+01>-1<+02>,M3.5.0/2,M10.5.0/3");
+        assert_eq!(tz("New York"), "<-05>5<-04>,M3.2.0,M11.1.0");
+        assert_eq!(tz("Sydney"), "<+10>-10<+11>,M10.1.0,M4.1.0/3");
+        assert_eq!(posix_fixed(330), "<+0530>-5:30");
+        assert_eq!(posix_fixed(0), "<+00>0");
+    }
 
     fn at(stamp: &str) -> i64 {
         parse_stamp(stamp).expect("a stamp")

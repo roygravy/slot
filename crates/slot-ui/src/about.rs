@@ -6,7 +6,6 @@ use crate::draw::{Canvas, Draw, TexId, OUT_H, OUT_W};
 use crate::plate::UndoFace;
 use crate::text;
 
-const DARK_PNG: &[u8] = include_bytes!("../../../assets/about_dark.png");
 const LIGHT_PNG: &[u8] = include_bytes!("../../../assets/about_light.png");
 
 /// The paper label, as tools/about_art.py draws it.
@@ -17,9 +16,10 @@ const INK: [u8; 3] = [0x1c, 0x1c, 0x1e];
 /// positive turns anticlockwise).
 const STICKER_DEG: f32 = -0.9;
 
-/// The whole About screen for a theme, with `serial` printed on the label.
-pub fn about_face(light: bool, serial: &str) -> UndoFace {
-    let png = if light { LIGHT_PNG } else { DARK_PNG };
+/// The whole About screen, always the original DMG grey (Roy), with `serial` printed on the
+/// label.
+pub fn about_face(serial: &str) -> UndoFace {
+    let png = LIGHT_PNG;
     let (mut rgba, w, h) = decode_png_bytes(png)
         .unwrap_or_else(|| (vec![0; (OUT_W * OUT_H * 4) as usize], OUT_W, OUT_H));
     if let Some(font) = text::serial_font() {

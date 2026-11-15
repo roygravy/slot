@@ -70,9 +70,9 @@ height -= sides * 3.0  # the raised centre stands well proud of the side pieces 
 for v in (0.211, 0.367, 0.522, 0.681, 0.837):
     g = (rect(0.0, v - 0.006, 0.156, v + 0.006) | rect(0.844, v - 0.006, 1.0, v + 0.006)) & cart
     height -= g * 2.2
-label = rect(0.195, -0.05, 0.809, 0.426, 0.012)  # as tall as the American stickers (2.23 : 1)
+label = rect(0.195, -0.05, 0.809, 0.4448, 0.025)  # the American sticker whole, with 2px under it (Roy 2026-11-15)
 height -= label * 2.0  # as deep as the PAL cart's (Roy)
-window = rect(0.194, 0.617, 0.809, 1.05, 0.03)
+window = rect(0.194, 0.617, 0.809, 1.05, 0.025)
 height -= window * 4.5  # deep, and runs out through the bottom edge (Roy's photo)
 yy, xx = np.mgrid[0:h, 0:w]
 # a channel down the middle of the window with straight side walls; its floor curves up

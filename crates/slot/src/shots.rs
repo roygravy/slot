@@ -1,5 +1,5 @@
 //! The screenshots on the card, for the Screenshots page: one game's while playing it, every
-//! one from the main menu. Names are "<game> <stamp>.png" in `Screenshots/<GB|GBC|GBA>/`, or
+//! one from the main menu. Names are "<game> <stamp>.png" in `Screenshots/<system>/`, or
 //! "slot <stamp>.png" in `Screenshots/` for those taken outside a game; a second shot in the
 //! same second ends in " 2", " 3" and so on.
 
@@ -17,8 +17,6 @@ pub struct Shot {
     /// 1 for the first shot of its second, 2 for the next, ...
     pub n: u32,
 }
-
-const PLATFORMS: [Platform; 3] = [Platform::Gb, Platform::Gbc, Platform::Gba];
 
 fn dir(root: &Path) -> PathBuf {
     root.join("Screenshots")
@@ -81,7 +79,7 @@ pub fn for_game(root: &Path, platform: Platform, stem: &str) -> Vec<Shot> {
 pub fn all(root: &Path) -> Vec<Shot> {
     let mut out = Vec::new();
     read(&dir(root), false, &mut out);
-    for p in PLATFORMS {
+    for p in Platform::ALL {
         read(&dir(root).join(p.dir_name()), true, &mut out);
     }
     newest_first(&mut out);

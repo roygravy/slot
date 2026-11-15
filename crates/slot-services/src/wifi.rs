@@ -107,18 +107,43 @@ fn unescape(s: &str) -> String {
     String::from_utf8_lossy(&out).into_owned()
 }
 
-/// A scan, through the supplicant when one runs, else straight from the radio.
-pub fn scan(home: &Home) -> Result<String, &'static str> {
+/// A scan, through the supplicant when one runs. With no network saved yet nothing runs,
+/// and the radio on its own often hears nothing: start a bare supplicant just for the scan
+/// (as WPS does), ask it, and let it go again. `iw` straight from the radio stays the last
+/// resort.
+pub fn scan(home: &mut Home) -> Result<String, &'static str> {
     if home.interface.wpa.is_some() {
-        home.interface.cli(&["scan"])?;
-        std::thread::sleep(Duration::from_millis(3500));
-        return Ok(reply(parse_supplicant(
-            &home.interface.cli(&["scan_results"])?,
-        )));
+        return supplicant_scan(home);
     }
     let _ = output("rfkill", &["unblock", "wifi"]);
+    if home.interface.start_wps().is_ok() {
+        let seen = supplicant_scan(home);
+        home.interface.stop();
+        if let Ok(seen) = seen {
+            if !seen.is_empty() {
+                return Ok(seen);
+            }
+        }
+    }
     output("ip", &["link", "set", "wlan0", "up"])?;
     Ok(reply(parse_iw(&output("iw", &["dev", "wlan0", "scan"])?)))
+}
+
+fn supplicant_scan(home: &Home) -> Result<String, &'static str> {
+    // A supplicant just started needs a moment before its control socket answers.
+    let up = Instant::now() + Duration::from_secs(3);
+    while home.interface.cli(&["ping"]).map_or(true, |r| !r.contains("PONG")) {
+        if Instant::now() >= up {
+            return Err("WIFI_SCAN");
+        }
+        std::thread::sleep(Duration::from_millis(150));
+    }
+    // FAIL-BUSY means a scan is already running, which is just as good.
+    let _ = home.interface.cli(&["scan"]);
+    std::thread::sleep(Duration::from_millis(3500));
+    Ok(reply(parse_supplicant(
+        &home.interface.cli(&["scan_results"])?,
+    )))
 }
 
 pub enum WpsState {

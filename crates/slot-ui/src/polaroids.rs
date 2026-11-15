@@ -18,7 +18,8 @@ const DOT_DIM: f32 = 0.35;
 
 const MARGIN: f32 = 16.0;
 
-pub const LEGEND: [(&str, &str); 3] = [("B", "Back"), ("Y", "Delete"), ("A", "Load")];
+/// A and Y on the left, Back alone on the right (Roy 2026-11-14).
+pub const LEGEND: [(&str, &str); 3] = [("A", "Load"), ("Y", "Delete"), ("B", "Back")];
 const WAYS_OUT: usize = 2;
 
 pub struct PhotoFace {
@@ -28,18 +29,18 @@ pub struct PhotoFace {
 }
 
 pub fn photo_face(entry: &StateEntry) -> PhotoFace {
-    let rgba = art::cover(&entry.thumb, PHOTO_W, PHOTO_H).unwrap_or_else(|| {
-        std::iter::repeat_n(
-            [BLANK[0], BLANK[1], BLANK[2], 255],
-            (PHOTO_W * PHOTO_H) as usize,
-        )
-        .flatten()
-        .collect()
-    });
-    PhotoFace {
-        rgba,
-        w: PHOTO_W,
-        h: PHOTO_H,
+    match art::photo(&entry.thumb, PHOTO_W, PHOTO_H) {
+        Some((rgba, w, h)) => PhotoFace { rgba, w, h },
+        None => PhotoFace {
+            rgba: std::iter::repeat_n(
+                [BLANK[0], BLANK[1], BLANK[2], 255],
+                (PHOTO_W * PHOTO_H) as usize,
+            )
+            .flatten()
+            .collect(),
+            w: PHOTO_W,
+            h: PHOTO_H,
+        },
     }
 }
 
@@ -134,7 +135,7 @@ impl Polaroids {
         battery_percent: Printed,
         bolt: Option<TexId>,
         clock: Printed,
-        wifi: Option<TexId>,
+        wifi: impl Into<crate::footer::Marks>,
         out: &mut Vec<Draw>,
     ) {
         self.draw_photo(canvas, out);
@@ -168,7 +169,7 @@ impl Polaroids {
         battery_percent: Printed,
         bolt: Option<TexId>,
         clock: Printed,
-        wifi: Option<TexId>,
+        wifi: impl Into<crate::footer::Marks>,
         out: &mut Vec<Draw>,
     ) {
         out.push(plate(canvas, 0.0));
@@ -208,9 +209,10 @@ impl Polaroids {
                 tex,
                 colour: white,
             };
-            out.push(tint(c.cancel.0, MARGIN, y, c.cancel.1, HINT_H));
-            let dx = canvas.w - MARGIN - c.delete.1 as f32;
-            out.push(tint(c.delete.0, dx, y, c.delete.1, HINT_H));
+            // Delete left, Cancel right: B last (Roy 2026-11-14).
+            out.push(tint(c.delete.0, MARGIN, y, c.delete.1, HINT_H));
+            let dx = canvas.w - MARGIN - c.cancel.1 as f32;
+            out.push(tint(c.cancel.0, dx, y, c.cancel.1, HINT_H));
             let lx = (canvas.w - c.line.1 as f32) / 2.0;
             out.push(tint(
                 c.line.0,

@@ -8,6 +8,10 @@ on:
       version:
         description: Version in the zip's name
         default: v1.1
+      ra:
+        description: TEST BUILD - with RetroAchievements (not in the release yet)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -33,7 +37,9 @@ jobs:
           curl -fsSL https://taskfile.dev/install.sh | sh -s -- -b /usr/local/bin
 
       - name: Build the tree
-        run: task dist:device OUT="slot-${BUILD_NAME}"
+        env:
+          FEATURES: ${{ inputs.ra && 'slot/device,slot/retroachievements' || 'slot/device' }}
+        run: task dist:device OUT="slot-${BUILD_NAME}" FEATURES="$FEATURES"
 
       - name: Check what is about to ship
         run: |
@@ -90,15 +96,22 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
     steps:
+      - uses: actions/checkout@v5
+        with:
+          path: src
+
       - uses: actions/download-artifact@v8
         with:
           name: ${{ needs.build.outputs.zip }}
 
       - name: Create the release
         env:
-          GH_TOKEN: ${{ github.token }}
+          # Development happens in a private repo; releases go to the public one.
+          # RELEASE_TOKEN = fine-grained token, Contents read/write on roygravy/slot only.
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          RELEASE_REPO: roygravy/slot
           ZIP: ${{ needs.build.outputs.zip }}
         run: |
           set -eu
@@ -107,10 +120,13 @@ jobs:
 
           Emulation by mGBA (MPL-2.0), gpSP (GPL-2.0), Gambatte (GPL-2.0), FCEUmm (GPL-2.0) and Snes9x (non-commercial licence). Their licences, patches and sources are in \`System/licenses/\`.
           NOTES
+          # GPL-3.0: the full source of this exact release goes along with the zip.
+          SRC="slot-x-gravy-${GITHUB_REF_NAME}-source.tar.gz"
+          git -C src archive --format=tar.gz --prefix="slot-x-gravy-${GITHUB_REF_NAME}/" -o "../$SRC" HEAD
           # A release already made by hand for this tag just gets the zip; otherwise one is made.
-          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" "$ZIP" --repo "$GITHUB_REPOSITORY" --clobber
+          if gh release view "$GITHUB_REF_NAME" --repo "$RELEASE_REPO" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "$ZIP" "$SRC" --repo "$RELEASE_REPO" --clobber
           else
-            gh release create "$GITHUB_REF_NAME" "$ZIP" --repo "$GITHUB_REPOSITORY" \
+            gh release create "$GITHUB_REF_NAME" "$ZIP" "$SRC" --repo "$RELEASE_REPO" \
               --title "$GITHUB_REF_NAME" --notes-file notes.md
           fi

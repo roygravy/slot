@@ -584,3 +584,11 @@ fn a_search_puts_the_names_typed_first_accents_and_all() {
     assert_eq!(likeness("Pokémon Fool's Gold", "pokemon gold"), 2);
     assert_eq!(likeness("Kou Dai Bao Shi: Jin", "pokemon gold"), 3);
 }
+
+#[test]
+fn pokemon_ruby_goes_straight_to_its_own_page() {
+    for stem in ["Pokemon - Ruby Version (USA, Europe) (Rev 2)", "Pokemon Ruby (Europe)"] {
+        let t = crate::source::title(stem);
+        assert_eq!(crate::source::known_id(&t), Some(2241), "{stem} -> {t}");
+    }
+}

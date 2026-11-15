@@ -129,6 +129,14 @@ impl TimeZone {
         }
     }
 
+    /// As a POSIX TZ string for libc.
+    pub fn posix(&self) -> String {
+        match self {
+            TimeZone::Fixed(min) => slot_store::posix_fixed(*min),
+            TimeZone::City(zone) => zone.posix(),
+        }
+    }
+
     pub fn city(&self) -> Option<&'static str> {
         match self {
             TimeZone::Fixed(_) => None,
@@ -461,14 +469,7 @@ impl ClockPicker {
         let hw = hint_width(SET_CLOCK_KEY, SET_CLOCK_LABEL);
         let hints: Vec<(TexId, u32)> = back.into_iter().chain(hint.map(|t| (t, hw))).collect();
         for (tex, w, x) in centred_hints(canvas, &hints, LEGEND_GAP) {
-            out.push(Draw::Tint {
-                x: x.round(),
-                y: LEGEND_Y,
-                w: w as f32,
-                h: HINT_H as f32,
-                tex,
-                colour: ink.text,
-            });
+            crate::plate::shaded_hint(out, tex, x.round(), LEGEND_Y, w as f32, HINT_H as f32, ink.text, ink.wash);
         }
     }
 }

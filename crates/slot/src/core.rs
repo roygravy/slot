@@ -126,14 +126,17 @@ fn open_named(
         if core == Core::Gambatte {
             ensure_dmg_palette(&bios);
         }
-        // Gambatte reads this option during retro_init, so it has to exist
+        // Gambatte reads these options during retro_init, so it has to exist
         // before the core is initialized (setting it afterward is too late).
         let opened = if core == Core::Gambatte {
             LibretroCore::open_with_options(
                 path,
                 &bios,
                 &saves,
-                &[("gambatte_gb_bootloader", "enabled")],
+                &[
+                    ("gambatte_gb_bootloader", "enabled"),
+                    ("gambatte_rumble_level", "10"),
+                ],
             )
         } else {
             LibretroCore::open_with(path, &bios, &saves)
@@ -186,15 +189,6 @@ pub fn dmg_only(rom: &Path) -> bool {
     std::fs::File::open(rom)
         .and_then(|mut f| f.read_exact(&mut header))
         .is_ok_and(|_| header[0x143] & 0x80 == 0)
-}
-
-/// A cart that speaks to the Super Game Boy (header 0x146 = 0x03), Game Boy Color or not.
-pub fn sgb_aware(rom: &Path) -> bool {
-    use std::io::Read;
-    let mut header = [0u8; 0x150];
-    std::fs::File::open(rom)
-        .and_then(|mut f| f.read_exact(&mut header))
-        .is_ok_and(|_| header[0x146] == 0x03)
 }
 
 fn report_missing(core: Core, paths: &[PathBuf]) {
@@ -275,12 +269,16 @@ pub fn tv_options(
             (
                 "fceumm_ntsc_filter",
                 match cable {
-                    TvCable::Off => "disabled",
-                    // The NES's core draws no aerial: its RF is the nearest, composite.
-                    TvCable::Rf | TvCable::Composite => "composite",
+                    // The NES's core draws no aerial: slot. runs the RF filter on its picture.
+                    TvCable::Off | TvCable::Rf => "disabled",
+                    TvCable::Composite => "composite",
                     TvCable::SVideo => "svideo",
                     TvCable::Rgb => "rgb",
                 },
+            ),
+            (
+                slot_retro::SLOT_NTSC,
+                if cable == TvCable::Rf { "rf" } else { "off" },
             ),
             (
                 "fceumm_palette",
@@ -339,7 +337,7 @@ fn gambatte_palette_name(palette: GbPalette) -> String {
 
 /// slot.'s own DMG Green, lightest to darkest: a yellow-green glass with dark, slightly blue
 /// pixels, nearer a real DMG-01 than Gambatte's built-in "GB - DMG".
-pub const DMG_GREEN: [u32; 4] = [0x8E9526, 0x5F7C48, 0x36554F, 0x213A3B];
+pub const DMG_GREEN: [u32; 4] = [0x8E9518, 0x5A7D4E, 0x2F5E63, 0x1C3050];
 
 /// Marks the palette file as slot.'s own, so one a player wrote themselves is left alone.
 const DMG_MARK: &str = "[slot. DMG Green]";
@@ -510,17 +508,11 @@ pub fn set_sgb_border(root: &Path, choice: u8, two: bool, turn: u32) -> (&'stati
 }
 
 /// mGBA as a Super Game Boy, drawing on the SNES's screen: its borders, and the SGB's own
-/// colours for the games that set none. The Super Game Boy 2 has a secret: a Game Boy Color
-/// game plays in its own colours inside the border (`gbc`), as mGBA's Super Game Boy Color.
-pub fn sgb_options(root: &Path, core: &mut dyn RetroCore, choice: u8, two: bool, gbc: bool) {
+/// colours for the games that set none.
+pub fn sgb_options(root: &Path, core: &mut dyn RetroCore, choice: u8, two: bool) {
     let (w, h) = Platform::Snes.canvas();
     core.set_canvas(w, h);
-    let model = if gbc {
-        "Super Game Boy Color"
-    } else {
-        "Super Game Boy"
-    };
-    core.set_option("mgba_gb_model", model);
+    core.set_option("mgba_gb_model", "Super Game Boy");
     core.set_option("mgba_sgb_borders", "ON");
     core.set_option("mgba_gb_colors_preset", "0");
     core.set_option("mgba_gb_colors", "SGB 1-A");

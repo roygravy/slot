@@ -48,6 +48,7 @@ struct Host {
     declared: std::collections::HashMap<String, Vec<String>>,
     /// The NTSC filter slot. runs on the picture itself (`slot_ntsc`), for a core without one.
     ntsc: Option<crate::ntsc::Ntsc>,
+    memmap: Option<Box<MapCopy>>,
 }
 
 thread_local! {
@@ -91,6 +92,10 @@ unsafe extern "C" fn environment(cmd: c_uint, data: *mut c_void) -> bool {
             }
             *(data as *mut bool) = true;
             true
+        }
+        SET_MEMORY_MAPS => {
+            let copy = MapCopy::copy(data as *const MemoryMap);
+            with_host(|h| h.memmap = copy).is_some()
         }
         SET_PIXEL_FORMAT => {
             if data.is_null() {
@@ -625,6 +630,7 @@ impl LibretroCore {
             options_dirty: false,
             declared: std::collections::HashMap::new(),
             ntsc: None,
+            memmap: None,
         });
         unsafe {
             let _a = Active::bind(&mut host);
@@ -819,6 +825,16 @@ impl RetroCore for LibretroCore {
         }
     }
 
+    fn memory_map_ptr(&self) -> *const c_void {
+        self.host.memmap.as_ref().map_or(ptr::null(), |m| &m.map as *const MemoryMap as *const c_void)
+    }
+
+    fn memory_raw(&self, id: u32) -> (*mut c_void, usize) {
+        let data = unsafe { (self.api.get_memory_data)(id) };
+        let len = unsafe { (self.api.get_memory_size)(id) };
+        if data.is_null() { (ptr::null_mut(), 0) } else { (data as *mut c_void, len) }
+    }
+
     fn save_ram(&self) -> Option<Vec<u8>> {
         let mut sav = self.memory(MEMORY_SAVE_RAM)?.to_vec();
         if let Some(rtc) = self.memory(MEMORY_RTC) {
@@ -901,6 +917,7 @@ mod tests {
             options_dirty,
             declared: HashMap::new(),
             ntsc: None,
+            memmap: None,
         })
     }
 

@@ -5,11 +5,14 @@ macro_rules! eprintln {
     }};
 }
 
+pub mod aging;
 pub mod app;
 pub mod audio;
+pub mod buzz;
 pub mod bezel;
 pub mod boot_time;
 pub mod bootlogo;
+pub mod calibrate;
 pub mod build_info;
 pub mod cable;
 pub mod card_log;
@@ -47,6 +50,10 @@ pub mod list_page;
 pub mod loading_mark;
 pub mod panel_turn;
 pub mod persist;
+#[cfg(feature = "retroachievements")]
+pub mod ra;
+#[cfg(feature = "retroachievements")]
+pub mod ra_page;
 pub mod prefetch;
 pub mod resample;
 pub mod rewind;

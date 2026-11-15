@@ -679,3 +679,4 @@ fn a_reset_with_start_first_lets_start_go_and_never_taps_select() {
     after.extend(g.tick(400));
     assert!(!after.contains(&GbaDown(Select)), "SELECT tapped the game: {after:?}");
 }
+

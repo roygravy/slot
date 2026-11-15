@@ -168,14 +168,7 @@ impl ShotPage<'_> {
 
     fn legend(&self, hints: &[Hint], out: &mut Vec<Draw>) {
         for (tex, w, x) in centred_hints(self.canvas, hints, LEGEND_GAP) {
-            out.push(Draw::Tint {
-                x,
-                y: LEGEND_Y,
-                w: w as f32,
-                h: HINT_H as f32,
-                tex,
-                colour: self.ink.text,
-            });
+            crate::plate::shaded_hint(out, tex, x, LEGEND_Y, w as f32, HINT_H as f32, self.ink.text, self.ink.wash);
         }
     }
 

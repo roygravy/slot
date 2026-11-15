@@ -20,6 +20,25 @@ def fix(src, dst, size):
     run(lambda i: out[i,::-1,:], h, w)    # left edge, so it matches the right
     img=Image.fromarray(out.clip(0,255).astype(np.uint8),'RGBA')
     img.convert('RGBa').resize(size,Image.Resampling.LANCZOS).convert('RGBA').save(dst,optimize=True)
+def seams(path):
+    """The two seams cut like the SNES slot's grooves (Roy 2026-11-15): 2px dark, the wall in
+    shadow then the floor, and 1px lit, shaded from the plastic beside them. One line: below the
+    label and on above it, between the label and the top rim."""
+    im=np.asarray(Image.open(path).convert('RGBA')).astype(np.float32)
+    a=im[...,3]
+    for x in (53, 281):
+        for y in list(range(4, 10))+list(range(112, im.shape[0])):
+            if y>100 and a[y,x-3:x+6].min()<255: break
+            beside=(im[y,x-4,:3]+im[y,x+5,:3])/2
+            for i,f in enumerate((0.5, 0.68)):
+                im[y,x+i,:3]=beside*f
+            # lit as the slot's (x1.08 + 6 on screen), as an overlay base on the SFC grey
+            im[y,x+2,:3]=beside*1.2
+            im[y,x-1,:3]=im[y,x+3,:3]=beside
+    Image.fromarray(im.clip(0,255).astype(np.uint8),'RGBA').save(path,optimize=True)
+if sys.argv[1]=='--seams':
+    seams('assets/snes_pal_neutral.png'); sys.exit()
 P=sys.argv[1].rstrip('/')+'/'
 for part in ['neutral','clear']:
     fix(P+'snes_%s.png'%part,'assets/snes_pal_%s.png'%part,(336,228))
+seams('assets/snes_pal_neutral.png')

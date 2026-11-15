@@ -157,11 +157,13 @@ fn gb_shell(title: &[u8], code: &[u8], cgb: u8, japan: bool) -> slot_ui::Shell {
 }
 
 #[test]
-fn original_is_the_consoles_own_standard_cart_whatever_the_game() {
-    // Pokémon Red and Crystal, Metal Gear Solid and Tetris all come as their console's cart.
-    assert_eq!(gb_shell(b"POKEMON RED", b"", 0x00, false), DMG_SHELL);
+fn original_is_the_cart_the_game_shipped_in() {
+    assert_eq!(gb_shell(b"POKEMON RED", b"", 0x00, false).colour, [0xc0, 0x28, 0x2c]);
+    assert_eq!(gb_shell(b"POKEMON RED", b"", 0x00, true), DMG_SHELL);
     assert_eq!(gb_shell(b"TETRIS", b"", 0x00, false), DMG_SHELL);
-    assert_eq!(gb_shell(b"METALGEARGB", b"BMGE", 0xc0, false), DMG_SHELL);
+    assert_eq!(gb_shell(b"METALGEARGB", b"BMGE", 0xc0, false), slot_ui::DUAL_MODE_SHELL);
+    assert_eq!(gb_shell(b"ZELDA", b"AZ7E", 0x80, false), slot_ui::DUAL_MODE_SHELL);
+    assert_eq!(gb_shell(b"PM_CRYSTAL", b"BYTE", 0xc0, false).finish, Finish::Glitter);
     let d = tempfile::tempdir().expect("tempdir");
     let games = d.path().join("Games/GBC");
     std::fs::create_dir_all(&games).expect("games dir");

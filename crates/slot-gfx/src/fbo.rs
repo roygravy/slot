@@ -1,5 +1,5 @@
 use crate::draw::{Draw, Sprites, TexId};
-use crate::grade::blue_light_gain;
+use crate::grade::{blue_light_gain, dim_gain};
 use crate::pipeline::GamePass;
 use crate::quad::Quad;
 use crate::shaders::{BEZEL_FRAG, BLIT_FRAG, BLIT_VERT, TURN_VERT};
@@ -22,8 +22,12 @@ pub struct Compositor {
     size: (u32, u32),
     blit: gl::types::GLuint,
     u_gain: gl::types::GLint,
+    u_sat: gl::types::GLint,
+    u_bezel_sat: gl::types::GLint,
+    sat: f32,
     u_blit_uv: gl::types::GLint,
     gain: [f32; 3],
+    dim: f32,
     shake: f32,
     window: (u32, u32),
     layout: Layout,
@@ -72,11 +76,13 @@ impl Compositor {
             gl::UseProgram(blit);
             gl::Uniform1i(crate::gl::uniform_location(blit, "u_tex"), 0);
             let u_gain = crate::gl::uniform_location(blit, "u_gain");
+            let u_sat = crate::gl::uniform_location(blit, "u_sat");
             let u_blit_uv = crate::gl::uniform_location(blit, "u_uv");
             gl::Uniform4f(u_blit_uv, 0.0, 0.0, 1.0, 1.0);
             gl::UseProgram(bezel_prog);
             gl::Uniform1i(crate::gl::uniform_location(bezel_prog, "u_tex"), 0);
             let u_bezel_gain = crate::gl::uniform_location(bezel_prog, "u_gain");
+            let u_bezel_sat = crate::gl::uniform_location(bezel_prog, "u_sat");
             let u_bezel_alpha = crate::gl::uniform_location(bezel_prog, "u_alpha");
             gl::Uniform4f(
                 crate::gl::uniform_location(bezel_prog, "u_uv"),
@@ -92,8 +98,12 @@ impl Compositor {
                 size: (OUT_W, OUT_H),
                 blit,
                 u_gain,
+                u_sat,
+                u_bezel_sat,
+                sat: 1.0,
                 u_blit_uv,
                 gain: blue_light_gain(0),
+                dim: 1.0,
                 shake: 0.0,
                 window: (OUT_W, OUT_H),
                 layout: Layout::Framed,
@@ -120,6 +130,8 @@ impl Compositor {
             gl::UseProgram(prog);
             gl::Uniform1i(crate::gl::uniform_location(prog, "u_tex"), 0);
             gl::Uniform3f(crate::gl::uniform_location(prog, "u_gain"), 1.0, 1.0, 1.0);
+            // The second, turning pass leaves colour alone.
+            gl::Uniform1f(crate::gl::uniform_location(prog, "u_sat"), 1.0);
             gl::Uniform1f(
                 crate::gl::uniform_location(prog, "u_ccw"),
                 if ccw { 1.0 } else { 0.0 },
@@ -183,12 +195,25 @@ impl Compositor {
         self.gain = blue_light_gain(step);
     }
 
+    /// Colour of the whole screen, games and menus alike: 1.0 as drawn, above it richer.
+    pub fn set_screen_saturation(&mut self, saturation: f32) {
+        self.sat = saturation.clamp(0.0, 3.0);
+    }
+
+    pub fn set_dim(&mut self, step: u8) {
+        self.dim = dim_gain(step);
+    }
+
     pub fn set_screen_effect(&mut self, effect: crate::ScreenEffect) {
         self.game.set_effect(effect);
     }
 
     pub fn set_tv_lines(&mut self, scanlines: bool, mask: bool) {
         self.game.set_tv_lines(scanlines, mask);
+    }
+
+    pub fn set_tv_colors(&mut self, trinitron: bool) {
+        self.game.set_tv_colors(trinitron);
     }
 
     pub fn set_backlight(&mut self, on: bool) {
@@ -246,6 +271,14 @@ impl Compositor {
 
     pub fn set_black_edge(&mut self, black: bool) {
         self.game.set_black_edge(black);
+    }
+
+    pub fn set_gba_shape(&mut self, on: bool) {
+        self.game.set_gba_shape(on);
+    }
+
+    pub fn set_sharp_pixels(&mut self, on: bool) {
+        self.game.set_sharp_pixels(on);
     }
 
     pub fn set_pale_opacity(&mut self, opacity: f32) {
@@ -510,7 +543,9 @@ impl Compositor {
             gl::Clear(gl::COLOR_BUFFER_BIT);
             gl::UseProgram(self.blit);
             gl::ActiveTexture(gl::TEXTURE0);
-            gl::Uniform3f(self.u_gain, self.gain[0], self.gain[1], self.gain[2]);
+            let [r, g, b] = self.gain.map(|g| g * self.dim);
+            gl::Uniform3f(self.u_gain, r, g, b);
+            gl::Uniform1f(self.u_sat, self.sat);
             gl::BindTexture(gl::TEXTURE_2D, self.tex);
         }
         if self.native() {
@@ -542,6 +577,7 @@ impl Compositor {
             gl::Viewport(0, -drop, window.0 as i32, window.1 as i32);
             gl::UseProgram(self.bezel_prog);
             gl::Uniform3f(self.u_bezel_gain, self.gain[0], self.gain[1], self.gain[2]);
+            gl::Uniform1f(self.u_bezel_sat, self.sat);
             gl::Uniform1f(self.u_bezel_alpha, 1.0);
             gl::BindTexture(gl::TEXTURE_2D, bezel);
             gl::Enable(gl::BLEND);

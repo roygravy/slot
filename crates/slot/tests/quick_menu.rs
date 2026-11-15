@@ -56,11 +56,11 @@ fn open_at(a: &mut App, row: QuickRow) {
         }
         // A tab page past the first: A opens the first tab, R1 turns to it.
         if depth > 0 {
-            for _ in 0..step.tab(a.hidden_rows()).unwrap_or(0) {
+            for _ in 0..step.tab(&a.hidden_rows()).unwrap_or(0) {
                 press(a, Btn::R1);
             }
         }
-        for _ in 0..step.position(a.hidden_rows()) {
+        for _ in 0..step.position(&a.hidden_rows()) {
             press(a, Btn::Down);
         }
     }
@@ -253,15 +253,17 @@ fn fast_forward_steps_through_its_speeds_wraps_at_both_ends_and_saves_each_one()
     let (d, mut a, _) = on_carousel();
     open_at(&mut a, QuickRow::FastForward);
     for (btn, want) in [
-        (Btn::Left, 4),
-        (Btn::Left, 3),
-        (Btn::Left, 2),
+        // Quarters of the game's own speed, from the 6x it starts at.
+        (Btn::Left, 16),
+        (Btn::Left, 12),
+        (Btn::Left, 8),
         (Btn::Left, 6),
-        (Btn::Right, 2),
-        (Btn::Right, 3),
-        (Btn::Right, 4),
+        (Btn::Left, 24),
         (Btn::Right, 6),
-        (Btn::Right, 2),
+        (Btn::Right, 8),
+        (Btn::Right, 12),
+        (Btn::Right, 16),
+        (Btn::Right, 24),
     ] {
         press(&mut a, btn);
         assert_eq!(a.ff_speed(), want, "{btn:?}");
@@ -566,7 +568,14 @@ fn fake_faces(a: &mut App) {
             (id(403), 90),
             (id(404), 90),
             (id(405), 90),
+            (id(406), 90),
+            (id(407), 90),
+            (id(408), 90),
+            (id(409), 110),
+            (id(410), 90),
         ],
+        wifi: (id(950), 24, 24),
+        lock: (id(951), 24, 24),
         switches: [(id(600), 52, 30), (id(601), 52, 30)],
         help: vec![None; QuickRow::ALL.len()],
         more: [(id(800), 20, 20), (id(801), 20, 20)],
@@ -657,7 +666,7 @@ fn the_arrows_stand_only_around_the_selected_rows_value() {
     let out = frame(&a);
     assert!(drawn(&out, 500), "the date and time is not grey");
 
-    for _ in 0..QuickRow::DateTime.position(a.hidden_rows()) {
+    for _ in 0..QuickRow::DateTime.position(&a.hidden_rows()) {
         press(&mut a, Btn::Down);
     }
     let out = frame(&a);
@@ -800,7 +809,14 @@ fn no_row_in_hand_runs_its_arrows_into_its_label() {
             (id(403), 90),
             (id(404), 90),
             (id(405), 90),
+            (id(406), 90),
+            (id(407), 90),
+            (id(408), 90),
+            (id(409), 110),
+            (id(410), 90),
         ],
+        wifi: (id(950), 24, 24),
+        lock: (id(951), 24, 24),
         switches: [(id(600), 52, 30), (id(601), 52, 30)],
         help: vec![None; QuickRow::ALL.len()],
         more: [(id(800), 20, 20), (id(801), 20, 20)],

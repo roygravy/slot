@@ -32,7 +32,9 @@ fn placed(s: &Shelf) -> Vec<(f32, f32)> {
             Draw::Part { x, w, .. } => (x, w),
             Draw::Turned { x, w, .. }
             | Draw::Tint { x, w, .. }
-            | Draw::Light { x, w, .. } => (x, w),
+            | Draw::Shade { x, w, .. }
+            | Draw::Shade { x, w, .. }
+        | Draw::Light { x, w, .. } => (x, w),
             Draw::Game | Draw::Shot { .. } => (0.0, OUT_W as f32),
         })
         .collect()
@@ -45,6 +47,7 @@ fn xw(d: &Draw) -> (f32, f32) {
         | Draw::Part { x, w, .. }
         | Draw::Turned { x, w, .. }
         | Draw::Tint { x, w, .. }
+        | Draw::Shade { x, w, .. }
         | Draw::Light { x, w, .. } => (x, w),
         Draw::Game | Draw::Shot { .. } => (0.0, OUT_W as f32),
     }
@@ -282,8 +285,10 @@ fn a_held_scroll_never_travels_against_the_button() {
             for f in 1..120u64 {
                 s.tick(f * 1000 / 60);
                 s.update(1.0 / 60.0);
+                // The row rides a spring (playful shelf): it may give back a hair as it lands
+                // on a cart, never a visible step against the button.
                 assert!(
-                    (s.scroll - was) * way >= -1e-4,
+                    (s.scroll - was) * way >= -0.005,
                     "{n} carts, held {name}: the row travelled {} at frame {f}",
                     s.scroll - was
                 );
@@ -372,13 +377,16 @@ fn shelf_scroll_settles_on_the_selected_index() {
 }
 
 #[test]
-fn scroll_never_overshoots_the_cart_it_lands_on() {
+fn scroll_springs_only_a_little_past_the_cart_it_lands_on() {
+    // The playful shelf slides on an underdamped spring: a small swing past the cart and
+    // back, never as far as the next one.
     let mut s = shelf_with(5);
     s.right();
     for _ in 0..600 {
         s.update(1.0 / 60.0);
-        assert!(s.scroll <= 1.0 + 1e-4, "overshot to {}", s.scroll);
+        assert!(s.scroll <= 1.0 + 0.05, "overshot to {}", s.scroll);
     }
+    assert!((s.scroll - 1.0).abs() < 1e-3, "did not settle: {}", s.scroll);
 }
 
 #[test]
@@ -732,6 +740,7 @@ fn cart_spans(out: &[Draw]) -> Vec<(f32, f32)> {
             | Draw::Part { x, w, h, .. }
             | Draw::Turned { x, w, h, .. }
             | Draw::Tint { x, w, h, .. }
+            | Draw::Shade { x, w, h, .. }
             | Draw::Light { x, w, h, .. } => (h > 60.0).then_some((x, x + w)),
             Draw::Game | Draw::Shot { .. } => None,
         })
@@ -1051,7 +1060,7 @@ fn a_clear_cart_draws_its_interior_then_the_board_then_the_plastic() {
     s.draw_row(Canvas::FRAMED, None, 0.0, 0.0, 1.0, &mut out);
     let at = |t: TexId| {
         out.iter()
-            .position(|d| matches!(*d, Draw::Tex { tex, .. } if tex == t))
+            .position(|d| matches!(*d, Draw::Tex { tex, .. } | Draw::Turned { tex, .. } if tex == t))
             .expect("layer drawn")
     };
     assert!(at(interior) < at(board) && at(board) < at(face));
@@ -1100,7 +1109,7 @@ fn a_clear_pak_draws_its_interior_then_the_board_then_the_plastic() {
     s.draw_row(Canvas::FRAMED, None, 0.0, 0.0, 1.0, &mut out);
     let at = |t: TexId| {
         out.iter()
-            .position(|d| matches!(*d, Draw::Tex { tex, .. } if tex == t))
+            .position(|d| matches!(*d, Draw::Tex { tex, .. } | Draw::Turned { tex, .. } if tex == t))
             .expect("layer drawn")
     };
     assert!(at(interior) < at(board) && at(board) < at(face));
@@ -1206,7 +1215,11 @@ fn face_spans(s: &Shelf, n: usize) -> Vec<Option<(f32, f32)>> {
     (0..n)
         .map(|i| {
             out.iter().find_map(|d| match *d {
-                Draw::Tex { x, w, tex, .. } if tex == TexId::from_raw(60 + i) => Some((x, x + w)),
+                Draw::Tex { x, w, tex, .. } | Draw::Turned { x, w, tex, .. }
+                    if tex == TexId::from_raw(60 + i) =>
+                {
+                    Some((x, x + w))
+                }
                 _ => None,
             })
         })
@@ -1290,7 +1303,7 @@ fn a_mixed_row_does_not_jump_when_the_selection_moves() {
 fn only_a_starred_cart_glows_behind_its_face() {
     let glow = TexId::from_raw(9);
     let mut s = shelf_with(3);
-    s.set_glow(slot_store::FavoriteMark::GoldGlow, Mould::Gba, glow);
+    s.set_glow(Mould::Gba, glow);
     s.mark_starred(|c| c.stem == "Game 1");
     s.select(1);
     settle(&mut s);

@@ -33,8 +33,13 @@ pub struct Update {
     uploading: AtomicBool,
     /// What the newest GitHub release says about itself, shown under the update.
     notes: Mutex<Notes>,
-    /// A newer BaseOS than the console runs: only told, the user installs it.
+    /// A newer BaseOS than the console runs, and the update file made for this console.
     baseos: Mutex<Option<BaseOs>>,
+    /// The BaseOS update file coming in from GitHub.
+    baseos_job: Mutex<BaseJob>,
+    /// The newest BaseOS on GitHub and its page, from the last look, so the page can say the
+    /// console is up to date.
+    baseos_seen: Mutex<Option<(String, String)>>,
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -42,11 +47,30 @@ struct BaseOs {
     installed: String,
     version: String,
     link: String,
+    /// This console's BaseOS target, such as rg35xxplus.
+    target: String,
+    /// The one .bosupd of the release that is made for this target: file name and address.
+    asset: Option<(String, String)>,
 }
+
+#[derive(Clone, PartialEq, Debug)]
+enum BaseJob {
+    Idle,
+    Checking,
+    Downloading { done: u64, total: u64 },
+    Failed(String),
+}
+
+/// Big enough for a BaseOS update, which carries a whole system.
+const MAX_BOSUPD: u64 = 1 << 30;
+/// Left on the card by Install on the page; the console sees it and restarts so BaseOS
+/// takes the update file from the card root.
+pub const BASEOS_INSTALL: &str = ".baseos-install";
 
 /// BaseOS releases, the same place slot.'s own updater looks.
 const BASEOS_LATEST: &str = "https://api.github.com/repos/pvaibhav/BaseOS/releases/latest";
 const BASEOS_RELEASE: &str = "/etc/baseos-release";
+const BASEOS_PAGE: &str = "https://github.com/pvaibhav/BaseOS/releases";
 
 /// A release's own notes (its Markdown body) and its page on GitHub.
 #[derive(Clone, Default, PartialEq, Debug)]
@@ -69,6 +93,8 @@ pub static UPDATE: Update = Update {
         link: String::new(),
     }),
     baseos: Mutex::new(None),
+    baseos_job: Mutex::new(BaseJob::Idle),
+    baseos_seen: Mutex::new(None),
 };
 
 /// Left in System.new by Install on the page; the console sees it and restarts.
@@ -112,13 +138,36 @@ impl Update {
         } else {
             (notes.text, notes.link)
         };
-        let baseos = match self.baseos.lock().unwrap().clone() {
-            Some(b) => format!(
-                "{{\"installed\":{},\"version\":{},\"link\":{}}}",
-                crate::web::quote(&b.installed),
-                crate::web::quote(&b.version),
-                crate::web::quote(&b.link),
-            ),
+        let baseos = match baseos_local() {
+            Some((installed, target)) => {
+                let offer = self.baseos.lock().unwrap().clone();
+                let seen = self.baseos_seen.lock().unwrap().clone();
+                let file = offer.as_ref().and_then(|b| b.asset.as_ref()).map(|(name, _)| name.clone());
+                let on_card = file.as_ref().is_some_and(|f| root.join(f).is_file());
+                let (state, done, total, error) = match self.baseos_job.lock().unwrap().clone() {
+                    BaseJob::Checking => ("checking", 0, 0, String::new()),
+                    BaseJob::Downloading { done, total } => ("downloading", done, total, String::new()),
+                    BaseJob::Failed(e) => ("failed", 0, 0, e),
+                    BaseJob::Idle if on_card => ("ready", 0, 0, String::new()),
+                    BaseJob::Idle if offer.is_some() => ("available", 0, 0, String::new()),
+                    BaseJob::Idle if seen.is_some() => ("latest", 0, 0, String::new()),
+                    BaseJob::Idle => ("idle", 0, 0, String::new()),
+                };
+                let (version, link) = match (&offer, seen) {
+                    (Some(b), _) => (b.version.clone(), b.link.clone()),
+                    (None, Some(seen)) => seen,
+                    (None, None) => (String::new(), BASEOS_PAGE.to_string()),
+                };
+                format!(
+                    "{{\"installed\":{},\"version\":{},\"link\":{},\"target\":{},\"file\":{},\"state\":\"{state}\",\"done\":{done},\"total\":{total},\"error\":{}}}",
+                    crate::web::quote(&installed),
+                    crate::web::quote(&version),
+                    crate::web::quote(&link),
+                    crate::web::quote(&target),
+                    file.as_deref().map_or("null".to_string(), crate::web::quote),
+                    crate::web::quote(&error),
+                )
+            }
             None => "null".to_string(),
         };
         format!(
@@ -139,7 +188,8 @@ impl Update {
         self.set(Status::Checking);
         let installed = installed(root);
         std::thread::spawn(move || {
-            *self.baseos.lock().unwrap() = newer_baseos();
+            // A look for BaseOS that fails says nothing here: it has its own button.
+            let _ = self.baseos_look();
             let found = newest();
             if let Ok((version, _, notes)) = &found {
                 *self.notes.lock().unwrap() = Notes {
@@ -173,7 +223,7 @@ impl Update {
             total: 0,
         });
         std::thread::spawn(move || {
-            let result = fetch(&url, &root, |done, total| {
+            let result = fetch(&url, &root, ".update.zip", MAX_ZIP, |done, total| {
                 self.set(Status::Downloading {
                     version: version.clone(),
                     done,
@@ -191,6 +241,80 @@ impl Update {
             });
         });
         Ok(())
+    }
+
+    /// Asks GitHub for the newest BaseOS, on its own thread, for the BaseOS card's own button.
+    pub fn baseos_check(&'static self) -> Result<(), &'static str> {
+        {
+            let mut job = self.baseos_job.lock().unwrap();
+            if matches!(*job, BaseJob::Checking | BaseJob::Downloading { .. }) {
+                return Err("Already busy with BaseOS");
+            }
+            *job = BaseJob::Checking;
+        }
+        std::thread::spawn(move || {
+            let result = self.baseos_look();
+            *self.baseos_job.lock().unwrap() = match result {
+                Ok(()) => BaseJob::Idle,
+                Err(e) => BaseJob::Failed(e.into()),
+            };
+        });
+        Ok(())
+    }
+
+    /// Looks on GitHub and keeps what it found: the newest version, and the update when newer.
+    fn baseos_look(&self) -> Result<(), &'static str> {
+        let (installed, target) = baseos_local().ok_or("This console doesn't say its BaseOS version")?;
+        let body = baseos_latest()?;
+        let version = string(&body, "tag_name").ok_or("GitHub sent no BaseOS release")?;
+        let link = string(&body, "html_url").unwrap_or_else(|| BASEOS_PAGE.to_string());
+        *self.baseos_seen.lock().unwrap() = Some((version.trim_start_matches('v').to_string(), link));
+        *self.baseos.lock().unwrap() = baseos_offer(&body, &installed, &target);
+        Ok(())
+    }
+
+    /// Fetches this console's BaseOS update file into the card root, on its own thread.
+    pub fn baseos_download(&'static self, root: &Path) -> Result<(), &'static str> {
+        let Some((name, url)) = self.baseos.lock().unwrap().clone().and_then(|b| b.asset) else {
+            return Err("There is no BaseOS update for this console to fetch");
+        };
+        {
+            let mut job = self.baseos_job.lock().unwrap();
+            if matches!(*job, BaseJob::Checking | BaseJob::Downloading { .. }) || self.busy() {
+                return Err("Already busy with an update");
+            }
+            *job = BaseJob::Downloading { done: 0, total: 0 };
+        }
+        let root = root.to_path_buf();
+        std::thread::spawn(move || {
+            let part = ".baseos.part";
+            let result = fetch(&url, &root, part, MAX_BOSUPD, |done, total| {
+                *self.baseos_job.lock().unwrap() = BaseJob::Downloading { done, total }
+            })
+            .and_then(|path| fs::rename(path, root.join(&name)).map_err(|_| "The card can't be written"));
+            *self.baseos_job.lock().unwrap() = match result {
+                Ok(()) => BaseJob::Idle,
+                Err(e) => BaseJob::Failed(e.into()),
+            };
+        });
+        Ok(())
+    }
+
+    /// Asks the console to restart; BaseOS installs the update file in the card root at start.
+    pub fn baseos_install(&self, root: &Path) -> Result<(), &'static str> {
+        let file = self
+            .baseos
+            .lock()
+            .unwrap()
+            .clone()
+            .and_then(|b| b.asset)
+            .map(|(name, _)| name);
+        match file {
+            Some(f) if root.join(&f).is_file() => {
+                fs::write(root.join(BASEOS_INSTALL), b"").map_err(|_| "The card can't be written")
+            }
+            _ => Err("The BaseOS update is not on the card yet"),
+        }
     }
 
     pub fn install(&self, root: &Path) -> Result<(), &'static str> {
@@ -294,35 +418,65 @@ fn newest() -> Result<(String, String, Notes), &'static str> {
     Ok((version, url, release_notes(&body)))
 }
 
-/// A BaseOS release newer than the one running, or None when it can't be told.
-fn newer_baseos() -> Option<BaseOs> {
+/// The BaseOS this console runs and its target, read from the system, without GitHub.
+fn baseos_local() -> Option<(String, String)> {
+    let release = fs::read_to_string(BASEOS_RELEASE).unwrap_or_default();
     let installed = std::env::var("BASEOS_VERSION")
         .ok()
-        .or_else(|| baseos_version(&fs::read_to_string(BASEOS_RELEASE).ok()?))?;
-    let body = agent()
+        .or_else(|| baseos_version(&release))
+        .filter(|v| !v.is_empty())?;
+    let target = std::env::var("BASEOS_TARGET")
+        .ok()
+        .or_else(|| baseos_value(&release, "BASEOS_TARGET"))
+        .unwrap_or_default();
+    Some((installed, target))
+}
+
+/// The newest BaseOS release, as GitHub tells it.
+fn baseos_latest() -> Result<String, &'static str> {
+    agent()
         .get(BASEOS_LATEST)
         .header("Accept", "application/vnd.github+json")
         .config()
         .timeout_global(Some(Duration::from_secs(20)))
         .build()
         .call()
-        .ok()?
+        .map_err(|_| "Can't reach GitHub. Is Wi-Fi on?")?
         .body_mut()
         .with_config()
         .limit(1 << 20)
         .read_to_string()
-        .ok()?;
-    baseos_offer(&body, &installed)
+        .map_err(|_| "GitHub's answer didn't come through")
 }
 
 fn baseos_version(release: &str) -> Option<String> {
+    baseos_value(release, "BASEOS_VERSION")
+}
+
+fn baseos_value(release: &str, key: &str) -> Option<String> {
     release.lines().find_map(|line| {
         let (k, v) = line.trim().split_once('=')?;
-        (k == "BASEOS_VERSION").then(|| v.trim_matches('"').to_string())
+        (k == key).then(|| v.trim_matches('"').to_string())
     })
 }
 
-fn baseos_offer(json: &str, installed: &str) -> Option<BaseOs> {
+/// The release's one .bosupd made for this console: exactly one file name carrying the target,
+/// otherwise nothing is offered and the page only links to the release.
+fn baseos_asset(json: &str, target: &str) -> Option<(String, String)> {
+    if target.is_empty() {
+        return None;
+    }
+    let target = target.to_ascii_lowercase();
+    let mut found = strings(json, "browser_download_url").into_iter().filter_map(|url| {
+        let file = url.rsplit('/').next()?.to_string();
+        let lower = file.to_ascii_lowercase();
+        (lower.ends_with(".bosupd") && lower.contains(&target)).then_some((file, url))
+    });
+    let one = found.next()?;
+    found.next().is_none().then_some(one)
+}
+
+fn baseos_offer(json: &str, installed: &str, target: &str) -> Option<BaseOs> {
     let version = string(json, "tag_name")?.trim_start_matches('v').to_string();
     if !newer(&version, installed) || installed.is_empty() {
         return None;
@@ -331,6 +485,8 @@ fn baseos_offer(json: &str, installed: &str) -> Option<BaseOs> {
         installed: installed.to_string(),
         version,
         link: string(json, "html_url")?,
+        target: target.to_string(),
+        asset: baseos_asset(json, target),
     })
 }
 
@@ -412,7 +568,13 @@ fn strings(json: &str, key: &str) -> Vec<String> {
         .collect()
 }
 
-fn fetch(url: &str, root: &Path, mut progress: impl FnMut(u64, u64)) -> Result<PathBuf, &'static str> {
+fn fetch(
+    url: &str,
+    root: &Path,
+    dest: &str,
+    max: u64,
+    mut progress: impl FnMut(u64, u64),
+) -> Result<PathBuf, &'static str> {
     let mut response = agent()
         .get(url)
         .call()
@@ -422,16 +584,16 @@ fn fetch(url: &str, root: &Path, mut progress: impl FnMut(u64, u64)) -> Result<P
         .get("content-length")
         .and_then(|v| v.to_str().ok()?.parse().ok())
         .unwrap_or(0u64);
-    if total > MAX_ZIP {
+    if total > max {
         return Err("That release is too big");
     }
     if total * 3 > crate::web::free(root) {
         return Err("The card is full");
     }
-    let zip = root.join(".update.zip");
+    let zip = root.join(dest);
     let written = (|| -> std::io::Result<()> {
         let mut f = File::create(&zip)?;
-        let mut body = response.body_mut().with_config().limit(MAX_ZIP).reader();
+        let mut body = response.body_mut().with_config().limit(max).reader();
         let mut buf = vec![0u8; 64 << 10];
         let mut done = 0u64;
         loop {
@@ -485,13 +647,35 @@ fn unpack(zip: &Path, root: &Path) -> Result<String, &'static str> {
         // slot-x-gravy-v1.1.2/System/slot, or System/slot when zipped without the folder.
         let mut parts = path.components().map(|c| c.as_os_str().to_string_lossy().into_owned());
         let first = parts.next().unwrap_or_default();
-        let rest: Vec<String> = if first == "System" {
-            parts.collect()
-        } else if parts.next().as_deref() == Some("System") {
-            parts.collect()
+        let top = if first == "System" || first == "Wallpapers" {
+            first
         } else {
-            continue;
+            parts.next().unwrap_or_default()
         };
+        let rest: Vec<String> = parts.collect();
+        if top == "Wallpapers" {
+            // A wallpaper the release brings is put on the card when it is not there yet; one
+            // the player already has (or changed) is left alone.
+            if let [name] = rest.as_slice() {
+                let to = root.join("Wallpapers").join(name);
+                if !entry.is_dir() && !to.exists() && fs::create_dir_all(root.join("Wallpapers")).is_ok() {
+                    let tmp = to.with_extension("part");
+                    let copied = File::create(&tmp).and_then(|mut f| {
+                        std::io::copy(&mut entry, &mut f)?;
+                        f.sync_all()
+                    });
+                    if copied.is_ok() {
+                        let _ = fs::rename(&tmp, &to);
+                    } else {
+                        let _ = fs::remove_file(&tmp);
+                    }
+                }
+            }
+            continue;
+        }
+        if top != "System" {
+            continue;
+        }
         if rest.is_empty() {
             continue;
         }
@@ -526,13 +710,28 @@ mod tests {
     use super::*;
 
     #[test]
+    fn baseos_offers_only_the_one_file_for_this_console() {
+        let json = r#"{"tag_name":"v1.6.0","html_url":"x","assets":[
+            {"browser_download_url":"https://github.com/pvaibhav/BaseOS/releases/download/v1.6.0/BaseOS-rg35xxplus-1.6.0.bosupd"},
+            {"browser_download_url":"https://github.com/pvaibhav/BaseOS/releases/download/v1.6.0/BaseOS-rg40xxh-1.6.0.bosupd"},
+            {"browser_download_url":"https://github.com/pvaibhav/BaseOS/releases/download/v1.6.0/BaseOS-rg35xxplus-1.6.0.img.xz"}]}"#;
+        let b = baseos_offer(json, "1.5.2", "rg35xxplus").unwrap();
+        assert_eq!(b.asset.unwrap().0, "BaseOS-rg35xxplus-1.6.0.bosupd");
+        // No target, another console's target or two matches: only the link.
+        assert!(baseos_offer(json, "1.5.2", "").unwrap().asset.is_none());
+        assert!(baseos_offer(json, "1.5.2", "rg28xx").unwrap().asset.is_none());
+        assert!(baseos_offer(json, "1.5.2", "rg").unwrap().asset.is_none());
+    }
+
+    #[test]
     fn a_newer_baseos_is_only_told() {
         let json = r#"{"html_url":"https://github.com/pvaibhav/BaseOS/releases/tag/v1.6.0","tag_name":"v1.6.0"}"#;
-        let b = baseos_offer(json, "1.5.2").unwrap();
+        let b = baseos_offer(json, "1.5.2", "rg35xxplus").unwrap();
+        assert!(b.asset.is_none());
         assert_eq!((b.version.as_str(), b.installed.as_str()), ("1.6.0", "1.5.2"));
         assert!(b.link.ends_with("/v1.6.0"));
-        assert!(baseos_offer(json, "1.6.0").is_none());
-        assert!(baseos_offer(json, "").is_none());
+        assert!(baseos_offer(json, "1.6.0", "rg35xxplus").is_none());
+        assert!(baseos_offer(json, "", "rg35xxplus").is_none());
         assert_eq!(
             baseos_version("BASEOS_TARGET=rg35xxplus\nBASEOS_VERSION=\"1.5.2\"\n").as_deref(),
             Some("1.5.2")
@@ -581,13 +780,20 @@ mod tests {
             ("slot-x-gravy-v1.2/System/version.txt", "v1.2\n"),
             ("slot-x-gravy-v1.2/System/licenses/a.txt", "a"),
             ("slot-x-gravy-v1.2/Config/wifi.toml.example", "x"),
+            ("slot-x-gravy-v1.2/Wallpapers/Retro Vibes.png", "new"),
+            ("slot-x-gravy-v1.2/Wallpapers/Mine.png", "theirs"),
         ] {
             w.start_file(name, o).unwrap();
             w.write_all(body.as_bytes()).unwrap();
         }
         w.finish().unwrap();
+        fs::create_dir_all(r.join("Wallpapers")).unwrap();
+        fs::write(r.join("Wallpapers/Mine.png"), "mine").unwrap();
         assert_eq!(unpack(&zip, r).unwrap(), "v1.2");
         assert_eq!(fs::read_to_string(r.join("System.new/licenses/a.txt")).unwrap(), "a");
+        // New wallpapers land on the card, the player's own stay as they are.
+        assert_eq!(fs::read_to_string(r.join("Wallpapers/Retro Vibes.png")).unwrap(), "new");
+        assert_eq!(fs::read_to_string(r.join("Wallpapers/Mine.png")).unwrap(), "mine");
         assert!(!r.join("System.new/wifi.toml.example").exists());
         assert!(!r.join("Config").exists());
         assert_eq!(ready(r).as_deref(), Some("v1.2"));

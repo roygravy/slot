@@ -129,13 +129,16 @@ pub fn board_x(canvas: Canvas) -> f32 {
     canvas.centred(BOARD_W as f32)
 }
 
-pub const BOARD_Y: f32 = 150.0;
+/// The open cart held up a little smaller than the shelf's, so the page breathes between the
+/// lid above and the help line below (Roy 2026-11-07).
+pub const BOARD_REST: f32 = 0.86;
+pub const BOARD_Y: f32 = 160.0;
 
 pub const TURN_PAD: u32 = 2;
 
 pub const LID_TURN: f32 = -5.0 * std::f32::consts::PI / 180.0;
 pub const CHIP_TIP: f32 = 4.0 * std::f32::consts::PI / 180.0;
-pub const HOP_LIFT: f32 = 10.0;
+pub const HOP_LIFT: f32 = 14.0;
 
 pub const SLIDE_SHARE: f32 = 160.0 / 420.0;
 pub const SLIDE_UP: f32 = CART_H as f32 / 3.0;
@@ -168,14 +171,16 @@ const CHIP_INK: [u8; 3] = [0xf2, 0xf2, 0xf2];
 
 fn lid_rest(canvas: Canvas) -> Placed {
     Placed {
-        x: canvas.centred(144.0),
+        x: canvas.centred(LID_REST_SCALE * CART_W as f32),
         y: 70.5 - LID_REST_H / 2.0,
-        w: 144.0,
+        w: LID_REST_SCALE * CART_W as f32,
         h: LID_REST_H,
     }
 }
 
 const LID_REST_H: f32 = 144.0 * CART_H as f32 / CART_W as f32;
+/// The held-up lid's width over the shelf cart's.
+pub const LID_REST_SCALE: f32 = 144.0 / CART_W as f32;
 
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub struct Placed {
@@ -204,11 +209,12 @@ pub fn board_at(canvas: Canvas, progress: f32) -> Placed {
 }
 
 pub fn board_from(canvas: Canvas, shelf: Placed, progress: f32) -> Placed {
+    let (w, h) = (BOARD_W as f32 * BOARD_REST, BOARD_H as f32 * BOARD_REST);
     let rest = Placed {
-        x: board_x(canvas),
+        x: canvas.centred(w),
         y: BOARD_Y,
-        w: BOARD_W as f32,
-        h: BOARD_H as f32,
+        w,
+        h,
     };
     lerp(board_in(shelf), rest, lift_of(progress))
 }
@@ -228,8 +234,16 @@ pub fn lid_from(canvas: Canvas, shelf: Placed, progress: f32) -> (Placed, f32) {
         y: shelf.y - SLIDE_UP * slide_of(progress),
         ..shelf
     };
-    let lift = lift_of(progress);
+    let lift = lid_lift_of(progress);
     (lerp(slid, lid_rest(canvas), lift), LID_TURN * lift)
+}
+
+/// The lid starts its flight up halfway through its slide, so it never stops between the two:
+/// one smooth movement off the cart and up, as the studio's cart (Roy 2026-11-13).
+pub const LID_LIFT_FROM: f32 = SLIDE_SHARE / 2.0;
+
+pub fn lid_lift_of(progress: f32) -> f32 {
+    ease(((progress - LID_LIFT_FROM) / (1.0 - LID_LIFT_FROM)).clamp(0.0, 1.0))
 }
 
 const UNITS_W: f32 = 240.0;
@@ -272,6 +286,42 @@ pub fn padded(face: &CartFace, pad: u32) -> CartFace {
         let from = (row * face.w * 4) as usize;
         let to = (((row + pad) * w + pad) * 4) as usize;
         rgba[to..to + stride].copy_from_slice(&face.rgba[from..from + stride]);
+    }
+    CartFace { rgba, w, h }
+}
+
+/// `face` made smaller with every source pixel counted (alpha-weighted), not sampled: the
+/// core picker's lid, held up at 0.4 of its size, drawn from this stays smooth instead of
+/// pixelating as the GPU skips pixels (Roy, xe2).
+pub fn shrunk(face: &CartFace, w: u32, h: u32) -> CartFace {
+    let (sw, sh) = (face.w as f32, face.h as f32);
+    let (kx, ky) = (sw / w as f32, sh / h as f32);
+    let mut rgba = vec![0u8; (w * h * 4) as usize];
+    for y in 0..h {
+        let (y0, y1) = (y as f32 * ky, (y + 1) as f32 * ky);
+        for x in 0..w {
+            let (x0, x1) = (x as f32 * kx, (x + 1) as f32 * kx);
+            let mut acc = [0.0f32; 4];
+            for sy in y0 as u32..(y1.ceil() as u32).min(face.h) {
+                let wy = (y1.min(sy as f32 + 1.0) - y0.max(sy as f32)).max(0.0);
+                for sx in x0 as u32..(x1.ceil() as u32).min(face.w) {
+                    let wx = (x1.min(sx as f32 + 1.0) - x0.max(sx as f32)).max(0.0);
+                    let i = ((sy * face.w + sx) * 4) as usize;
+                    let a = face.rgba[i + 3] as f32 * wx * wy;
+                    for k in 0..3 {
+                        acc[k] += face.rgba[i + k] as f32 * a;
+                    }
+                    acc[3] += a;
+                }
+            }
+            let o = ((y * w + x) * 4) as usize;
+            if acc[3] > 0.0 {
+                for k in 0..3 {
+                    rgba[o + k] = (acc[k] / acc[3]).round().clamp(0.0, 255.0) as u8;
+                }
+            }
+            rgba[o + 3] = (acc[3] / (kx * ky)).round().clamp(0.0, 255.0) as u8;
+        }
     }
     CartFace { rgba, w, h }
 }

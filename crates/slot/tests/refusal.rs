@@ -91,17 +91,15 @@ fn a_refused_cart_shows_an_alert_and_does_not_jitter() {
 }
 
 #[test]
-fn the_alert_is_gone_before_the_cart_is() {
+fn the_message_outlasts_the_cart() {
     let d = tmp_root_with_carts(&["Broken"]);
     let mut a = boot(d.path());
     a.on_core_failed();
-    assert!(a.alert_visible(), "the alert never appeared");
-    let mut last = 1.0;
+    assert!(a.alert_visible(), "the message never appeared");
     while matches!(a.phase(), Phase::Ejecting { .. }) {
-        last = a.alert_alpha();
         a.update(1.0 / 60.0);
     }
-    assert_eq!(last, 0.0, "the alert was still lit as the cart landed");
+    assert!(a.alert_visible(), "the message was gone before it could be read");
 }
 
 #[test]

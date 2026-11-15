@@ -34,14 +34,21 @@ uniform vec4 u_rect;
 uniform vec2 u_target;
 uniform vec2 u_turn;
 uniform vec4 u_src;
+uniform float u_soft;
 varying vec2 v_uv;
+varying vec4 v_edge;
 void main() {
-    v_uv = u_src.xy + a_pos * u_src.zw;
-    vec2 mid = u_rect.zw * 0.5;
-    vec2 local = a_pos * u_rect.zw - mid;
+    // A turned sprite grows a pixel on each side so its edge can fade out smoothly instead of
+    // stepping along the pixel grid (Roy: the swaying Game Boy pak looked jagged).
+    vec2 size = u_rect.zw;
+    vec2 px = a_pos * (size + 2.0 * u_soft) - u_soft;
+    v_uv = u_src.xy + (px / size) * u_src.zw;
+    v_edge = vec4(px, size - px);
+    vec2 mid = size * 0.5;
+    vec2 local = px - mid;
     vec2 turned = vec2(u_turn.x * local.x - u_turn.y * local.y,
                        u_turn.y * local.x + u_turn.x * local.y);
-    vec2 p = (u_rect.xy + a_pos * u_rect.zw + (turned - local)) / u_target;
+    vec2 p = (u_rect.xy + mid + turned) / u_target;
     gl_Position = vec4(p.x * 2.0 - 1.0, 1.0 - p.y * 2.0, 0.0, 1.0);
 }
 "#;
@@ -53,6 +60,7 @@ precision highp float;
 precision mediump float;
 #endif
 uniform sampler2D u_game;
+uniform sampler2D u_game_soft;
 uniform sampler2D u_paper;
 uniform sampler2D u_lcd_overlay;
 uniform vec2 u_src;
@@ -74,10 +82,12 @@ uniform float u_saturation;
 uniform float u_pale_opacity;
 uniform float u_panel_fixed;
 uniform float u_black_edge;
+uniform float u_sharp;
 uniform vec3 u_lcd_mix;
 uniform float u_grid_opacity;
 uniform float u_pixel_transparency;
 uniform vec2 u_tv;
+uniform mat3 u_tv_colors;
 uniform float u_backlight;
 varying vec2 v_uv;
 const vec3 offsets = vec3(3.141592654) * vec3(1.0 / 2.0, 1.0 / 2.0 - 2.0 / 3.0, 1.0 / 2.0 - 4.0 / 3.0);
@@ -110,6 +120,23 @@ void main() {
     vec2 span = 0.5 - 0.5 / px;
     vec2 sharp = (floor(uv * u_src) + (d - clamp(d, -span, span)) * px + 0.5) / u_src;
     vec3 c = texture2D(u_game, sharp).rgb;
+    if (u_sharp > 0.5 && u_mode < 5.5) {
+        // Sharp Shimmerless: scaled by no whole number, a screen pixel on the line between two
+        // of the game's takes each in the share it covers, so every pixel shows the same size.
+        // The game's texture is nearest, so the blend of the four round it is done here.
+        // The four stay inside the picture: past its edge the texture is black, which drew a
+        // thin dark line along the right and bottom (and top and left) edges.
+        vec2 p = sharp * u_src - 0.5;
+        vec2 i0 = floor(p);
+        vec2 t = p - i0;
+        vec2 lo = floor(u_pic.xy * u_src + 0.001);
+        vec2 hi = max(ceil(u_pic.zw * u_src - 0.001) - 1.0, lo);
+        vec3 a = texture2D(u_game, (clamp(i0, lo, hi) + 0.5) / u_src).rgb;
+        vec3 b = texture2D(u_game, (clamp(i0 + vec2(1.0, 0.0), lo, hi) + 0.5) / u_src).rgb;
+        vec3 e = texture2D(u_game, (clamp(i0 + vec2(0.0, 1.0), lo, hi) + 0.5) / u_src).rgb;
+        vec3 g = texture2D(u_game, (clamp(i0 + 1.0, lo, hi) + 0.5) / u_src).rgb;
+        c = mix(mix(a, b, t.x), mix(e, g, t.x), t.y);
+    }
     vec4 lcd = vec4(0.0);
     bool inside = all(greaterThanEqual(uv, u_pic.xy)) && all(lessThan(uv, u_pic.zw));
     if (!inside) {
@@ -173,7 +200,10 @@ void main() {
                     band_cover(lo.x, hi.x, 2.0 / 3.0, 1.0)) / (2.0 * w.x);
                 dark = band_cover(lo.y, hi.y, 2.0 / 3.0, 1.0) / (2.0 * w.y);
             }
-            c = mix(c, stripe, u_lcd_mix.y);
+            // The stripes half as strong on black as on white: bright on black they flickered
+            // as the device moved (Roy). The same on the GBA and the GBC.
+            float stripes = u_lcd_mix.y * mix(0.5, 1.0, clamp(dot(c, luma_coeff), 0.0, 1.0));
+            c = mix(c, stripe, stripes);
             c = mix(c, vec3(0.0), u_lcd_mix.x * dark);
             if (u_lcd_mix.z < 0.5) {
                 // The GBC's black, greyer the less light falls on its unlit panel.
@@ -218,6 +248,8 @@ void main() {
         c *= yfactor * xfactors;
     }
     if (inside) {
+        // A TV's decoder: the console's own colours, or a Trinitron's (identity on handhelds).
+        c = max(u_tv_colors * c, 0.0);
         c *= 1.0 - u_picture_dim;
         // How vivid the screen shows colour: a little less than the raw colours on a GBA.
         c = mix(vec3(dot(c, luma_coeff)), c, u_saturation);
@@ -239,18 +271,19 @@ void main() {
         float shadow_luma;
         vec3 shadow_rgb = vec3(0.0);
         if (u_shadow.z > 0.5) {
-            // Soft: a small blur over the pixel up and to the left, edges fading out.
+            // Soft: a small blur over the pixel up and to the left, edges fading out. Four
+            // smooth-filtered taps half a spread out make the same 1-2-1 blur as nine sharp
+            // ones a spread out, at less than half the cost (nine made GBA games slow, Roy).
             vec2 soft_uv = uv - texel * 0.85;
-            shadow_rgb = vec3(0.0);
-            for (int j = -1; j <= 1; j++) {
-                for (int i = -1; i <= 1; i++) {
-                    float w = (i == 0 ? 2.0 : 1.0) * (j == 0 ? 2.0 : 1.0) / 16.0;
-                    vec2 o = vec2(float(i), float(j)) * texel * spread;
-                    // Only the game's own pixels cast shadows: never sample past its picture.
-                    vec2 at = clamp(soft_uv + o, u_pic.xy + texel * 0.5, u_pic.zw - texel * 0.5);
-                    shadow_rgb += texture2D(u_game, at).rgb * w;
-                }
-            }
+            vec2 h = texel * spread * 0.5;
+            // Only the game's own pixels cast shadows: never sample past its picture.
+            vec2 lo = u_pic.xy + texel * 0.5;
+            vec2 hi = u_pic.zw - texel * 0.5;
+            shadow_rgb = texture2D(u_game_soft, clamp(soft_uv + vec2(-h.x, -h.y), lo, hi)).rgb;
+            shadow_rgb += texture2D(u_game_soft, clamp(soft_uv + vec2(h.x, -h.y), lo, hi)).rgb;
+            shadow_rgb += texture2D(u_game_soft, clamp(soft_uv + vec2(-h.x, h.y), lo, hi)).rgb;
+            shadow_rgb += texture2D(u_game_soft, clamp(soft_uv + h, lo, hi)).rgb;
+            shadow_rgb *= 0.25;
             shadow_luma = dot(shadow_rgb, luma_coeff);
         } else {
             shadow_luma = dot(texture2D(u_game, shadow_uv).rgb, luma_coeff) * 0.60;
@@ -294,12 +327,27 @@ void main() {
 "#;
 
 pub const SPRITE_FRAG: &str = r#"
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
 precision mediump float;
+#endif
 uniform sampler2D u_tex;
 uniform vec4 u_colour;
+uniform float u_soft;
+uniform float u_flat;
 varying vec2 v_uv;
+varying vec4 v_edge;
 void main() {
-    FRAG_COLOR = texture2D(u_tex, v_uv) * u_colour;
+    vec4 c = texture2D(u_tex, v_uv) * u_colour;
+    if (u_flat > 0.5) {
+        c = vec4(u_colour.rgb, texture2D(u_tex, v_uv).a * u_colour.a);
+    }
+    if (u_soft > 0.0) {
+        float d = min(min(v_edge.x, v_edge.z), min(v_edge.y, v_edge.w));
+        c.a *= clamp(d + 0.5, 0.0, 1.0);
+    }
+    FRAG_COLOR = c;
 }
 "#;
 
@@ -329,9 +377,13 @@ pub const BLIT_FRAG: &str = r#"
 precision mediump float;
 uniform sampler2D u_tex;
 uniform vec3 u_gain;
+uniform float u_sat;
 varying vec2 v_uv;
 void main() {
-    FRAG_COLOR = vec4(texture2D(u_tex, v_uv).rgb * u_gain, 1.0);
+    vec3 c = texture2D(u_tex, v_uv).rgb;
+    // The whole screen's colour (GRAVY Manager > Screen): 1.0 as the picture came.
+    c = clamp(mix(vec3(dot(c, vec3(0.2126, 0.7152, 0.0722))), c, u_sat), 0.0, 1.0);
+    FRAG_COLOR = vec4(c * u_gain, 1.0);
 }
 "#;
 
@@ -340,9 +392,11 @@ precision mediump float;
 uniform sampler2D u_tex;
 uniform vec3 u_gain;
 uniform float u_alpha;
+uniform float u_sat;
 varying vec2 v_uv;
 void main() {
     vec4 c = texture2D(u_tex, v_uv);
-    FRAG_COLOR = vec4(c.rgb * u_gain, c.a * u_alpha);
+    vec3 rgb = clamp(mix(vec3(dot(c.rgb, vec3(0.2126, 0.7152, 0.0722))), c.rgb, u_sat), 0.0, 1.0);
+    FRAG_COLOR = vec4(rgb * u_gain, c.a * u_alpha);
 }
 "#;

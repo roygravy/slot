@@ -294,6 +294,11 @@ impl TcpLink {
         let _ = wrote.recv_timeout(Duration::from_millis(BYE_MS));
     }
 
+    /// The other handheld's address: a Game Boy link dials it from the core (gambatte).
+    pub fn peer_ip(&self) -> Option<std::net::IpAddr> {
+        self.stream.peer_addr().ok().map(|a| a.ip())
+    }
+
     pub fn nodelay(&self) -> std::io::Result<bool> {
         self.stream.nodelay()
     }

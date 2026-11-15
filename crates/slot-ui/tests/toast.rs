@@ -270,7 +270,7 @@ fn the_card_alarm_is_drawn_over_the_volume_bar() {
 fn the_card_alarm_says_what_failed_and_what_it_costs() {
     assert_eq!(Toast::CardUnwritable.text(), "Can't write to SD card");
     assert_eq!(
-        Toast::CardUnwritable.detail(),
+        Toast::CardUnwritable.detail().as_deref(),
         Some("Progress is not being saved")
     );
     assert_eq!(Toast::StateSaved.detail(), None);

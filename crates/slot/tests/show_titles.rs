@@ -50,8 +50,10 @@ fn press(a: &mut App, btn: Btn) {
 fn title_alpha(a: &App) -> Option<f32> {
     let mut out = Vec::new();
     a.draw(&mut out);
-    out.iter().find_map(|d| match *d {
+    // The title is drawn tinted with the menu ink, over its own drop shadow: the last one.
+    out.iter().rev().find_map(|d| match *d {
         Draw::Tex { tex, alpha, .. } if tex == TexId::from_raw(TITLE) => Some(alpha),
+        Draw::Tint { tex, colour, .. } if tex == TexId::from_raw(TITLE) => Some(colour[3]),
         _ => None,
     })
 }
@@ -86,17 +88,57 @@ fn show_titles_is_flipped_from_the_general_page_and_saved() {
         press(&mut a, Btn::Down);
     }
     press(&mut a, Btn::A);
-    for _ in 0..QuickRow::ShowTitles.position(a.hidden_rows()) {
+    for _ in 0..QuickRow::ShowTitles.position(&a.hidden_rows()) {
         press(&mut a, Btn::Down);
     }
     assert_eq!(a.quick_menu(), Some(QuickRow::ShowTitles));
-    assert_eq!(a.quick_value(QuickRow::ShowTitles), Some(QuickValue::Hide));
+    assert_eq!(a.quick_value(QuickRow::ShowTitles), Some(QuickValue::BorderOff));
+    // Fade first, then Always, then Off (Roy 2026-11-13).
     press(&mut a, Btn::Right);
-    assert_eq!(a.quick_value(QuickRow::ShowTitles), Some(QuickValue::Show));
+    assert_eq!(a.quick_value(QuickRow::ShowTitles), Some(QuickValue::Fade));
+    let saved = read_slot_state(d.path());
+    assert!(saved.show_titles && saved.fade_titles, "Fade was not saved");
+    press(&mut a, Btn::Right);
+    assert_eq!(a.quick_value(QuickRow::ShowTitles), Some(QuickValue::Always));
     assert!(
         read_slot_state(d.path()).show_titles,
         "the choice was not saved"
     );
+    press(&mut a, Btn::Right);
+    assert_eq!(a.quick_value(QuickRow::ShowTitles), Some(QuickValue::BorderOff));
+    press(&mut a, Btn::Left);
+    assert_eq!(a.quick_value(QuickRow::ShowTitles), Some(QuickValue::Always));
+}
+
+#[test]
+fn fading_titles_come_up_with_each_pick_and_go_again() {
+    let d = card();
+    write_gb_cart(&d, "Wario", "WARIO");
+    write_slot_state(
+        d.path(),
+        &SlotState {
+            clock_set: true,
+            show_titles: true,
+            fade_titles: true,
+            ..SlotState::default()
+        },
+    )
+    .unwrap();
+    let mut a = App::boot(d.path());
+    a.set_shelf_title_face(TexId::from_raw(TITLE), 120);
+    a.set_shelf_platform_face(TexId::from_raw(RACK), 80);
+    tick(&mut a, 2.6);
+    let up = title_alpha(&a).unwrap_or(0.0);
+    assert!(up > 0.9, "the title did not take over from the console name: {up}");
+    tick(&mut a, 3.0);
+    assert_eq!(title_alpha(&a).unwrap_or(0.0), 0.0, "the title did not fade away");
+    press(&mut a, Btn::Right);
+    tick(&mut a, 0.5);
+    assert_eq!(a.title_text().as_deref(), Some("Wario"));
+    let back = title_alpha(&a).unwrap_or(0.0);
+    assert!(back > 0.9, "the title did not come back on a new pick: {back}");
+    tick(&mut a, 3.0);
+    assert_eq!(title_alpha(&a).unwrap_or(0.0), 0.0, "the title stayed up");
 }
 
 #[test]

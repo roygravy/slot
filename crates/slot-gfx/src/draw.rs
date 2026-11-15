@@ -57,6 +57,16 @@ pub enum Draw {
         tex: TexId,
         colour: [f32; 4],
     },
+    /// A texture's shape in one flat colour (its alpha times the colour's): a small drop shadow
+    /// under text and icons whatever their own ink.
+    Shade {
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+        tex: TexId,
+        colour: [f32; 4],
+    },
     /// A texture added onto what is below it, as light is: it brightens, never paints over.
     Light {
         x: f32,
@@ -79,6 +89,8 @@ pub struct Sprites {
     u_rect: gl::types::GLint,
     u_colour: gl::types::GLint,
     u_turn: gl::types::GLint,
+    u_soft: gl::types::GLint,
+    u_flat: gl::types::GLint,
     u_target: gl::types::GLint,
     u_src: gl::types::GLint,
 }
@@ -94,7 +106,7 @@ impl Sprites {
             gl::RGBA,
             Some(&[255u8; 4]),
         );
-        let (u_rect, u_colour, u_turn, u_target, u_src);
+        let (u_rect, u_colour, u_turn, u_soft, u_flat, u_target, u_src);
         unsafe {
             gl::UseProgram(prog);
             gl::Uniform1i(crate::gl::uniform_location(prog, "u_tex"), 0);
@@ -104,6 +116,8 @@ impl Sprites {
             u_rect = crate::gl::uniform_location(prog, "u_rect");
             u_colour = crate::gl::uniform_location(prog, "u_colour");
             u_turn = crate::gl::uniform_location(prog, "u_turn");
+            u_soft = crate::gl::uniform_location(prog, "u_soft");
+            u_flat = crate::gl::uniform_location(prog, "u_flat");
         }
         Ok(Sprites {
             prog,
@@ -112,6 +126,8 @@ impl Sprites {
             u_rect,
             u_colour,
             u_turn,
+            u_soft,
+            u_flat,
             u_target,
             u_src,
         })
@@ -234,6 +250,17 @@ impl Sprites {
                     Some(t) => (x, y, w, h, *t, colour, 0.0, whole),
                     None => continue,
                 },
+                Draw::Shade {
+                    x,
+                    y,
+                    w,
+                    h,
+                    tex,
+                    colour,
+                } => match self.textures.get(tex.0) {
+                    Some(t) => (x, y, w, h, *t, colour, 0.0, whole),
+                    None => continue,
+                },
                 Draw::Light {
                     x,
                     y,
@@ -256,6 +283,8 @@ impl Sprites {
                 gl::BindTexture(gl::TEXTURE_2D, tex);
                 gl::Uniform4f(self.u_rect, x, y, w, h);
                 gl::Uniform2f(self.u_turn, cos, sin);
+                gl::Uniform1f(self.u_soft, if turn == 0.0 { 0.0 } else { 1.0 });
+                gl::Uniform1f(self.u_flat, matches!(item, Draw::Shade { .. }) as u8 as f32);
                 gl::Uniform4f(self.u_src, uv[0], uv[1], uv[2], uv[3]);
                 gl::Uniform4f(self.u_colour, colour[0], colour[1], colour[2], colour[3]);
             }

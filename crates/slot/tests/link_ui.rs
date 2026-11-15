@@ -20,7 +20,7 @@ use slot::session::Session;
 use slot_input::{Action, Btn, Millis, RawEvent};
 use slot_retro::{ButtonMask, LinkChannel};
 use slot_store::{write_slot_state, Core, Platform, SlotState};
-use slot_ui::{arrows_hint_face, hint_face, Draw, TexId, Toast, FOOTER_Y, HINT_EDGE, OUT_H, OUT_W};
+use slot_ui::{arrows_hint_face, hint_face, Draw, TexId, Toast, HINT_EDGE, OUT_H, OUT_W};
 use tempfile::TempDir;
 
 const BAIL: Duration = Duration::from_secs(5);
@@ -53,6 +53,20 @@ fn fake_starter(
 
 fn io_err(kind: io::ErrorKind) -> io::Error {
     io::Error::new(kind, "from a test")
+}
+
+/// Lets the plug come back out after a cancel: the role picker stays up (Roy 2026-11-13), and
+/// a second B closes it.
+fn unplugged(app: &mut App) {
+    for _ in 0..((UNPLUG_HOLD_MS / 16 + 4) as usize) {
+        app.update(1.0 / 60.0);
+    }
+    assert!(
+        matches!(app.game_menu(), Some(GameMenu::Pick(_))),
+        "the plug came out but the picker went: {:?}",
+        app.game_menu()
+    );
+    app.apply(Action::GbaDown(Btn::B));
 }
 
 fn settle(app: &mut App) {
@@ -245,6 +259,13 @@ fn a_cancelled_link_says_nothing_and_returns_to_the_game() {
     app.update(1.0 / 60.0);
     app.apply(Action::GbaDown(Btn::B));
     settle(&mut app);
+    // Cancel is not Close (Roy 2026-11-13): the plug comes back out first.
+    assert!(
+        matches!(app.game_menu(), Some(GameMenu::Unplug { .. })),
+        "B did not pull the plug back out: {:?}",
+        app.game_menu()
+    );
+    unplugged(&mut app);
     assert!(!app.game_menu_open(), "the cancel left a screen behind");
     assert!(matches!(app.phase(), Phase::Playing { .. }));
 }
@@ -357,6 +378,7 @@ fn b_during_the_radio_step_does_not_hand_the_game_back_early() {
     );
     release.send(()).expect("release the radio");
     settle(&mut app);
+    unplugged(&mut app);
     assert!(!app.game_menu_open(), "the cancel never landed at all");
 }
 
@@ -751,8 +773,11 @@ fn fake_link_sprites() -> slot::link_screen::LinkSprites {
     };
     slot::link_screen::LinkSprites {
         port: s(1),
+        port_shade: s(31),
         plug_host: s(2),
         plug_join: s(3),
+        plug_gb: s(30),
+        plug_gb_join: s(30),
         adapter: s(4),
         arcs_right: [s(7), s(8), s(9)],
         arcs_left: [s(10), s(11), s(12)],
@@ -1020,6 +1045,7 @@ fn b_during_the_reload_hands_the_game_back_once_it_finishes() {
         "B handed the game back while it was still loading"
     );
     app.link_reload_done();
+    unplugged(&mut app);
     assert!(!app.game_menu_open(), "the cancel left a screen behind");
     assert!(matches!(app.phase(), Phase::Playing { .. }));
     idle(&mut app, 150);
@@ -1156,6 +1182,7 @@ fn a_reloads_only_for_a_serial_the_core_was_not_loaded_with() {
     assert!(reaches_waiting(&mut app), "A started no link");
     app.apply(Action::GbaDown(Btn::B));
     settle(&mut app);
+    unplugged(&mut app);
     app.apply(Action::GameMenu);
     select(&mut app);
     app.apply(Action::GbaDown(Btn::A));
@@ -1219,7 +1246,7 @@ fn a_switch_is_refused_over_a_resume_the_core_would_not_take() {
 }
 
 #[test]
-fn pick_names_cancel_mode_swap_and_link_across_the_strip() {
+fn pick_names_swap_link_mode_and_cancel_centred_on_the_legend_line() {
     let (mut app, _d) = playing_on(Core::Gpsp);
     let width = |k: LinkLegend| match k {
         LinkLegend::Cancel => hint_face("B", "Cancel").w,
@@ -1252,32 +1279,22 @@ fn pick_names_cancel_mode_swap_and_link_across_the_strip() {
     assert_eq!(
         keys.iter().map(|k| k.3).collect::<Vec<_>>(),
         [
-            LinkLegend::Cancel,
-            LinkLegend::Mode,
             LinkLegend::Swap,
-            LinkLegend::Link
+            LinkLegend::Link,
+            LinkLegend::Mode,
+            LinkLegend::Cancel
         ],
     );
     assert!(
-        keys.iter().all(|k| k.1 == FOOTER_Y),
-        "the keys are not on the carousel footer line"
+        keys.iter().all(|k| k.1 == slot_ui::MENU_LEGEND_Y),
+        "the keys are not on the menus' legend line"
     );
     let left = keys[0].0;
     let (x, _, w, _) = keys[keys.len() - 1];
     let right = x + w - HINT_EDGE as f32;
     assert!(
-        (left - 24.0).abs() < 1.0,
-        "Cancel is not on the left of the strip: {left}"
-    );
-    assert!(
-        (right - (OUT_W as f32 - 24.0)).abs() < 1.0,
-        "Link is not on the right of the strip: {right}"
-    );
-    let mode_end = keys[1].0 + keys[1].2 - HINT_EDGE as f32;
-    let swap_start = keys[2].0;
-    assert!(
-        swap_start - mode_end > 80.0,
-        "no gap between Mode and Swap for the socket: {mode_end}..{swap_start}"
+        ((left + right) / 2.0 - OUT_W as f32 / 2.0).abs() < 1.0,
+        "the legend is not centred: {left}..{right}"
     );
 }
 
@@ -1361,11 +1378,14 @@ fn a_link_in_a_switched_mode_reloads_the_game_and_then_starts_the_link() {
 
     step(&mut s, &mut now, &[RawEvent::Down(Btn::B)]);
     let deadline = Instant::now() + BAIL;
-    while s.app().game_menu_open() {
+    while !matches!(s.app().game_menu(), Some(GameMenu::Pick(_))) {
         assert!(Instant::now() < deadline, "the cancel never landed");
         step(&mut s, &mut now, &[]);
         std::thread::sleep(Duration::from_millis(1));
     }
+    // the plug is out, the picker stays; a second B closes the Game Link
+    step(&mut s, &mut now, &[RawEvent::Down(Btn::B)]);
+    assert!(!s.app().game_menu_open(), "the second B left the picker up");
 }
 
 fn session_on_a_real_core() -> Option<(Session, TempDir, Millis)> {
@@ -1683,4 +1703,14 @@ fn the_shortcut_still_opens_the_screen_when_nothing_is_linked() {
     app.apply(Action::GameMenu);
     assert!(app.game_menu_open());
     assert_eq!(app.toast(), None);
+}
+
+#[test]
+fn a_game_boy_game_on_gambatte_opens_the_link_screen() {
+    let (mut app, _d) = playing_on(Core::Gambatte);
+    app.apply(Action::GameMenu);
+    assert!(
+        matches!(app.game_menu(), Some(GameMenu::Pick(_))),
+        "gambatte's network link was not offered"
+    );
 }

@@ -78,6 +78,10 @@ pub struct ListPage {
     hidden: bool,
     /// The try failed: A types the password again.
     retry: bool,
+    /// The password was taken: a check is drawn, then the page closes.
+    taken: Option<Millis>,
+    /// When the password went to be tried: the Wi-Fi sign turns into the spinner from then.
+    checking_at: Millis,
 }
 
 /// What the page shows, made into faces by the frontend.
@@ -124,6 +128,8 @@ impl ListPage {
             joining: None,
             hidden: false,
             retry: false,
+            taken: None,
+            checking_at: 0,
         }
     }
 
@@ -145,7 +151,32 @@ impl ListPage {
 
     /// The password is being tried: the spinner turns.
     pub fn spinning(&self) -> bool {
-        self.kind == Kind::Checking && !self.retry && self.closed.is_none()
+        self.kind == Kind::Checking && !self.retry && self.taken.is_none() && self.closed.is_none()
+    }
+
+    /// The password was right: the spinner makes way for a check, the page closes after it.
+    pub fn password_taken(&mut self, now: Millis) {
+        if self.kind == Kind::Checking && self.taken.is_none() {
+            self.taken = Some(now);
+            self.stage = Stage::Message("Password Correct".into(), "Joining the network".into());
+            self.rev += 1;
+        }
+    }
+
+    /// The password screen, tried or turned down: it shows no Wi-Fi sign.
+    pub fn checking(&self) -> bool {
+        self.kind == Kind::Checking
+    }
+
+    /// When the password went to be tried, while it still is (or was taken).
+    pub fn checking_since(&self) -> Option<Millis> {
+        (self.kind == Kind::Checking && !self.retry && self.closed.is_none())
+            .then_some(self.checking_at)
+    }
+
+    /// When the password was taken, for the check drawn on the page.
+    pub fn taken(&self) -> Option<Millis> {
+        self.taken.filter(|_| self.closed.is_none())
     }
 
     /// The network whose password is being tried.
@@ -226,25 +257,36 @@ impl ListPage {
     pub fn rom_manager(now: Millis) -> Self {
         Self::new(
             Kind::RomManager,
-            Stage::Message("Starting...".into(), String::new()),
+            Stage::Message("Starting...".into(), "Getting the web page ready".into()),
             Vec::new(),
             now,
         )
     }
 
     /// The page is up at `address`, or could not be started.
-    pub fn rom_manager_ready(&mut self, page: Option<(String, String)>) {
+    pub fn rom_manager_ready(&mut self, page: Option<crate::link_radio::ManagerPage>) {
         if self.kind != Kind::RomManager {
             return;
         }
         self.stage = match page {
-            Some((address, pin)) => {
-                self.pin = Some(pin);
-                self.address = Some(address.clone());
-                Stage::Message(
-                    address,
-                    "Scan the code, or open the address and enter the PIN".into(),
-                )
+            Some(page) => {
+                self.pin = Some(page.pin);
+                // The QR code keeps the IP: it works on every phone and router. The name is
+                // what a person types; the IP is there for when it does not load.
+                self.address = Some(page.address.clone());
+                match page.named {
+                    Some(named) => Stage::Message(
+                        named.trim_start_matches("http://").to_owned(),
+                        format!(
+                            "Scan the code, or open the address or {}",
+                            page.address.trim_start_matches("http://")
+                        ),
+                    ),
+                    None => Stage::Message(
+                        page.address,
+                        "Scan the code, or open the address and enter the PIN".into(),
+                    ),
+                }
             }
             None => Stage::Message(
                 "Not connected".into(),
@@ -255,18 +297,21 @@ impl ListPage {
     }
 
     /// An update came down while the page is open: the note says so until it is installed.
-    pub fn rom_manager_update(&mut self, version: &str) {
+    /// True the moment the note first says so.
+    pub fn rom_manager_update(&mut self, version: &str) -> bool {
         let Stage::Message(address, note) = &self.stage else {
-            return;
+            return false;
         };
         if self.kind != Kind::RomManager || self.address.is_none() {
-            return;
+            return false;
         }
         let ready = format!("Update {version} ready · install it from the web page");
-        if *note != ready {
-            self.stage = Stage::Message(address.clone(), ready);
-            self.rev += 1;
+        if *note == ready {
+            return false;
         }
+        self.stage = Stage::Message(address.clone(), ready);
+        self.rev += 1;
+        true
     }
 
     fn wps_message(secs: u64) -> Stage {
@@ -385,8 +430,9 @@ impl ListPage {
                 .map(|r| (r.title.clone(), r.sub.clone()))
                 .collect(),
             upper: self.kind == Kind::Zones,
-            large_status: (self.kind == Kind::Details && matches!(self.stage, Stage::Message(..)))
-                || self.pin.is_some(),
+            // Every message screen's line at one size, the Manager's "Starting..." as well as
+            // its address; only a list's heading stays small.
+            large_status: matches!(self.stage, Stage::Message(..) | Stage::Confirm(_)),
             wps: matches!(self.kind, Kind::Wps | Kind::Checking)
                 && matches!(self.stage, Stage::Message(..)),
             placeholder: (self.kind == Kind::Name).then(|| "Network name".to_owned()),
@@ -508,6 +554,8 @@ impl ListPage {
                         };
                         self.joining = Some((ssid.clone(), typed));
                         self.kind = Kind::Checking;
+                        self.checking_at = now;
+                        self.taken = None;
                         self.retry = false;
                         self.stage = Stage::Message(
                             "Checking Password".into(),

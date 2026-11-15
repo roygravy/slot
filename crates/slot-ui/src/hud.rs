@@ -1,5 +1,5 @@
 use slot_gfx::{Canvas, Draw, TexId, OUT_H};
-use slot_store::{BLUE_LIGHT_MAX, BRIGHTNESS_MAX, VOLUME_MAX};
+use slot_store::{BLUE_LIGHT_MAX, BRIGHTNESS_MAX, DIM_MAX, VOLUME_MAX};
 
 use crate::icon::icon_box;
 use crate::toast::toast_rect;
@@ -77,7 +77,7 @@ impl HudKind {
 
     fn max(self) -> u8 {
         match self {
-            HudKind::Brightness => BRIGHTNESS_MAX,
+            HudKind::Brightness => BRIGHTNESS_MAX + DIM_MAX,
             HudKind::BlueLight => BLUE_LIGHT_MAX,
             HudKind::Volume => VOLUME_MAX,
             HudKind::Rewind | HudKind::Power => 100,
@@ -173,6 +173,10 @@ impl Hud {
         self.toasts = toasts;
     }
 
+    pub fn toast_tex(&self, toast: Toast) -> Option<TexId> {
+        self.toasts.get(toast.index()).copied()
+    }
+
     pub fn toast(&mut self, toast: Toast, now: Millis) {
         self.said = Some((toast, now));
     }
@@ -191,6 +195,11 @@ impl Hud {
 
     pub fn toast_visible(&self, now: Millis) -> bool {
         self.toast_alpha(now) > 0.0
+    }
+
+    /// The last toast and when it was said, shown or not.
+    pub fn said_at(&self) -> Option<(Toast, Millis)> {
+        self.said
     }
 
     pub fn said(&self, now: Millis) -> Option<Toast> {
@@ -267,7 +276,12 @@ impl Hud {
                 y: top,
                 w: canvas.w,
                 h: PLATE_H,
-                colour: faded(PLATE, alpha.max(toast)),
+                // A toast's bar is solid black: nothing under it (studio tabs, a menu's
+                // heading) shows through its words (Roy 2026-11-12, ui8).
+                colour: match toast > 0.0 {
+                    true => faded([0.0, 0.0, 0.0, 1.0], toast),
+                    false => faded(PLATE, alpha),
+                },
             });
             if toast > 0.0 {
                 self.draw_toast(canvas, now, out);
@@ -301,20 +315,12 @@ impl Hud {
                 alpha,
             });
         }
-        out.push(Draw::Rect {
-            x,
-            y: top + BAR_Y,
-            w: BAR_W,
-            h: BAR_H,
-            colour: faded(TRACK, alpha),
-        });
-        out.push(Draw::Rect {
-            x,
-            y: top + BAR_Y,
-            w: BAR_W * self.fraction(),
-            h: BAR_H,
-            colour: faded(FILL, alpha),
-        });
+        // Round ends, the empty part see-through (Roy 2026-11-12, ui2).
+        pill(x, top + BAR_Y, BAR_W, BAR_H, faded(TRACK, alpha), out);
+        let fill = BAR_W * self.fraction();
+        if fill > 0.0 {
+            pill(x, top + BAR_Y, fill.max(BAR_H), BAR_H, faded(FILL, alpha), out);
+        }
     }
 
     fn place_badge(&self, canvas: Canvas, tex: TexId, out: &mut Vec<Draw>) {
@@ -426,4 +432,30 @@ fn pulse(age: Millis) -> [f32; 4] {
 
 fn faded(colour: [f32; 4], alpha: f32) -> [f32; 4] {
     [colour[0], colour[1], colour[2], colour[3] * alpha]
+}
+
+/// A bar with round ends, from flat rects: each row inset to the ends' circle, its edge pixel
+/// faded by how much of it the circle covers.
+pub(crate) fn pill(x: f32, y: f32, w: f32, h: f32, colour: [f32; 4], out: &mut Vec<Draw>) {
+    let r = h / 2.0;
+    for row in 0..h.round() as i32 {
+        let dy = row as f32 + 0.5 - r;
+        let inset = r - (r * r - dy * dy).max(0.0).sqrt();
+        let full = inset.ceil();
+        let edge = full - inset;
+        let y = y + row as f32;
+        out.push(Draw::Rect {
+            x: x + full,
+            y,
+            w: (w - 2.0 * full).max(0.0),
+            h: 1.0,
+            colour,
+        });
+        if edge > 0.01 && full >= 1.0 {
+            let c = [colour[0], colour[1], colour[2], colour[3] * edge];
+            for ex in [x + full - 1.0, x + w - full] {
+                out.push(Draw::Rect { x: ex, y, w: 1.0, h: 1.0, colour: c });
+            }
+        }
+    }
 }

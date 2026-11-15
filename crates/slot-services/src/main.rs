@@ -1,5 +1,8 @@
 //! Slot-owned home and Link networking. No commands run on the render thread.
+mod bluetooth;
 mod config;
+mod mdns;
+mod ra;
 mod radio;
 mod system;
 mod update;
@@ -277,8 +280,12 @@ fn serve(root: &Path, run: &Path) -> std::io::Result<()> {
     listener.set_nonblocking(true)?;
     let mut home = Home::new(run);
     let mut link = Link::new(run);
+    let mut bt = bluetooth::Bluetooth::new(run);
     let state = slot_store::read_slot_state(root);
     home.enable(state.home_wifi_enabled, root);
+    if state.bluetooth_enabled {
+        bt.enable_soon();
+    }
     // Off when the player keeps the clock by hand, so the network never moves it.
     let mut auto_time = state.auto_time;
     if !auto_time {
@@ -387,7 +394,7 @@ fn serve(root: &Path, run: &Path) -> std::io::Result<()> {
                             ),
                         );
                     }
-                    ("wifi", "scan") => match wifi::scan(&home) {
+                    ("wifi", "scan") => match wifi::scan(&mut home) {
                         Ok(seen) => respond(&mut stream, 0, &format!("SEEN {seen}")),
                         Err(e) => respond(&mut stream, 1, e),
                     },
@@ -486,6 +493,31 @@ fn serve(root: &Path, run: &Path) -> std::io::Result<()> {
                         }
                         powered_down = false;
                     }
+                    ("bt", "on" | "off") => {
+                        bt.enable(action == "on");
+                        respond(
+                            &mut stream,
+                            if bt.error.is_empty() { 0 } else { 1 },
+                            if bt.error.is_empty() { "ACCEPTED" } else { bt.error },
+                        );
+                    }
+                    ("bt", "status") => respond(&mut stream, 0, &bt.status()),
+                    ("bt", "scan") => match bt.scan() {
+                        Ok(()) => respond(&mut stream, 0, "SCANNING"),
+                        Err(e) => respond(&mut stream, 1, e),
+                    },
+                    ("bt", "list") => match bt.devices() {
+                        Ok(d) => respond(&mut stream, 0, &bluetooth::reply(d)),
+                        Err(e) => respond(&mut stream, 1, e),
+                    },
+                    // pair-AA:BB:..., connect-..., disconnect-..., forget-...: one word.
+                    ("bt", act) if act.contains('-') => {
+                        let (verb, mac) = act.split_once('-').unwrap_or_default();
+                        match bt.act(verb, mac) {
+                            Ok(()) => respond(&mut stream, 0, "ACCEPTED"),
+                            Err(e) => respond(&mut stream, 1, e),
+                        }
+                    }
                     _ => respond(&mut stream, 2, "UNKNOWN_COMMAND"),
                 }
             }
@@ -499,6 +531,7 @@ fn serve(root: &Path, run: &Path) -> std::io::Result<()> {
         }
         if now >= tick_at {
             link.tick();
+            bt.tick();
             if let Some(w) = &mut wps {
                 w.tick(&mut home, root);
             }
@@ -605,7 +638,7 @@ fn main() {
         return;
     }
     if args.len() != 2 {
-        eprintln!("usage: slot-services home on|off|reload|sleep|wake | time auto|manual | link warm|cool|host|join|down | service status|stop | wifi scan|wps|wpsstatus|wpsstop | web on|off");
+        eprintln!("usage: slot-services home on|off|reload|sleep|wake | time auto|manual | link warm|cool|host|join|down | service status|stop | wifi scan|wps|wpsstatus|wpsstop | web on|off | bt on|off|status|scan|list|pair-MAC|connect-MAC|disconnect-MAC|forget-MAC");
         std::process::exit(2);
     }
     let pid = std::env::var("SLOT_OWNER_PID")
@@ -620,7 +653,8 @@ fn main() {
         s.set_read_timeout(Some(Duration::from_secs(
             if args[0] == "link" && ["host", "join"].contains(&args[1].as_str()) {
                 45
-            } else if args[0] == "wifi" {
+            } else if args[0] == "wifi" || args[0] == "bt" {
+                // Bluetooth on loads the radio's firmware first: up to twelve seconds.
                 20
             } else {
                 8
@@ -644,6 +678,7 @@ fn main() {
         if args[1] == "status"
             || args[0] == "wifi"
             || args[0] == "web"
+            || args[0] == "bt"
             || (args[1] == "lan" && code == 0)
         {
             println!("{}", response.trim());

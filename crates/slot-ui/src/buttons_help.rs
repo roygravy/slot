@@ -31,6 +31,7 @@ pub const BUTTON_PAGES: [(&str, &[(&str, &str)]); 7] = [
             ("Left / Right", "Move along the shelf"),
             ("Up / Down", "Jump to the next letter"),
             ("L1 / R1", "Switch shelf"),
+            ("X", "Remove from Recents"),
             ("MENU", "Settings"),
         ],
     ),
@@ -40,6 +41,7 @@ pub const BUTTON_PAGES: [(&str, &[(&str, &str)]); 7] = [
             ("Tap A", "Play from the last state"),
             ("Hold A", "Start the game fresh"),
             ("Y", "Favorite or unfavorite"),
+            ("B", "On or off the Deck"),
             ("START", "Emulator choice (GBA)"),
             ("SELECT", "Cart color and label"),
         ],
@@ -71,6 +73,7 @@ pub const BUTTON_PAGES: [(&str, &[(&str, &str)]); 7] = [
             ("Hold R2", "Fast-forward"),
             ("Double tap R2", "Keep fast-forwarding"),
             ("Hold X / Y", "Turbo A / turbo B"),
+            ("SELECT + L2 / R2", "GBA 3:2 or stretched"),
         ],
     ),
 ];
@@ -256,14 +259,10 @@ impl ButtonsHelp<'_> {
                     colour: self.ink.bar,
                 });
             }
-            out.push(Draw::Tint {
-                x: (x + gap).round(),
-                y: TAB_Y,
-                w: w as f32,
-                h: h as f32,
-                tex,
-                colour: if lit { self.ink.on_bar } else { self.ink.dim },
-            });
+            let colour = if lit { self.ink.on_bar } else { self.ink.dim };
+            let wash = if lit { [0.0, 0.0, 0.0, 1.0] } else { self.ink.wash };
+            let tx = (x + gap).round();
+            crate::plate::shaded_hint(out, tex, tx, TAB_Y, w as f32, h as f32, colour, wash);
             x += cell;
         }
         // ‹ and ›: this tab has a page before or after this one.
@@ -290,24 +289,12 @@ impl ButtonsHelp<'_> {
             });
         }
         if let Some(&(tex, w, h)) = faces.bodies.get(self.page) {
-            out.push(Draw::Tint {
-                x: self.canvas.centred(w as f32).round(),
-                y: BODY_Y + ((BODY_ROOM - h as f32) / 2.0).max(0.0).round(),
-                w: w as f32,
-                h: h as f32,
-                tex,
-                colour: self.ink.text,
-            });
+            let x = self.canvas.centred(w as f32).round();
+            let y = BODY_Y + ((BODY_ROOM - h as f32) / 2.0).max(0.0).round();
+            crate::plate::shaded_hint(out, tex, x, y, w as f32, h as f32, self.ink.text, self.ink.wash);
         }
         for (tex, w, x) in centred_hints(self.canvas, &faces.legend, LEGEND_GAP) {
-            out.push(Draw::Tint {
-                x,
-                y: LEGEND_Y,
-                w: w as f32,
-                h: HINT_H as f32,
-                tex,
-                colour: self.ink.text,
-            });
+            crate::plate::shaded_hint(out, tex, x, LEGEND_Y, w as f32, HINT_H as f32, self.ink.text, self.ink.wash);
         }
     }
 }

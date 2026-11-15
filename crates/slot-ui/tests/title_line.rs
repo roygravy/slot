@@ -42,7 +42,7 @@ fn the_title_sits_on_the_rack_names_baseline_and_grows_upward() {
         [1.0; 4],
         &mut out,
     );
-    let Some(Draw::Tint { x, y, w, h, .. }) = out.first() else {
+    let Some(Draw::Tint { x, y, w, h, .. }) = out.last() else {
         panic!("no title drawn");
     };
     assert_eq!(*h, TITLE_LINE_H as f32);

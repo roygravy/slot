@@ -21,8 +21,8 @@ const HELP_Y: f32 = 392.0;
 const LEGEND_Y: f32 = crate::quick_menu::LEGEND_Y;
 const EMPTY_Y: f32 = 170.0;
 
-/// The robber's height in the menu corner (a pixel taller than the battery) and in play.
-pub const BADGE_MENU_H: u32 = 15;
+/// The robber's height in the menu corner (the battery's, Roy ui5) and in play.
+pub const BADGE_MENU_H: u32 = 18;
 pub const BADGE_GAME_H: u32 = 22;
 /// In play the robber mirrors the fast-forward badge: this far in from the bottom left.
 const BADGE_GAME_X: f32 = 14.0;
@@ -83,14 +83,7 @@ impl CheatPage<'_> {
         };
         let legend = |names: &[(TexId, u32)], out: &mut Vec<Draw>| {
             for (tex, w, x) in centred_hints(self.canvas, names, LEGEND_GAP) {
-                out.push(Draw::Tint {
-                    x,
-                    y: LEGEND_Y,
-                    w: w as f32,
-                    h: HINT_H as f32,
-                    tex,
-                    colour: ink.text,
-                });
+                crate::plate::shaded_hint(out, tex, x, LEGEND_Y, w as f32, HINT_H as f32, ink.text, ink.wash);
             }
         };
         let count = self.on.len().min(faces.names.len());

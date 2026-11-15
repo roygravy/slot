@@ -19,18 +19,27 @@ main { position: relative; max-width: 760px; margin: 0 auto; padding: 32px 16px 
 header { text-align: center; margin-bottom: 26px; }
 .sub { font-size: 11px; letter-spacing: .3em; color: var(--dim); margin-top: 10px; text-transform: uppercase; }
 #msg { min-height: 20px; margin: -8px 0 4px; text-align: center; font-size: 13px; color: var(--dim); }
-nav { display: flex; gap: 4px; border-bottom: 1px solid var(--line); overflow-x: auto; }
-nav button { flex: 1 0 auto; background: none; border: 0; color: var(--dim); font: inherit; font-weight: 600; letter-spacing: .08em;
-  padding: 10px 4px; border-bottom: 2px solid transparent; cursor: pointer; }
-nav .sep { flex: none; width: 1px; margin: 10px 4px 12px; background: var(--line); }
+/* Two rows of tabs, every tab the same width: the games, then the card's other folders and the
+   console's own pages. On a phone the second row folds into two rows of three. */
+nav { border-bottom: 1px solid var(--line); }
+nav .row { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
+nav .row + .row { border-top: 1px solid var(--line); }
+nav button { position: relative; background: none; border: 0; color: var(--dim); font: inherit; font-size: 12px; font-weight: 600; letter-spacing: .07em;
+  text-transform: uppercase; white-space: nowrap; padding: 11px 4px 9px; border-bottom: 2px solid transparent; cursor: pointer; }
 .drop[hidden] { display: none; }
-/* Screenshots as a gallery: the picture, its game and time, then the buttons. */
-ul.shots { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; margin-top: 20px; }
-ul.shots li { flex-wrap: wrap; border: 1px solid var(--line); border-radius: 8px; padding: 10px; gap: 6px 8px; }
-ul.shots li img.thumb { width: 100%; height: auto; aspect-ratio: 4 / 3; }
-ul.shots li .name { flex-basis: 100%; }
-ul.shots li .size { flex-basis: 100%; }
-ul.shots li button { flex: 1; }
+/* Screenshots as a gallery like the phone's own photos: the picture edge to edge, its game and
+   time under it, and two small round buttons beside them that never wrap. */
+ul.shots { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 18px 14px; margin-top: 20px; }
+ul.shots li { display: block; min-width: 0; padding: 0; border: 0; }
+ul.shots li img.thumb { display: block; width: 100%; height: auto; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 8px; }
+ul.shots .cap { display: flex; align-items: flex-start; gap: 4px; margin-top: 8px; }
+ul.shots .cap div { flex: 1; min-width: 0; }
+ul.shots .cap .size { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+ul.shots .cap .name { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; white-space: normal; overflow-wrap: anywhere; font-size: 14px; font-weight: 600; line-height: 1.25; }
+ul.shots .cap .size { font-size: 12px; }
+li button.ico { flex: none; width: 30px; height: 30px; padding: 0; border-radius: 50%; display: grid; place-items: center; color: var(--fg); }
+button.ico svg { pointer-events: none; }
+ul.shots li.none { grid-column: 1 / -1; }
 nav button.on { color: var(--fg); border-bottom-color: var(--fg); }
 .drop { display: block; margin: 20px 0; border: 1px dashed var(--line); border-radius: 10px; padding: 22px; text-align: center; color: var(--dim); cursor: pointer; }
 .drop b { color: var(--fg); font-weight: 600; }
@@ -39,17 +48,31 @@ nav button.on { color: var(--fg); border-bottom-color: var(--fg); }
 .bar i { display: block; height: 100%; background: var(--fg); }
 ul { list-style: none; margin: 0; padding: 0; }
 li { display: flex; align-items: center; gap: 12px; padding: 11px 4px; border-bottom: 1px solid var(--line); }
+li .txt { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 12px; }
+li .txt .name { flex: 1; }
 li .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 li .size { color: var(--dim); font-size: 13px; white-space: nowrap; }
 li button { background: none; border: 1px solid var(--line); color: var(--fg); border-radius: 6px; font: inherit; font-size: 13px; padding: 4px 10px; cursor: pointer; }
 li button:hover { border-color: var(--fg); }
 li input { flex: 1; background: var(--panel); border: 1px solid var(--fg); color: var(--fg); font: inherit; font-size: 16px; padding: 4px 8px; border-radius: 6px; }
 footer { margin-top: 18px; color: var(--dim); font-size: 12px; display: flex; justify-content: space-between; }
+#free { margin-left: auto; }
+li.label .lthumb { height: 44px; width: auto; max-width: 72px; border-radius: 4px; object-fit: contain; flex: none; }
+/* Sorting the games: four words in a row, the chosen one a filled pill; tapped again it turns
+   round (newest or oldest, most or least played, with or without a label first). */
+.sort { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 4px 0 6px; }
+.sort[hidden] { display: none; }
+.sort span { color: var(--dim); font-size: 11px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; margin-right: 4px; }
+.sort button { background: none; border: 0; border-radius: 999px; color: var(--dim); font: inherit; font-size: 12px; font-weight: 600; letter-spacing: .05em;
+  text-transform: uppercase; padding: 5px 11px; cursor: pointer; white-space: nowrap; }
+.sort button.on { background: var(--fg); color: var(--bg); }
+/* On a phone the four fit on one line: the word Sort goes, the pills come closer. */
+@media (max-width: 520px) { .sort { flex-wrap: nowrap; gap: 2px; } .sort span { display: none; } .sort button { font-size: 11px; letter-spacing: .04em; padding: 5px 9px; } }
 .pin { position: fixed; inset: 0; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; }
 .pin .keep { color: var(--dim); font-size: 14px; display: flex; align-items: center; gap: 8px; cursor: pointer; }
 .pin .keep input { width: 18px; height: 18px; padding: 0; letter-spacing: 0; accent-color: var(--fg); }
 .pin input#pin { width: 150px; text-align: center; font: 600 30px system-ui; letter-spacing: .4em; background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
-@media (max-width: 520px) { main { padding-top: 56px; } .theme { top: 12px; } nav { flex-wrap: wrap; } nav .sep.row { flex-basis: 100%; height: 0; margin: 0; } nav button { font-size: 11px; letter-spacing: .03em; padding: 10px 2px; } nav .sep { margin: 10px 2px 12px; } li { flex-wrap: wrap; gap: 6px 10px; } li .name { flex-basis: 100%; } li:has(.thumb) .name { flex-basis: calc(100% - 92px); } li .size { flex: 1; } ul.shots li:has(.thumb) .name, ul.shots li .size { flex-basis: 100%; } ul.shots { grid-template-columns: 1fr 1fr; gap: 10px; } }
+@media (max-width: 520px) { main { padding-top: 56px; } .theme { top: 12px; } nav .row.more { grid-auto-flow: row; grid-template-columns: repeat(6, minmax(0, 1fr)); } nav .row.more button { grid-column: span 2; } nav .row.more button:nth-child(n+4) { grid-column: span 3; } nav .row.more:has(> :nth-child(6)) button { grid-column: span 2; } nav button { font-size: 11px; letter-spacing: .05em; padding: 11px 2px 9px; } li { gap: 8px; } li:has(input) { flex-wrap: wrap; } li:has(input) input { flex-basis: 100%; } li .txt { flex-direction: column; align-items: stretch; gap: 2px; } li .txt .size { font-size: 12px; } ul.shots { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 12px; } }
 .pin[hidden], .viewer[hidden], ul[hidden] { display: none; }
 li img.thumb { width: 80px; height: 60px; object-fit: cover; border-radius: 4px; background: var(--panel); border: 1px solid var(--line); cursor: zoom-in; flex: none; }
 .viewer { position: fixed; inset: 0; background: rgba(0, 0, 0, .85); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 16px; cursor: zoom-out; z-index: 2; }
@@ -62,7 +85,10 @@ li img.thumb { width: 80px; height: 60px; object-fit: cover; border-radius: 4px;
 .update p { margin: 0 0 18px; color: var(--dim); font-size: 13px; }
 .update button { background: var(--fg); color: var(--bg); border: 0; border-radius: 8px; font: inherit; font-weight: 600; padding: 10px 22px; cursor: pointer; }
 .update button[disabled] { opacity: .4; cursor: default; }
+.update input { display: block; width: 100%; max-width: 320px; box-sizing: border-box; margin: 0 auto 10px; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--line); background: transparent; color: var(--fg); font: inherit; }
 .update .bar { max-width: 320px; margin: 0 auto 18px; }
+/* BaseOS's card under the release notes, a line apart from slot. x GRAVY's. */
+.update .base { max-width: 520px; margin: 30px auto 0; border-top: 1px solid var(--line); padding-top: 26px; }
 .notes { max-width: 520px; margin: 26px auto 0; text-align: left; border-top: 1px solid var(--line); padding-top: 18px; font-size: 14px; line-height: 1.5; }
 .notes h3 { margin: 18px 0 6px; font-size: 13px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
 .notes h3:first-child { margin-top: 0; }
@@ -71,13 +97,21 @@ li img.thumb { width: 80px; height: 60px; object-fit: cover; border-radius: 4px;
 .notes li { display: list-item; margin: 0 0 6px; padding: 0; border: 0; }
 .notes code { font-size: 12px; }
 .notes a, .update .gh { color: inherit; }
-nav button.new::after { content: ""; display: inline-block; width: 7px; height: 7px; margin: 0 0 2px 6px; border-radius: 50%; background: var(--fg); vertical-align: middle; }
+/* The update dot hangs beside the word, so the tab keeps its width and the word its centre. */
+nav button.new span { position: relative; }
+nav button.new span::after { content: ""; position: absolute; left: 100%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 5px; border-radius: 50%; background: var(--fg); }
 .news { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 14px; padding: 10px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; font-size: 14px; }
 .news[hidden] { display: none; }
 .news span { color: var(--dim); }
 .news b { color: var(--fg); font-weight: 600; }
 .news button { background: var(--fg); color: var(--bg); border: 0; border-radius: 8px; font: inherit; font-size: 13px; font-weight: 600; padding: 6px 14px; cursor: pointer; flex: none; }
 .update .gh { display: inline-block; margin-top: 14px; font-size: 13px; color: var(--dim); }
+/* Achievements tab (Roy, ra4): the buttons side by side on one line, the logo grey at the foot. */
+.update p a { color: inherit; }
+.update .btns { display: flex; justify-content: center; gap: 10px; margin-top: 4px; }
+.update .btns button.alt { background: none; color: var(--fg); border: 1px solid var(--line); }
+.update a.ra { display: inline-flex; flex-direction: column; align-items: center; gap: 8px; margin-top: 34px; color: var(--dim); font-size: 12px; text-decoration: none; }
+.update a.ra i { width: 46px; height: 26px; background: var(--dim); -webkit-mask: url(data:image/png;base64,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) center / contain no-repeat; mask: url(data:image/png;base64,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) center / contain no-repeat; }
 </style>
 </head>
 <body>
@@ -93,9 +127,13 @@ nav button.new::after { content: ""; display: inline-block; width: 7px; height: 
   <div class="news" id="news" hidden><span><b id="newsv"></b> is out</span><button id="newsgo">Update</button></div>
   <nav id="tabs"></nav>
   <div class="update" id="update" hidden></div>
+  <input type="file" accept="image/*" hidden id="labelpick">
   <label class="drop" id="drop"><b>Drop files here</b> or tap to choose<input type="file" multiple hidden id="pick">
     <div id="up"></div></label>
+  <div class="update" id="after" hidden></div>
+  <div class="update" id="ra" hidden></div>
   <div id="msg"></div>
+  <div class="sort" id="sort" hidden></div>
   <ul id="list"></ul>
   <footer><span id="count"></span><span id="free"></span></footer>
 </main>
@@ -112,20 +150,57 @@ function theme(light) {
   document.documentElement.dataset.theme = light ? "light" : "dark";
   $("theme").setAttribute("aria-pressed", light);
 }
-const SYS = ["GB", "GBC", "GBA", "NES", "SNES", "BIOS", "WALLPAPERS", "SCREENSHOTS", "UPDATE"];
+// Line icons for the list buttons on every tab, drawn in the text colour.
+const ICON = {
+  get: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v8M4.5 6.5 8 10l3.5-3.5M3 13.5h10"/></svg>',
+  ren: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10.5 2.5l3 3L5.5 13.5 2 14l.5-3.5z"/></svg>',
+  ok: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.2 3.2L13 4.5"/></svg>',
+  no: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>',
+  lbl: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="3" width="11" height="10" rx="1.5"/><path d="M2.5 11l3.5-3.5 3 3 1.5-1.5 3 3"/><circle cx="10.5" cy="6" r=".9"/></svg>',
+  del: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4h11M6 4V2.5h4V4M4 4l.7 9.5h6.6L12 4"/></svg>',
+};
+const SYS = ["GB", "GBC", "GBA", "NES", "SNES", "BIOS", "WALLPAPERS", "SCREENSHOTS", "RA", "UPDATE"];
 const UPDATE = s => s == "UPDATE";
+const RA = s => s == "RA";
 const SHOTS = s => s == "SCREENSHOTS";
 const PICTURES = s => s == "WALLPAPERS" || s == "SCREENSHOTS";
-const NAME = {};
+const LOGS = s => s == "LOGS";
+const NAME = { RA: "Achievements" };
+// A hidden Logs tab for the maker: five taps on the logo turn it on or off, remembered on this
+// browser. The PIN still guards it, like everything else here.
+try { if (localStorage.getItem("logs") == "1") SYS.push("LOGS"); } catch (e) {}
 const GAMES = s => SYS.indexOf(s) < 5;
 const EXT = { gb: "GB", gbc: "GBC", gba: "GBA", nes: "NES", sfc: "SNES", smc: "SNES", bin: "BIOS", png: "WALLPAPERS" };
-let sys = "GB", data = null, pin = "", key = "", renaming = null;
+let sys = "GB", data = null, pin = "", key = "", renaming = null, labeling = null;
+// How the games are sorted, remembered on this browser: A-Z, added, played or label, and
+// whether turned round (Z-A, oldest, least played, no label first).
+let sortBy = "az", sortBack = false;
+try { [sortBy, sortBack] = [localStorage.getItem("sort") || "az", localStorage.getItem("sortBack") == "1"]; } catch (e) {}
+const SORTS = [["az", "A–Z", "Z–A"], ["added", "Newest", "Oldest"], ["played", "Most played", "Least played"], ["label", "Label", "No label"]];
 // A phone ticked "Remember this phone" keeps the console's key and needs no PIN.
 try { key = localStorage.getItem("key") || ""; } catch (e) {}
 try { pin = sessionStorage.getItem("pin") || ""; sys = sessionStorage.getItem("sys") || sys; } catch (e) {}
+if (!SYS.includes(sys)) sys = SYS[0];
 // Scanned from the console's QR code: the PIN comes in after the #, then leaves the address bar.
 const scanned = location.hash.match(/pin=(\d{4})/);
-if (scanned) { pin = scanned[1]; history.replaceState(null, "", "/"); try { sessionStorage.setItem("pin", pin); } catch (e) {} }
+// Moved over from the IP address: the remembered key comes along, it is per address.
+const carried = location.hash.match(/key=([0-9a-f]+)/);
+if (carried) { key = carried[1]; try { localStorage.setItem("key", key); } catch (e) {} }
+if (scanned) { pin = scanned[1]; try { sessionStorage.setItem("pin", pin); } catch (e) {} }
+if (scanned || carried) history.replaceState(null, "", "/");
+// Opened by IP (the QR code): go to gravy.local when this phone can reach it, else stay.
+if (/^\d+\.\d+\.\d+\.\d+$/.test(location.hostname)) {
+  fetch("/api/name").then(r => r.text()).then(name => {
+    if (!name) return;
+    const probe = new Image(), give_up = setTimeout(() => { probe.src = ""; }, 2500);
+    probe.onload = () => {
+      clearTimeout(give_up);
+      const pass = [pin && "pin=" + pin, key && "key=" + key].filter(Boolean).join("&");
+      location.replace(name + "/" + (pass ? "#" + pass : ""));
+    };
+    probe.src = name + "/logo.png?" + Date.now();
+  }).catch(() => {});
+}
 const $ = id => document.getElementById(id);
 const esc = t => t.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 const size = n => n < 1048576 ? Math.round(n / 1024) + " KB" : (n / 1048576).toFixed(1) + " MB";
@@ -164,46 +239,99 @@ $("pin").oninput = async () => {
 
 async function load() {
   data = await (await api("GET", "/api/list")).json();
+  // The console's own A-Z order, kept to come back to: name, size, label, added, played, place.
+  SYS.filter(GAMES).forEach(s => (data.systems[s] || []).forEach((g, i) => g[5] = i));
   render();
 }
+function sortGames(games) {
+  const az = (a, b) => a[5] - b[5];
+  const by = { az, added: (a, b) => b[3] - a[3], played: (a, b) => b[4] - a[4], label: (a, b) => b[2] - a[2] }[sortBy] || az;
+  // Turned round, the order flips but games alike stay A-Z.
+  games.sort((a, b) => (sortBack ? by(b, a) : by(a, b)) || az(a, b));
+}
+function played(secs) {
+  const m = Math.round(secs / 60);
+  return m < 60 ? m + " min" : Math.floor(m / 60) + " h" + (m % 60 ? " " + (m % 60) + " min" : "");
+}
 function render() {
-  // Thin lines keep games, BIOS, wallpapers and screenshots apart; on a phone the first one
-  // breaks the tabs into two rows.
-  $("tabs").innerHTML = SYS.map(s => (s == "BIOS" ? '<i class="sep row"></i>' : s == "WALLPAPERS" || s == "SCREENSHOTS" || s == "UPDATE" ? '<i class="sep"></i>' : "") +
-    `<button class="${s == sys ? "on" : ""}" data-s="${s}">${NAME[s] || s}</button>`).join("");
+  // The games on the first row, everything else on the second.
+  $("tabs").innerHTML = [SYS.slice(0, 5), SYS.slice(5)].map((row, i) => `<div class="row ${i ? "more" : "games"}">` +
+    row.map(s => `<button class="${s == sys ? "on" : ""}" data-s="${s}"><span>${NAME[s] || s}</span></button>`).join("") + "</div>").join("");
   const games = data && data.systems[sys] || [];
-  $("drop").hidden = SHOTS(sys);
-  $("update").hidden = !UPDATE(sys);
+  $("sort").hidden = !GAMES(sys) || games.length < 2;
+  if (GAMES(sys)) {
+    sortGames(games);
+    $("sort").innerHTML = "<span>Sort</span>" + SORTS.map(([k, a, z]) =>
+      `<button class="${k == sortBy ? "on" : ""}" data-sort="${k}">${k == sortBy && sortBack ? z : a}</button>`).join("");
+  }
+  $("drop").hidden = SHOTS(sys) || RA(sys) || LOGS(sys);
+  $("ra").hidden = !RA(sys);
+  $("update").hidden = $("after").hidden = !UPDATE(sys);
   $("drop").querySelector("b").textContent = UPDATE(sys) ? "Drop a slot. x GRAVY zip here" : "Drop files here";
-  $("list").hidden = $("count").hidden = UPDATE(sys);
+  $("list").hidden = $("count").hidden = UPDATE(sys) || RA(sys);
+  // Free space matters where files go onto the card; the Achievements tab has none.
+  document.querySelector("footer").style.display = RA(sys) ? "none" : "";
   badge();
+  if (RA(sys)) { raTab(); return; }
   if (UPDATE(sys)) { updated(); return; }
   $("list").className = SHOTS(sys) ? "shots" : "";
+  if (LOGS(sys)) {
+    $("list").innerHTML = games.length ? games.map(([n, b], i) => `<li><div class="txt"><span class="name">${esc(n)}</span><span class="size">${size(b)}</span></div>` +
+      `<button class="ico" data-get="${i}" aria-label="Download" title="Download">${ICON.get}</button></li>`).join("")
+      : `<li><span class="name" style="color:var(--dim)">No logs yet</span></li>`;
+    $("count").textContent = games.length + " log" + (games.length == 1 ? "" : "s");
+    $("free").textContent = "";
+    return;
+  }
   if (SHOTS(sys)) $("list").innerHTML = games.length ? games.map(([n, b], i) => {
     const [game, when] = caption(n);
-    return `<li><img class="thumb" data-view="${i}" alt=""><span class="name">${esc(game)}</span><span class="size">${when}</span>` +
-      `<button data-get="${i}">Download</button><button data-del="${i}">Delete</button></li>`;
-  }).join("") : `<li><span class="name" style="color:var(--dim)">No screenshots yet</span></li>`;
-  else $("list").innerHTML = games.length ? games.map(([n, b], i) => renaming == n
-    ? `<li><input id="to" value="${esc(n)}"><button data-save="${i}">Save</button><button data-cancel>Cancel</button></li>`
-    : `<li>${PICTURES(sys) ? `<img class="thumb" data-view="${i}" alt="">` : ""}<span class="name">${esc(n)}</span><span class="size">${size(b)}</span>` +
-      `<button data-ren="${i}">Rename</button><button data-del="${i}">Delete</button></li>`).join("")
+    return `<li><img class="thumb" data-view="${i}" alt=""><div class="cap"><div><span class="name">${esc(game)}</span><span class="size">${when}</span></div>` +
+      `<button class="ico" data-get="${i}" aria-label="Download" title="Download">${ICON.get}</button><button class="ico" data-del="${i}" aria-label="Delete" title="Delete">${ICON.del}</button></div></li>`;
+  }).join("") : `<li class="none"><span class="name" style="color:var(--dim)">No screenshots yet</span></li>`;
+  else $("list").innerHTML = games.length ? games.map((g, i) => { const [n, b, l] = g; return labeling == n
+    ? `<li class="label"><img class="lthumb" data-lthumb="${i}" alt="" ${l ? "" : "hidden"}><div class="txt"><span class="name">${esc(n.replace(/\.[^.]*$/, ""))}</span>` +
+      `<span class="size">${l ? "Replace or remove" : "Add your own"}</span></div>` +
+      `<button class="ico" data-pickl="${i}" aria-label="Choose picture" title="Choose picture">${ICON.lbl}</button>` +
+      (l ? `<button class="ico" data-rmlbl="${i}" aria-label="Remove label" title="Remove label">${ICON.del}</button>` : "") +
+      `<button class="ico" data-cancel aria-label="Close" title="Close">${ICON.no}</button></li>`
+    : renaming == n
+    ? `<li><input id="to" value="${esc(n)}"><button class="ico" data-save="${i}" aria-label="Save" title="Save">${ICON.ok}</button><button class="ico" data-cancel aria-label="Cancel" title="Cancel">${ICON.no}</button></li>`
+    : `<li>${PICTURES(sys) ? `<img class="thumb" data-view="${i}" alt="">` : ""}<div class="txt"><span class="name">${esc(n)}</span><span class="size">${size(b)}${GAMES(sys) ? (l ? " · Label" : " · No label") + extra(g) : ""}</span></div>` +
+      (GAMES(sys) ? `<button class="ico" data-lbl="${i}" aria-label="Label" title="Your own label">${ICON.lbl}</button>` : "") +
+      `<button class="ico" data-ren="${i}" aria-label="Rename" title="Rename">${ICON.ren}</button><button class="ico" data-del="${i}" aria-label="Delete" title="Delete">${ICON.del}</button></li>`; }).join("")
     : `<li><span class="name" style="color:var(--dim)">Nothing here yet</span></li>`;
   const what = GAMES(sys) ? " game" : SHOTS(sys) ? " screenshot" : " file";
   $("count").textContent = games.length + what + (games.length == 1 ? "" : "s");
   $("free").textContent = data ? (data.free / 1073741824).toFixed(1) + " GB free on SD card" : "";
   if (PICTURES(sys)) thumbs(games);
+  const lt = $("list").querySelector("img.lthumb:not([hidden])");
+  if (lt) labelPicture(games[lt.dataset.lthumb][0]).then(src => lt.src = src).catch(() => lt.hidden = true);
   const to = $("to");
   if (to) { to.focus(); to.setSelectionRange(0, to.value.lastIndexOf(".")); to.onkeydown = e => {
     if (e.key == "Enter") $("list").querySelector("[data-save]").click();
     if (e.key == "Escape") { renaming = null; render(); } }; }
 }
+// Sorted by when added or by play time, each game shows that too.
+function extra(g) {
+  if (sortBy == "added" && g[3]) return " · " + new Date(g[3] * 1000).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+  if (sortBy == "played") return g[4] >= 60 ? " · " + played(g[4]) : " · Not played";
+  return "";
+}
+$("sort").onclick = e => {
+  const k = e.target.dataset.sort;
+  if (!k) return;
+  sortBack = k == sortBy ? !sortBack : false; sortBy = k;
+  try { localStorage.setItem("sort", sortBy); localStorage.setItem("sortBack", sortBack ? "1" : "0"); } catch (e) {}
+  renaming = labeling = null; render();
+};
 // "GB/Tetris 2026-10-20_09-14-02 2.png" as its game and when it was taken.
 function caption(n) {
   const m = n.replace(/^.*\//, "").replace(/\.png$/i, "").match(/^(.*) (\d{4})-(\d\d)-(\d\d)_(\d\d)-(\d\d)-\d\d( \d+)?$/);
   if (!m) return [n, ""];
   const month = "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split(" ")[m[3] - 1];
-  return [m[1] == "slot" ? "Menu" : m[1], `${+m[4]} ${month} ${m[2]} · ${m[5]}:${m[6]}`];
+  // This year's pictures leave the year out, so the time fits beside the buttons on a phone.
+  const year = m[2] == new Date().getFullYear() ? "" : " " + m[2];
+  return [m[1] == "slot" ? "Menu" : m[1], `${+m[4]} ${month}${year} · ${m[5]}:${m[6]}`];
 }
 // Pictures are fetched with the PIN and kept while the page is open.
 const pictures = {};
@@ -215,7 +343,8 @@ async function picture(name, bytes, from = sys) {
 async function download(i) {
   const [n, b] = data.systems[sys][i];
   const a = document.createElement("a");
-  a.href = await picture(n, b);
+  // A log is fetched fresh each time: it keeps growing while the console runs.
+  a.href = LOGS(sys) ? URL.createObjectURL(await (await api("GET", "/api/logs/" + encodeURIComponent(n))).blob()) : await picture(n, b);
   a.download = n.replace(/^.*\//, "");
   a.click();
 }
@@ -231,12 +360,49 @@ async function view(i) {
   $("bigname").textContent = SHOTS(sys) ? caption(n).filter(Boolean).join(" · ") : n;
   $("viewer").hidden = false;
 }
+// A game's own label: any picture from the phone, sent to the console as a PNG no larger than
+// it needs. The console fits it to the cart's sticker.
+let labelFor = null;
+const labelPics = {};
+function labelPicture(name) {
+  const k = sys + "/" + name;
+  if (!labelPics[k]) labelPics[k] = api("GET", "/api/label/" + sys + "/" + encodeURIComponent(name)).then(r => r.blob()).then(URL.createObjectURL);
+  return labelPics[k];
+}
+$("labelpick").onchange = async () => {
+  const f = $("labelpick").files[0], game = labelFor;
+  if (!f || !game) return;
+  try {
+    const img = await createImageBitmap(f);
+    const k = Math.min(1, 1024 / Math.max(img.width, img.height));
+    const c = document.createElement("canvas");
+    c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+    c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+    const png = await new Promise(ok => c.toBlob(ok, "image/png"));
+    await api("PUT", "/api/label/" + sys + "/" + encodeURIComponent(game), png);
+    delete labelPics[sys + "/" + game]; labeling = null;
+    say("New label for " + game.replace(/\.[^.]*$/, "")); await load();
+  } catch (e) { if (e.message) say(e.message); else if (!pin) return; else say("That picture can't be used"); }
+};
 $("viewer").onclick = () => $("viewer").hidden = true;
+let logoTaps = [];
+document.querySelector(".logo").onclick = () => {
+  const now = Date.now();
+  logoTaps = logoTaps.filter(t => now - t < 3000).concat(now);
+  if (logoTaps.length < 5) return;
+  logoTaps = [];
+  const on = !SYS.includes("LOGS");
+  if (on) SYS.push("LOGS"); else SYS.pop();
+  try { localStorage.setItem("logs", on ? "1" : "0"); } catch (e) {}
+  if (!on && LOGS(sys)) sys = SYS[0];
+  say(on ? "Logs tab on" : "Logs tab off");
+  if (data) render();
+};
 document.addEventListener("keydown", e => { if (e.key == "Escape") $("viewer").hidden = true; });
 $("tabs").onclick = e => {
-  const s = e.target.dataset.s;
+  const s = e.target.closest("button")?.dataset.s;
   if (!s) return;
-  sys = s; renaming = null; say();
+  sys = s; renaming = labeling = null; say();
   try { sessionStorage.setItem("sys", s); } catch (e) {}
   render();
   if (UPDATE(s)) checkUpdate();
@@ -246,8 +412,16 @@ $("list").onclick = async e => {
   try {
     if (d.view) return view(d.view);
     if (d.get) return download(d.get);
-    if (d.ren) { renaming = games[d.ren][0]; return render(); }
-    if ("cancel" in d) { renaming = null; return render(); }
+    if (d.lbl) { labeling = games[d.lbl][0]; renaming = null; return render(); }
+    if (d.pickl) { labelFor = games[d.pickl][0]; $("labelpick").value = ""; return $("labelpick").click(); }
+    if (d.rmlbl) {
+      const n = games[d.rmlbl][0];
+      if (!confirm("Remove the label of " + n.replace(/\.[^.]*$/, "") + "?\nThe console looks one up online again.")) return;
+      await api("DELETE", "/api/label/" + sys + "/" + encodeURIComponent(n));
+      delete labelPics[sys + "/" + n]; labeling = null; say("Label removed"); return load();
+    }
+    if (d.ren) { labeling = null; renaming = games[d.ren][0]; return render(); }
+    if ("cancel" in d) { renaming = labeling = null; return render(); }
     if (d.save) {
       const from = games[d.save][0], to = $("to").value.trim();
       await api("POST", "/api/rename/" + sys + "/" + encodeURIComponent(from), to);
@@ -302,6 +476,31 @@ function send(file, to, path) {
     x.send(file);
   });
 }
+// The achievements tab: the password goes to the console once, which keeps only the token.
+let ra = null;
+async function raTab() {
+  try { ra = await (await api("GET", "/api/ra")).json(); } catch (e) { return; }
+  if (!RA(sys)) return;
+  const site = `<a href="https://retroachievements.org" target="_blank" rel="noopener">retroachievements.org</a>`;
+  const where = `<p>Your Web API Key is on ${site} under Settings.</p>`;
+  const foot = `<a class="ra" href="https://retroachievements.org" target="_blank" rel="noopener"><i></i>Powered by RetroAchievements</a>`;
+  $("ra").innerHTML = (ra.user
+    ? `<h2>Logged in as ${esc(ra.user)}</h2><p>Every game with achievements counts them on the console. They pause while cheats are on.</p>` +
+      (ra.key
+        ? `<p>Web API Key saved.</p><div class="btns"><button id="rout" class="alt">Log out</button></div>`
+        : `<input id="rk" placeholder="Web API Key" autocapitalize="off" autocomplete="off">${where}<div class="btns"><button id="rks">Save</button><button id="rout" class="alt">Log out</button></div>`)
+    : `<h2>RetroAchievements</h2><p>Earn achievements in your games, like trophies on a modern console. Make a free account at ${site}.</p><p>Log in once. Your password is never saved.</p>` +
+      `<input id="rau" placeholder="User name" autocomplete="username" autocapitalize="off"><input id="rap" type="password" placeholder="Password" autocomplete="current-password"><input id="rak" placeholder="Web API Key" autocapitalize="off" autocomplete="off">${where}<div class="btns"><button id="rin">Log in</button></div>`) + foot;
+  const out = $("rout"), inn = $("rin");
+  if (out) out.onclick = async () => { try { await api("DELETE", "/api/ra"); } catch (e) { if (e.message) say(e.message); } raTab(); };
+  const ks = $("rks");
+  if (ks) ks.onclick = async () => { try { await api("POST", "/api/ra/key", $("rk").value.trim()); } catch (e) { if (e.message) say(e.message); } raTab(); };
+  if (inn) inn.onclick = async () => {
+    inn.disabled = true; say("");
+    try { await api("POST", "/api/ra/login", $("rau").value.trim() + "\n" + $("rap").value + "\n" + $("rak").value.trim()); } catch (e) { if (e.message) say(e.message); }
+    raTab();
+  };
+}
 // The update tab: the newest release on GitHub, or a zip dropped on the page, is put beside
 // the running version; Install restarts the console into it.
 let update = null, polling = null, quiet = false;
@@ -312,7 +511,7 @@ async function checkUpdate() {
   badge();
   updated();
   clearTimeout(polling);
-  if (UPDATE(sys) && (update.state == "checking" || update.state == "downloading")) polling = setTimeout(checkUpdate, 1000);
+  if (UPDATE(sys) && (update.state == "checking" || update.state == "downloading" || (update.baseos && ["checking", "downloading"].includes(update.baseos.state)))) polling = setTimeout(checkUpdate, 1000);
 }
 function updated() {
   if (!UPDATE(sys)) return;
@@ -320,7 +519,7 @@ function updated() {
   const [title, note, button] = {
     idle: ["slot. x GRAVY " + (u.installed || ""), "Look for a newer version on GitHub.", "Check for update"],
     checking: ["Checking...", "Asking GitHub for the newest release.", ""],
-    latest: ["Up to date", "You have the newest version, " + u.version + ".", "Check again"],
+    latest: ["slot. x GRAVY is up to date", "You have the newest version, " + u.version + ".", "Check again"],
     available: [u.version + " is out", "You have " + have + ". Games, saves and settings stay as they are.", "Download"],
     downloading: ["Downloading " + u.version, u.total ? size(u.done) + " of " + size(u.total) : size(u.done), ""],
     ready: [(u.version || "The update") + " is ready", "The console restarts into it. If it doesn't start, the next start goes back to " + have + ".", "Install"],
@@ -329,8 +528,11 @@ function updated() {
   const p = u.total ? Math.round(100 * u.done / u.total) : 0;
   $("update").innerHTML = `<h2>${esc(title.trim())}</h2><p>${esc(note || "")}</p>` +
     (u.state == "downloading" ? `<div class="bar"><i style="width:${p}%"></i></div>` : "") +
-    (button ? `<button id="go" data-state="${u.state}">${button}</button>` : "") +
-    notes(u) + baseos(u);
+    (button ? `<button id="go" data-state="${u.state}">${button}</button>` : "");
+  // Release notes and the BaseOS note sit under the drop zone, so the zip box belongs to the
+  // slot. x GRAVY update above it and never reads as a place to drop BaseOS.
+  $("after").innerHTML = notes(u) + baseos(u);
+  baseosButton();
   const go = $("go");
   if (go) go.onclick = async () => {
     try {
@@ -345,12 +547,46 @@ function updated() {
     checkUpdate();
   };
 }
-// A newer BaseOS is only told: it is installed the BaseOS way, not from here.
+// BaseOS has its own card under slot. x GRAVY's, built the same way: the version the console runs,
+// a button that asks GitHub, and when the release has the update file made for this console it
+// comes onto the card from here and Install restarts the console into it.
 function baseos(u) {
   const b = u.baseos;
   if (!b) return "";
-  return `<div class="notes"><h3>BaseOS ${esc(b.version)} is out</h3><p>Your console runs BaseOS ${esc(b.installed)}. BaseOS is updated on its own, not from here.</p></div>` +
-    `<div><a class="gh" href="${esc(b.link)}" target="_blank" rel="noopener">BaseOS on GitHub</a></div>`;
+  const ver = b.version || "", have = b.installed;
+  const [title, note, button] = {
+    idle: ["BaseOS " + have, "Look for a newer BaseOS on GitHub.", "Check for update"],
+    checking: ["Checking...", "Asking GitHub for the newest BaseOS.", ""],
+    latest: ["BaseOS is up to date", "You have the newest BaseOS, " + have + ".", "Check again"],
+    available: b.file
+      ? ["BaseOS " + ver + " is out", "You have " + have + ". Made for your " + b.target + ". Games, saves and settings stay.", "Download"]
+      : ["BaseOS " + ver + " is out", "You have " + have + ". Update it the BaseOS way, from its release page.", ""],
+    downloading: ["Downloading BaseOS " + ver, b.total ? size(b.done) + " of " + size(b.total) : size(b.done), ""],
+    ready: ["BaseOS " + ver + " is ready", "The update is on the card. Keep the console charged: it restarts and installs it while it starts.", "Install"],
+    failed: ["That didn't work", b.error, "Try again"],
+  }[b.state];
+  const p = b.total ? Math.round(100 * b.done / b.total) : 0;
+  return `<div class="base"><h2>${esc(title)}</h2><p>${esc(note || "")}</p>` +
+    (b.state == "downloading" ? `<div class="bar"><i style="width:${p}%"></i></div>` : "") +
+    (button ? `<button id="gobase" data-state="${b.state}">${button}</button>` : "") +
+    `<div><a class="gh" href="${esc(b.link)}" target="_blank" rel="noopener">BaseOS on GitHub</a></div></div>`;
+}
+function baseosButton() {
+  const b = update && update.baseos, go = $("gobase");
+  if (!go || !b) return;
+  go.onclick = async () => {
+    try {
+      if (b.state == "ready") {
+        if (!confirm("Install BaseOS " + b.version + "? The console restarts and installs it while it starts. Keep it charged.")) return;
+        await api("POST", "/api/update/baseos/install");
+        $("update").innerHTML = "<h2>Restarting...</h2><p>BaseOS installs while the console starts. This can take a few minutes; this page closes with it.</p>";
+        $("after").innerHTML = "";
+        return;
+      }
+      await api("POST", "/api/update/baseos/" + (b.state == "available" ? "download" : "check"));
+    } catch (err) { if (err.message) say(err.message); }
+    checkUpdate();
+  };
 }
 // Each visit looks on GitHub once by itself, so a newer release shows as a dot on the Update tab
 // and a line above the tabs, without opening the tab first.
@@ -409,17 +645,20 @@ async function add(files) {
     $("up").innerHTML = "";
     return checkUpdate();
   }
-  let added = 0, last = sys;
+  let added = 0, last = sys, wrong = "", one = "";
   for (const f of files) {
     // Each game goes to the shelf its file says, whichever tab is open.
     const ext = f.name.split(".").pop().toLowerCase();
+    // A packed game never plays: say so at once, without sending it first.
+    if (/^(zip|7z|rar|gz|tar)$/.test(ext)) { wrong = f.name + ": unzip it first, the console can't open ." + ext + " files"; continue; }
     // A .gb on the GBC tab and a Super Game Boy .sfc on the BIOS tab stay where they are dropped.
     const stays = (sys == "GBC" && ext == "gb") || (sys == "BIOS" && (ext == "sfc" || ext == "smc"));
     const to = EXT[ext] && !stays ? EXT[ext] : sys;
-    try { await send(f, to); added++; last = to; } catch (err) { say(err.message); }
+    try { await send(f, to); added++; last = to; one = f.name; } catch (err) { say(err.message); }
   }
   $("up").innerHTML = "";
-  if (added) { sys = last; say(added == 1 ? "Added " + files[0].name : "Added " + added + " files"); }
+  if (added) { sys = last; say(added == 1 ? "Added " + one : "Added " + added + " files"); }
+  if (wrong) say(wrong);
   await load().catch(() => {});
 }
 $("pick").onchange = () => { add([...$("pick").files]); $("pick").value = ""; };
@@ -427,6 +666,7 @@ const drop = $("drop");
 drop.ondragover = e => { e.preventDefault(); drop.classList.add("over"); };
 drop.ondragleave = () => drop.classList.remove("over");
 drop.ondrop = e => { e.preventDefault(); drop.classList.remove("over"); add([...e.dataTransfer.files]); };
+
 
 let light = false;
 try { light = localStorage.getItem("theme") == "light"; } catch (e) {}

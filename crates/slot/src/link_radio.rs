@@ -66,6 +66,58 @@ pub enum WifiJob {
     RomManagerOff,
 }
 
+/// Bluetooth headphones, paired or heard nearby.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BtDevice {
+    pub mac: String,
+    pub name: String,
+    pub paired: bool,
+    pub connected: bool,
+}
+
+/// The Bluetooth page's questions for the service, answered later through `bt_answer`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BtJob {
+    Power(bool),
+    Scan,
+    List,
+    /// pair, connect, disconnect or forget, and the device.
+    Act(&'static str, String),
+    /// How the last pair or connect went.
+    Status,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BtAnswer {
+    /// None when the service could not list them.
+    Listed(Option<Vec<BtDevice>>),
+    /// PAIRING, WORKING, DONE, FAILED or NONE.
+    Job(String),
+    /// The radio could not come on: why.
+    PowerFailed(String),
+}
+
+/// `0 BT mac,hexname,flags ...` from `bt list`.
+pub fn parse_bt(reply: &str) -> Vec<BtDevice> {
+    reply
+        .split_whitespace()
+        .skip_while(|w| *w != "BT")
+        .skip(1)
+        .filter_map(|w| {
+            let mut f = w.split(',');
+            let mac = f.next()?.to_owned();
+            let name = unhex(f.next()?)?;
+            let flags = f.next().unwrap_or("");
+            Some(BtDevice {
+                name: if name.is_empty() { mac.clone() } else { name },
+                mac,
+                paired: flags.contains('p'),
+                connected: flags.contains('c'),
+            })
+        })
+        .collect()
+}
+
 /// A network heard nearby.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Seen {
@@ -83,7 +135,7 @@ pub enum WifiAnswer {
     WpsDone(String),
     WpsFailed,
     /// The ROM Manager's address and PIN; None when it could not start.
-    RomManager(Option<(String, String)>),
+    RomManager(Option<ManagerPage>),
 }
 
 /// How joining a network is going, from the service.
@@ -112,6 +164,12 @@ pub trait RadioJobs: Send {
     fn wifi(&mut self, _job: WifiJob) {}
 
     fn wifi_answer(&mut self) -> Option<WifiAnswer> {
+        None
+    }
+
+    fn bt(&mut self, _job: BtJob) {}
+
+    fn bt_answer(&mut self) -> Option<BtAnswer> {
         None
     }
 
@@ -193,6 +251,44 @@ impl RadioJobs for RadioQueue {
         (!q.is_empty()).then(|| q.remove(0))
     }
 
+    fn bt(&mut self, job: BtJob) {
+        std::thread::spawn(move || {
+            let word = match &job {
+                BtJob::Power(on) => (if *on { "on" } else { "off" }).to_owned(),
+                BtJob::Scan => "scan".to_owned(),
+                BtJob::List => "list".to_owned(),
+                BtJob::Act(verb, mac) => format!("{verb}-{mac}"),
+                BtJob::Status => "status".to_owned(),
+            };
+            let out = helper().args(["bt", &word]).output();
+            let ok = out.as_ref().is_ok_and(|o| o.status.success());
+            let text = out
+                .as_ref()
+                .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+                .unwrap_or_default();
+            let answer = match job {
+                BtJob::List => Some(BtAnswer::Listed(ok.then(|| parse_bt(&text)))),
+                BtJob::Status => text
+                    .split_whitespace()
+                    .find_map(|w| w.strip_prefix("bt_job="))
+                    .map(|j| BtAnswer::Job(j.to_owned())),
+                BtJob::Power(true) if !ok => Some(BtAnswer::PowerFailed(
+                    text.split_whitespace().nth(1).unwrap_or("BT_FAILED").to_owned(),
+                )),
+                BtJob::Act(..) if !ok => Some(BtAnswer::Job("FAILED".to_owned())),
+                _ => None,
+            };
+            if let (Some(a), Ok(mut q)) = (answer, BT_ANSWERS.lock()) {
+                q.push(a);
+            }
+        });
+    }
+
+    fn bt_answer(&mut self) -> Option<BtAnswer> {
+        let mut q = BT_ANSWERS.lock().ok()?;
+        (!q.is_empty()).then(|| q.remove(0))
+    }
+
     fn warmed(&self) -> bool {
         WARM.load(Ordering::SeqCst)
     }
@@ -233,6 +329,8 @@ impl RadioJobs for RadioQueue {
 
 #[cfg(feature = "device")]
 static WIFI_ANSWERS: std::sync::Mutex<Vec<WifiAnswer>> = std::sync::Mutex::new(Vec::new());
+#[cfg(feature = "device")]
+static BT_ANSWERS: std::sync::Mutex<Vec<BtAnswer>> = std::sync::Mutex::new(Vec::new());
 #[cfg(feature = "device")]
 static WARM: AtomicBool = AtomicBool::new(false);
 #[cfg(feature = "device")]
@@ -399,10 +497,25 @@ pub fn parse_wps(reply: &str) -> Option<WifiAnswer> {
     (word == "FAILED").then_some(WifiAnswer::WpsFailed)
 }
 
-/// `0 WEB http://address pin` from `web on`.
-pub fn parse_rom_manager(reply: &str) -> Option<(String, String)> {
+/// Where the GRAVY Manager is: its IP address, its PIN, and its `gravy.local` name when mDNS
+/// answers for one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ManagerPage {
+    pub address: String,
+    pub pin: String,
+    pub named: Option<String>,
+}
+
+/// `0 WEB http://address pin [http://gravy.local]` from `web on`.
+pub fn parse_rom_manager(reply: &str) -> Option<ManagerPage> {
+    let page = |address: &str, pin: &str, named: Option<&str>| ManagerPage {
+        address: address.into(),
+        pin: pin.into(),
+        named: named.map(Into::into),
+    };
     match reply.split_whitespace().collect::<Vec<_>>()[..] {
-        ["0", "WEB", address, pin] => Some((address.into(), pin.into())),
+        ["0", "WEB", address, pin] => Some(page(address, pin, None)),
+        ["0", "WEB", address, pin, named] => Some(page(address, pin, Some(named))),
         _ => None,
     }
 }
@@ -485,6 +598,21 @@ static FAKE_JOIN: std::sync::Mutex<Option<(String, std::time::Instant, bool)>> =
     std::sync::Mutex::new(None);
 
 #[cfg(not(feature = "device"))]
+#[derive(Default)]
+struct FakeBt {
+    devices: Vec<BtDevice>,
+    busy: Option<(&'static str, String, u32)>,
+    answers: Vec<BtAnswer>,
+}
+
+#[cfg(not(feature = "device"))]
+static FAKE_BT: std::sync::Mutex<FakeBt> = std::sync::Mutex::new(FakeBt {
+    devices: Vec::new(),
+    busy: None,
+    answers: Vec::new(),
+});
+
+#[cfg(not(feature = "device"))]
 static FAKE_WIFI: std::sync::Mutex<Vec<WifiAnswer>> = std::sync::Mutex::new(Vec::new());
 
 #[cfg(not(feature = "device"))]
@@ -512,9 +640,9 @@ impl RadioJobs for RadioQueue {
                 seen("iPhone van Roy", -82, true),
             ])),
             WifiJob::WpsStart | WifiJob::WpsPoll => WifiAnswer::WpsWaiting(107),
-            WifiJob::RomManagerOn => {
-                WifiAnswer::RomManager(Some(("http://192.168.1.23".into(), "4821".into())))
-            }
+            WifiJob::RomManagerOn => WifiAnswer::RomManager(parse_rom_manager(
+                "0 WEB http://192.168.1.23 4821 http://gravy.local",
+            )),
             // A join: the first saved network, turned down when its password is "wrong" or w×8.
             WifiJob::Reload => {
                 let root = std::env::var_os("SLOT_ROOT").map(std::path::PathBuf::from);
@@ -538,6 +666,65 @@ impl RadioJobs for RadioQueue {
     fn wifi_answer(&mut self) -> Option<WifiAnswer> {
         let mut q = FAKE_WIFI.lock().ok()?;
         (!q.is_empty()).then(|| q.remove(0))
+    }
+
+    /// Off-device: with SLOT_FAKE_BT, AirPods paired before and a few speakers nearby, for
+    /// previews. A pair or connect takes three lists (about three seconds), so the spinner shows.
+    fn bt(&mut self, job: BtJob) {
+        if std::env::var_os("SLOT_FAKE_BT").is_none() {
+            return;
+        }
+        let Ok(mut fake) = FAKE_BT.lock() else { return };
+        if fake.devices.is_empty() {
+            let d = |mac: &str, name: &str, paired| BtDevice {
+                mac: mac.into(),
+                name: name.into(),
+                paired,
+                connected: false,
+            };
+            fake.devices = vec![
+                d("11:22:33:44:55:01", "AirPods Pro", true),
+                d("11:22:33:44:55:02", "JBL Flip 6", false),
+                d("11:22:33:44:55:03", "WH-1000XM5", false),
+                d("11:22:33:44:55:04", "Marshall Major IV", false),
+            ];
+        }
+        let answer = match job {
+            BtJob::List => {
+                if let Some((verb, mac, lists)) = fake.busy.clone() {
+                    fake.busy = Some((verb, mac.clone(), lists + 1));
+                    if lists >= 3 {
+                        for d in fake.devices.iter_mut() {
+                            match verb {
+                                "pair" | "connect" => d.connected = d.mac == mac,
+                                "disconnect" if d.mac == mac => d.connected = false,
+                                _ => {}
+                            }
+                            if d.mac == mac && verb == "pair" {
+                                d.paired = true;
+                            }
+                        }
+                        if verb == "forget" {
+                            fake.devices.retain(|d| d.mac != mac);
+                        }
+                        fake.busy = None;
+                    }
+                }
+                BtAnswer::Listed(Some(fake.devices.clone()))
+            }
+            BtJob::Act(verb, mac) => {
+                fake.busy = Some((verb, mac, 0));
+                return;
+            }
+            BtJob::Status => BtAnswer::Job(if fake.busy.is_some() { "WORKING" } else { "DONE" }.into()),
+            _ => return,
+        };
+        fake.answers.push(answer);
+    }
+
+    fn bt_answer(&mut self) -> Option<BtAnswer> {
+        let mut fake = FAKE_BT.lock().ok()?;
+        (!fake.answers.is_empty()).then(|| fake.answers.remove(0))
     }
 
     fn warmed(&self) -> bool {
@@ -611,5 +798,21 @@ mod tests {
     #[test]
     fn a_host_build_has_no_driver_left_to_load() {
         assert!(radio_jobs().warmed());
+    }
+}
+
+#[cfg(test)]
+mod bt_tests {
+    use super::*;
+
+    #[test]
+    fn bt_reply_reads_name_and_flags() {
+        let hex = |s: &str| s.bytes().map(|b| format!("{b:02x}")).collect::<String>();
+        let reply = format!("0 BT 11:22:33:44:55:66,{},pca AA:BB:CC:DD:EE:FF,,a", hex("AirPods Pro"));
+        let d = parse_bt(&reply);
+        assert_eq!(d.len(), 2);
+        assert_eq!((d[0].name.as_str(), d[0].paired, d[0].connected), ("AirPods Pro", true, true));
+        // No name: the address stands in.
+        assert_eq!((d[1].name.as_str(), d[1].paired), ("AA:BB:CC:DD:EE:FF", false));
     }
 }

@@ -95,11 +95,25 @@ pub struct Process {
 }
 impl Process {
     pub fn spawn(program: &str, args: &[&str], record: PathBuf) -> Result<Self, &'static str> {
+        Self::spawn_to(program, args, record, None)
+    }
+
+    /// As `spawn`, with what it prints appended to `log`.
+    pub fn spawn_to(
+        program: &str,
+        args: &[&str],
+        record: PathBuf,
+        log: Option<&Path>,
+    ) -> Result<Self, &'static str> {
+        let out = || -> Stdio {
+            log.and_then(|p| OpenOptions::new().create(true).append(true).open(p).ok())
+                .map_or_else(Stdio::null, Stdio::from)
+        };
         let mut child = Command::new(program)
             .args(args)
             .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
+            .stdout(out())
+            .stderr(out())
             .spawn()
             .map_err(|_| "PROCESS_START")?;
         let result = identity(child.id())

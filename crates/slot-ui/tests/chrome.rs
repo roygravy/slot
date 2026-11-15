@@ -65,6 +65,7 @@ fn quad(d: &Draw) -> Quad {
         | Draw::Part { x, y, w, h, .. }
         | Draw::Turned { x, y, w, h, .. }
         | Draw::Tint { x, y, w, h, .. }
+        | Draw::Shade { x, y, w, h, .. }
         | Draw::Light { x, y, w, h, .. } => Quad { x, y, w, h },
         Draw::Game | Draw::Shot { .. } => Quad {
             x: 0.0,
@@ -119,7 +120,7 @@ fn alpha(d: &Draw) -> f32 {
         | Draw::Part { alpha, .. }
         | Draw::Turned { alpha, .. }
         | Draw::Light { alpha, .. } => alpha,
-        Draw::Tint { colour, .. } => colour[3],
+        Draw::Tint { colour, .. } | Draw::Shade { colour, .. } => colour[3],
         Draw::Game | Draw::Shot { .. } => 1.0,
     }
 }
@@ -164,6 +165,9 @@ fn chrome_into(c: &Cart, seat: f32, out: &mut Vec<Draw>) {
         lid: None,
         light: false,
         ejecting: false,
+        power: None,
+        perched: None,
+        drop: None,
     }
     .draw(out);
 }
@@ -201,10 +205,13 @@ fn a_cart_the_row_had_not_finished_moving_slides_across_as_it_goes_in() {
             lid: None,
             light: false,
             ejecting: false,
+            power: None,
+            perched: None,
+            drop: None,
         }
         .draw(&mut out);
         out.iter()
-            .find(|d| matches!(d, Draw::Tex { .. }))
+            .find(|d| matches!(d, Draw::Tex { .. } | Draw::Turned { .. }))
             .map(quad)
             .expect("no cartridge in the list")
     };
@@ -265,6 +272,9 @@ fn draw_powering_on(t: f32, out: &mut Vec<Draw>) {
         lid: None,
         light: false,
         ejecting: false,
+        power: None,
+        perched: None,
+        drop: None,
     }
     .draw(out);
 }
@@ -684,6 +694,9 @@ fn the_empty_slot_is_the_same_slot_the_chrome_draws() {
         lid: None,
         light: false,
         ejecting: false,
+        power: None,
+        perched: None,
+        drop: None,
     }
     .draw(&mut seated);
 
@@ -880,8 +893,10 @@ fn the_cart_catches_on_the_top_edge_of_the_slot() {
                 ref other => panic!("the cart is not a quad: {other:?}"),
             }
         };
+        // The pak is picked up off the shelf first and only starts down towards the slot
+        // after that arc, so the hesitation is looked for once it is on its way down.
         let mut slowest = (f32::MAX, 0.0f32);
-        let mut t = 0.05;
+        let mut t = 0.3;
         while t < 0.95 {
             let d = bottom_at(t + 0.05) - bottom_at(t);
             if d < slowest.0 {
@@ -926,11 +941,16 @@ fn a_clear_carts_board_goes_into_the_slot_and_comes_out_with_it() {
                 lid: None,
                 light: false,
                 ejecting: false,
+                power: None,
+                perched: None,
+                drop: None,
             }
             .draw(&mut out);
             let at = |t: TexId| {
                 out.iter()
-                    .position(|d| matches!(*d, Draw::Tex { tex, .. } if tex == t))
+                    .position(|d| {
+                        matches!(*d, Draw::Tex { tex, .. } | Draw::Turned { tex, .. } if tex == t)
+                    })
                     .unwrap_or_else(|| panic!("{name} at {seat}: a layer was not drawn"))
             };
             assert!(

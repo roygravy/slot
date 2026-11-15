@@ -71,3 +71,9 @@ mod tests {
         assert_eq!(text_from_bytes(&[0u8; 12]), None);
     }
 }
+
+/// The game code, read once per file and kept on the card: the shelf asks for it on every
+/// cart it draws.
+pub fn cached_code(rom: &Path) -> String {
+    crate::header_index::gba_code(rom)
+}

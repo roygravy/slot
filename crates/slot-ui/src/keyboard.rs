@@ -15,6 +15,8 @@ pub enum Key {
     Delete,
     /// Between the letters and the numbers.
     Layer,
+    /// Between the numbers and the other marks (#+= / 123), where shift sits on the letters.
+    Symbols,
     Space,
     Search,
 }
@@ -38,23 +40,37 @@ fn chars(keys: &str, from: f32, w: f32) -> Vec<Cap> {
         .collect()
 }
 
-/// The rows, top to bottom: the letters as a phone lays them out, or its numbers and marks.
-pub fn key_rows(numbers: bool) -> [Vec<Cap>; 4] {
+/// Which of the phone's three keyboards shows: letters, numbers, or the other marks (#+=).
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Default)]
+pub enum Board {
+    #[default]
+    Letters,
+    Numbers,
+    Symbols,
+}
+
+impl Board {
+    pub const ALL: [Board; 3] = [Board::Letters, Board::Numbers, Board::Symbols];
+}
+
+/// The rows, top to bottom: the letters as a phone lays them out, its numbers, or its marks.
+pub fn key_rows(board: Board) -> [Vec<Cap>; 4] {
     let cap = |key, x, w| Cap { key, x, w };
     let bottom = vec![
         cap(Key::Layer, 0.0, 2.5),
         cap(Key::Space, 2.5, 5.0),
         cap(Key::Search, 7.5, 2.5),
     ];
-    if numbers {
-        let mut third = chars(".,?!'", 1.5, 1.4);
+    if board != Board::Letters {
+        let mut third = vec![cap(Key::Symbols, 0.0, 1.5)];
+        third.extend(chars(".,?!'", 1.5, 1.4));
         third.push(cap(Key::Delete, 8.5, 1.5));
-        [
-            chars("1234567890", 0.0, 1.0),
-            chars("-/:;()$&@\"", 0.0, 1.0),
-            third,
-            bottom,
-        ]
+        let (first, second) = if board == Board::Numbers {
+            ("1234567890", "-/:;()$&@\"")
+        } else {
+            ("[]{}#%^*+=", "_\\|~<>€£¥•")
+        };
+        [chars(first, 0.0, 1.0), chars(second, 0.0, 1.0), third, bottom]
     } else {
         let mut third = vec![cap(Key::Shift, 0.0, 1.5)];
         third.extend(chars("zxcvbnm", 1.5, 1.0));
@@ -181,8 +197,8 @@ fn shapes() -> Vec<Shape> {
             all.push(s);
         }
     };
-    for numbers in [false, true] {
-        for (r, row) in key_rows(numbers).iter().enumerate() {
+    for board in Board::ALL {
+        for (r, row) in key_rows(board).iter().enumerate() {
             for cap in row {
                 add(shape_of(key_box(r, cap), false));
                 add(shape_of(ring_box(r, cap), true));
@@ -353,11 +369,13 @@ pub type Up = (TexId, u32, u32);
 pub struct KeyboardFaces<T> {
     /// Each key's letter, lower and upper case, and its numbers and marks.
     pub glyphs: Vec<(char, T)>,
-    /// space, search, 123, ABC.
-    pub words: [T; 4],
+    /// space, search, 123, ABC, #+=.
+    pub words: [T; 5],
     pub shapes: Vec<(Shape, T)>,
     /// Shift, shift held, delete, magnifier, clear.
     pub icons: [T; 5],
+    /// A soft round dot, scaled and tinted: the password check's spinner and check.
+    pub disc: T,
     /// The field's hint while nothing is typed.
     pub placeholder: T,
     pub searching: T,
@@ -404,9 +422,9 @@ impl KeyboardFaces<UndoFace> {
     pub fn build_for(purpose: Purpose) -> Self {
         let pw = purpose == Purpose::Password;
         let go = if pw { "Join" } else { "Search" };
-        let set: String = key_rows(false)
+        let set: String = Board::ALL
             .iter()
-            .chain(key_rows(true).iter())
+            .flat_map(|&b| key_rows(b))
             .flatten()
             .filter_map(|c| match c.key {
                 Key::Char(c) => Some(c),
@@ -428,19 +446,20 @@ impl KeyboardFaces<UndoFace> {
                 .iter()
                 .map(|&c| (c, plain(&c.to_string(), KEY_PX, 0.0, false)))
                 .collect(),
-            words: ["space", if pw { "join" } else { "search" }, "123", "ABC"]
+            words: ["space", if pw { "join" } else { "search" }, "123", "ABC", "#+="]
                 .map(|w| plain(w, WORD_PX, 0.0, false)),
             shapes: shapes().into_iter().map(|s| (s, rounded(s))).collect(),
             icons: icons(),
+            disc: disc_face(),
             placeholder: plain(if pw { "Password" } else { "Game title" }, FIELD_PX, 0.0, false),
-            searching: plain(if pw { "Scanning" } else { "Searching" }, 16.0, 3.0, true),
+            searching: plain(if pw { "Scanning" } else { "Searching" }, MESSAGE_PX, 3.0, true),
             try_again: plain(
                 if pw {
                     "Move closer to the router"
                 } else {
                     "Try fewer or other words"
                 },
-                13.0,
+                crate::quick_menu::HELP_PX,
                 2.0,
                 true,
             ),
@@ -460,24 +479,25 @@ impl KeyboardFaces<UndoFace> {
                 hint("MENU", "Exit"),
             ],
             legend_strip: vec![hint("A", "Type"), hint("B", "Close"), hint("MENU", "Exit")],
+            // B Close after the actions, before MENU Exit (Roy 2026-11-14).
             legend_empty: vec![
-                hint("B", "Close"),
                 hint("Y", "Space"),
                 hint("SELECT", "Shift"),
                 hint("START", go),
+                hint("B", "Close"),
                 hint("MENU", "Exit"),
             ],
-            legend_results: vec![hint("B", "Back"), hint("A", "Choose"), hint("MENU", "Exit")],
+            legend_results: vec![hint("A", "Select"), hint("B", "Back"), hint("MENU", "Exit")],
             legend_back: vec![hint("B", "Back"), hint("MENU", "Exit")],
             extra: if pw {
                 vec![
-                    vec![hint("B", "Back"), hint("A", "Join"), hint("Y", "Scan Again")],
-                    vec![hint("B", "Back"), hint("A", "Join"), hint("Y", "Forget")],
-                    vec![hint("B", "Cancel"), hint("A", "Forget")],
+                    vec![hint("A", "Join"), hint("Y", "Scan Again"), hint("B", "Back")],
+                    vec![hint("A", "Join"), hint("Y", "Forget"), hint("B", "Back")],
+                    vec![hint("A", "Forget"), hint("B", "Cancel")],
                     vec![hint("B", "Cancel")],
-                    vec![hint("B", "Back"), hint("A", "Choose")],
+                    vec![hint("A", "Select"), hint("B", "Back")],
                     vec![hint("B", "Back")],
-                    vec![hint("B", "Back"), hint("A", "Try Again")],
+                    vec![hint("A", "Try Again"), hint("B", "Back")],
                 ]
             } else {
                 Vec::new()
@@ -499,6 +519,7 @@ impl KeyboardFaces<UndoFace> {
             words: self.words.map(&mut up),
             shapes: self.shapes.into_iter().map(|(s, f)| (s, up(f))).collect(),
             icons: self.icons.map(&mut up),
+            disc: up(self.disc),
             placeholder: up(self.placeholder),
             searching: up(self.searching),
             try_again: up(self.try_again),
@@ -575,6 +596,85 @@ pub fn search_typed_face(text: &str) -> UndoFace {
     UndoFace { rgba, w, h }
 }
 
+/// Where a caret after `cursor` bytes of `text` stands in its `search_typed_face`, which
+/// shows the end of a text too long for the field.
+pub fn search_caret_x(text: &str, cursor: usize) -> u16 {
+    let full = plain(text, FIELD_PX, 0.0, false).w;
+    let before = if cursor == 0 {
+        0
+    } else {
+        plain(&text[..cursor], FIELD_PX, 0.0, false).w
+    };
+    let skip = full.saturating_sub(TYPED_MAX);
+    before.saturating_sub(skip).saturating_sub(2) as u16
+}
+
+/// A white disc with a smooth edge, large enough to scale down cleanly.
+fn disc_face() -> UndoFace {
+    const N: u32 = 64;
+    let r = N as f32 / 2.0;
+    let mut rgba = Vec::with_capacity((N * N * 4) as usize);
+    for y in 0..N {
+        for x in 0..N {
+            let d = (x as f32 + 0.5 - r).hypot(y as f32 + 0.5 - r);
+            let a = (r - d + 0.5).clamp(0.0, 1.0);
+            rgba.extend_from_slice(&[255, 255, 255, (a * 255.0).round() as u8]);
+        }
+    }
+    UndoFace { rgba, w: N, h: N }
+}
+
+fn dot(out: &mut Vec<Draw>, disc: Up, x: f32, y: f32, d: f32, colour: [f32; 4]) {
+    out.push(Draw::Tint {
+        x: x - d / 2.0,
+        y: y - d / 2.0,
+        w: d,
+        h: d,
+        tex: disc.0,
+        colour,
+    });
+}
+
+/// The password check's spinner: eight round dots on a ring, the newest largest and
+/// brightest, the ones behind it shrinking and fading as they trail.
+pub fn draw_round_spinner(out: &mut Vec<Draw>, disc: Up, cx: f32, cy: f32, r: f32, d: f32, now: u64, colour: [f32; 4]) {
+    // Smoothly round, not in steps: the head glides from dot to dot.
+    let head = (now % 900) as f32 / 900.0 * 8.0;
+    for i in 0..8 {
+        let a = i as f32 * std::f32::consts::FRAC_PI_4 - std::f32::consts::FRAC_PI_2;
+        let age = (head - i as f32).rem_euclid(8.0) / 8.0;
+        let fade = 1.0 - age;
+        let size = d * (0.5 + 0.5 * fade);
+        let c = [colour[0], colour[1], colour[2], colour[3] * (0.2 + 0.8 * fade)];
+        dot(out, disc, cx + a.cos() * (r - d / 2.0), cy + a.sin() * (r - d / 2.0), size, c);
+    }
+}
+
+/// A check `s` from its middle to its tips, a round-ended stroke `w` wide, drawn as far as
+/// `t` (0 to 1): the short stroke down first, then the long one up.
+pub fn draw_round_check(out: &mut Vec<Draw>, disc: Up, cx: f32, cy: f32, s: f32, w: f32, t: f32, colour: [f32; 4]) {
+    let pts = [(cx - s * 0.95, cy + s * 0.02), (cx - s * 0.3, cy + s * 0.62), (cx + s, cy - s * 0.66)];
+    let len = |a: (f32, f32), b: (f32, f32)| (b.0 - a.0).hypot(b.1 - a.1);
+    let (l1, l2) = (len(pts[0], pts[1]), len(pts[1], pts[2]));
+    // Eased, so the pen slows as it lands.
+    let e = 1.0 - (1.0 - t.clamp(0.0, 1.0)).powi(3);
+    let mut left = e * (l1 + l2);
+    for (a, b, l) in [(pts[0], pts[1], l1), (pts[1], pts[2], l2)] {
+        let run = left.min(l);
+        let mut at = 0.0;
+        // Round dots half a pixel apart make one smooth stroke with round ends.
+        while at <= run {
+            let f = at / l;
+            dot(out, disc, a.0 + (b.0 - a.0) * f, a.1 + (b.1 - a.1) * f, w, colour);
+            at += 0.5;
+        }
+        left -= run;
+        if left <= 0.0 {
+            break;
+        }
+    }
+}
+
 /// How wide the QR code shows, its quiet zone included.
 const QR_PX: u32 = 176;
 
@@ -611,9 +711,14 @@ pub fn search_big_face(text: &str) -> UndoFace {
     plain(text, 64.0, 18.0, false)
 }
 
+/// A list's heading over its rows ("Networks Nearby", "3 Games Found"), as every list heading.
 pub fn search_status_face(text: &str) -> UndoFace {
-    plain(text, 15.0, 3.0, true)
+    plain(text, crate::quick_menu::HELP_PX, 3.0, true)
 }
+
+/// The one size of a message screen's line, loading or not: "Starting...", "Scanning",
+/// "Not connected", the GRAVY Manager's address. The line under it is at help size.
+pub const MESSAGE_PX: f32 = 22.0;
 
 /// A message screen's lead line at menu size, over two lines if it must: WPS's instruction.
 pub fn search_lead_face(text: &str) -> UndoFace {
@@ -635,6 +740,8 @@ pub fn search_sub_face(text: &str) -> UndoFace {
 
 const LEAD_H: u32 = 84;
 const ICON_Y: f32 = 96.0;
+/// The middle of the large Wi-Fi sign, where the password check turns and ticks.
+pub const SEARCH_ICON_MID: f32 = ICON_Y + 42.0;
 const LEAD_Y: f32 = 214.0;
 const SUB_Y: f32 = 312.0;
 /// The GRAVY Manager's QR code, clear of the heading.
@@ -642,7 +749,7 @@ const QR_Y: f32 = 64.0;
 
 /// The GRAVY Manager's address under its PIN: larger, to type it over from the screen.
 pub fn search_address_face(text: &str) -> UndoFace {
-    plain(text, 22.0, 3.0, true)
+    plain(text, MESSAGE_PX, 3.0, true)
 }
 
 /// A game found: its name, cut short with an ellipsis when it is wider than the list, and
@@ -684,8 +791,12 @@ pub enum SearchScreen {
     Keyboard {
         row: usize,
         col: usize,
-        numbers: bool,
+        board: Board,
         shift: bool,
+        /// Caps lock: shift drawn held, with a bar under it.
+        caps: bool,
+        /// Where the caret stands in the typed face, when it is not at its end.
+        caret_x: Option<u16>,
         /// The caret, which blinks.
         caret: bool,
         /// The chosen key's accents are showing, this one of them chosen.
@@ -710,6 +821,8 @@ pub struct SearchView<'a> {
     pub openness: f32,
     /// In place of the search's own legend, on every screen but the keyboard.
     pub legend: Option<&'a [Up]>,
+    /// How much of the large Wi-Fi sign shows: it makes way for the password check.
+    pub icon_alpha: f32,
 }
 
 fn rgb(c: [u8; 3], a: f32) -> [f32; 4] {
@@ -731,18 +844,22 @@ struct Keys {
     field: [f32; 4],
     glyph: [f32; 4],
     faint: [f32; 4],
+    /// The thin shade under each key that lifts a white key off the light panel, as on a
+    /// phone's light keyboard. The dark keys stand out on their own.
+    shadow: Option<[f32; 4]>,
 }
 
 fn keys(light: bool, a: f32) -> Keys {
     if light {
         Keys {
-            panel: rgb([0xd3, 0xd2, 0xcd], a),
+            panel: rgb([0xcc, 0xcb, 0xc6], a),
             key: rgb([0xfb, 0xfb, 0xf9], a),
             func: rgb([0xaa, 0xab, 0xa8], a),
             balloon: rgb([0xff, 0xff, 0xff], a),
             field: rgb([0xd8, 0xd6, 0xd0], a),
             glyph: rgb([0x1c, 0x1c, 0x1e], a),
             faint: rgb([0x80, 0x80, 0x84], a),
+            shadow: Some(rgb([0x8c, 0x8b, 0x87], a)),
         }
     } else {
         Keys {
@@ -753,6 +870,7 @@ fn keys(light: bool, a: f32) -> Keys {
             field: rgb([0x3a, 0x3a, 0x3e], a),
             glyph: rgb([0xff, 0xff, 0xff], a),
             faint: rgb([0x9c, 0x9c, 0xa0], a),
+            shadow: None,
         }
     }
 }
@@ -805,14 +923,8 @@ pub fn draw_label_search(canvas: Canvas, v: &SearchView, out: &mut Vec<Draw>) {
     let legend = |faces: &[Up], gap: f32, out: &mut Vec<Draw>| {
         let pairs: Vec<(TexId, u32)> = faces.iter().map(|f| (f.0, f.1)).collect();
         for (tex, w, x) in centred_hints(canvas, &pairs, gap) {
-            out.push(tint(
-                tex,
-                x,
-                LEGEND_Y,
-                w as f32,
-                HINT_H as f32,
-                faded(v.ink.text, a),
-            ));
+            let (x, y) = (x.round(), LEGEND_Y.round());
+            crate::plate::shaded_hint(out, tex, x, y, w as f32, HINT_H as f32, faded(v.ink.text, a), v.ink.wash);
         }
     };
     let heading = |f: Up, y: f32, colour: [f32; 4], out: &mut Vec<Draw>| {
@@ -830,8 +942,10 @@ pub fn draw_label_search(canvas: Canvas, v: &SearchView, out: &mut Vec<Draw>) {
         SearchScreen::Keyboard {
             row,
             col,
-            numbers,
+            board,
             shift,
+            caps: caps_lock,
+            caret_x,
             caret,
             accent,
         } => {
@@ -885,8 +999,9 @@ pub fn draw_label_search(canvas: Canvas, v: &SearchView, out: &mut Vec<Draw>) {
                 }
             };
             if caret {
+                let cx = caret_x.map_or(typed_w, f32::from);
                 out.push(Draw::Rect {
-                    x: (tx + typed_w + 1.0).round(),
+                    x: (tx + cx + 1.0).round(),
                     y: fy + 11.0,
                     w: 2.0,
                     h: fh - 22.0,
@@ -901,7 +1016,7 @@ pub fn draw_label_search(canvas: Canvas, v: &SearchView, out: &mut Vec<Draw>) {
                 h: PANEL_H,
                 colour: k.panel,
             });
-            let rows = key_rows(numbers);
+            let rows = key_rows(board);
             let mut strip = None;
             for (r, caps) in rows.iter().enumerate() {
                 for (c, cap) in caps.iter().enumerate() {
@@ -916,6 +1031,9 @@ pub fn draw_label_search(canvas: Canvas, v: &SearchView, out: &mut Vec<Draw>) {
                         Key::Shift if shift => (k.balloon, k.glyph),
                         _ => (k.func, k.glyph),
                     };
+                    if let Some(sh) = k.shadow {
+                        shape((b.0, b.1 + 1.0, b.2, b.3), false, sh, out);
+                    }
                     shape(b, false, fill, out);
                     let face = match cap.key {
                         Key::Char(ch) => {
@@ -933,10 +1051,24 @@ pub fn draw_label_search(canvas: Canvas, v: &SearchView, out: &mut Vec<Draw>) {
                         Key::Delete => Some(v.faces.icons[2]),
                         Key::Space => Some(v.faces.words[0]),
                         Key::Search => Some(v.faces.words[1]),
-                        Key::Layer => Some(v.faces.words[if numbers { 3 } else { 2 }]),
+                        Key::Layer => Some(v.faces.words[if board == Board::Letters { 2 } else { 3 }]),
+                        Key::Symbols => {
+                            Some(v.faces.words[if board == Board::Numbers { 4 } else { 2 }])
+                        }
                     };
                     if let Some(f) = face {
                         centred_in(f, at(b), glyph, out);
+                        // Caps lock: a bar under the held shift arrow, as on a phone.
+                        if caps_lock && cap.key == Key::Shift {
+                            let (bx, by, bw, bh) = at(b);
+                            out.push(Draw::Rect {
+                                x: (bx + bw / 2.0 - 7.0).round(),
+                                y: (by + bh / 2.0 + f.2 as f32 / 2.0 + 2.0).round(),
+                                w: 14.0,
+                                h: 2.0,
+                                colour: glyph,
+                            });
+                        }
                     }
                     if chosen {
                         let ring = if accent.is_some() {
@@ -993,7 +1125,9 @@ pub fn draw_label_search(canvas: Canvas, v: &SearchView, out: &mut Vec<Draw>) {
             heading(v.texts.heading, HEADING_Y, faded(v.ink.dim, a), out);
             // WPS: a grey Wi-Fi sign, the instruction at menu size, the countdown under it.
             if let Some(icon) = v.texts.icon {
-                heading(icon, ICON_Y, faded(v.ink.dim, a), out);
+                if v.icon_alpha > 0.0 {
+                    heading(icon, ICON_Y, faded(v.ink.dim, a * v.icon_alpha), out);
+                }
                 if let Some(s) = v.texts.status {
                     heading(s, LEAD_Y, faded(v.ink.text, a), out);
                 }
@@ -1024,8 +1158,10 @@ pub fn draw_label_search(canvas: Canvas, v: &SearchView, out: &mut Vec<Draw>) {
             if let Some(s) = v.texts.status {
                 heading(s, 200.0 + low, faded(v.ink.text, a), out);
             }
-            // The larger address under a PIN needs a little more room above the note.
-            let note_drop = if v.texts.big.is_some() { 6.0 } else { 0.0 };
+            // The message line is at message size on every screen: the note keeps clear of it.
+            // Under a QR code the note sits where every menu's help line sits, as clear of
+            // the legend.
+            let note_drop = if v.texts.qr.is_some() { -1.0 } else { 8.0 };
             heading(
                 v.texts.note.unwrap_or(v.faces.try_again),
                 236.0 + low + note_drop,
@@ -1083,8 +1219,8 @@ mod tests {
 
     #[test]
     fn every_row_fills_the_keyboard_and_no_keys_overlap() {
-        for numbers in [false, true] {
-            for row in key_rows(numbers) {
+        for board in Board::ALL {
+            for row in key_rows(board) {
                 for pair in row.windows(2) {
                     assert!(pair[0].x + pair[0].w <= pair[1].x + 1e-4);
                 }
@@ -1097,8 +1233,8 @@ mod tests {
     #[test]
     fn every_key_shape_is_made() {
         let all = shapes();
-        for numbers in [false, true] {
-            for (r, row) in key_rows(numbers).iter().enumerate() {
+        for board in Board::ALL {
+            for (r, row) in key_rows(board).iter().enumerate() {
                 for cap in row {
                     assert!(all.contains(&shape_of(key_box(r, cap), false)));
                 }

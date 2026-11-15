@@ -78,6 +78,16 @@ pub fn gba_custom_game_rect(t: f32) -> (f32, f32, f32, f32) {
     ((OUT_W as f32 - w) / 2.0, (OUT_H as f32 - h) / 2.0, w, h)
 }
 
+/// The GBA in its own 3:2 shape, as big as fits, bars above and below on a 4:3 screen. `k`
+/// is how much wider the panel shows the frame than it is (1 on 640x480).
+pub fn gba_shape_game_rect(t: f32, k: f32) -> (f32, f32, f32, f32) {
+    let height = ((OUT_H - 2) as f32).min((OUT_W as f32 * k / 1.5).round());
+    let width = (1.5 * height / k).min(OUT_W as f32);
+    let w = width * screen_width_for(t, width);
+    let h = height * screen_scale_for(t, height);
+    ((OUT_W as f32 - w) / 2.0, ((OUT_H as f32 - h) / 2.0).round(), w, h)
+}
+
 fn screen_scale_for(t: f32, height: f32) -> f32 {
     let left = 1.0 - t.clamp(0.0, 1.0);
     1.0 - (1.0 - LINE_PX / height) * left * left

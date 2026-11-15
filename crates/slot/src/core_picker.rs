@@ -5,7 +5,11 @@ pub const SLIDE_MS: Millis = 160;
 pub const LIFT_MS: Millis = 260;
 pub const OPEN_MS: Millis = SLIDE_MS + LIFT_MS;
 pub const CLOSE_MS: Millis = 320;
-pub const HOP_MS: Millis = 180;
+pub const HOP_MS: Millis = 260;
+/// After its hop the chip takes a last push into its socket, sinking this far (in hop lifts)
+/// over this long, as a cart does into its slot.
+const PRESS_MS: Millis = 90;
+const PRESS_SINK: f32 = 0.18;
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum Press {
@@ -117,6 +121,14 @@ impl CorePicker {
         }
     }
 
+    /// Seconds the lid has been held up, fully open: for it to breathe.
+    pub fn held_for(&self, now: Millis) -> f32 {
+        match (self.close, self.started) {
+            (None, Some(started)) => now.saturating_sub(started + OPEN_MS) as f32 / 1000.0,
+            _ => 0.0,
+        }
+    }
+
     pub fn finished(&self, now: Millis) -> bool {
         self.close.is_some() && self.openness(now) <= 0.0
     }
@@ -169,6 +181,16 @@ impl CorePicker {
     pub fn chip(&self, now: Millis) -> Chip {
         let shake = self.refusal.map_or(0.0, |r| r.offset(now));
         match (self.hop, self.hop_progress(now)) {
+            (Some(_), Some(q)) if q >= 1.0 => {
+                let p = (q - 1.0) * HOP_MS as f32 / PRESS_MS as f32;
+                Chip {
+                    across: self.position(self.seat) as f32,
+                    lift: -PRESS_SINK * (std::f32::consts::PI * p).sin(),
+                    tip: 0.0,
+                    seated: Some(self.seat),
+                    shake,
+                }
+            }
             (Some(hop), Some(q)) => {
                 let rightward = self.position(hop.from) < self.position(self.seat);
                 let lean = if rightward { 1.0 } else { -1.0 };
@@ -201,6 +223,6 @@ impl CorePicker {
     fn hop_progress(&self, now: Millis) -> Option<f32> {
         let hop = self.hop?;
         let q = now.saturating_sub(hop.started) as f32 / HOP_MS as f32;
-        (q < 1.0).then_some(q)
+        (q < 1.0 + PRESS_MS as f32 / HOP_MS as f32).then_some(q)
     }
 }

@@ -61,6 +61,9 @@ pub struct Session {
     root: PathBuf,
     app: App,
     emu: Option<EmuHandle>,
+    /// A Game Boy link's handshake socket, kept open while gambatte runs its own: the other
+    /// handheld sees the link end when it closes.
+    gb_link: Option<Box<dyn slot_retro::LinkChannel>>,
     sink: Box<dyn AudioSink>,
     gestures: Gestures,
     pad: Pad,
@@ -70,6 +73,8 @@ pub struct Session {
     held: Vec<Btn>,
     motor: u16,
     pulse: Option<(Millis, u16)>,
+    /// A buzz playing (Vibration): when it began, and which.
+    buzzing: Option<(Millis, crate::buzz::Buzz)>,
     prefetch: Prefetch,
     reloading: bool,
     driven: bool,
@@ -89,6 +94,7 @@ impl Session {
             app: App::boot(&root),
             root,
             emu: None,
+            gb_link: None,
             sink,
             gestures: Gestures::new(),
             pad: Pad::default(),
@@ -97,6 +103,7 @@ impl Session {
             held: Vec::new(),
             motor: 0,
             pulse: None,
+            buzzing: None,
             prefetch: Prefetch::default(),
             reloading: false,
             driven: false,
@@ -250,6 +257,11 @@ impl Session {
         let had_link = self.app.link_active();
         f(&mut self.app);
         if had_link && !self.app.link_active() {
+            if self.gb_link.take().is_some() {
+                if let Some(emu) = &self.emu {
+                    emu.set_option("gambatte_gb_link_mode", "Not Connected");
+                }
+            }
             if let Some(emu) = &self.emu {
                 emu.end_link();
             }
@@ -300,12 +312,17 @@ impl Session {
             emu.set_volume(self.app.output_volume());
         }
         if let Some((client_id, transport)) = self.app.take_link_transport() {
-            match &self.emu {
-                Some(emu) => match self.app.link_player() {
-                    Some(player) => emu.begin_cable(player, transport),
-                    None => emu.begin_link(client_id, transport),
-                },
-                None => eprintln!("slot: link: a transport arrived with no core to run it"),
+            if let (Some(ip), Some(emu)) = (self.app.take_link_gb_peer(), &self.emu) {
+                begin_gb_link(emu, client_id == 0, ip);
+                self.gb_link = Some(transport);
+            } else {
+                match &self.emu {
+                    Some(emu) => match self.app.link_player() {
+                        Some(player) => emu.begin_cable(player, transport),
+                        None => emu.begin_link(client_id, transport),
+                    },
+                    None => eprintln!("slot: link: a transport arrived with no core to run it"),
+                }
             }
         }
         if self.app.take_reset() {
@@ -425,6 +442,16 @@ impl Session {
     }
 
     fn sync_rumble(&mut self) {
+        let now = self.app.now();
+        if let Some(buzz) = self.app.take_buzz() {
+            self.buzzing = Some((now, buzz));
+        }
+        if let Some((at, buzz)) = self.buzzing {
+            match buzz.strength_at(now.saturating_sub(at)) {
+                Some(strength) => return self.rumble(strength),
+                None => self.buzzing = None,
+            }
+        }
         let asked = match &self.emu {
             Some(emu) if self.playing() && self.app.rumble_enabled() => emu.rumble().strength(),
             _ => {
@@ -552,6 +579,11 @@ impl Session {
                 self.emu = None;
                 return;
             }
+            // Once the core is ready the insert only finishes its animation: palette and
+            // cheats went in once, not again on every frame of it.
+            Phase::Inserting {
+                core_ready: true, ..
+            } if self.emu.is_some() => return,
             Phase::Inserting { cart, .. } => cart.clone(),
             _ => return,
         };
@@ -567,9 +599,12 @@ impl Session {
         match self.emu.as_ref().map(EmuHandle::state) {
             Some(CoreState::Loading) => {}
             Some(CoreState::Ready) => {
-                if let (true, Some(p), Some(emu)) =
-                    (self.app.palette_live(), self.app.gb_palette(), &self.emu)
-                {
+                if let (true, true, Some(p), Some(emu)) = (
+                    self.app.core() == slot_store::Core::Mgba,
+                    self.app.palette_live(),
+                    self.app.gb_palette(),
+                    &self.emu,
+                ) {
                     emu.set_option("mgba_gb_colors", p.core_name());
                 }
                 let cheats = self.app.start_cheats();
@@ -649,9 +684,6 @@ impl Session {
             (
                 self.app.sgb_border(),
                 self.app.sgb_two(),
-                // A colour game made for the SGB too plays as on the real thing, in SGB
-                // colours with its own border; only the rest keep their colour inside slot.'s.
-                platform == Platform::Gbc && !crate::core::sgb_aware(&rom),
             )
         });
         let open = Box::new(move || {
@@ -666,8 +698,8 @@ impl Session {
             for (key, value) in tv {
                 opened.core.set_option(key, value);
             }
-            if let Some((border, two, gbc)) = sgb_setup {
-                crate::core::sgb_options(&root, opened.core.as_mut(), border, two, gbc);
+            if let Some((border, two)) = sgb_setup {
+                crate::core::sgb_options(&root, opened.core.as_mut(), border, two);
             }
             opened.core
         });
@@ -682,6 +714,8 @@ impl Session {
         launch("save read");
         let ring = self.sink.ring();
         let linked = player.filter(|_| platform == Platform::Gba);
+        #[cfg(feature = "retroachievements")]
+        crate::ra::prepare(self.ra_setup(core, platform, sgb));
         let emu = EmuHandle::spawn_opening(open, rom, ring, sav, resume, linked);
         if sav_unread {
             emu.refuse_save_ram();
@@ -694,6 +728,24 @@ impl Session {
         emu.set_driven(self.driven);
         self.app.set_snapshot(Box::new(emu.snapshot()));
         self.emu = Some(emu);
+    }
+
+    /// Achievements for this game: needs the login on the card, and not gpSP (not supported).
+    #[cfg(feature = "retroachievements")]
+    fn ra_setup(&self, core: slot_store::Core, platform: Platform, _sgb: bool) -> Option<crate::ra::Setup> {
+        use slot_achievements::Console;
+        if core == slot_store::Core::Gpsp || !self.app.achievements_on() {
+            return None;
+        }
+        let console = match platform {
+            Platform::Gb => Console::GameBoy,
+            Platform::Gbc => Console::GameBoyColor,
+            Platform::Gba => Console::GameBoyAdvance,
+            Platform::Nes => Console::Nes,
+            Platform::Snes => Console::Snes,
+        };
+        let (user, token) = crate::ra::read_login(&self.root)?;
+        Some(crate::ra::Setup { console, user, token, root: self.root.clone() })
     }
 
     fn reload_for_link(&mut self, stem: &str, serial: &'static str) {
@@ -735,4 +787,20 @@ pub(crate) fn trace() -> bool {
 
 fn launch(step: &str) {
     eprintln!("slot: launch: {step} at {:.1} ms", crate::boot_time::ms());
+}
+
+/// gambatte's network Game Link: the host listens, the other dials its address. The address is
+/// twelve one-digit options, three per octet.
+fn begin_gb_link(emu: &EmuHandle, host: bool, peer: std::net::IpAddr) {
+    emu.set_option("gambatte_gb_link_network_port", "56400");
+    if let std::net::IpAddr::V4(v4) = peer {
+        let digits: String = v4.octets().iter().map(|o| format!("{o:03}")).collect();
+        for (i, d) in digits.chars().enumerate() {
+            emu.set_option(&format!("gambatte_gb_link_network_server_ip_{}", i + 1), &d.to_string());
+        }
+    }
+    emu.set_option(
+        "gambatte_gb_link_mode",
+        if host { "Network Server" } else { "Network Client" },
+    );
 }

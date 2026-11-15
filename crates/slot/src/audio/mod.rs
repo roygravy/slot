@@ -9,7 +9,7 @@ mod sink;
 mod stub;
 pub mod volume;
 
-pub use alsa::AlsaSink;
+pub use alsa::{bt_route, AlsaSink};
 #[cfg(feature = "host")]
 pub use host::HostAudio;
 pub use pacer::Pacer;

@@ -15,6 +15,19 @@ pub fn cover_label(path: &Path, w: u32, h: u32) -> Option<Vec<u8>> {
     cover_rgba(&src, sw, sh, w, h)
 }
 
+/// A state's photo as the game's screen draws it: a frame the size of its canvas (the
+/// GBA's for the Game Boys, a TV console's own) is kept pixel for pixel; an older TV photo,
+/// kept at 256 columns, is drawn back out to the canvas; anything else covers `w`x`h`.
+pub fn photo(path: &Path, w: u32, h: u32) -> Option<(Vec<u8>, u32, u32)> {
+    let (src, sw, sh) = decode(path)?;
+    let (tw, th) = slot_store::TV_CANVAS;
+    match (sw, sh) {
+        _ if (sw, sh) == (w, h) || (sw, sh) == (tw, th) => Some((src, sw, sh)),
+        (256, _) if sh == th => Some((stretch_rgba(&src, sw, sh, tw, th), tw, th)),
+        _ => cover_rgba(&src, sw, sh, w, h).map(|px| (px, w, h)),
+    }
+}
+
 fn stretch_rgba(src: &[u8], sw: u32, sh: u32, w: u32, h: u32) -> Vec<u8> {
     let (sx, sy) = (sw as f32 / w as f32, sh as f32 / h as f32);
     let mut out = vec![0u8; (w * h * 4) as usize];

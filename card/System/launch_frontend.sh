@@ -32,6 +32,13 @@ if [ -f "$SD/System.new/.complete" ] && [ -f "$SD/System.new/.install" ]; then
 			# move along, so the shelf doesn't recache every label after an update.
 			[ -d "$SD/System.old/Cache" ] && [ ! -e "$SYS/Cache" ] &&
 				mv "$SD/System.old/Cache" "$SYS/Cache"
+			# The RetroAchievements login lives in System too: copied, so a step back
+			# to System.old still has it.
+			[ -f "$SD/System.old/retroachievements.txt" ] && [ ! -e "$SYS/retroachievements.txt" ] &&
+				cp -p "$SD/System.old/retroachievements.txt" "$SYS/retroachievements.txt"
+			# Bluetooth pairings too, or the headphones must be paired again after an update.
+			[ -f "$SD/System.old/bluetooth-pairings" ] && [ ! -e "$SYS/bluetooth-pairings" ] &&
+				cp -p "$SD/System.old/bluetooth-pairings" "$SYS/bluetooth-pairings"
 			touch "$SYS/.trial"
 			log "update: $(cat "$SYS/version.txt" 2>/dev/null) swapped in"
 		else
@@ -43,6 +50,8 @@ elif [ -f "$SYS/.trial" ] && [ -d "$SD/System.old" ]; then
 	if mv "$SD/System" "$SD/System.bad" && mv "$SD/System.old" "$SD/System"; then
 		[ -d "$SD/System.bad/Cache" ] && [ ! -e "$SYS/Cache" ] &&
 			mv "$SD/System.bad/Cache" "$SYS/Cache"
+		[ -f "$SD/System.bad/bluetooth-pairings" ] &&
+			cp -p "$SD/System.bad/bluetooth-pairings" "$SYS/bluetooth-pairings"
 		rm -rf "$SD/System.bad"
 		log "update: never reached the shelf, back to $(cat "$SYS/version.txt" 2>/dev/null)"
 	fi

@@ -55,22 +55,23 @@ fn a_long_label_is_set_as_large_as_a_short_one() {
 }
 
 #[test]
-fn the_fast_forward_row_offers_the_four_ceilings_the_card_can_hold() {
-    assert_eq!(FF_SPEEDS, [2, 3, 4, 6]);
+fn the_fast_forward_row_offers_its_five_ceilings_in_quarters() {
+    assert_eq!(FF_SPEEDS, [6, 8, 12, 16, 24]);
     assert_eq!(
         FF_SPEEDS.map(QuickValue::speed),
         [
+            Some(QuickValue::Speed1_5),
             Some(QuickValue::Speed2),
             Some(QuickValue::Speed3),
             Some(QuickValue::Speed4),
             Some(QuickValue::Speed6),
         ]
     );
-    for other in [1, 5, 7, 9, 16, 28, 255] {
+    for other in [1, 2, 5, 7, 9, 28, 255] {
         assert_eq!(
             QuickValue::speed(other),
             None,
-            "{other}x is not a value the row has"
+            "{other} quarters is not a value the row has"
         );
     }
 }
@@ -251,4 +252,11 @@ fn show_titles_sits_under_recents_on_the_general_page() {
         at(QuickRow::Recents).map(|i| i + 1)
     );
     assert_eq!(QuickRow::ShowTitles.parent(), Some(QuickRow::General));
+}
+
+#[test]
+fn every_value_sits_in_all_at_its_own_index() {
+    for (i, v) in QuickValue::ALL.iter().enumerate() {
+        assert_eq!(v.index(), i, "{v:?}");
+    }
 }

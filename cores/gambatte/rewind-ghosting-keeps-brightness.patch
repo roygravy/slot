@@ -1,0 +1,38 @@
+diff --git a/libgambatte/libretro/libretro.cpp b/libgambatte/libretro/libretro.cpp
+--- a/libgambatte/libretro/libretro.cpp
++++ b/libgambatte/libretro/libretro.cpp
+@@ -1185,8 +1185,14 @@
+ /* Zero out any allocated frame-blend history buffers without
+  * deallocating them. Called from retro_unserialize so a state
+  * load doesn't carry ghost trails from the pre-load timeline. */
++/* slot.: set when a state load cleared the blend history. The next
++ * frame then fills the history with itself instead of blending with
++ * black, so rewinding (a state load every frame) keeps its brightness. */
++static bool frame_blend_seed = false;
++
+ static void reset_frame_blending_buffers(void)
+ {
++   frame_blend_seed = true;
+    if (video_buf_prev_1)
+       memset(video_buf_prev_1, 0, VIDEO_BUFF_SIZE);
+    if (video_buf_prev_2)
+@@ -2977,7 +2983,19 @@
+ 
+    /* Perform interframe blending, if required */
+    if (blend_frames)
++   {
++      if (frame_blend_seed)
++      {
++         gambatte::video_pixel_t *history[4] = {
++            video_buf_prev_1, video_buf_prev_2, video_buf_prev_3, video_buf_prev_4
++         };
++         for (unsigned i = 0; i < 4; i++)
++            if (history[i])
++               memcpy(history[i], video_buf, VIDEO_BUFF_SIZE);
++         frame_blend_seed = false;
++      }
+       blend_frames();
++   }
+ 
+    video_cb(video_buf, VIDEO_WIDTH, VIDEO_HEIGHT, VIDEO_PITCH * sizeof(gambatte::video_pixel_t));
+ 

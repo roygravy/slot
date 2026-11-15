@@ -142,6 +142,9 @@ struct Spec {
     /// The sticker's usual width, as a fraction of the cart, for when both its edges are lost
     /// to pale strips that match the plastic; 0 when stickers vary too much to guess.
     width: f32,
+    /// The sticker's own width to height, for when its dark top runs on into a dark shell's
+    /// moulding: the bottom edge is kept and the top set from the width. 0 for none.
+    ratio: f32,
 }
 
 const SNES_SPEC: Spec = Spec {
@@ -153,6 +156,7 @@ const SNES_SPEC: Spec = Spec {
     aspect: (1.8, 3.2),
     centred: true,
     width: 0.0,
+    ratio: 0.0,
 };
 
 // The NES cart's left is its grip; only its right rim is bare plastic. A Famicom cart, or a
@@ -166,6 +170,7 @@ const NES_SPEC: Spec = Spec {
     aspect: (0.5, 0.75),
     centred: false,
     width: 0.0,
+    ratio: 0.0,
 };
 
 const GB_SPEC: Spec = Spec {
@@ -177,6 +182,7 @@ const GB_SPEC: Spec = Spec {
     aspect: (0.95, 1.3),
     centred: true,
     width: 0.73,
+    ratio: 0.0,
 };
 
 const GBA_SPEC: Spec = Spec {
@@ -185,9 +191,10 @@ const GBA_SPEC: Spec = Spec {
     below: &[],
     band: (0.35, 0.75),
     rows: (0.10, 0.95),
-    aspect: (1.6, 2.2),
+    aspect: (1.6, 2.4),
     centred: true,
     width: 0.0,
+    ratio: 1.92,
 };
 
 /// A cart's sticker, found rather than measured, as every console's scans come in their own
@@ -321,8 +328,33 @@ fn find_sticker(image: &DynamicImage, spec: &Spec) -> Option<(u32, u32, u32, u32
             }
             _ => (t, b),
         }
+    } else if spec.ratio > 0.0 && ((r - l) as f32) < (b - t) as f32 * spec.ratio * 0.94 {
+        // Too tall for a sticker: its top ran on into the shell's moulding (a dark label on
+        // a dark cart, Batman: Rise of Sin Tzu). The bottom edge is plain plastic, so it holds.
+        (b.saturating_sub(((r - l) as f32 / spec.ratio) as u32).max(t), b)
     } else {
         (t, b)
+    };
+    // A whole GBA cart on its own (no backdrop): its sticker sits in the same place on every
+    // one. An edge found far from there ran into a clear or dark shell (Pokémon Ruby).
+    let whole_cart = (1.62..=1.80).contains(&(w as f32 / h.max(1) as f32));
+    let (l, t, r, b) = if spec.ratio > 0.0 && whole_cart {
+        let (fw, fh) = (w as f32, h as f32);
+        let near = |found: u32, at: f32, span: f32| {
+            if (found as f32 - at).abs() <= span * 0.04 {
+                found
+            } else {
+                at.round() as u32
+            }
+        };
+        (
+            near(l, x0 as f32 + fw * 0.14, fw),
+            near(t, y0 as f32 + fh * 0.232, fh),
+            near(r, x1 as f32 - fw * 0.14, fw),
+            near(b, y0 as f32 + fh * 0.866, fh),
+        )
+    } else {
+        (l, t, r, b)
     };
     let (cw, ch) = (r - l, b - t);
     if cw < 60 || ch < 40 {

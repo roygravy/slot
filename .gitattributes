@@ -6,3 +6,4 @@ cores/**/*.patch -text
 # These run under the device's /bin/sh. A CRLF checkout (Windows autocrlf) leaves a \r on the
 # shebang and on every command, and the frontend never starts.
 *.sh text eol=lf
+docs/ export-ignore

@@ -35,15 +35,40 @@ pub enum Toast {
     NoConnection,
     WifiConnected,
     WifiFailed,
+    /// Headphones that would not pair or connect.
+    BtFailed,
+    /// Bluetooth on, but the radio did not answer (the switch stays on and it tries again).
+    BtNotReady,
     WifiForgotten,
     PasswordLength,
+    /// A password with marks Wi-Fi cannot take: € £ ¥ • or accented letters.
+    PasswordMarks,
     WpsFailed,
     WrongPassword,
+    /// A RetroAchievements unlock: the title is set with `set_achievement`.
+    Achievement,
     Palette(GbPalette),
+    /// X on a cart: laid on the Deck, or taken off it.
+    DeckOn,
+    DeckOff,
+    /// A cart the console could not start.
+    GameFailed,
+    /// GRAVY Manager: what the web page just did on the card.
+    GameAdded,
+    GamesAdded,
+    BiosAdded,
+    WallpaperAdded,
+    LabelAdded,
+    FileDeleted,
+    FileRenamed,
+    UploadFailed,
+    UpdateReady,
+    /// Screen Calibration: the colours kept on the card.
+    ScreenSaved,
 }
 
 impl Toast {
-    const FIXED: [Toast; 31] = [
+    const FIXED: [Toast; 48] = [
         Toast::StateSaved,
         Toast::StateLoaded,
         Toast::NeedsGpsp,
@@ -71,10 +96,27 @@ impl Toast {
         Toast::NoConnection,
         Toast::WifiConnected,
         Toast::WifiFailed,
+        Toast::BtFailed,
+        Toast::BtNotReady,
         Toast::WifiForgotten,
         Toast::PasswordLength,
+        Toast::PasswordMarks,
         Toast::WpsFailed,
         Toast::WrongPassword,
+        Toast::Achievement,
+        Toast::DeckOn,
+        Toast::DeckOff,
+        Toast::GameFailed,
+        Toast::GameAdded,
+        Toast::GamesAdded,
+        Toast::BiosAdded,
+        Toast::WallpaperAdded,
+        Toast::LabelAdded,
+        Toast::FileDeleted,
+        Toast::FileRenamed,
+        Toast::UploadFailed,
+        Toast::UpdateReady,
+        Toast::ScreenSaved,
     ];
 
     pub fn all() -> Vec<Toast> {
@@ -95,9 +137,10 @@ impl Toast {
         self == Toast::CardUnwritable
     }
 
-    pub fn detail(self) -> Option<&'static str> {
+    pub fn detail(self) -> Option<String> {
         match self {
-            Toast::CardUnwritable => Some("Progress is not being saved"),
+            Toast::CardUnwritable => Some("Progress is not being saved".to_string()),
+            Toast::Achievement => Some(ACHIEVEMENT.lock().map(|t| t.clone()).unwrap_or_default()),
             _ => None,
         }
     }
@@ -122,25 +165,52 @@ impl Toast {
             Toast::ShaderSimpletex => "Shader: Simpletex",
             Toast::CardUnwritable => "Can't write to SD card",
             Toast::ScreenshotSaved => "Screenshot Saved",
+            Toast::ScreenSaved => "Screen Colors Saved",
             Toast::GameReset => "Game Reset",
             Toast::LabelsReady => "Labels Ready",
+            Toast::DeckOn => "Added to the Deck",
+            Toast::DeckOff => "Taken off the Deck",
+            Toast::GameFailed => "Game Could Not Start",
+            Toast::GameAdded => "Game Added",
+            Toast::GamesAdded => "Games Added",
+            Toast::BiosAdded => "BIOS Added",
+            Toast::WallpaperAdded => "Wallpaper Added",
+            Toast::LabelAdded => "Label Added",
+            Toast::FileDeleted => "Deleted",
+            Toast::FileRenamed => "Renamed",
+            Toast::UploadFailed => "Upload Failed",
+            Toast::UpdateReady => "Update Ready",
             Toast::LabelDownloaded => "Label Downloaded",
             Toast::NoLabelFound => "No Label Found",
             Toast::LabelFailed => "Download Failed",
             Toast::TurnOnWifi => "Turn On Home Wi-Fi",
             Toast::NoConnection => "No Connection",
             Toast::WifiConnected => "Wi-Fi Connected",
-            Toast::WifiFailed => "Could Not Connect",
+            Toast::WifiFailed => "Wi-Fi Failed",
+            Toast::BtFailed => "Bluetooth Failed",
+            Toast::BtNotReady => "Bluetooth Not Ready",
             Toast::WifiForgotten => "Network Forgotten",
             Toast::PasswordLength => "8 to 63 Characters",
+            Toast::PasswordMarks => "No € £ ¥ • or Accents",
             Toast::WpsFailed => "WPS Timed Out",
             Toast::WrongPassword => "Wrong Password",
+            Toast::Achievement => "Achievement Unlocked",
             Toast::Palette(p) => p.label(),
         }
     }
 }
 
+static ACHIEVEMENT: std::sync::Mutex<String> = std::sync::Mutex::new(String::new());
+
+/// The title the next `Toast::Achievement` shows under "Achievement Unlocked".
+pub fn set_achievement(title: &str) {
+    if let Ok(mut t) = ACHIEVEMENT.lock() {
+        *t = title.to_string();
+    }
+}
+
 const TOAST_W: u32 = 240;
+const ACH_W: u32 = 380;
 const TOAST_H: u32 = 22;
 const TOAST_PX: f32 = 16.0;
 const TOAST_MIN_PX: f32 = 12.0;
@@ -160,6 +230,9 @@ struct Setting {
 }
 
 fn setting(toast: Toast) -> Setting {
+    if toast == Toast::Achievement {
+        return Setting { w: ACH_W, h: TOAST_H, px: TOAST_PX, min_px: TOAST_MIN_PX, middle: PLATE_H / 2.0 + 14.0 };
+    }
     match toast.alarm() {
         true => Setting {
             w: ALARM_W,
@@ -209,7 +282,7 @@ pub fn toast_face(toast: Toast) -> CartFace {
     let layout = text::fit(font, toast.text(), s.w as f32, 1, s.px, s.min_px);
     let mut cov = text::coverage(s.w, s.h, &layout);
     if let Some(detail) = toast.detail() {
-        let layout = text::fit(font, detail, s.w as f32, 1, DETAIL_PX, DETAIL_PX);
+        let layout = text::fit(font, &detail, s.w as f32, 1, DETAIL_PX, DETAIL_PX);
         cov.extend(text::coverage(s.w, DETAIL_H, &layout));
     }
     haloed(&cov, s.w, s.h + detail_h(toast), HUD_INK)

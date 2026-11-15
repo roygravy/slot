@@ -24,6 +24,23 @@ const RELEASE_AFTER: Duration = Duration::from_secs(3);
 
 const DEVICES: [&str; 4] = ["plug:default", "default", "plughw:0,0", "hw:0,0"];
 
+/// Bluetooth headphones add their own delay on top; this is what is held here on top of it.
+const BT_LATENCY_US: c_uint = 80_000;
+
+/// How often the headphones the service has connected are looked at, in periods (~1 s).
+const ROUTE_EVERY: u32 = 90;
+
+/// The Bluetooth headphones slot-services has connected, from its run directory.
+pub fn bt_route() -> Option<String> {
+    let run = std::env::var_os("SLOT_SERVICES_RUN")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| "/run/slot-services".into());
+    let text = std::fs::read_to_string(run.join("bt-audio")).ok()?;
+    let mac = text.lines().next()?.trim();
+    (mac.len() == 17 && mac.chars().all(|c| c.is_ascii_hexdigit() || c == ':'))
+        .then(|| mac.to_owned())
+}
+
 type PcmOpen = unsafe extern "C" fn(*mut *mut c_void, *const c_char, c_int, c_int) -> c_int;
 type PcmSetParams =
     unsafe extern "C" fn(*mut c_void, c_int, c_int, c_uint, c_uint, c_int, c_uint) -> c_int;
@@ -79,9 +96,15 @@ impl Alsa {
         }
     }
 
-    fn open_pcm(&self, rate: u32) -> Result<*mut c_void, AudioError> {
+    fn open_pcm(&self, rate: u32, bt: Option<&str>) -> Result<*mut c_void, AudioError> {
         let mut last = AudioError::NoDevice;
-        for name in DEVICES {
+        let headphones = bt.map(|mac| format!("bluealsa:DEV={mac},PROFILE=a2dp"));
+        for name in headphones.iter().map(String::as_str).chain(DEVICES) {
+            let latency = if headphones.as_deref() == Some(name) {
+                BT_LATENCY_US
+            } else {
+                LATENCY_US
+            };
             let Ok(cname) = CString::new(name) else {
                 continue;
             };
@@ -99,7 +122,7 @@ impl Alsa {
                     CHANNELS,
                     rate,
                     1,
-                    LATENCY_US,
+                    latency,
                 )
             };
             if err < 0 {
@@ -197,11 +220,15 @@ struct Playback {
     pcm: Option<*mut c_void>,
     rate: u32,
     failing: bool,
+    /// The headphones the open device plays on; None is the console's own output.
+    route: Option<String>,
+    route_check: u32,
 }
 
 fn play(ring: &Arc<Ring>, sample_rate: u32) -> Result<Playback, AudioError> {
     let alsa = Alsa::load()?;
-    let pcm = match alsa.open_pcm(sample_rate) {
+    let route = bt_route();
+    let pcm = match alsa.open_pcm(sample_rate, route.as_deref()) {
         Ok(pcm) => Some(pcm),
         Err(e) => {
             eprintln!("slot: audio: {e}, retrying");
@@ -214,6 +241,8 @@ fn play(ring: &Arc<Ring>, sample_rate: u32) -> Result<Playback, AudioError> {
         pcm,
         rate: sample_rate,
         failing: pcm.is_none(),
+        route,
+        route_check: 0,
     })
 }
 
@@ -225,13 +254,26 @@ impl Playback {
         let mut pace = Pacer::new(span);
         while !stop.load(Ordering::Relaxed) {
             ring.fill(&mut buf);
+            self.route_check += 1;
+            if self.route_check >= ROUTE_EVERY {
+                self.route_check = 0;
+                let route = bt_route();
+                if route != self.route {
+                    // Headphones came or went: let go, the next open picks the new way out.
+                    eprintln!("slot: audio route {:?}", route);
+                    self.release();
+                    self.route = route;
+                }
+            }
             let hold = silence.hear(&buf, span) || ring.playing();
             match (self.pcm, hold) {
-                (Some(_), false) => {
+                // Headphones stay open: opening them again takes a second and cuts the
+                // first sound off.
+                (Some(_), false) if self.route.is_none() => {
                     self.release();
                     eprintln!("slot: audio released after silence");
                 }
-                (None, true) => match self.alsa.open_pcm(self.rate) {
+                (None, true) => match self.alsa.open_pcm(self.rate, self.route.as_deref()) {
                     Ok(pcm) => {
                         eprintln!("slot: audio reopened at {:.1} ms", crate::boot_time::ms());
                         self.pcm = Some(pcm);
@@ -250,7 +292,12 @@ impl Playback {
                 Some(pcm) => {
                     pace.reset();
                     if !self.write(pcm, &buf) {
-                        return;
+                        if self.route.is_none() {
+                            return;
+                        }
+                        // The headphones dropped away mid-write: back to the speaker.
+                        self.release();
+                        self.route = None;
                     }
                 }
                 None => std::thread::sleep(pace.wait(Instant::now())),

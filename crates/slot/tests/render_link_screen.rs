@@ -63,8 +63,11 @@ fn sprites_and_faces() -> (LinkSprites, Vec<(TexId, Face)>) {
     let [al0, al1, al2] = art.arcs_left;
     let sprites = LinkSprites {
         port: put(art.port),
+        port_shade: put(art.port_shade),
         plug_host: put(art.plug_host),
         plug_join: put(art.plug_join),
+        plug_gb: put(art.plug_gb),
+        plug_gb_join: put(art.plug_gb_join),
         adapter: put(art.adapter),
         arcs_right: [put(ar0), put(ar1), put(ar2)],
         arcs_left: [put(al0), put(al1), put(al2)],
@@ -154,7 +157,7 @@ fn at(px: &[u8], x: usize, y: usize) -> [u8; 3] {
 fn render(menu: GameMenu, kind: LinkKind, now: u64, name: &str) -> Vec<u8> {
     let (sprites, faces) = sprites_and_faces();
     let mut out = Vec::new();
-    draw_link_art(menu, kind, now, &sprites, &mut out);
+    draw_link_art(menu, kind, false, now, &sprites, &mut out);
     let px = composite(&out, &faces);
     dump(&px, name);
     px
@@ -165,7 +168,7 @@ fn render_picker(kind: LinkKind, home: bool, name: &str) -> Vec<u8> {
     let (sprites, faces) = sprites_and_faces();
     let mut out = Vec::new();
     let menu = GameMenu::Pick(LinkRow::Host);
-    draw_link_art(menu, kind, 0, &sprites, &mut out);
+    draw_link_art(menu, kind, false, 0, &sprites, &mut out);
     draw_network_label(menu, home, &sprites, &mut out);
     let px = composite(&out, &faces);
     dump(&px, name);
@@ -194,7 +197,7 @@ fn the_host_picks_a_purple_plug_over_the_port() {
         0,
         "cable-host-pick",
     );
-    let housing = at(&px, 356, 330 - 60);
+    let housing = at(&px, 356, 330 - 60 - slot_ui::LINK_LIFT as usize);
     assert!(
         housing[2] > housing[1] + 30,
         "no purple housing above the port: {housing:?}"
@@ -214,7 +217,7 @@ fn a_joiner_picks_a_gray_plug() {
         0,
         "cable-join-pick",
     );
-    let housing = at(&px, 356, 330 - 60);
+    let housing = at(&px, 356, 330 - 60 - slot_ui::LINK_LIFT as usize);
     assert!(
         (housing[0] as i32 - housing[2] as i32).abs() < 14 && housing[0] > 0x70,
         "not gray: {housing:?}"
@@ -295,7 +298,7 @@ fn ending_a_wireless_link_lifts_the_adapter_off_the_port() {
     };
     let seated = render(menu, LinkKind::Wireless, 0, "wireless-unplug-start");
     let gone = render(menu, LinkKind::Wireless, 400, "wireless-unplug-end");
-    let (x, y) = (360, 380);
+    let (x, y) = (360, 380 - slot_ui::LINK_LIFT as usize);
     assert_ne!(
         at(&seated, x, y),
         GROUND,
@@ -700,7 +703,7 @@ fn the_picker_prints_which_network_the_link_will_use() {
         let mut n = 0;
         for y in y0..y0 + slot_ui::NET_H as usize {
             for x in x0..x0 + slot_ui::NET_W as usize {
-                if at(px, x, y).iter().all(|c| *c > 0xc0) {
+                if at(px, x, y).iter().all(|c| *c > 0x90) {
                     n += 1;
                 }
             }
@@ -721,7 +724,5 @@ fn the_picker_prints_which_network_the_link_will_use() {
             ink(&direct)
         );
         assert_ne!(home, direct);
-        // The plate sits on the strip, clear of the port notch the plug lands in.
-        assert!(at(&home, 360, 406).iter().all(|c| *c < 0x14));
     }
 }

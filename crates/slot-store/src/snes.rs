@@ -79,10 +79,10 @@ pub fn region_of_name(stem: &str) -> Option<Region> {
         .step_by(2)
         .flat_map(|tag| tag.split(',').map(str::trim));
     for tag in tags {
-        match tag {
-            "USA" | "U" | "Canada" | "Brazil" | "UE" => return Some(Region::Ntsc),
-            "Japan" | "J" | "Europe" | "E" | "Germany" | "France" | "Spain" | "Italy"
-            | "Australia" | "Sweden" | "Netherlands" | "Korea" | "Asia" | "World" => {
+        match tag.to_ascii_lowercase().as_str() {
+            "usa" | "u" | "us" | "canada" | "brazil" | "ue" => return Some(Region::Ntsc),
+            "japan" | "j" | "jp" | "europe" | "e" | "eu" | "world" | "w" | "germany" | "france" | "spain" | "italy"
+            | "australia" | "sweden" | "netherlands" | "korea" | "asia" => {
                 return Some(Region::Pal)
             }
             _ => {}
@@ -102,6 +102,10 @@ mod tests {
         assert_eq!(region_of_name("Super Mario Kart (Europe)"), Some(Region::Pal));
         assert_eq!(region_of_name("Super Mario Kart (Japan)"), Some(Region::Pal));
         assert_eq!(region_of_name("Tetris Attack (USA, Europe)"), Some(Region::Ntsc));
+        assert_eq!(region_of_name("Street Fighter II (EU)"), Some(Region::Pal));
+        assert_eq!(region_of_name("Tetris (World)"), Some(Region::Pal));
+        assert_eq!(region_of_name("Tetris (W)"), Some(Region::Pal));
+        assert_eq!(region_of_name("Zelda (europe)"), Some(Region::Pal));
         assert_eq!(region_of_name("Homebrew"), None);
     }
 

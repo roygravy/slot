@@ -598,6 +598,7 @@ fn a_cart_in_flight_is_not_also_left_standing_on_the_shelf() {
             | Draw::Part { w, h, .. }
             | Draw::Turned { w, h, .. }
             | Draw::Tint { w, h, .. }
+            | Draw::Shade { w, h, .. }
             | Draw::Light { w, h, .. } => {
                 w > 200.0
                     && w <= CART_W as f32 + 0.01
@@ -1093,7 +1094,7 @@ struct PickerFaces {
     chips: [TexId; 2],
     blank: TexId,
     shadow: TexId,
-    legend: [(TexId, u32); 3],
+    legend: [(TexId, u32, u32); 4],
 }
 
 fn fake_boot_faces(app: &mut App) -> PickerFaces {
@@ -1105,7 +1106,7 @@ fn fake_boot_faces(app: &mut App) -> PickerFaces {
         chips: [id(904), id(905)],
         blank: id(906),
         shadow: id(907),
-        legend: [(id(908), 60), (id(909), 90), (id(910), 80)],
+        legend: [(id(908), 60, 18), (id(909), 90, 18), (id(910), 80, 18), (id(911), 300, 24)],
     };
     app.set_core_part_faces(f.sockets.to_vec(), f.chips.to_vec(), f.blank, f.shadow);
     app.set_core_legend_faces(f.legend.to_vec());
@@ -1114,7 +1115,7 @@ fn fake_boot_faces(app: &mut App) -> PickerFaces {
 
 fn fake_picker_faces(app: &mut App) -> PickerFaces {
     let f = fake_boot_faces(app);
-    app.set_core_board_faces(f.board, f.lid);
+    app.set_core_board_faces(f.board, f.lid, f.lid);
     f
 }
 
@@ -1353,45 +1354,51 @@ fn the_open_cart_rests_over_the_shelf_with_its_lid_turned() {
     );
     assert!(shadow_i < lid_i, "the lid's shadow is drawn over the lid");
 
-    let [cancel, swap, choose] = f.legend;
+    // The legend where every menu has it, centred, and the help line over it (Roy 2026-11-07).
+    let [cancel, swap, choose, help] = f.legend;
     let at = |tex| tex_at(&out, tex).expect("a legend hint is missing").1;
     let seen = |w: u32| (w - HINT_EDGE) as f32;
-    assert_eq!(at(cancel.0), [180.0, 386.0, cancel.1 as f32, HINT_H as f32]);
-    assert_eq!(
-        at(swap.0)[0] + seen(swap.1) / 2.0,
-        360.0,
-        "Swap is off the panel's centre"
-    );
-    assert_eq!(
-        at(choose.0)[0] + seen(choose.1),
-        540.0,
-        "Choose does not end at the cart's edge"
-    );
-    assert_eq!((at(swap.0)[1], at(choose.0)[1]), (386.0, 386.0));
+    let y = slot_ui::MENU_LEGEND_Y;
+    assert_eq!([at(cancel.0)[1], at(swap.0)[1], at(choose.0)[1]], [y, y, y]);
+    let (left, right) = (at(cancel.0)[0], at(choose.0)[0] + seen(choose.1));
+    assert!(((left + right) / 2.0 - 360.0).abs() <= 1.0, "the legend is off centre");
+    assert!(left < at(swap.0)[0] && at(swap.0)[0] < at(choose.0)[0]);
+    assert_eq!(at(help.0)[1], slot_ui::HELP_Y);
+    assert_eq!(at(help.0)[0] + help.1 as f32 / 2.0, 360.0, "the help line is off centre");
 }
 
 #[test]
-fn the_sockets_and_the_seated_chip_rest_on_whole_pixels() {
+fn the_sockets_and_the_seated_chip_float_with_the_open_cart() {
+    // The open cart floats smoothly, not a whole pixel at a time (Roy 2026-11-13): sockets and
+    // chip ride on it, never a pixel off where the board puts them.
     let (_d, mut app) = on_shelf(&["Emerald", "Zzz"]);
     let f = fake_picker_faces(&mut app);
     app.apply(Action::GbaDown(Btn::Start));
     let_it_open(&mut app);
+    app.update(1.3);
     let out = frame(&app);
 
-    let whole = |r: [f32; 4]| r[0].fract() == 0.0 && r[1].fract() == 0.0;
+    let (_, b) = tex_at(&out, f.board).expect("the open cart is missing");
+    let board = Placed { x: b[0], y: b[1], w: b[2], h: b[3] };
     for (i, socket) in f.sockets.iter().enumerate() {
         let (_, at) = tex_at(&out, *socket).expect("a socket is missing");
-        assert!(whole(at), "socket {i} is off the pixel grid at {at:?}");
+        let (x, y) = on_board(board, SOCKET_U[i], SOCKET_V);
+        assert!((at[0] - x).abs() < 0.01 && (at[1] - y).abs() < 0.01, "socket {i} left the board");
     }
+    let zoom = slot_ui::board_zoom(board);
+    let (x, y) = on_board(board, CHIP_U[0], CHIP_V);
     let (_, chip, _) = turned_at(&out, f.chips[0]).expect("the chip is not seated in mGBA");
+    let pad = TURN_PAD as f32 * zoom;
     assert!(
-        whole(chip),
-        "the seated chip is off the pixel grid at {chip:?}"
+        (chip[0] - (x - pad)).abs() < 0.01 && (chip[1] - (y - pad)).abs() < 0.01,
+        "the seated chip left its socket: {chip:?}"
     );
 }
 
 #[test]
-fn the_neighbours_dim_to_a_quarter_while_a_cart_is_open() {
+fn the_neighbours_fade_away_while_a_cart_is_open() {
+    // As in the studio, the shelf fades whole under the page's ground (Roy 2026-11-07): no
+    // neighbour left see-through at the sides.
     let (_d, mut app) = on_shelf(&["Emerald", "Zzz"]);
     let faces = vec![TexId::from_raw(920), TexId::from_raw(921)];
     app.set_faces(faces.clone());
@@ -1400,17 +1407,10 @@ fn the_neighbours_dim_to_a_quarter_while_a_cart_is_open() {
     let_it_open(&mut app);
     let out = frame(&app);
 
-    let alpha = out
-        .iter()
-        .find_map(|d| match *d {
-            Draw::Tex { tex, alpha, .. } if tex == faces[1] => Some(alpha),
-            _ => None,
-        })
-        .expect("the neighbour is not on screen while the cart is open");
-    assert!(
-        (alpha - 0.25).abs() <= 0.01,
-        "the neighbour's face is at {alpha}, not a quarter"
-    );
+    let shown = out.iter().any(|d| {
+        matches!(*d, Draw::Tex { tex, alpha, .. } if tex == faces[1] && alpha > 0.01)
+    });
+    assert!(!shown, "the neighbour still shows while the cart is open");
 }
 
 #[test]
@@ -1420,23 +1420,28 @@ fn the_seated_chip_moves_to_the_socket_it_hopped_to() {
     app.apply(Action::GbaDown(Btn::Start));
     let_it_open(&mut app);
     app.apply(Action::GbaDown(Btn::Right));
-    let_it_hop(&mut app);
+    // The hop, then its last push into the socket.
+    app.update(0.4);
     let out = frame(&app);
 
-    let (x, y) = on_board(board_at(Canvas::FRAMED, 1.0), CHIP_U[1], CHIP_V);
+    // The open cart rests at its own size now, and floats a few pixels up and down.
+    let board = board_at(Canvas::FRAMED, 1.0);
+    let zoom = slot_ui::board_zoom(board);
+    let (x, y) = on_board(board, CHIP_U[1], CHIP_V);
     let want = grown(
         Placed {
             x,
             y,
-            w: CHIP_W as f32,
-            h: CHIP_H as f32,
+            w: CHIP_W as f32 * zoom,
+            h: CHIP_H as f32 * zoom,
         },
-        TURN_PAD as f32,
+        TURN_PAD as f32 * zoom,
     );
     let (_, chip, _) = turned_at(&out, f.chips[1]).expect("the chip did not land in gpSP");
     assert!(
-        near(chip, [want.x.round(), want.y.round(), want.w, want.h]),
-        "the gpSP chip is not in gpSP's socket: {chip:?}"
+        near([chip[0], want.y, chip[2], chip[3]], [want.x, want.y, want.w, want.h])
+            && (chip[1] - want.y).abs() <= 3.0,
+        "the gpSP chip is not in gpSP's socket: {chip:?}, want {want:?}"
     );
     assert!(
         turned_at(&out, f.chips[0]).is_none(),
@@ -1570,10 +1575,11 @@ fn mid_hop_the_chip_is_blank_tipped_and_off_the_board() {
         mid > left && mid < right,
         "the flying chip is not between the sockets: {mid} not in ({left}, {right})"
     );
+    // The lid's shadow is the cart's own drop shadow now, not the chip's.
     assert_eq!(
         tex_all(&out, f.shadow).len(),
-        2,
-        "nothing under the chip in flight, beside the lid's own shadow"
+        1,
+        "nothing under the chip in flight"
     );
     assert!(
         f.chips.iter().all(|c| turned_at(&out, *c).is_none()),
@@ -1691,7 +1697,7 @@ fn the_open_waits_on_the_shelf_for_its_faces() {
     app.update(0.3);
     assert_plain_shelf(&frame(&app), &f, "while its faces are built");
 
-    app.set_core_board_faces(f.board, f.lid);
+    app.set_core_board_faces(f.board, f.lid, f.lid);
     app.update(0.016);
     let out = frame(&app);
     let shelf = grown(shelf_cart_at(rest, 1.0), TURN_PAD as f32);
@@ -1773,7 +1779,11 @@ fn the_fallback_open_lifts_the_shelfs_own_face_for_the_lid() {
         near(lid, [rest.x, rest.y, rest.w, rest.h]),
         "the fallback lid is not at rest: {lid:?}"
     );
-    assert_eq!(turn, LID_TURN, "the fallback lid is not turned");
+    // Held up, it sways a touch either side of its turn, as the shelf's middle cart breathes.
+    assert!(
+        (turn - LID_TURN).abs() <= 0.02,
+        "the fallback lid is not turned: {turn}"
+    );
 }
 
 #[test]
@@ -1805,7 +1815,7 @@ fn arrows_pressed_while_the_cart_waits_move_nothing() {
     let f = fake_boot_faces(&mut app);
     app.apply(Action::GbaDown(Btn::Start));
     app.apply(Action::GbaDown(Btn::Right));
-    app.set_core_board_faces(f.board, f.lid);
+    app.set_core_board_faces(f.board, f.lid, f.lid);
     app.update(0.016);
     assert_eq!(
         app.core_picker(),

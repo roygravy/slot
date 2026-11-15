@@ -36,6 +36,8 @@ pub enum Action {
     BrightnessDown,
     BlueLightUp,
     BlueLightDown,
+    /// SELECT + L2 or R2 on the GBA (its palette chord): the GBA between stretched and its own 3:2 shape.
+    ScreenShape,
     VolumeUp,
     VolumeDown,
     QuickMenu,
@@ -528,11 +530,13 @@ impl Gestures {
 
 impl Gestures {
     fn menu_display_chord(&self, b: Btn) -> Option<(u16, Action)> {
-        (self.menu_dpad_display
-            && !self.menu_eject_fired
-            && (self.menu_down_at.is_some() || self.menu_display_chorded))
-            .then(|| display_chord(b))
-            .flatten()
+        if self.menu_eject_fired || (self.menu_down_at.is_none() && !self.menu_display_chorded) {
+            return None;
+        }
+        match b {
+            _ if self.menu_dpad_display => display_chord(b),
+            _ => None,
+        }
     }
 }
 

@@ -446,3 +446,35 @@ fn auto_sleep_waits_while_a_button_is_held() {
         "a minute idle sleeps"
     );
 }
+
+#[test]
+fn asleep_by_power_only_power_wakes_it() {
+    let d = tmp_root_with_carts(&["Emerald"]);
+    let mut a = app_playing_in(d.path(), "Emerald");
+    a.apply(Action::PowerPress);
+    a.apply(Action::PowerTap);
+    assert!(matches!(a.phase(), Phase::Doze { .. }));
+    a.apply(Action::GbaDown(Btn::A));
+    a.apply(Action::ShelfLeft);
+    a.apply(Action::QuickMenu);
+    assert!(
+        matches!(a.phase(), Phase::Doze { .. }),
+        "a button woke a sleep that POWER started"
+    );
+    a.apply(Action::PowerPress);
+    assert!(matches!(a.phase(), Phase::Playing { .. }), "POWER did not wake it");
+}
+
+#[test]
+fn asleep_on_the_timer_any_button_wakes_it() {
+    let d = tmp_root_with_carts(&["Emerald", "Ruby"]);
+    let (mut s, _) = session_with_platform(d.path());
+    run_for(&mut s, 65_000);
+    assert!(matches!(s.app().phase(), Phase::Doze { .. }), "a minute idle sleeps");
+    let now = s.app().now();
+    s.feed([RawEvent::Down(Btn::A)], now);
+    assert!(
+        !matches!(s.app().phase(), Phase::Doze { .. }),
+        "A did not wake the timer's sleep"
+    );
+}

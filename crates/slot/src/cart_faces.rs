@@ -6,7 +6,7 @@ use std::thread;
 
 use slot_gfx::{Compositor, TexId};
 use slot_store::Cart;
-use slot_ui::{cart_face_with, cart_interior, shows_interior, CartFace};
+use slot_ui::{cart_interior, shows_interior, CartFace};
 
 use crate::app::{App, FaceWant};
 use crate::label_cache::label_art;
@@ -162,7 +162,8 @@ fn work(queue: &Shared, outbox: &Sender<Built>, root: &Path) {
                 q = wake.wait(q).unwrap_or_else(|e| e.into_inner());
             }
         };
-        let face = cart_face_with(&cart, label_art(root, &cart));
+        slot_store::header_index::verify(&cart.rom);
+        let face = crate::aging::face(root, &cart, label_art(root, &cart));
         let interior = shows_interior(&cart).then(|| cart_interior(&cart));
         if outbox.send((key, face, interior, cart)).is_err() {
             return;

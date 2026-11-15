@@ -372,3 +372,16 @@ fn select_b_with_every_effect_off_brings_the_standard_look() {
     assert_eq!(value(&a, QuickRow::PixelTransparency), Some(false));
     assert_eq!(value(&a, QuickRow::LcdGhosting), Some(false));
 }
+
+#[test]
+fn a_flips_a_switch_in_game_like_left_and_right() {
+    let (_d, mut a) = playing();
+    let value = |a: &App, row| a.quick_value(row).and_then(slot_ui::QuickValue::switch);
+    go_to(&mut a, QuickRow::LcdGhosting);
+    let before = value(&a, QuickRow::LcdGhosting).expect("a switch");
+    press(&mut a, Btn::A);
+    assert_eq!(value(&a, QuickRow::LcdGhosting), Some(!before));
+    assert_eq!(a.in_game_menu(), Some(QuickRow::LcdGhosting), "the menu stays on the row");
+    press(&mut a, Btn::A);
+    assert_eq!(value(&a, QuickRow::LcdGhosting), Some(before));
+}

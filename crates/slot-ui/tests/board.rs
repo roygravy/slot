@@ -228,17 +228,26 @@ fn the_board_fills_the_cart_so_opening_does_not_squash_it() {
 fn the_front_slides_up_a_third_before_it_lifts() {
     assert_eq!(SLIDE_UP, CART_H as f32 / 3.0);
     let shelf = shelf_cart(Canvas::FRAMED);
-    let (slid, turn) = lid_at(Canvas::FRAMED, SLIDE_SHARE);
+    // The first half of the slide is a slide only: straight up, not turned, same size.
+    let (half, turn) = lid_at(Canvas::FRAMED, SLIDE_SHARE / 2.0);
     assert_eq!(
-        slid,
+        half,
         Placed {
-            y: shelf.y - SLIDE_UP,
+            y: shelf.y - SLIDE_UP * slide_of(SLIDE_SHARE / 2.0),
             ..shelf
         }
     );
-    assert_eq!(turn, 0.0);
-    let (half, turn) = lid_at(Canvas::FRAMED, SLIDE_SHARE / 2.0);
-    assert!(half.y < shelf.y && half.y > slid.y && turn == 0.0 && half.w == shelf.w);
+    assert!(half.y < shelf.y && turn == 0.0);
+}
+
+#[test]
+fn the_lid_never_stops_on_its_way_up() {
+    let y = |p: f32| lid_at(Canvas::FRAMED, p).0.y;
+    let mut p = 0.05;
+    while p < 0.9 {
+        assert!(y(p + 0.01) < y(p) - 0.05, "the lid stalls at {p}");
+        p += 0.01;
+    }
 }
 
 #[test]

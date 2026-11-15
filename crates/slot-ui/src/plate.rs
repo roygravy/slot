@@ -73,19 +73,35 @@ pub fn hint_face(key: &str, label: &str) -> UndoFace {
 }
 
 pub fn hint_coloured(key: &str, label: &str, ink: [u8; 3]) -> UndoFace {
-    let w = hint_width(key, label);
+    keys_hint_coloured(&[key], label, ink)
+}
+
+/// A hint with a key cap of its own for each key, as the arrows have: "L1" "R1" Tab (Roy
+/// 2026-11-07).
+pub fn keys_hint_face(keys: &[&str], label: &str) -> UndoFace {
+    keys_hint_coloured(keys, label, INK)
+}
+
+fn keys_hint_coloured(keys: &[&str], label: &str, ink: [u8; 3]) -> UndoFace {
+    let caps_w: u32 = keys.iter().map(|k| cap_width(k)).sum::<u32>()
+        + ARROW_GAP * keys.len().saturating_sub(1) as u32;
+    let w = caps_w + CAP_GAP + band_width(label) + EDGE;
     let mut rgba = vec![0u8; (w * HINT_H * 4) as usize];
 
-    let cap_w = cap_width(key);
-    let mut cap = Vec::with_capacity((cap_w * CAP * 4) as usize);
-    for _ in 0..cap_w * CAP {
-        cap.extend_from_slice(&[INK[0], INK[1], INK[2], 255]);
+    let mut x = 0;
+    for key in keys {
+        let cap_w = cap_width(key);
+        let mut cap = Vec::with_capacity((cap_w * CAP * 4) as usize);
+        for _ in 0..cap_w * CAP {
+            cap.extend_from_slice(&[INK[0], INK[1], INK[2], 255]);
+        }
+        if let Some(font) = text::label_font() {
+            let layout = text::fit(font, key, cap_w as f32, 1, KEY_PX, KEY_PX);
+            text::draw_centred(&mut cap, cap_w, CAP, &layout, CAP_INK);
+        }
+        blit(&mut rgba, w, &cap, cap_w, CAP, x, (HINT_H - CAP) / 2);
+        x += cap_w + ARROW_GAP;
     }
-    if let Some(font) = text::label_font() {
-        let layout = text::fit(font, key, cap_w as f32, 1, KEY_PX, KEY_PX);
-        text::draw_centred(&mut cap, cap_w, CAP, &layout, CAP_INK);
-    }
-    blit(&mut rgba, w, &cap, cap_w, CAP, 0, (HINT_H - CAP) / 2);
 
     let text_w = band_width(label);
     let mut band = vec![0u8; (text_w * HINT_H * 4) as usize];
@@ -93,7 +109,7 @@ pub fn hint_coloured(key: &str, label: &str, ink: [u8; 3]) -> UndoFace {
         let layout = text::fit(font, label, text_w as f32, 1, LABEL_PX, LABEL_MIN_PX);
         text::draw_centred(&mut band, text_w, HINT_H, &layout, ink);
     }
-    blit(&mut rgba, w, &band, text_w, HINT_H, cap_w + CAP_GAP, 0);
+    blit(&mut rgba, w, &band, text_w, HINT_H, caps_w + CAP_GAP, 0);
 
     UndoFace { rgba, w, h: HINT_H }
 }
@@ -328,4 +344,20 @@ fn glyph_cap(glyph: char) -> Vec<u8> {
         }
     }
     cap
+}
+
+/// A legend hint (or the help line) in `colour`, with the shelf's soft shadow under it while
+/// the wallpaper shows through the menu's wash: readable over busy wallpapers (Roy 2026-11-07).
+pub fn shaded_hint(out: &mut Vec<Draw>, tex: TexId, x: f32, y: f32, w: f32, h: f32, colour: [f32; 4], wash: [f32; 4]) {
+    // On a flat ground too, in both themes: the keys' white caps stand off it (Roy 2026-11-12,
+    // ui7); plain black there, the wallpaper's colour only where it shows.
+    crate::slot_chrome::soft_shadow_over(tex, x, y, w, h, colour, 1.0, wash[3] < 1.0, out);
+    out.push(Draw::Tint {
+        x,
+        y,
+        w,
+        h,
+        tex,
+        colour,
+    });
 }
