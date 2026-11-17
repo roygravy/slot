@@ -26,7 +26,7 @@ pub const PALETTE: [(&str, [u8; 3]); 23] = [
     ("Pokémon FireRed", [0xd8, 0x52, 0x24]),
     ("Daisy Orange", [0xf0, 0xa9, 0x5e]),
     ("Pokémon Yellow", [0xe9, 0xa8, 0x26]),
-    ("Zelda Gold", [0xc9, 0xa2, 0x3f]),
+    ("Zelda Gold", [0xba, 0xa2, 0x67]),
     ("Pokémon Gold", [0xb3, 0x8b, 0x3a]),
     ("Pokémon LeafGreen", [0x63, 0xb0, 0x44]),
     ("Pokémon Emerald", [0x24, 0x9c, 0x60]),
@@ -276,6 +276,8 @@ pub struct ShellPicker {
     slot_finishes: Vec<slot_ui::SlotFinish>,
     /// The slot studio is open instead of the cart's (L1/R1, Roy).
     slot_mode: bool,
+    /// Opened straight on the Slot tab (START): the slot stays where it stands, no rise.
+    straight: bool,
     /// When the studios last switched.
     mode_at: Option<Millis>,
     /// When the slot last changed its case, and how hard it hops for it.
@@ -360,6 +362,7 @@ impl ShellPicker {
             slot_groups: Vec::new(),
             slot_finishes: Vec::new(),
             slot_mode: false,
+            straight: false,
             mode_at: None,
             slot_poke: None,
             real: None,
@@ -425,6 +428,20 @@ impl ShellPicker {
             .or(self.standards.first())
             .copied()
             .unwrap_or(([0, 0, 0], ShellFinish::Own))
+    }
+
+    /// Opens on the Slot tab, when there is one (START on the shelf). False without a slot studio.
+    pub fn open_on_slot(&mut self, now: Millis) -> bool {
+        if self.slot.is_none() {
+            return false;
+        }
+        self.slot_mode = true;
+        // The cart flies off; the slot is already in place, so it stays (Roy 2026-11-17: it
+        // sprang up in front of the shelf's own).
+        self.mode_at = Some(now);
+        self.straight = true;
+        self.row = self.top_row();
+        true
     }
 
     /// Offers the slot studio: the Game Boy slot's case `now`, of cases grouped per model.
@@ -496,6 +513,11 @@ impl ShellPicker {
     pub fn slot_motion(&self, now: Millis) -> (Option<f32>, Option<(f32, f32)>) {
         let secs = |at: Millis| now.saturating_sub(at) as f32 / 1000.0;
         (self.mode_at.map(secs), self.slot_poke.map(|(at, k)| (secs(at), k)))
+    }
+
+    /// Opened straight on the Slot tab and not switched since: the slot does not rise.
+    pub fn straight(&self) -> bool {
+        self.straight
     }
 
     /// Whether the slot studio is open: None when it is not offered.
@@ -1182,6 +1204,7 @@ impl ShellPicker {
                 let slot = matches!(press, Press::TabRight);
                 if slot != self.slot_mode {
                     self.slot_mode = slot;
+                    self.straight = false;
                     self.mode_at = Some(now);
                     // The other studio opens at its top row (Roy 2026-11-07).
                     self.row = self.top_row();

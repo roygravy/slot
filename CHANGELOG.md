@@ -1,5 +1,27 @@
 # Changelog
 
+## slot. x GRAVY v1.3.1
+
+Fine-tuning after v1.3, with thanks to our testers on other devices.
+
+### New
+
+- Screen Calibration on or off (General), off by default. Calibrate Screen sits right under it.
+- Extra colour only on the RG35XX Plus; the RG SP and other consoles show colours as drawn.
+- NES and SNES: Sharp Pixels, before the CRT effects. On 3:2 screens: Screen Size 4:3 or full screen.
+
+### Improved
+
+- START opens the Slot Studio straight from the shelf; the GBA emulator choice moved to X.
+- Shelf names follow your own wallpaper: black on light ones, white on dark ones.
+- Calmer metallic slots: Gold, Pearl Pink, Pearl Blue and Pearl Green, and the gold Zelda carts.
+- Favorites gold slots lit from above, like real metal.
+- General: Recents, Deck, then Favorites.
+
+### Bugfixes
+
+- Carts set to Zelda Gold in v1.3 take the new gold.
+
 ## slot. x GRAVY v1.3
 
 Everything since slot. x GRAVY v1.2.2.

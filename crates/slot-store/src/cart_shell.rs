@@ -46,7 +46,11 @@ impl ShellChoice {
         if hex.len() != 6 || !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
             return None;
         }
-        let colour = [0, 2, 4].map(|i| u8::from_str_radix(&hex[i..i + 2], 16).unwrap_or(0));
+        let mut colour = [0, 2, 4].map(|i| u8::from_str_radix(&hex[i..i + 2], 16).unwrap_or(0));
+        // Zelda Gold before v1.3.1 (full colour): the studio's Zelda Gold now, at 60%.
+        if colour == [0xc9, 0xa2, 0x3f] {
+            colour = [0xba, 0xa2, 0x67];
+        }
         let finish = match words.next()? {
             "solid" => ShellFinish::Solid,
             "clear" => ShellFinish::Clear,

@@ -8,7 +8,7 @@
 pub struct Calibration {
     pub gain: [f32; 3],
     pub gamma: [f32; 3],
-    /// Colour of the whole screen, 1.0 as drawn, `SATURATION_DEFAULT` when not set. Done in the final blit, not in the table.
+    /// Colour of the whole screen, 1.0 as drawn, `saturation_default()` when not set. Done in the final blit, not in the table.
     pub saturation: f32,
 }
 
@@ -17,17 +17,45 @@ impl Default for Calibration {
         Calibration {
             gain: [1.0; 3],
             gamma: [1.0; 3],
-            saturation: SATURATION_DEFAULT,
+            saturation: saturation_default(),
         }
     }
 }
 
 pub const GAIN_MIN: f32 = 0.5;
 pub const GAMMA_RANGE: (f32, f32) = (0.5, 2.0);
-pub const SATURATION_RANGE: (f32, f32) = (0.84, 2.52);
-/// Without a calibration of its own the screen shows a little more colour than drawn: the
-/// RG35XX panel looks flat at 100% (Roy 2026-11-13).
-pub const SATURATION_DEFAULT: f32 = 1.4;
+/// Without a calibration of its own the RG35XX Plus shows a little more colour than drawn: its
+/// panel looks flat at 100% (Roy 2026-11-13). Other consoles' panels are livelier (an RG SP
+/// tester, 2026-11-16): they show the colours as drawn.
+pub const SATURATION_RG35XX_PLUS: f32 = 1.4;
+
+/// The standard saturation of this console's panel: the RG35XX Plus's, also off the device
+/// (the simulator, the tests) and when BaseOS does not say which console it is.
+pub fn saturation_default() -> f32 {
+    static DEFAULT: std::sync::OnceLock<f32> = std::sync::OnceLock::new();
+    *DEFAULT.get_or_init(|| {
+        let target = std::env::var("BASEOS_TARGET").ok().or_else(|| {
+            let release = std::fs::read_to_string("/etc/baseos-release").ok()?;
+            release.lines().find_map(|l| {
+                l.strip_prefix("BASEOS_TARGET=").map(|v| v.trim().trim_matches('"').to_string())
+            })
+        });
+        saturation_for(target.as_deref())
+    })
+}
+
+fn saturation_for(target: Option<&str>) -> f32 {
+    match target.map(str::trim) {
+        None | Some("") | Some("rg35xxplus") => SATURATION_RG35XX_PLUS,
+        Some(_) => 1.0,
+    }
+}
+
+/// The saturation a card may keep: 60% to 180% of the standard.
+pub fn saturation_range() -> (f32, f32) {
+    let d = saturation_default();
+    (d * 0.6, d * 1.8)
+}
 
 impl Calibration {
     /// Reads `gain r g b` and `gamma r g b`; a missing line keeps the neutral value,
@@ -41,7 +69,8 @@ impl Calibration {
             };
             let v: Vec<f32> = values.filter_map(|w| w.parse().ok()).collect();
             if key == "saturation" && v.len() == 1 && v[0].is_finite() {
-                cal.saturation = v[0].clamp(SATURATION_RANGE.0, SATURATION_RANGE.1);
+                let (lo, hi) = saturation_range();
+                cal.saturation = v[0].clamp(lo, hi);
                 continue;
             }
             if v.len() != 3 || !v.iter().all(|x| x.is_finite()) {
@@ -164,6 +193,14 @@ pub fn apply(_cal: &Calibration) -> std::io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_the_rg35xx_plus_gets_the_extra_colour() {
+        assert_eq!(saturation_for(Some("rg35xxplus")), SATURATION_RG35XX_PLUS);
+        assert_eq!(saturation_for(None), SATURATION_RG35XX_PLUS);
+        assert_eq!(saturation_for(Some("rg35xxsp")), 1.0);
+        assert_eq!(saturation_for(Some("rg34xxsp")), 1.0);
+    }
 
     #[test]
     fn neutral_is_the_identity() {

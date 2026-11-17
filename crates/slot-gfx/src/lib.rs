@@ -28,7 +28,7 @@ mod shaders;
 mod surface;
 
 pub use bezel::{framed, lifted_rect, screen_rect};
-pub use displaycal::{Calibration, SATURATION_DEFAULT, SATURATION_RANGE};
+pub use displaycal::{saturation_default, saturation_range, Calibration};
 pub use draw::{Draw, TexId};
 pub mod calibration {
     pub use crate::displaycal::{apply, load, release};

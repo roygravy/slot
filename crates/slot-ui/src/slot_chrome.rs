@@ -1013,7 +1013,13 @@ pub fn soft_shadow_over(
 pub struct ShadowGround {
     tones: Vec<[f32; 3]>,
     h: f32,
+    /// How light the wallpaper is where the shelf's names sit, under the carts (0 to 1).
+    band_luma: f32,
 }
+
+/// Where the shelf's console name and game title sit on a 480-line wallpaper, the middle half
+/// of its width.
+const NAME_BAND: (usize, usize) = (360, 425);
 
 const TONE_COLS: usize = 20;
 const TONE_ROWS: usize = 15;
@@ -1026,8 +1032,14 @@ impl ShadowGround {
     pub fn new(rgba: &[u8], w: u32, h: u32) -> Self {
         let (w, h) = (w as usize, h as usize);
         let mut sum = vec![[0.0f32; 4]; TONE_COLS * TONE_ROWS];
+        let (mut band, mut band_n) = (0.0f32, 0.0f32);
+        let (b0, b1) = (NAME_BAND.0 * h / 480, NAME_BAND.1 * h / 480);
         for (i, px) in rgba.chunks_exact(4).enumerate().step_by(3) {
             let (x, y) = (i % w, i / w);
+            if (b0..b1).contains(&y) && (w / 4..w * 3 / 4).contains(&x) {
+                band += (0.299 * px[0] as f32 + 0.587 * px[1] as f32 + 0.114 * px[2] as f32) / 255.0;
+                band_n += 1.0;
+            }
             let cell = &mut sum[(y * TONE_ROWS / h) * TONE_COLS + x * TONE_COLS / w];
             for k in 0..3 {
                 cell[k] += px[k] as f32 / 255.0;
@@ -1041,7 +1053,13 @@ impl ShadowGround {
                 false => [0.0; 3],
             })
             .collect();
-        Self { tones, h: h as f32 }
+        Self { tones, h: h as f32, band_luma: if band_n > 0.0 { band / band_n } else { 0.0 } }
+    }
+
+    /// The wallpaper is light under the shelf's names, with `dim` of black over it (Wallpaper
+    /// Tint): they go black there, white on a dark one (Roy 2026-11-17), whatever the menus do.
+    pub fn light(&self, dim: f32) -> bool {
+        self.band_luma * (1.0 - dim) > 0.55
     }
 }
 

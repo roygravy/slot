@@ -509,11 +509,13 @@ pub const GB_SLOT_CASES: [SlotCase; 4 * SLOT_COLOURS] = [
     case("Water Blue", 0x8CC0E4, false, Clear, true, 0xA8DBFF),
     case("Midnight Blue", 0x4C5CB4, false, Clear, true, 0x667AE0),
     case("Silver", 0xB8BABE, true, Metallic, true, 0xB8BABE),
-    case("Gold", 0xC9A24F, true, Metallic, true, 0xC9A24F),
+    case("Gold", 0xBAA371, true, Metallic, true, 0xBAA371),
+    // Gold, Pearl Pink, Blue and Green at 60% of their colour: fuller they read too loud on livelier
+    // panels (RG SP tester, Roy 2026-11-17).
     case("Pearl White", 0xEEEDE8, true, Pearl, true, 0xEEEDE8),
-    case("Pearl Pink", 0xEBBACB, true, Pearl, true, 0xEBBACB),
-    case("Pearl Blue", 0x9DBCE0, true, Pearl, true, 0x9DBCE0),
-    case("Pearl Green", 0xA9D3A6, true, Pearl, true, 0xA9D3A6),
+    case("Pearl Pink", 0xDEC1CB, true, Pearl, true, 0xDEC1CB),
+    case("Pearl Blue", 0xA7BAD0, true, Pearl, true, 0xA7BAD0),
+    case("Pearl Green", 0xB3CCB1, true, Pearl, true, 0xB3CCB1),
     // The Pocket and the Light: one flat slot.
     case("DMG Grey", 0xC4C0B7, true, Solid, false, 0xC4C0B7),
     case("Grape", 0x684E92, false, Solid, false, 0x684E92),
@@ -541,11 +543,11 @@ pub const GB_SLOT_CASES: [SlotCase; 4 * SLOT_COLOURS] = [
     case("Water Blue", 0x8CC0E4, false, Clear, false, 0xA8DBFF),
     case("Midnight Blue", 0x4C5CB4, false, Clear, false, 0x667AE0),
     case("Silver", 0xB8BABE, true, Metallic, false, 0xB8BABE),
-    case("Gold", 0xC9A24F, true, Metallic, false, 0xC9A24F),
+    case("Gold", 0xBAA371, true, Metallic, false, 0xBAA371),
     case("Pearl White", 0xEEEDE8, true, Pearl, false, 0xEEEDE8),
-    case("Pearl Pink", 0xEBBACB, true, Pearl, false, 0xEBBACB),
-    case("Pearl Blue", 0x9DBCE0, true, Pearl, false, 0x9DBCE0),
-    case("Pearl Green", 0xA9D3A6, true, Pearl, false, 0xA9D3A6),
+    case("Pearl Pink", 0xDEC1CB, true, Pearl, false, 0xDEC1CB),
+    case("Pearl Blue", 0xA7BAD0, true, Pearl, false, 0xA7BAD0),
+    case("Pearl Green", 0xB3CCB1, true, Pearl, false, 0xB3CCB1),
     // The Game Boy Color.
     case("DMG Grey", 0xC4C0B7, true, Solid, false, 0xC4C0B7),
     case("Original", 0x684E92, false, Solid, false, 0x684E92),
@@ -573,11 +575,11 @@ pub const GB_SLOT_CASES: [SlotCase; 4 * SLOT_COLOURS] = [
     case("Water Blue", 0x8CC0E4, false, Clear, false, 0xA8DBFF),
     case("Midnight Blue", 0x4C5CB4, false, Clear, false, 0x667AE0),
     case("Silver", 0xB8BABE, true, Metallic, false, 0xB8BABE),
-    case("Gold", 0xC9A24F, true, Metallic, false, 0xC9A24F),
+    case("Gold", 0xBAA371, true, Metallic, false, 0xBAA371),
     case("Pearl White", 0xEEEDE8, true, Pearl, false, 0xEEEDE8),
-    case("Pearl Pink", 0xEBBACB, true, Pearl, false, 0xEBBACB),
-    case("Pearl Blue", 0x9DBCE0, true, Pearl, false, 0x9DBCE0),
-    case("Pearl Green", 0xA9D3A6, true, Pearl, false, 0xA9D3A6),
+    case("Pearl Pink", 0xDEC1CB, true, Pearl, false, 0xDEC1CB),
+    case("Pearl Blue", 0xA7BAD0, true, Pearl, false, 0xA7BAD0),
+    case("Pearl Green", 0xB3CCB1, true, Pearl, false, 0xB3CCB1),
     // The Game Boy Advance SP.
     case("DMG Grey", 0xC4C0B7, true, Solid, false, 0xC4C0B7),
     case("Grape", 0x684E92, false, Solid, false, 0x684E92),
@@ -605,11 +607,11 @@ pub const GB_SLOT_CASES: [SlotCase; 4 * SLOT_COLOURS] = [
     case("Water Blue", 0x8CC0E4, false, Clear, false, 0xA8DBFF),
     case("Midnight Blue", 0x4C5CB4, false, Clear, false, 0x667AE0),
     case("Platinum", 0xB8BABE, true, Metallic, false, 0xB8BABE),
-    case("Gold", 0xC9A24F, true, Metallic, false, 0xC9A24F),
+    case("Gold", 0xBAA371, true, Metallic, false, 0xBAA371),
     case("Pearl White", 0xEEEDE8, true, Pearl, false, 0xEEEDE8),
-    case("Pearl Pink", 0xEBBACB, true, Pearl, false, 0xEBBACB),
-    case("Pearl Blue", 0x9DBCE0, true, Pearl, false, 0x9DBCE0),
-    case("Pearl Green", 0xA9D3A6, true, Pearl, false, 0xA9D3A6),
+    case("Pearl Pink", 0xDEC1CB, true, Pearl, false, 0xDEC1CB),
+    case("Pearl Blue", 0xA7BAD0, true, Pearl, false, 0xA7BAD0),
+    case("Pearl Green", 0xB3CCB1, true, Pearl, false, 0xB3CCB1),
 ];
 
 /// How many colours each Game Boy slot model offers.
@@ -677,13 +679,31 @@ pub fn slot_fav_gold(kind: usize, front: bool) -> &'static [u8] {
     static P: [OnceLock<Vec<u8>>; FAV_GOLD_KINDS * 2] = [const { OnceLock::new() }; FAV_GOLD_KINDS * 2];
     P[kind * 2 + usize::from(front)].get_or_init(|| {
         if kind >= 4 {
-            return gilded(slot_tv_grey(kind == 4, front), u32::from(front), 0.0);
+            let mut rgba = gilded(slot_tv_grey(kind == 4, front), u32::from(front), 0.0);
+            fav_light(&mut rgba);
+            return rgba;
         }
         let case = case("Favorites", FAV_GOLD, true, SlotFinish::Metallic, kind == 0, FAV_GOLD);
         let mut rgba = paint_slot(&case, kind, front);
+        fav_light(&mut rgba);
         bleed(&mut rgba, SLOT_W, SLOT_H);
         rgba
     })
+}
+
+/// The Favorites gold lit from above: brighter at the top, down to a deeper, warmer gold at
+/// the bottom, so it reads as metal rather than flat yellow (Roy 2026-11-17, A).
+fn fav_light(rgba: &mut [u8]) {
+    let rows = (rgba.len() / 4 / SLOT_W as usize).max(2);
+    for (i, px) in rgba.chunks_exact_mut(4).enumerate() {
+        let t = (i / SLOT_W as usize) as f32 / (rows - 1) as f32;
+        let g = 1.06 - 0.28 * t;
+        let warm = ((t - 0.5) * 0.25).max(0.0);
+        let k = [g, g * (1.0 - warm * 0.5), g * (1.0 - warm)];
+        for c in 0..3 {
+            px[c] = (f32::from(px[c]) * k[c]).round().clamp(0.0, 255.0) as u8;
+        }
+    }
 }
 
 /// The NES lid in the Favorites gold.

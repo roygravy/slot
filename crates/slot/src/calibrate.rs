@@ -4,7 +4,7 @@
 
 use std::path::Path;
 
-use slot_gfx::{calibration, Calibration, Draw, OUT_H, OUT_W, SATURATION_DEFAULT, SATURATION_RANGE};
+use slot_gfx::{calibration, saturation_default, Calibration, Draw, OUT_H, OUT_W};
 
 /// What fills the screen while calibrating.
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -27,10 +27,14 @@ pub struct Calibrate {
     on_panel: bool,
     /// Screen Calibration is open: its sliders are on the panel.
     console: Option<Console>,
+    /// Switched off on General's Screen Calibration row: the panel as the console makes it,
+    /// no table and no extra colour, to compare with. Screen Calibration itself still shows
+    /// its sliders while open.
+    off: bool,
 }
 
 /// Screen Calibration: the sliders, worked with the buttons. Values as GRAVY Manager kept them: warmth and tint -100 to 100, each curve as 100 x log2 of its exponent,
-/// saturation in percent of the standard (`SATURATION_DEFAULT` reads 100%).
+/// saturation in percent of the standard (`saturation_default()` reads 100%).
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct Console {
     /// White, Red, Green, Blue, Check, Color (`slot_ui::CAL_STEPS`).
@@ -49,7 +53,7 @@ pub struct Console {
 const WARM_STEP: i32 = 2;
 const CURVE_STEP: i32 = 1;
 const SAT_STEP: i32 = 5;
-/// The saturation slider in percent of the standard, 60 to 180 (`slot_gfx::SATURATION_RANGE`
+/// The saturation slider in percent of the standard, 60 to 180 (`slot_gfx::saturation_range()`
 /// on the card).
 const SAT_MIN: i32 = 60;
 const SAT_MAX: i32 = 180;
@@ -100,7 +104,7 @@ impl Console {
             warm,
             tint,
             curve: cal.gamma.map(|g| (g.log2() * 100.0).round() as i32),
-            sat: (cal.saturation / SATURATION_DEFAULT * 100.0).round() as i32,
+            sat: (cal.saturation / saturation_default() * 100.0).round() as i32,
             touched: now,
         }
     }
@@ -110,7 +114,7 @@ impl Console {
             "gain {}\ngamma {}\nsaturation {}\n",
             gains(self.warm, self.tint).map(|v| format!("{v:.4}")).join(" "),
             self.curve.map(|c| format!("{:.4}", 2f32.powf(c as f32 / 100.0))).join(" "),
-            self.sat as f32 / 100.0 * SATURATION_DEFAULT
+            self.sat as f32 / 100.0 * saturation_default()
         ))
     }
 
@@ -197,9 +201,10 @@ impl Default for Calibrate {
     fn default() -> Self {
         Calibrate {
             booted: false,
-            saturation: SATURATION_DEFAULT,
+            saturation: saturation_default(),
             on_panel: false,
             console: None,
+            off: false,
         }
     }
 }
@@ -216,9 +221,11 @@ impl Calibrate {
     }
 
     fn put(&mut self, cal: &Calibration) {
+        let bare = Calibration { saturation: 1.0, ..Default::default() };
+        let cal = if self.off && self.console.is_none() { &bare } else { cal };
         self.saturation = cal.saturation;
         let table_neutral = Calibration {
-            saturation: SATURATION_DEFAULT,
+            saturation: saturation_default(),
             ..*cal
         }
         .is_neutral();
@@ -300,6 +307,19 @@ impl Calibrate {
         }
         if let Some(root) = root {
             let saved = calibration::load(root);
+            self.put(&saved);
+        }
+    }
+
+    /// General's Screen Calibration row switched: off shows the panel bare, on the saved
+    /// calibration again.
+    pub fn set_off(&mut self, off: bool, root: Option<&Path>) {
+        if self.off == off {
+            return;
+        }
+        self.off = off;
+        if self.booted && self.console.is_none() {
+            let saved = root.map(calibration::load).unwrap_or_default();
             self.put(&saved);
         }
     }
@@ -391,6 +411,7 @@ const MID: f32 = 186.0 / 255.0;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use slot_gfx::saturation_range;
 
     #[test]
     fn the_test_pictures_are_judged_without_the_saturation() {
@@ -410,7 +431,7 @@ mod tests {
     fn no_calibration_on_the_card_is_the_default_saturation_and_a_neutral_table() {
         let dir = std::env::temp_dir().join("slot-cal-default");
         let cal = calibration::load(&dir);
-        assert_eq!(cal.saturation, SATURATION_DEFAULT);
+        assert_eq!(cal.saturation, saturation_default());
         assert!(cal.is_neutral());
         let console = Console::from(&cal, 0);
         assert_eq!(console.sat, 100);
@@ -432,12 +453,12 @@ mod tests {
             c.nudge(1);
         }
         assert_eq!(c.sat, 180);
-        assert!((c.calibration().saturation - SATURATION_RANGE.1).abs() < 1e-3);
+        assert!((c.calibration().saturation - saturation_range().1).abs() < 1e-3);
         for _ in 0..100 {
             c.nudge(-1);
         }
         assert_eq!(c.sat, 60);
-        assert!((c.calibration().saturation - SATURATION_RANGE.0).abs() < 1e-3);
+        assert!((c.calibration().saturation - saturation_range().0).abs() < 1e-3);
     }
 
     #[test]

@@ -24,6 +24,14 @@ fn a_choice_reads_back_as_itself() {
 }
 
 #[test]
+fn a_cart_kept_in_the_old_zelda_gold_reads_as_the_new_one() {
+    assert_eq!(
+        ShellChoice::parse("auto c9a23f metallic").unwrap().colour,
+        [0xba, 0xa2, 0x67]
+    );
+}
+
+#[test]
 fn anything_else_is_no_choice() {
     for bad in [
         "",

@@ -367,6 +367,15 @@ pub struct SlotState {
     pub sharp_pixels_gb: bool,
     pub sharp_pixels_gbc: bool,
     pub sharp_pixels_gba: bool,
+    /// The NES and SNES too, before the CRT's lines and mask (off by default: the TV look as it was).
+    pub sharp_pixels_nes: bool,
+    pub sharp_pixels_snes: bool,
+    /// On a 3:2 panel: the NES / SNES picture across the whole screen instead of 4:3 (off by default).
+    pub tv_full_nes: bool,
+    pub tv_full_snes: bool,
+    /// General's Screen Calibration row off: the panel without its calibration (to compare).
+    /// Off by default (Roy 2026-11-17).
+    pub calibration_off: bool,
     /// GBA in its own 3:2 shape with bars, not stretched to the screen (off by default).
     pub gba_shape: bool,
     pub in_game_menu: bool,
@@ -660,6 +669,11 @@ impl Default for SlotState {
             sharp_pixels_gb: true,
             sharp_pixels_gbc: true,
             sharp_pixels_gba: true,
+            sharp_pixels_nes: false,
+            sharp_pixels_snes: false,
+            tv_full_nes: false,
+            tv_full_snes: false,
+            calibration_off: true,
             gba_shape: false,
             in_game_menu: true,
             remember_position: false,
@@ -826,6 +840,11 @@ pub fn write_slot_state(root: &Path, s: &SlotState) -> std::io::Result<()> {
         ("sharp_pixels_gb", s.sharp_pixels_gb),
         ("sharp_pixels_gbc", s.sharp_pixels_gbc),
         ("sharp_pixels_gba", s.sharp_pixels_gba),
+        ("sharp_pixels_nes", s.sharp_pixels_nes),
+        ("sharp_pixels_snes", s.sharp_pixels_snes),
+        ("tv_full_nes", s.tv_full_nes),
+        ("tv_full_snes", s.tv_full_snes),
+        ("calibration_off", s.calibration_off),
         ("gba_shape", s.gba_shape),
         ("tv_filter_nes", s.tv_filter_nes),
         ("tv_filter_snes", s.tv_filter_snes),
@@ -967,6 +986,11 @@ fn parse(text: &str) -> Option<SlotState> {
     let mut sharp_pixels_gb = None;
     let mut sharp_pixels_gbc = None;
     let mut sharp_pixels_gba = None;
+    let mut sharp_pixels_nes = None;
+    let mut sharp_pixels_snes = None;
+    let mut tv_full_nes = None;
+    let mut tv_full_snes = None;
+    let mut calibration_off = None;
     let mut gba_shape = None;
     let mut in_game_menu = None;
     let mut remember_position = None;
@@ -1078,6 +1102,11 @@ fn parse(text: &str) -> Option<SlotState> {
             "sharp_pixels_gb" => sharp_pixels_gb = flag(value),
             "sharp_pixels_gbc" => sharp_pixels_gbc = flag(value),
             "sharp_pixels_gba" => sharp_pixels_gba = flag(value),
+            "sharp_pixels_nes" => sharp_pixels_nes = flag(value),
+            "sharp_pixels_snes" => sharp_pixels_snes = flag(value),
+            "tv_full_nes" => tv_full_nes = flag(value),
+            "tv_full_snes" => tv_full_snes = flag(value),
+            "calibration_off" => calibration_off = flag(value),
             "gba_shape" => gba_shape = flag(value),
             "tv_filter_nes" => tv_filter_nes = flag(value),
             "tv_filter_snes" => tv_filter_snes = flag(value),
@@ -1189,6 +1218,11 @@ fn parse(text: &str) -> Option<SlotState> {
         sharp_pixels_gb: sharp_pixels_gb.unwrap_or(fallback.sharp_pixels_gb),
         sharp_pixels_gbc: sharp_pixels_gbc.unwrap_or(fallback.sharp_pixels_gbc),
         sharp_pixels_gba: sharp_pixels_gba.unwrap_or(fallback.sharp_pixels_gba),
+        sharp_pixels_nes: sharp_pixels_nes.unwrap_or(fallback.sharp_pixels_nes),
+        sharp_pixels_snes: sharp_pixels_snes.unwrap_or(fallback.sharp_pixels_snes),
+        tv_full_nes: tv_full_nes.unwrap_or(fallback.tv_full_nes),
+        tv_full_snes: tv_full_snes.unwrap_or(fallback.tv_full_snes),
+        calibration_off: calibration_off.unwrap_or(fallback.calibration_off),
         gba_shape: gba_shape.unwrap_or(fallback.gba_shape),
         in_game_menu: in_game_menu.unwrap_or(fallback.in_game_menu),
         remember_position: remember_position.unwrap_or(fallback.remember_position),

@@ -120,7 +120,8 @@ void main() {
     vec2 span = 0.5 - 0.5 / px;
     vec2 sharp = (floor(uv * u_src) + (d - clamp(d, -span, span)) * px + 0.5) / u_src;
     vec3 c = texture2D(u_game, sharp).rgb;
-    if (u_sharp > 0.5 && u_mode < 5.5) {
+    // A TV console's picture is evened out too, before its lines, mask and glow.
+    if (u_sharp > 0.5) {
         // Sharp Shimmerless: scaled by no whole number, a screen pixel on the line between two
         // of the game's takes each in the share it covers, so every pixel shows the same size.
         // The game's texture is nearest, so the blend of the four round it is done here.

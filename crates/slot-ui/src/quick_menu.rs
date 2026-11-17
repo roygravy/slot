@@ -146,10 +146,20 @@ pub enum QuickRow {
     BtOther3,
     BtOther4,
     BtOther5,
+    /// Sharp Pixels and, on a 3:2 panel, Screen Size for the NES and SNES; in game TvSize
+    /// stands for whichever of the two is in the slot.
+    NesSharp,
+    SnesSharp,
+    NesSize,
+    SnesSize,
+    TvSize,
+    /// General: the screen's calibration on or off (named Screen Calibration); Calibrate
+    /// Screen under it opens the sliders, only while it is on.
+    CalibrationOn,
 }
 
 impl QuickRow {
-    pub const ALL: [QuickRow; 133] = [
+    pub const ALL: [QuickRow; 139] = [
         QuickRow::Achievements,
         QuickRow::RaToggle,
         QuickRow::FastForward,
@@ -283,6 +293,12 @@ impl QuickRow {
         QuickRow::BtOther3,
         QuickRow::BtOther4,
         QuickRow::BtOther5,
+        QuickRow::NesSharp,
+        QuickRow::SnesSharp,
+        QuickRow::NesSize,
+        QuickRow::SnesSize,
+        QuickRow::TvSize,
+        QuickRow::CalibrationOn,
     ];
 
     /// The power menu, held POWER.
@@ -300,16 +316,18 @@ impl QuickRow {
     ];
 
     /// General's first tab, Shelf: how the shelf looks.
-    pub const GENERAL: [QuickRow; 9] = [
+    pub const GENERAL: [QuickRow; 10] = [
         QuickRow::Wallpaper,
         QuickRow::Theme,
         // Right under Slot Color, then Vibration, then the shelves (Roy, 2026-11-13).
+        QuickRow::CalibrationOn,
         QuickRow::ScreenColors,
         QuickRow::Vibration,
+        // Recents, the Deck, then Favorites (Roy 2026-11-17).
+        QuickRow::Recents,
         QuickRow::Deck,
         QuickRow::FavoriteMark,
         QuickRow::FavoriteGold,
-        QuickRow::Recents,
         QuickRow::ShowTitles,
         // Dust & Wear has no row: wear is a hidden easter egg, dust is gone (Roy, xg1 xg2).
     ];
@@ -445,20 +463,24 @@ impl QuickRow {
         QuickRow::ScreenSnes,
     ];
 
-    pub const SCREEN_NES: [QuickRow; 5] = [
+    pub const SCREEN_NES: [QuickRow; 7] = [
         QuickRow::NesCable,
         QuickRow::NesColors,
         QuickRow::NesScanlines,
         QuickRow::NesMask,
         QuickRow::NesAfterglow,
+        QuickRow::NesSharp,
+        QuickRow::NesSize,
     ];
 
-    pub const SCREEN_SNES: [QuickRow; 5] = [
+    pub const SCREEN_SNES: [QuickRow; 7] = [
         QuickRow::SnesCable,
         QuickRow::SnesColors,
         QuickRow::SnesScanlines,
         QuickRow::SnesMask,
         QuickRow::SnesAfterglow,
+        QuickRow::SnesSharp,
+        QuickRow::SnesSize,
     ];
 
     pub const SCREEN_GBA: [QuickRow; 6] = [
@@ -515,7 +537,7 @@ impl QuickRow {
     /// The in-game Screen page: the playing system's own settings, through rows that stand
     /// for whichever system is in the slot.
     /// The TV consoles' rows come after the handhelds' and only one set is shown.
-    pub const PLAY_SCREEN: [QuickRow; 14] = [
+    pub const PLAY_SCREEN: [QuickRow; 15] = [
         QuickRow::SgbBorder,
         QuickRow::Shader,
         QuickRow::ScreenLight,
@@ -530,6 +552,7 @@ impl QuickRow {
         QuickRow::Scanlines,
         QuickRow::Mask,
         QuickRow::Afterglow,
+        QuickRow::TvSize,
     ];
 
     pub fn index(self) -> usize {
@@ -547,12 +570,16 @@ impl QuickRow {
             | QuickRow::NesColors
             | QuickRow::NesScanlines
             | QuickRow::NesMask
-            | QuickRow::NesAfterglow => &QuickRow::SCREEN_NES,
+            | QuickRow::NesAfterglow
+            | QuickRow::NesSharp
+            | QuickRow::NesSize => &QuickRow::SCREEN_NES,
             QuickRow::SnesCable
             | QuickRow::SnesColors
             | QuickRow::SnesScanlines
             | QuickRow::SnesMask
-            | QuickRow::SnesAfterglow => &QuickRow::SCREEN_SNES,
+            | QuickRow::SnesAfterglow
+            | QuickRow::SnesSharp
+            | QuickRow::SnesSize => &QuickRow::SCREEN_SNES,
             QuickRow::GbaShader
             | QuickRow::GbaTransparency
             | QuickRow::GbaGhosting
@@ -594,7 +621,8 @@ impl QuickRow {
             | QuickRow::Vibration
             | QuickRow::DustWear
             | QuickRow::BootPicture
-            | QuickRow::ScreenColors => &QuickRow::GENERAL,
+            | QuickRow::ScreenColors
+            | QuickRow::CalibrationOn => &QuickRow::GENERAL,
             QuickRow::DateTime | QuickRow::AutoTime | QuickRow::TimeZone | QuickRow::Clock24 => {
                 &QuickRow::CLOCK
             }
@@ -659,6 +687,7 @@ impl QuickRow {
             | QuickRow::Mask
             | QuickRow::Afterglow
             | QuickRow::ScreenShape
+            | QuickRow::TvSize
             | QuickRow::SgbBorder => &QuickRow::PLAY_SCREEN,
             _ => &QuickRow::MAIN,
         }
@@ -767,7 +796,8 @@ impl QuickRow {
             QuickRow::FastForward => "Fast Forward",
             QuickRow::FastForwardSound => "Fast Forward Sound",
             QuickRow::Screen => "Game Settings",
-            QuickRow::ScreenColors => "Screen Calibration",
+            QuickRow::ScreenColors => "Calibrate Screen",
+            QuickRow::CalibrationOn => "Screen Calibration",
             QuickRow::Rumble => "Rumble",
             QuickRow::CheatIcon => "Cheat Icon",
             QuickRow::RaToggle => "RetroAchievements",
@@ -816,8 +846,14 @@ impl QuickRow {
             QuickRow::SharpPixels
             | QuickRow::GbSharp
             | QuickRow::GbcSharp
-            | QuickRow::GbaSharp => "Sharp Pixels",
-            QuickRow::GbaShape | QuickRow::ScreenShape => "Screen Size",
+            | QuickRow::GbaSharp
+            | QuickRow::NesSharp
+            | QuickRow::SnesSharp => "Sharp Pixels",
+            QuickRow::GbaShape
+            | QuickRow::ScreenShape
+            | QuickRow::NesSize
+            | QuickRow::SnesSize
+            | QuickRow::TvSize => "Screen Size",
             QuickRow::InGameMenu => "In-Game Menu",
             QuickRow::RememberPosition => "Remember Shelf Position",
             QuickRow::ResumeGame => "Resume Game",
@@ -896,6 +932,7 @@ impl QuickRow {
             QuickRow::General => "Theme, slot color, shelves and sleep.",
             QuickRow::Screen => "How games look and play.",
             QuickRow::ScreenColors => "This screen's colors, set by eye.",
+            QuickRow::CalibrationOn => "This screen's own colors. Off to compare.",
             QuickRow::Game => "Speed, rewind, turbo and saving.",
             QuickRow::Buttons => "Every button and shortcut, explained.",
             QuickRow::About => "Who made this, and what it runs on.",
@@ -944,9 +981,14 @@ impl QuickRow {
             QuickRow::SharpPixels
             | QuickRow::GbSharp
             | QuickRow::GbcSharp
-            | QuickRow::GbaSharp => "Every pixel the same size at any screen size.",
+            | QuickRow::GbaSharp
+            | QuickRow::NesSharp
+            | QuickRow::SnesSharp => "Every pixel the same size at any screen size.",
             QuickRow::GbaShape | QuickRow::ScreenShape => {
                 "4:3 fills the screen, 3:2 is the GBA's own. SELECT + L2/R2."
+            }
+            QuickRow::NesSize | QuickRow::SnesSize | QuickRow::TvSize => {
+                "4:3 is the TV's own, 3:2 fills the whole screen."
             }
             QuickRow::FastForward => "How fast the game runs while you hold R2.",
             QuickRow::FastForwardSound => "Hear the game while it fast-forwards.",
@@ -1829,6 +1871,8 @@ pub struct QuickMenu<'a> {
     pub zone: Option<[(TexId, u32, u32); 2]>,
     /// A row shown faded that takes no input, like Date & Time while Auto Time is on.
     pub locked: Option<QuickRow>,
+    /// A second faded row, on General: Calibrate Screen while Screen Calibration is off.
+    pub locked_too: Option<QuickRow>,
     pub wallpaper: Option<[(TexId, u32, u32); 2]>,
     pub faces: Option<&'a QuickMenuFaces>,
     pub ground: Option<TexId>,
@@ -1847,6 +1891,10 @@ pub struct QuickMenu<'a> {
 }
 
 impl QuickMenu<'_> {
+    fn is_locked(&self, row: QuickRow) -> bool {
+        self.locked == Some(row) || self.locked_too == Some(row)
+    }
+
     pub fn draw(&self, out: &mut Vec<Draw>) {
         let ink = if self.over_game {
             theme::OVER_GAME
@@ -1954,7 +2002,7 @@ impl QuickMenu<'_> {
             }
             let y = top + pitch * (i - first) as f32 + TYPE_DROP;
             let lit = row == self.row;
-            let colour = match (lit, self.locked == Some(row)) {
+            let colour = match (lit, self.is_locked(row)) {
                 (true, true) => [
                     ink.on_bar[0],
                     ink.on_bar[1],
@@ -2072,7 +2120,7 @@ impl QuickMenu<'_> {
                 }
                 continue;
             };
-            if !lit || row.opens() || row.read_only() || self.locked == Some(row) {
+            if !lit || row.opens() || row.read_only() || self.is_locked(row) {
                 tint(out, tex, right + pad - w as f32, y, w, h, colour);
                 continue;
             }
@@ -2119,7 +2167,7 @@ impl QuickMenu<'_> {
         };
         // A row that only tells, like Connected To, has nothing to change.
         let tabbed = self.row.tab(self.hidden).is_some();
-        let hints: &[(TexId, u32)] = match (self.row.read_only() || self.locked == Some(self.row), tabbed) {
+        let hints: &[(TexId, u32)] = match (self.row.read_only() || self.is_locked(self.row), tabbed) {
             (true, false) => &[back],
             // Arrows or A first, Back after, L1 R1 last (Roy 2026-11-14).
             (true, true) => &[back, tab],

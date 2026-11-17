@@ -1350,12 +1350,15 @@ impl App {
                 QuickRow::Bezel,
                 QuickRow::PixelTransparency,
                 QuickRow::LcdGhosting,
-                QuickRow::SharpPixels,
                 QuickRow::BlackBorder,
             ]);
         }
         if !platform.tv() {
             hidden.extend(TV_ROWS);
+        }
+        // Only a 3:2 panel has a choice for the TV's 4:3 picture.
+        if !platform.tv() || !self.framed_panel() {
+            hidden.push(QuickRow::TvSize);
         }
         if platform != Platform::Gba || self.framed_panel() {
             hidden.push(QuickRow::ScreenShape);
@@ -1408,6 +1411,10 @@ impl App {
             (QuickRow::SharpPixels, Platform::Gb) => QuickRow::GbSharp,
             (QuickRow::SharpPixels, Platform::Gbc) => QuickRow::GbcSharp,
             (QuickRow::SharpPixels, Platform::Gba) => QuickRow::GbaSharp,
+            (QuickRow::SharpPixels, Platform::Nes) => QuickRow::NesSharp,
+            (QuickRow::SharpPixels, Platform::Snes) => QuickRow::SnesSharp,
+            (QuickRow::TvSize, Platform::Nes) => QuickRow::NesSize,
+            (QuickRow::TvSize, Platform::Snes) => QuickRow::SnesSize,
             (QuickRow::BlackBorder, Platform::Gb) => QuickRow::GbBlackBorder,
             (QuickRow::BlackBorder, Platform::Gbc) => QuickRow::GbcBlackBorder,
             (QuickRow::BlackBorder, Platform::Gba) => QuickRow::GbaBlackBorder,
@@ -1438,7 +1445,8 @@ impl App {
             | QuickRow::Colors
             | QuickRow::Scanlines
             | QuickRow::Mask
-            | QuickRow::Afterglow => match self.playing_row(row) {
+            | QuickRow::Afterglow
+            | QuickRow::TvSize => match self.playing_row(row) {
                 stood_in if stood_in != row => self.quick_value(stood_in),
                 _ => None,
             },
@@ -1474,6 +1482,17 @@ impl App {
             QuickRow::GbSharp => Some(QuickValue::flag(self.state.sharp_pixels_gb)),
             QuickRow::GbcSharp => Some(QuickValue::flag(self.state.sharp_pixels_gbc)),
             QuickRow::GbaSharp => Some(QuickValue::flag(self.state.sharp_pixels_gba)),
+            QuickRow::ScreenColors => None,
+            QuickRow::CalibrationOn => Some(QuickValue::flag(!self.state.calibration_off)),
+            QuickRow::NesSharp => Some(QuickValue::flag(self.state.sharp_pixels_nes)),
+            QuickRow::SnesSharp => Some(QuickValue::flag(self.state.sharp_pixels_snes)),
+            QuickRow::NesSize | QuickRow::SnesSize => {
+                let full = match row {
+                    QuickRow::NesSize => self.state.tv_full_nes,
+                    _ => self.state.tv_full_snes,
+                };
+                Some(if full { QuickValue::Ratio3x2 } else { QuickValue::Ratio4x3 })
+            }
             QuickRow::GbaShape | QuickRow::ScreenShape => Some(if self.state.gba_shape {
                 QuickValue::Ratio3x2
             } else {
@@ -1564,7 +1583,6 @@ impl App {
             | QuickRow::NetForget
             | QuickRow::TimeZone
             | QuickRow::About
-            | QuickRow::ScreenColors
             | QuickRow::Screenshots
             | QuickRow::Screen
             | QuickRow::Game
@@ -1855,6 +1873,19 @@ impl App {
         }
     }
 
+    /// The shelf's console name and game title: on your own wallpaper black over a light one
+    /// and white over a dark one, not tied to the menus (Roy 2026-11-17); on Dark and Light as
+    /// the menus are.
+    fn shelf_ink(&self) -> slot_ui::theme::Ink {
+        let face = self.ground_face();
+        match self.shadow_grounds.iter().find(|(f, _)| Some(*f) == face) {
+            Some((_, ground)) if self.own_wallpaper_shown() => {
+                slot_ui::theme::ink(ground.light(tint_alpha(self.state.wallpaper_tint)))
+            }
+            _ => self.menu_ink(),
+        }
+    }
+
     fn menu_ground(&self) -> Option<TexId> {
         self.ground_face()
     }
@@ -1910,6 +1941,8 @@ impl App {
         }
         if !self.framed_panel() {
             hidden.push(QuickRow::GbaBezel);
+            // A 4:3 panel is the TV's own shape: the NES and SNES always fill it.
+            hidden.extend([QuickRow::NesSize, QuickRow::SnesSize]);
         } else {
             // A 3:2 panel is the GBA's own shape: its picture is always 3:2 there (Roy).
             hidden.push(QuickRow::GbaShape);
@@ -3310,13 +3343,14 @@ impl App {
     }
 
     /// Whether the playing picture is drawn with every pixel the same size when it is not
-    /// scaled a whole number of times; a TV console's picture goes through its own CRT.
+    /// scaled a whole number of times; on a TV console before its CRT.
     pub fn sharp_pixels(&self) -> bool {
         match self.playing_platform() {
             Platform::Gb => self.state.sharp_pixels_gb,
             Platform::Gbc => self.state.sharp_pixels_gbc,
             Platform::Gba => self.state.sharp_pixels_gba,
-            Platform::Nes | Platform::Snes => false,
+            Platform::Nes => self.state.sharp_pixels_nes,
+            Platform::Snes => self.state.sharp_pixels_snes,
         }
     }
 
@@ -3714,7 +3748,12 @@ impl App {
                     self.label_search_input(action)
                 }
                 _ if self.shell_picker.is_some() => self.shell_picker_input(action),
+                // START: the slot studio straight away; X: a GBA game's emulator, but on Recents
+                // X takes the game off the list (Roy 2026-11-17).
                 Action::GbaDown(Btn::Start) if self.core_picker.is_none() => {
+                    self.open_slot_studio()
+                }
+                Action::GbaDown(Btn::X) if self.core_picker.is_none() && self.shelf_at != RECENTS_AT => {
                     self.open_core_picker()
                 }
                 Action::GbaDown(Btn::Select) if self.core_picker.is_none() => {
@@ -4309,6 +4348,8 @@ impl App {
             QuickRow::ConnectedTo => self.open_network_details(),
             QuickRow::TimeZone => self.open_zones(),
             QuickRow::About => self.phase = Phase::About,
+            // Screen Calibration off: nothing to calibrate, the row shakes no.
+            QuickRow::ScreenColors if self.state.calibration_off => self.refuse(),
             QuickRow::ScreenColors => self.open_screen_colors(),
             QuickRow::Screenshots => self.open_shots(false),
             QuickRow::Buttons => self.phase = Phase::Buttons { page: 0 },
@@ -4387,6 +4428,12 @@ impl App {
             | QuickRow::GbaSharp
             | QuickRow::GbaShape
             | QuickRow::ScreenShape
+            | QuickRow::NesSharp
+            | QuickRow::SnesSharp
+            | QuickRow::NesSize
+            | QuickRow::SnesSize
+            | QuickRow::TvSize
+            | QuickRow::CalibrationOn
             | QuickRow::AutoSleep
             | QuickRow::DeepSleep
             | QuickRow::InGameMenu
@@ -4668,6 +4715,7 @@ impl App {
             | QuickRow::Wps
             | QuickRow::RomManager
             | QuickRow::About
+            | QuickRow::TvSize
             | QuickRow::ScreenColors
             | QuickRow::SgbBorder
             | QuickRow::Nearby0
@@ -4758,6 +4806,11 @@ impl App {
             QuickRow::GbcSharp => s.sharp_pixels_gbc = !s.sharp_pixels_gbc,
             QuickRow::GbaSharp => s.sharp_pixels_gba = !s.sharp_pixels_gba,
             QuickRow::GbaShape | QuickRow::ScreenShape => s.gba_shape = !s.gba_shape,
+            QuickRow::CalibrationOn => s.calibration_off = !s.calibration_off,
+            QuickRow::NesSharp => s.sharp_pixels_nes = !s.sharp_pixels_nes,
+            QuickRow::SnesSharp => s.sharp_pixels_snes = !s.sharp_pixels_snes,
+            QuickRow::NesSize => s.tv_full_nes = !s.tv_full_nes,
+            QuickRow::SnesSize => s.tv_full_snes = !s.tv_full_snes,
             QuickRow::GbGhosting | QuickRow::GbcGhosting | QuickRow::GbaGhosting => {
                 let on = match row {
                     QuickRow::GbGhosting => &mut s.lcd_ghosting_gb,
@@ -5252,7 +5305,8 @@ impl App {
             self.track_title_pick();
         }
         self.timers();
-        // The saved screen calibration onto the panel at start.
+        // The saved screen calibration onto the panel at start, unless switched off.
+        self.calibrate.set_off(self.state.calibration_off, self.root.as_deref());
         self.calibrate.tick(self.root.as_deref());
         if self.calibrate.picture().is_some() {
             self.keep_awake();
@@ -5410,7 +5464,9 @@ impl App {
         slot_gfx::framed(self.panel)
             && match self.playing_platform() {
                 Platform::Gba | Platform::Gb | Platform::Gbc => true,
-                Platform::Nes | Platform::Snes => false,
+                // The TV's 4:3 picture, unless chosen across the whole screen.
+                Platform::Nes => self.state.tv_full_nes,
+                Platform::Snes => self.state.tv_full_snes,
             }
     }
 
@@ -6155,6 +6211,8 @@ impl App {
                 } else {
                     self.state.auto_time.then_some(QuickRow::DateTime)
                 },
+                locked_too: (row.page() == QuickRow::GENERAL && self.state.calibration_off)
+                    .then_some(QuickRow::ScreenColors),
                 wallpaper: self.quick_wallpaper_faces,
                 faces: self.quick_menu_faces.as_ref(),
                 ground: self.menu_ground(),
@@ -6218,14 +6276,14 @@ impl App {
                             self.canvas(),
                             self.shelf_platform,
                             self.slot_name_alpha() * (1.0 - open),
-                            self.menu_ink().text,
+                            self.shelf_ink().text,
                             out,
                         );
                         slot_ui::draw_slot_title(
                             self.canvas(),
                             self.shelf_title,
                             self.title_alpha() * (1.0 - open),
-                            self.menu_ink().text,
+                            self.shelf_ink().text,
                             out,
                         );
                     }
@@ -6256,14 +6314,14 @@ impl App {
                             self.canvas(),
                             self.shelf_platform,
                             self.slot_name_alpha(),
-                            self.menu_ink().text,
+                            self.shelf_ink().text,
                             out,
                         );
                         slot_ui::draw_slot_title(
                             self.canvas(),
                             self.shelf_title,
                             self.title_alpha(),
-                            self.menu_ink().text,
+                            self.shelf_ink().text,
                             out,
                         );
                     }
@@ -6448,6 +6506,7 @@ impl App {
                 network: None,
                 zone: None,
                 locked: None,
+                locked_too: None,
                 wallpaper: None,
                 faces: self.quick_menu_faces.as_ref(),
                 ground: None,
@@ -7547,6 +7606,18 @@ impl App {
         self.play_held = None;
     }
 
+    /// START on the shelf: the studio opened on its Slot tab. Only Originals has a slot studio;
+    /// elsewhere the shelf shakes no.
+    fn open_slot_studio(&mut self) {
+        self.open_shell_picker();
+        let now = self.now();
+        let on_slot = self.shell_picker.as_mut().is_some_and(|p| p.open_on_slot(now));
+        if !on_slot {
+            self.shell_picker = None;
+            self.refuse();
+        }
+    }
+
     fn shell_picker_input(&mut self, action: Action) {
         use shell_picker::{Outcome, Press};
         let press = match action {
@@ -7559,7 +7630,9 @@ impl App {
             Action::GbaDown(Btn::A) => Press::Keep,
             Action::GbaDown(Btn::Y) => Press::Remove,
             Action::GbaDown(Btn::X) => Press::NewCart,
-            Action::GbaDown(Btn::B) | Action::GbaDown(Btn::Select) => Press::Back,
+            Action::GbaDown(Btn::B) | Action::GbaDown(Btn::Select) | Action::GbaDown(Btn::Start) => {
+                Press::Back
+            }
             _ => return,
         };
         let now = self.now();
@@ -9034,7 +9107,7 @@ impl App {
             Action::GbaDown(Btn::Left) | Action::ShelfLeft => Press::Left,
             Action::GbaDown(Btn::Right) | Action::ShelfRight => Press::Right,
             Action::GbaDown(Btn::A) => Press::Keep,
-            Action::GbaDown(Btn::B) => Press::Back,
+            Action::GbaDown(Btn::B) | Action::GbaDown(Btn::X) => Press::Back,
             _ => return,
         };
         let now = self.now();
@@ -10192,15 +10265,17 @@ fn studio_moves(picker: &ShellPicker, now: Millis) -> (f32, f32) {
     let Some(s) = since else {
         return (0.0, 0.0);
     };
+    // Opened straight on the slot (START): the slot already stands there, it does not rise.
+    let rise = |r: f32| if picker.straight() { 1.0 } else { r };
     match slot {
         // Closed from the slot's studio, the cart comes back down with the closing and glides
         // home to the shelf, as from the cart's (Roy 2026-11-06: it popped up in the middle).
         true if picker.closing() => {
             let back = slot_ui::lift_of(picker.openness(now));
-            (ease((s / 0.28).min(1.0)) * back, spring(s - 0.08))
+            (ease((s / 0.28).min(1.0)) * back, rise(spring(s - 0.08)))
         }
         // the cart flies up quick, the slot springs up a beat behind it
-        true => (ease((s / 0.28).min(1.0)), spring(s - 0.08)),
+        true => (ease((s / 0.28).min(1.0)), rise(spring(s - 0.08))),
         // the slot drops, the cart comes down and springs into place
         false => (1.0 - spring(s - 0.06), 1.0 - ease((s / 0.22).min(1.0))),
     }

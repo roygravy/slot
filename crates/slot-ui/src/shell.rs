@@ -127,7 +127,8 @@ pub fn original_shell(cart: &Cart) -> Shell {
 }
 
 /// The Legend of Zelda and Zelda II came in gold carts on the NES.
-pub const GOLD_SHELL: Shell = shell([0xc9, 0xa2, 0x3f], Finish::Metallic);
+/// At 60% of its colour, as the gold slot (Roy 2026-11-17).
+pub const GOLD_SHELL: Shell = shell([0xba, 0xa2, 0x67], Finish::Metallic);
 
 fn is_gold_zelda(stem: &str) -> bool {
     let s = stem.to_ascii_lowercase();
