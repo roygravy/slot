@@ -511,10 +511,10 @@ pub const GB_SLOT_CASES: [SlotCase; 4 * SLOT_COLOURS] = [
     case("Silver", 0xB8BABE, true, Metallic, true, 0xB8BABE),
     case("Gold", 0xBAA371, true, Metallic, true, 0xBAA371),
     // Gold, Pearl Pink, Blue and Green at 60% of their colour: fuller they read too loud on livelier
-    // panels (RG SP tester, Roy 2026-11-17).
+    // panels (RG SP tester, Roy 2026-11-17). Pearl Blue after Roy's SP photos: cyan, not silver.
     case("Pearl White", 0xEEEDE8, true, Pearl, true, 0xEEEDE8),
     case("Pearl Pink", 0xDEC1CB, true, Pearl, true, 0xDEC1CB),
-    case("Pearl Blue", 0xA7BAD0, true, Pearl, true, 0xA7BAD0),
+    case("Pearl Blue", 0x93B9D0, true, Pearl, true, 0x93B9D0),
     case("Pearl Green", 0xB3CCB1, true, Pearl, true, 0xB3CCB1),
     // The Pocket and the Light: one flat slot.
     case("DMG Grey", 0xC4C0B7, true, Solid, false, 0xC4C0B7),
@@ -546,7 +546,7 @@ pub const GB_SLOT_CASES: [SlotCase; 4 * SLOT_COLOURS] = [
     case("Gold", 0xBAA371, true, Metallic, false, 0xBAA371),
     case("Pearl White", 0xEEEDE8, true, Pearl, false, 0xEEEDE8),
     case("Pearl Pink", 0xDEC1CB, true, Pearl, false, 0xDEC1CB),
-    case("Pearl Blue", 0xA7BAD0, true, Pearl, false, 0xA7BAD0),
+    case("Pearl Blue", 0x93B9D0, true, Pearl, false, 0x93B9D0),
     case("Pearl Green", 0xB3CCB1, true, Pearl, false, 0xB3CCB1),
     // The Game Boy Color.
     case("DMG Grey", 0xC4C0B7, true, Solid, false, 0xC4C0B7),
@@ -578,7 +578,7 @@ pub const GB_SLOT_CASES: [SlotCase; 4 * SLOT_COLOURS] = [
     case("Gold", 0xBAA371, true, Metallic, false, 0xBAA371),
     case("Pearl White", 0xEEEDE8, true, Pearl, false, 0xEEEDE8),
     case("Pearl Pink", 0xDEC1CB, true, Pearl, false, 0xDEC1CB),
-    case("Pearl Blue", 0xA7BAD0, true, Pearl, false, 0xA7BAD0),
+    case("Pearl Blue", 0x93B9D0, true, Pearl, false, 0x93B9D0),
     case("Pearl Green", 0xB3CCB1, true, Pearl, false, 0xB3CCB1),
     // The Game Boy Advance SP.
     case("DMG Grey", 0xC4C0B7, true, Solid, false, 0xC4C0B7),
@@ -610,7 +610,7 @@ pub const GB_SLOT_CASES: [SlotCase; 4 * SLOT_COLOURS] = [
     case("Gold", 0xBAA371, true, Metallic, false, 0xBAA371),
     case("Pearl White", 0xEEEDE8, true, Pearl, false, 0xEEEDE8),
     case("Pearl Pink", 0xDEC1CB, true, Pearl, false, 0xDEC1CB),
-    case("Pearl Blue", 0xA7BAD0, true, Pearl, false, 0xA7BAD0),
+    case("Pearl Blue", 0x93B9D0, true, Pearl, false, 0x93B9D0),
     case("Pearl Green", 0xB3CCB1, true, Pearl, false, 0xB3CCB1),
 ];
 
