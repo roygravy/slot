@@ -77,7 +77,7 @@ fn flip_recents(a: &mut App) {
         press(a, Btn::Down);
     }
     press(a, Btn::A);
-    for _ in 0..QuickRow::Recents.position(a.hidden_rows()) {
+    for _ in 0..QuickRow::Recents.position(&a.hidden_rows()) {
         press(a, Btn::Down);
     }
     assert_eq!(a.quick_menu(), Some(QuickRow::Recents));
@@ -239,4 +239,22 @@ fn a_one_game_card_is_still_a_one_game_card_with_recents_on() {
         "the lone cart came out: {:?}",
         a.phase()
     );
+}
+
+#[test]
+fn menu_from_a_sub_page_goes_straight_to_the_shelf() {
+    let d = card();
+    let mut a = boot_with(d.path(), SlotState::default());
+    a.apply(Action::QuickMenu);
+    for _ in 0..QuickRow::General.position(&[]) {
+        press(&mut a, Btn::Down);
+    }
+    press(&mut a, Btn::A);
+    press(&mut a, Btn::Down);
+    assert!(a.quick_menu().is_some_and(|r| r != QuickRow::General));
+    a.apply(Action::QuickMenu);
+    assert!(matches!(a.phase(), Phase::Shelf), "{:?}", a.phase());
+    // On the shelf MENU still opens the menu.
+    a.apply(Action::QuickMenu);
+    assert!(a.quick_menu().is_some());
 }

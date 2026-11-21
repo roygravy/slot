@@ -3,7 +3,7 @@
 //! device's own search matches them, then by LaunchBox's alternate names, and a title that names
 //! more than one game is left out rather than guessed.
 //!
-//!     launchbox-index Metadata.xml GB.dat GBC.dat GBA.dat > data/launchbox.tsv
+//!     launchbox-index Metadata.xml GB.dat GBC.dat GBA.dat NES.dat SNES.dat > data/launchbox.tsv
 //!
 //! Metadata.xml is in LaunchBox's https://gamesdb.launchbox-app.com/Metadata.zip, and the dats are
 //! libretro-database's metadat/no-intro files. `task labels:index` fetches both.
@@ -27,7 +27,7 @@ struct Metadata {
     images: HashMap<String, Images>,
 }
 
-/// One pass over the 500 MB file, keeping only the three platforms' games and their cart fronts.
+/// One pass over the 500 MB file, keeping only the shelves' platforms' games and their cart fronts.
 fn metadata(path: &str, platforms: &[&str]) -> Metadata {
     let mut reader = Reader::from_file(path).expect("Metadata.xml");
     let mut buf = Vec::new();
@@ -98,14 +98,16 @@ fn metadata(path: &str, platforms: &[&str]) -> Metadata {
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let [metadata_xml, gb, gbc, gba] = args.as_slice() else {
-        eprintln!("usage: launchbox-index Metadata.xml GB.dat GBC.dat GBA.dat");
+    let [metadata_xml, gb, gbc, gba, nes, snes] = args.as_slice() else {
+        eprintln!("usage: launchbox-index Metadata.xml GB.dat GBC.dat GBA.dat NES.dat SNES.dat");
         std::process::exit(2);
     };
     let consoles = [
         (Platform::Gb, gb),
         (Platform::Gbc, gbc),
         (Platform::Gba, gba),
+        (Platform::Nes, nes),
+        (Platform::Snes, snes),
     ];
     let names: Vec<&str> = consoles
         .iter()

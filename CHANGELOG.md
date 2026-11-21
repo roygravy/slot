@@ -1,5 +1,21 @@
 # Changelog
 
+## slot. x GRAVY v1.3.2
+
+Sharper colours and a calmer way around.
+
+### New
+
+- Screen Calibration, reworked: calculated in the final picture with dithering, so gradients stay smooth. Saturation and Contrast in nine steps, new test pictures, and the default is "as drawn".
+- NES and SNES labels, found automatically like on the other consoles.
+- RetroAchievements in every build.
+
+### Improved
+
+- MENU takes you straight back to the shelf.
+- Pearl Blue is now a real cyan, after a real Game Boy Advance SP.
+- Diverse bugfixes.
+
 ## slot. x GRAVY v1.3.1
 
 Fine-tuning after v1.3, with thanks to our testers on other devices.

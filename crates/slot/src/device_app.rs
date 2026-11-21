@@ -123,6 +123,7 @@ pub fn run() {
     let platform = DevicePlatform::new(root.clone());
     eprintln!("slot: {}", platform.report());
     eprintln!("slot: {}", bluetooth_report());
+    eprintln!("slot: {}", display_report());
     platform.trace_boot();
     slot::boot_time::mark("platform");
     let sink = match audio.map(|h| h.join()) {
@@ -289,6 +290,30 @@ fn sync_log_writes() {
             synced = st.st_size;
         }
     }
+}
+
+/// One line in slot.log on the display engine's own picture work (Allwinner enhance and smart
+/// backlight), which would bend the colours before Screen Calibration's table. Only reads.
+fn display_report() -> String {
+    let dir = std::path::Path::new("/sys/class/disp/disp/attr");
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return "display engine: no /sys/class/disp/disp/attr".to_string();
+    };
+    let mut names: Vec<String> = entries
+        .flatten()
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .collect();
+    names.sort();
+    let values: Vec<String> = names
+        .iter()
+        .filter(|n| ["enhance", "smbl", "color", "gamma"].iter().any(|k| n.contains(k)))
+        .map(|n| {
+            let v = std::fs::read_to_string(dir.join(n)).unwrap_or_else(|_| "?".into());
+            let v: String = v.split_whitespace().collect::<Vec<_>>().join(" ");
+            format!("{n}={}", v.chars().take(40).collect::<String>())
+        })
+        .collect();
+    format!("display engine [{}], attr [{}]", values.join(", "), names.join(" "))
 }
 
 /// One line in slot.log on what this device offers for Bluetooth, so

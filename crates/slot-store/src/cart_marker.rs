@@ -8,8 +8,12 @@ use crate::Platform;
 
 pub const CART_MARKER_FILE: &str = "Config/cart_marker.txt";
 /// The games looked for and not found. A new name when the search learns to find more, so
-/// those are looked for once again (2: SNES renders, names as written, Europe's countries).
-pub const NO_LABEL_FILE: &str = "System/Cache/Labels/none-2.txt";
+/// those are looked for once again (2: SNES renders, names as written, Europe's countries;
+/// 3: NES and SNES checksums).
+pub const NO_LABEL_FILE: &str = "System/Cache/Labels/none-3.txt";
+/// How long a game stays noted as having no label before it is looked for once again: the
+/// source keeps adding cart fronts.
+pub const NO_LABEL_DAYS: u64 = 30;
 /// The carts whose label the player took off, kept with the labels rather than the cache so
 /// clearing the cache does not bring them back.
 pub const REMOVED_LABEL_FILE: &str = "Labels/removed.txt";
@@ -98,6 +102,33 @@ pub fn has_no_label(root: &Path, platform: Platform, stem: &str) -> bool {
     listed(root, NO_LABEL_FILE, platform, stem)
 }
 
+/// Once the list of games without a label is older than `NO_LABEL_DAYS`, it is dropped so
+/// they are all looked for again. Its first line notes when it was started.
+pub fn expire_no_labels(root: &Path, now: std::time::SystemTime) {
+    let path = root.join(NO_LABEL_FILE);
+    let Ok(text) = std::fs::read_to_string(&path) else {
+        return;
+    };
+    let secs = |t: std::time::SystemTime| {
+        t.duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_secs())
+    };
+    let now = secs(now);
+    let since = text
+        .lines()
+        .next()
+        .and_then(|l| l.strip_prefix("# since "))
+        .and_then(|s| s.trim().parse::<u64>().ok());
+    let result = match since {
+        Some(since) if now.saturating_sub(since) < NO_LABEL_DAYS * 86_400 => return,
+        Some(_) => std::fs::remove_file(&path),
+        None => crate::atomic::atomic_write(&path, format!("# since {now}\n{text}").as_bytes()),
+    };
+    if let Err(e) = result {
+        eprintln!("slot: labels: {}: {e}", path.display());
+    }
+}
+
 /// A label turned up after all: the cart is no longer noted as having none.
 pub fn forget_no_label(root: &Path, platform: Platform, stem: &str) {
     unlist(root, NO_LABEL_FILE, platform, stem)
@@ -161,5 +192,25 @@ mod tests {
         assert!(!has_no_label(root, Platform::Snes, "Game"));
         forget_label_removed(root, Platform::Snes, "Game");
         assert!(!label_removed(root, Platform::Snes, "Game"));
+    }
+}
+
+#[cfg(test)]
+mod no_label_tests {
+    use super::*;
+    use std::time::{Duration, UNIX_EPOCH};
+
+    #[test]
+    fn games_without_a_label_are_looked_for_again_after_a_month() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        note_no_label(root, Platform::Snes, "Game");
+        let start = UNIX_EPOCH + Duration::from_secs(1_000_000);
+        expire_no_labels(root, start);
+        assert!(has_no_label(root, Platform::Snes, "Game"));
+        expire_no_labels(root, start + Duration::from_secs(29 * 86_400));
+        assert!(has_no_label(root, Platform::Snes, "Game"));
+        expire_no_labels(root, start + Duration::from_secs(31 * 86_400));
+        assert!(!has_no_label(root, Platform::Snes, "Game"));
     }
 }

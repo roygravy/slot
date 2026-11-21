@@ -14,14 +14,14 @@ use crate::theme;
 
 /// The steps, as the GRAVY Manager's Screen tab has them.
 pub const CAL_STEPS: [&str; 6] = ["White", "Red", "Green", "Blue", "Check", "Color"];
-pub const CAL_SLIDERS: [&str; 4] = ["Warmth", "Tint", "Curve", "Saturation"];
+pub const CAL_SLIDERS: [&str; 5] = ["Warmth", "Tint", "Curve", "Saturation", "Contrast"];
 const CAL_HINTS: [&str; 6] = [
-    "Slide until white looks like clean paper.",
-    "Slide until the square melts into the lines.",
-    "Slide until the square melts into the lines.",
-    "Slide until the square melts into the lines.",
-    "The grey square melts in and looks neutral.",
-    "Colors pop, skin stays skin.",
+    "Slide until white is clean paper, grey neutral.",
+    "Slide until the squares melt into the lines.",
+    "Slide until the squares melt into the lines.",
+    "Slide until the squares melt into the lines.",
+    "The grey squares melt in and look neutral.",
+    "Colors pop, skin stays skin, every step shows.",
 ];
 const GLYPHS: &str = "0123456789+-.%";
 const LABEL_PX: f32 = 26.0;

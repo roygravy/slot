@@ -8,10 +8,6 @@ on:
       version:
         description: Version in the zip's name
         default: v1.1
-      ra:
-        description: TEST BUILD - with RetroAchievements (not in the release yet)
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -37,9 +33,7 @@ jobs:
           curl -fsSL https://taskfile.dev/install.sh | sh -s -- -b /usr/local/bin
 
       - name: Build the tree
-        env:
-          FEATURES: ${{ inputs.ra && 'slot/device,slot/retroachievements' || 'slot/device' }}
-        run: task dist:device OUT="slot-${BUILD_NAME}" FEATURES="$FEATURES"
+        run: task dist:device OUT="slot-${BUILD_NAME}"
 
       - name: Check what is about to ship
         run: |

@@ -8,8 +8,8 @@ license.workspace = true
 [features]
 default = ["host"]
 host = ["dep:winit", "dep:cpal", "dep:gilrs", "slot-gfx/host"]
-device = ["slot-gfx/device"]
-# TEST BUILD ONLY until Roy approves it for a release: RetroAchievements (crates/slot-achievements).
+# Every device build carries RetroAchievements (crates/slot-achievements).
+device = ["slot-gfx/device", "retroachievements"]
 retroachievements = ["dep:slot-achievements", "dep:ureq"]
 
 [dependencies]

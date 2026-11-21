@@ -20,8 +20,19 @@ impl Write for Crc {
 }
 
 pub(crate) fn crc32(rom: &Path) -> std::io::Result<u32> {
+    use std::io::{Seek, SeekFrom};
     let mut crc = Crc(crc32fast::Hasher::new());
-    std::io::copy(&mut std::fs::File::open(rom)?, &mut crc)?;
+    let mut file = std::fs::File::open(rom)?;
+    // An SNES dump from an old copier carries a 512-byte header No-Intro leaves out.
+    let snes = rom.extension().and_then(|e| e.to_str()).is_some_and(|e| {
+        ["smc", "sfc", "swc", "fig"]
+            .iter()
+            .any(|x| e.eq_ignore_ascii_case(x))
+    });
+    if snes && file.metadata()?.len() % 1024 == 512 {
+        file.seek(SeekFrom::Start(512))?;
+    }
+    std::io::copy(&mut file, &mut crc)?;
     Ok(crc.0.finalize())
 }
 
@@ -45,6 +56,17 @@ mod tests {
         let rom = dir.path().join("rom.gb");
         std::fs::write(&rom, b"123456789").unwrap();
         assert_eq!(crc32(&rom).unwrap(), 0xCBF4_3926);
+    }
+
+    #[test]
+    fn an_snes_copier_header_is_left_out_of_the_checksum() {
+        let dir = tempfile::tempdir().unwrap();
+        let plain = dir.path().join("game.sfc");
+        let headed = dir.path().join("game.smc");
+        let body = vec![7u8; 1024];
+        std::fs::write(&plain, &body).unwrap();
+        std::fs::write(&headed, [vec![0u8; 512], body].concat()).unwrap();
+        assert_eq!(crc32(&headed).unwrap(), crc32(&plain).unwrap());
     }
 
     #[test]

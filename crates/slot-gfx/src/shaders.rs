@@ -380,11 +380,44 @@ uniform sampler2D u_tex;
 uniform vec3 u_gain;
 uniform float u_sat;
 varying vec2 v_uv;
+// The whole screen's colour: 1.0 as the picture came. More colour stops short of a channel's
+// end, softly, so bright reds and blues keep their shading instead of clipping flat.
+vec3 colour(vec3 c, float s) {
+    float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+    vec3 d = c - l;
+    if (s > 1.0) {
+        vec3 room = mix(l / max(-d, 0.001), (1.0 - l) / max(d, 0.001), step(0.0, d));
+        float x = max(min(min(room.r, room.g), room.b) - 1.0, 0.0);
+        float k = s - 1.0;
+        s = 1.0 + k * x / (x + k);
+    }
+    return clamp(l + d * s, 0.0, 1.0);
+}
+// Screen Calibration, worked out here per pixel rather than in the display engine's 8-bit
+// table, which ran neighbouring tones together in smooth gradients (Roy 2026-11-18): each
+// channel's curve, contrast on the middle and light tones, then the white point.
+uniform vec3 u_cal_gain;
+uniform vec3 u_cal_gamma;
+uniform float u_contrast;
+uniform float u_dither;
+vec3 calibrate(vec3 c) {
+    c = pow(clamp(c, 0.0, 1.0), u_cal_gamma);
+    vec3 u = max((c - 0.2) / 0.8, 0.0);
+    c += u_contrast * 5.0 * u * u * (1.0 - c) * (1.0 - c);
+    c *= u_cal_gain;
+    // Half a step of fine noise: the in-between tones the 8-bit panel cannot show come back
+    // as a mix of the two around them, so gradients stay smooth.
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+    highp vec2 p = gl_FragCoord.xy;
+    highp float n = fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.00583715))));
+#else
+    float n = 0.5;
+#endif
+    return c + (n - 0.5) / 255.0 * u_dither;
+}
 void main() {
-    vec3 c = texture2D(u_tex, v_uv).rgb;
-    // The whole screen's colour (GRAVY Manager > Screen): 1.0 as the picture came.
-    c = clamp(mix(vec3(dot(c, vec3(0.2126, 0.7152, 0.0722))), c, u_sat), 0.0, 1.0);
-    FRAG_COLOR = vec4(c * u_gain, 1.0);
+    vec3 c = colour(texture2D(u_tex, v_uv).rgb, u_sat);
+    FRAG_COLOR = vec4(calibrate(c * u_gain), 1.0);
 }
 "#;
 
@@ -395,9 +428,44 @@ uniform vec3 u_gain;
 uniform float u_alpha;
 uniform float u_sat;
 varying vec2 v_uv;
+// The whole screen's colour: 1.0 as the picture came. More colour stops short of a channel's
+// end, softly, so bright reds and blues keep their shading instead of clipping flat.
+vec3 colour(vec3 c, float s) {
+    float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+    vec3 d = c - l;
+    if (s > 1.0) {
+        vec3 room = mix(l / max(-d, 0.001), (1.0 - l) / max(d, 0.001), step(0.0, d));
+        float x = max(min(min(room.r, room.g), room.b) - 1.0, 0.0);
+        float k = s - 1.0;
+        s = 1.0 + k * x / (x + k);
+    }
+    return clamp(l + d * s, 0.0, 1.0);
+}
+// Screen Calibration, worked out here per pixel rather than in the display engine's 8-bit
+// table, which ran neighbouring tones together in smooth gradients (Roy 2026-11-18): each
+// channel's curve, contrast on the middle and light tones, then the white point.
+uniform vec3 u_cal_gain;
+uniform vec3 u_cal_gamma;
+uniform float u_contrast;
+uniform float u_dither;
+vec3 calibrate(vec3 c) {
+    c = pow(clamp(c, 0.0, 1.0), u_cal_gamma);
+    vec3 u = max((c - 0.2) / 0.8, 0.0);
+    c += u_contrast * 5.0 * u * u * (1.0 - c) * (1.0 - c);
+    c *= u_cal_gain;
+    // Half a step of fine noise: the in-between tones the 8-bit panel cannot show come back
+    // as a mix of the two around them, so gradients stay smooth.
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+    highp vec2 p = gl_FragCoord.xy;
+    highp float n = fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.00583715))));
+#else
+    float n = 0.5;
+#endif
+    return c + (n - 0.5) / 255.0 * u_dither;
+}
 void main() {
     vec4 c = texture2D(u_tex, v_uv);
-    vec3 rgb = clamp(mix(vec3(dot(c.rgb, vec3(0.2126, 0.7152, 0.0722))), c.rgb, u_sat), 0.0, 1.0);
-    FRAG_COLOR = vec4(rgb * u_gain, c.a * u_alpha);
+    vec3 rgb = colour(c.rgb, u_sat);
+    FRAG_COLOR = vec4(calibrate(rgb * u_gain), c.a * u_alpha);
 }
 "#;

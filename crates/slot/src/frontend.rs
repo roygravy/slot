@@ -988,6 +988,7 @@ impl Frontend {
         compositor.set_blue_light(self.session.app().blue_light());
         compositor.set_dim(self.session.app().dim());
         compositor.set_screen_saturation(self.session.app().screen_saturation());
+        compositor.set_screen_calibration(self.session.app().screen_calibration());
         compositor.set_picture(self.session.app().picture_rect());
         let (cw, ch) = self.session.app().platform().canvas();
         compositor.set_game_canvas(cw, ch);

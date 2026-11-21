@@ -952,7 +952,7 @@ fn shadowed(tex: TexId, x: f32, y: f32, w: f32, h: f32, ink: [f32; 4], alpha: f3
     // The shadow is a dozen stacked layers, so at half alpha it still looks nearly whole while
     // the words are half gone. Cubed, it fades out ahead of the words and comes in after
     // them: never a shadow without its text (Roy 2026-11-13). At full alpha nothing changes.
-    soft_shadow(tex, x, y, w, h, ink, alpha.clamp(0.0, 1.0).powi(3), out);
+    shadow_table(&SHELF_SHADOW, tex, x, y, w, h, ink, alpha.clamp(0.0, 1.0).powi(3), true, out);
     out.push(Draw::Tint {
         x,
         y,
@@ -982,6 +982,21 @@ pub fn soft_shadow_over(
     wallpaper: bool,
     out: &mut Vec<Draw>,
 ) {
+    shadow_table(&SHADOW, tex, x, y, w, h, ink, alpha, wallpaper, out);
+}
+
+fn shadow_table(
+    table: &[(f32, f32, f32)],
+    tex: TexId,
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    ink: [f32; 4],
+    alpha: f32,
+    wallpaper: bool,
+    out: &mut Vec<Draw>,
+) {
     let luma = 0.299 * ink[0] + 0.587 * ink[1] + 0.114 * ink[2];
     // Light words get a shadow in the wallpaper's own colour, burnt deep: no grey haze over
     // a light or colourful ground (Roy 2026-11-12, ui6). Dark words keep their pale one.
@@ -997,7 +1012,7 @@ pub fn soft_shadow_over(
     if a <= 0.0 {
         return;
     }
-    for (dx, dy, k) in SHADOW {
+    for &(dx, dy, k) in table {
         out.push(Draw::Tint {
             x: x + dx,
             y: y + dy,
@@ -1111,6 +1126,41 @@ const SHADOW: [(f32, f32, f32); 13] = [
     (0.0, 0.0, 0.26),
     (0.0, 2.0, 0.26),
     (0.0, 1.0, 0.45),
+];
+
+/// The shelf names' shadow: wider and softer than the menus', a ring of three steps out to
+/// four pixels round a dense core, so the words hold up over the bright deck spotlight (Roy
+/// 2026-11-21). (dx, dy, opacity), outer ring first.
+const SHELF_SHADOW: [(f32, f32, f32); 29] = [
+    (-4.0, 1.0, 0.05),
+    (4.0, 1.0, 0.05),
+    (0.0, -3.0, 0.05),
+    (0.0, 5.0, 0.05),
+    (-3.0, -1.0, 0.06),
+    (3.0, -1.0, 0.06),
+    (-3.0, 3.0, 0.06),
+    (3.0, 3.0, 0.06),
+    (-3.0, 1.0, 0.09),
+    (3.0, 1.0, 0.09),
+    (0.0, -2.0, 0.08),
+    (0.0, 4.0, 0.08),
+    (-2.0, -1.0, 0.11),
+    (2.0, -1.0, 0.11),
+    (-2.0, 3.0, 0.11),
+    (2.0, 3.0, 0.11),
+    (-2.0, 1.0, 0.16),
+    (2.0, 1.0, 0.16),
+    (0.0, -1.0, 0.14),
+    (0.0, 3.0, 0.14),
+    (-1.0, 0.0, 0.22),
+    (1.0, 0.0, 0.22),
+    (-1.0, 2.0, 0.22),
+    (1.0, 2.0, 0.22),
+    (-1.0, 1.0, 0.30),
+    (1.0, 1.0, 0.30),
+    (0.0, 0.0, 0.30),
+    (0.0, 2.0, 0.30),
+    (0.0, 1.0, 0.50),
 ];
 
 pub fn draw_slot_title(

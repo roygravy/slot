@@ -10,6 +10,10 @@ pub struct Calibration {
     pub gamma: [f32; 3],
     /// Colour of the whole screen, 1.0 as drawn, `saturation_default()` when not set. Done in the final blit, not in the table.
     pub saturation: f32,
+    /// Contrast, 0 as the curve leaves it, -1 to 1: up lifts the middle and light tones, down
+    /// lowers them. The dark tones, black and white stay where they are, so no shadow detail
+    /// is lost.
+    pub contrast: f32,
 }
 
 impl Default for Calibration {
@@ -18,43 +22,24 @@ impl Default for Calibration {
             gain: [1.0; 3],
             gamma: [1.0; 3],
             saturation: saturation_default(),
+            contrast: 0.0,
         }
     }
 }
 
 pub const GAIN_MIN: f32 = 0.5;
+pub const CONTRAST_RANGE: f32 = 1.0;
 pub const GAMMA_RANGE: (f32, f32) = (0.5, 2.0);
-/// Without a calibration of its own the RG35XX Plus shows a little more colour than drawn: its
-/// panel looks flat at 100% (Roy 2026-11-13). Other consoles' panels are livelier (an RG SP
-/// tester, 2026-11-16): they show the colours as drawn.
-pub const SATURATION_RG35XX_PLUS: f32 = 1.4;
-
-/// The standard saturation of this console's panel: the RG35XX Plus's, also off the device
-/// (the simulator, the tests) and when BaseOS does not say which console it is.
+/// The standard saturation: the colours as drawn, on every console. The RG35XX Plus had 1.4
+/// here until 2026-11-17; Roy chose one start for all, more colour is a stop on the slider.
 pub fn saturation_default() -> f32 {
-    static DEFAULT: std::sync::OnceLock<f32> = std::sync::OnceLock::new();
-    *DEFAULT.get_or_init(|| {
-        let target = std::env::var("BASEOS_TARGET").ok().or_else(|| {
-            let release = std::fs::read_to_string("/etc/baseos-release").ok()?;
-            release.lines().find_map(|l| {
-                l.strip_prefix("BASEOS_TARGET=").map(|v| v.trim().trim_matches('"').to_string())
-            })
-        });
-        saturation_for(target.as_deref())
-    })
+    1.0
 }
 
-fn saturation_for(target: Option<&str>) -> f32 {
-    match target.map(str::trim) {
-        None | Some("") | Some("rg35xxplus") => SATURATION_RG35XX_PLUS,
-        Some(_) => 1.0,
-    }
-}
-
-/// The saturation a card may keep: 60% to 180% of the standard.
+/// The saturation a card may keep: 40% to 250% of the standard.
 pub fn saturation_range() -> (f32, f32) {
     let d = saturation_default();
-    (d * 0.6, d * 1.8)
+    (d * 0.4, d * 2.5)
 }
 
 impl Calibration {
@@ -73,6 +58,10 @@ impl Calibration {
                 cal.saturation = v[0].clamp(lo, hi);
                 continue;
             }
+            if key == "contrast" && v.len() == 1 && v[0].is_finite() {
+                cal.contrast = v[0].clamp(-CONTRAST_RANGE, CONTRAST_RANGE);
+                continue;
+            }
             if v.len() != 3 || !v.iter().all(|x| x.is_finite()) {
                 continue;
             }
@@ -89,8 +78,8 @@ impl Calibration {
         let [r, g, b] = self.gain;
         let [er, eg, eb] = self.gamma;
         format!(
-            "gain {r:.4} {g:.4} {b:.4}\ngamma {er:.4} {eg:.4} {eb:.4}\nsaturation {:.4}\n",
-            self.saturation
+            "gain {r:.4} {g:.4} {b:.4}\ngamma {er:.4} {eg:.4} {eb:.4}\nsaturation {:.4}\ncontrast {:.4}\n",
+            self.saturation, self.contrast
         )
     }
 
@@ -103,12 +92,21 @@ impl Calibration {
         std::array::from_fn(|i| {
             let x = i as f64 / 255.0;
             let c = |ch: usize| {
-                let v = f64::from(self.gain[ch]) * x.powf(f64::from(self.gamma[ch]));
+                let v = f64::from(self.gain[ch]) * s_curve(x.powf(f64::from(self.gamma[ch])), self.contrast);
                 (v * 255.0).round().clamp(0.0, 255.0) as u32
             };
             (c(0) << 16) | (c(1) << 8) | c(2)
         })
     }
+}
+
+/// Contrast on a tone from 0 to 1: nothing below `SHADOWS`, most in the light middle, nothing
+/// at white. Even at the ends no two neighbouring tones run together.
+fn s_curve(v: f64, contrast: f32) -> f64 {
+    const SHADOWS: f64 = 0.2;
+    const STRENGTH: f64 = 5.0;
+    let u = ((v - SHADOWS) / (1.0 - SHADOWS)).max(0.0);
+    v + f64::from(contrast) * STRENGTH * u * u * (1.0 - v) * (1.0 - v)
 }
 
 /// Loads the card's calibration, neutral when there is none.
@@ -195,14 +193,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn only_the_rg35xx_plus_gets_the_extra_colour() {
-        assert_eq!(saturation_for(Some("rg35xxplus")), SATURATION_RG35XX_PLUS);
-        assert_eq!(saturation_for(None), SATURATION_RG35XX_PLUS);
-        assert_eq!(saturation_for(Some("rg35xxsp")), 1.0);
-        assert_eq!(saturation_for(Some("rg34xxsp")), 1.0);
-    }
-
-    #[test]
     fn neutral_is_the_identity() {
         let t = Calibration::default().table();
         for (i, v) in t.iter().enumerate() {
@@ -217,12 +207,29 @@ mod tests {
             gain: [1.0, 0.95, 0.9],
             gamma: [1.1, 1.0, 0.9],
             saturation: 1.3,
+            contrast: 0.2,
         };
         assert_eq!(Calibration::parse(&cal.text()), cal);
         let wild = Calibration::parse("gain 2 0.1 nan\ngamma 9 0.1 1\nsaturation 9\n");
-        assert_eq!(wild.saturation, 2.52);
+        assert_eq!(wild.saturation, 2.5);
         assert_eq!(wild.gain, [1.0; 3]);
         assert_eq!(wild.gamma, [2.0, 0.5, 1.0]);
+    }
+
+    #[test]
+    fn contrast_keeps_black_and_white_and_order() {
+        for c in [-1.0, -0.5, 0.5, 1.0] {
+            let t = Calibration { contrast: c, ..Default::default() }.table();
+            assert_eq!(t[0], 0);
+            assert_eq!(t[255], 0xffffff);
+            assert!(t.windows(2).all(|w| (w[0] & 255) <= (w[1] & 255)));
+            // The shadows untouched, the middle moved the way asked.
+            assert!((0..=51).all(|i| t[i] & 255 == i as u32), "contrast {c}: shadows moved");
+            let mid = (t[128] & 255) as i32;
+            assert!(if c > 0.0 { mid > 140 } else { mid < 116 }, "contrast {c}: {mid}");
+        }
+        assert_eq!(Calibration::parse("gain 1 1 1\n").contrast, 0.0);
+        assert_eq!(Calibration::parse("contrast 9\n").contrast, CONTRAST_RANGE);
     }
 
     #[test]
