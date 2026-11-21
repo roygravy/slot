@@ -1,4 +1,4 @@
-//! The achievements screens, drawn in software into one 640x480 picture (test build).
+//! The achievements screens, drawn in software into one 640x480 picture.
 //! Monochrome like the other menus; only the badges, which are the content, carry colour.
 use std::collections::HashMap;
 use std::sync::Mutex;

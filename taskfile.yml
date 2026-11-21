@@ -191,11 +191,12 @@ tasks:
         curl -fsSL -o "$tmp/Metadata.zip" https://gamesdb.launchbox-app.com/Metadata.zip
         unzip -q "$tmp/Metadata.zip" Metadata.xml -d "$tmp"
         dat=https://raw.githubusercontent.com/libretro/libretro-database/master/metadat/no-intro
-        for p in Game%20Boy Game%20Boy%20Color Game%20Boy%20Advance; do
+        for p in Game%20Boy Game%20Boy%20Color Game%20Boy%20Advance Nintendo%20Entertainment%20System Super%20Nintendo%20Entertainment%20System; do
           curl -fsSL -o "$tmp/$p.dat" "$dat/Nintendo%20-%20$p.dat"
         done
         cargo run --release -q -p slot-labels --example launchbox-index -- "$tmp/Metadata.xml" \
           "$tmp/Game%20Boy.dat" "$tmp/Game%20Boy%20Color.dat" "$tmp/Game%20Boy%20Advance.dat" \
+          "$tmp/Nintendo%20Entertainment%20System.dat" "$tmp/Super%20Nintendo%20Entertainment%20System.dat" \
           > crates/slot-labels/data/launchbox.tsv
 
   labels:pack:
@@ -209,7 +210,7 @@ tasks:
         trap 'rm -rf "$tmp"' EXIT
         mkdir -p dist-device
         dat=https://raw.githubusercontent.com/libretro/libretro-database/master/metadat/no-intro
-        for p in Game%20Boy Game%20Boy%20Color Game%20Boy%20Advance; do
+        for p in Game%20Boy Game%20Boy%20Color Game%20Boy%20Advance Nintendo%20Entertainment%20System Super%20Nintendo%20Entertainment%20System; do
           curl -fsSL -o "$tmp/$p.dat" "$dat/Nintendo%20-%20$p.dat"
         done
         cargo run --release -q -p slot-labels --example artwork-pack -- \

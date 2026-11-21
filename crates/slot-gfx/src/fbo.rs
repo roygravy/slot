@@ -1,3 +1,4 @@
+use crate::displaycal::Calibration;
 use crate::draw::{Draw, Sprites, TexId};
 use crate::grade::{blue_light_gain, dim_gain};
 use crate::pipeline::GamePass;
@@ -16,6 +17,40 @@ struct Turn {
     size: (u32, u32),
 }
 
+/// Where a program takes Screen Calibration; `dither` off for a pass that only turns the picture.
+#[derive(Clone, Copy)]
+struct CalUniforms {
+    gain: gl::types::GLint,
+    gamma: gl::types::GLint,
+    contrast: gl::types::GLint,
+    dither: gl::types::GLint,
+    dithered: bool,
+}
+
+impl CalUniforms {
+    fn of(prog: gl::types::GLuint, dithered: bool) -> CalUniforms {
+        CalUniforms {
+            gain: crate::gl::uniform_location(prog, "u_cal_gain"),
+            gamma: crate::gl::uniform_location(prog, "u_cal_gamma"),
+            contrast: crate::gl::uniform_location(prog, "u_contrast"),
+            dither: crate::gl::uniform_location(prog, "u_dither"),
+            dithered,
+        }
+    }
+
+    /// With the program in use.
+    fn set(&self, cal: &Calibration) {
+        let [r, g, b] = cal.gain;
+        let [er, eg, eb] = cal.gamma;
+        unsafe {
+            gl::Uniform3f(self.gain, r, g, b);
+            gl::Uniform3f(self.gamma, er, eg, eb);
+            gl::Uniform1f(self.contrast, cal.contrast);
+            gl::Uniform1f(self.dither, if self.dithered { 1.0 } else { 0.0 });
+        }
+    }
+}
+
 pub struct Compositor {
     fbo: gl::types::GLuint,
     tex: gl::types::GLuint,
@@ -25,6 +60,9 @@ pub struct Compositor {
     u_sat: gl::types::GLint,
     u_bezel_sat: gl::types::GLint,
     sat: f32,
+    /// Screen Calibration's white point, curves and contrast, and where each program takes them.
+    cal: Calibration,
+    u_cal: [CalUniforms; 2],
     u_blit_uv: gl::types::GLint,
     gain: [f32; 3],
     dim: f32,
@@ -77,6 +115,7 @@ impl Compositor {
             gl::Uniform1i(crate::gl::uniform_location(blit, "u_tex"), 0);
             let u_gain = crate::gl::uniform_location(blit, "u_gain");
             let u_sat = crate::gl::uniform_location(blit, "u_sat");
+            let u_cal_blit = CalUniforms::of(blit, true);
             let u_blit_uv = crate::gl::uniform_location(blit, "u_uv");
             gl::Uniform4f(u_blit_uv, 0.0, 0.0, 1.0, 1.0);
             gl::UseProgram(bezel_prog);
@@ -84,6 +123,7 @@ impl Compositor {
             let u_bezel_gain = crate::gl::uniform_location(bezel_prog, "u_gain");
             let u_bezel_sat = crate::gl::uniform_location(bezel_prog, "u_sat");
             let u_bezel_alpha = crate::gl::uniform_location(bezel_prog, "u_alpha");
+            let u_cal_bezel = CalUniforms::of(bezel_prog, true);
             gl::Uniform4f(
                 crate::gl::uniform_location(bezel_prog, "u_uv"),
                 0.0,
@@ -101,6 +141,8 @@ impl Compositor {
                 u_sat,
                 u_bezel_sat,
                 sat: 1.0,
+                cal: Calibration::default(),
+                u_cal: [u_cal_blit, u_cal_bezel],
                 u_blit_uv,
                 gain: blue_light_gain(0),
                 dim: 1.0,
@@ -132,6 +174,7 @@ impl Compositor {
             gl::Uniform3f(crate::gl::uniform_location(prog, "u_gain"), 1.0, 1.0, 1.0);
             // The second, turning pass leaves colour alone.
             gl::Uniform1f(crate::gl::uniform_location(prog, "u_sat"), 1.0);
+            CalUniforms::of(prog, false).set(&Calibration::default());
             gl::Uniform1f(
                 crate::gl::uniform_location(prog, "u_ccw"),
                 if ccw { 1.0 } else { 0.0 },
@@ -279,6 +322,11 @@ impl Compositor {
 
     pub fn set_sharp_pixels(&mut self, on: bool) {
         self.game.set_sharp_pixels(on);
+    }
+
+    /// Screen Calibration on everything drawn: neutral leaves the picture as it is.
+    pub fn set_screen_calibration(&mut self, cal: &Calibration) {
+        self.cal = *cal;
     }
 
     pub fn set_pale_opacity(&mut self, opacity: f32) {
@@ -546,6 +594,7 @@ impl Compositor {
             let [r, g, b] = self.gain.map(|g| g * self.dim);
             gl::Uniform3f(self.u_gain, r, g, b);
             gl::Uniform1f(self.u_sat, self.sat);
+            self.u_cal[0].set(&self.cal);
             gl::BindTexture(gl::TEXTURE_2D, self.tex);
         }
         if self.native() {
@@ -578,6 +627,7 @@ impl Compositor {
             gl::UseProgram(self.bezel_prog);
             gl::Uniform3f(self.u_bezel_gain, self.gain[0], self.gain[1], self.gain[2]);
             gl::Uniform1f(self.u_bezel_sat, self.sat);
+            self.u_cal[1].set(&self.cal);
             gl::Uniform1f(self.u_bezel_alpha, 1.0);
             gl::BindTexture(gl::TEXTURE_2D, bezel);
             gl::Enable(gl::BLEND);

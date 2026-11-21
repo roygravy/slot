@@ -21,10 +21,8 @@ pub enum Picture {
 pub struct Calibrate {
     booted: bool,
     saturation: f32,
-    /// A gamma table was sent to the display engine. Until then a neutral calibration leaves
-    /// /dev/disp alone: with the engine's gamma switched on, waking from the deep sleep
-    /// froze the shelf (Roy, twice on 2026-11-07, calibration on). See `sleep`.
-    on_panel: bool,
+    /// What the final blit puts on the panel: white point, curves and contrast.
+    shown: Calibration,
     /// Screen Calibration is open: its sliders are on the panel.
     console: Option<Console>,
     /// Switched off on General's Screen Calibration row: the panel as the console makes it,
@@ -45,6 +43,8 @@ pub struct Console {
     pub tint: i32,
     pub curve: [i32; 3],
     pub sat: i32,
+    /// Contrast in whole steps, -4 to 4, 0 as the curve leaves it.
+    pub contrast: i32,
     /// When a button was last pressed: the bars fade a while after.
     pub touched: u64,
 }
@@ -52,21 +52,29 @@ pub struct Console {
 /// One press moves a slider this far; held, it keeps going.
 const WARM_STEP: i32 = 2;
 const CURVE_STEP: i32 = 1;
-const SAT_STEP: i32 = 5;
-/// The saturation slider in percent of the standard, 60 to 180 (`slot_gfx::saturation_range()`
-/// on the card).
-const SAT_MIN: i32 = 60;
-const SAT_MAX: i32 = 180;
+const CONTRAST_STEP: i32 = 1;
+/// The contrast slider, -4 to 4: big steps, easy to see (`slot_gfx` keeps -1 to 1).
+const CONTRAST_MAX: i32 = 4;
+/// The saturation slider's nine stops, -4 to 4, in percent of the standard: big steps, easy to
+/// see, inside `slot_gfx::saturation_range()` (40 to 250), each about a quarter more than the last.
+const SAT_STOPS: [i32; 9] = [40, 50, 64, 80, 100, 125, 156, 195, 250];
+/// The stop that is the standard, shown as 0.
+const SAT_ZERO: usize = 4;
+
+/// The stop nearest a saturation in percent.
+fn sat_stop(sat: i32) -> usize {
+    (0..SAT_STOPS.len()).min_by_key(|&i| (SAT_STOPS[i] - sat).abs()).unwrap_or(SAT_ZERO)
+}
 /// How long the bars stay after the last press, and how long they take to fade.
 const BARS_MS: u64 = 2000;
 const BARS_FADE_MS: u64 = 300;
 
-/// Which slider a step's row is: 0 Warmth, 1 Tint, 2 Curve, 3 Saturation.
+/// Which slider a step's row is: 0 Warmth, 1 Tint, 2 Curve, 3 Saturation, 4 Contrast.
 pub fn sliders(step: usize) -> &'static [usize] {
     match step {
         0 => &[0, 1],
         1..=3 => &[2],
-        5 => &[3],
+        5 => &[3, 4],
         _ => &[],
     }
 }
@@ -104,17 +112,19 @@ impl Console {
             warm,
             tint,
             curve: cal.gamma.map(|g| (g.log2() * 100.0).round() as i32),
-            sat: (cal.saturation / saturation_default() * 100.0).round() as i32,
+            sat: SAT_STOPS[sat_stop((cal.saturation / saturation_default() * 100.0).round() as i32)],
+            contrast: (cal.contrast * CONTRAST_MAX as f32).round() as i32,
             touched: now,
         }
     }
 
     pub fn calibration(&self) -> Calibration {
         Calibration::parse(&format!(
-            "gain {}\ngamma {}\nsaturation {}\n",
+            "gain {}\ngamma {}\nsaturation {}\ncontrast {}\n",
             gains(self.warm, self.tint).map(|v| format!("{v:.4}")).join(" "),
             self.curve.map(|c| format!("{:.4}", 2f32.powf(c as f32 / 100.0))).join(" "),
-            self.sat as f32 / 100.0 * saturation_default()
+            self.sat as f32 / 100.0 * saturation_default(),
+            self.contrast as f32 / CONTRAST_MAX as f32
         ))
     }
 
@@ -136,7 +146,16 @@ impl Console {
                 let c = self.curve[self.step.clamp(1, 3) - 1];
                 (part(c, -100, 100), 0.5, format!("{:.2}", 2f32.powf(c as f32 / 100.0)))
             }
-            _ => (part(self.sat, SAT_MIN, SAT_MAX), part(100, SAT_MIN, SAT_MAX), format!("{}%", self.sat)),
+            3 => {
+                let v = sat_stop(self.sat) as i32 - SAT_ZERO as i32;
+                let text = if v > 0 { format!("+{v}") } else { v.to_string() };
+                (part(v, -(SAT_ZERO as i32), SAT_ZERO as i32), 0.5, text)
+            }
+            _ => {
+                let v = self.contrast;
+                let text = if v > 0 { format!("+{v}") } else { v.to_string() };
+                (part(v, -CONTRAST_MAX, CONTRAST_MAX), 0.5, text)
+            }
         }
     }
 
@@ -149,7 +168,11 @@ impl Console {
                 let c = &mut self.curve[self.step - 1];
                 *c = (*c + dir * CURVE_STEP).clamp(-100, 100);
             }
-            Some(_) => self.sat = (self.sat + dir * SAT_STEP).clamp(SAT_MIN, SAT_MAX),
+            Some(3) => {
+                let i = (sat_stop(self.sat) as i32 + dir).clamp(0, SAT_STOPS.len() as i32 - 1);
+                self.sat = SAT_STOPS[i as usize];
+            }
+            Some(_) => self.contrast = (self.contrast + dir * CONTRAST_STEP).clamp(-CONTRAST_MAX, CONTRAST_MAX),
             None => {}
         }
     }
@@ -160,7 +183,8 @@ impl Console {
             Some(0) => self.warm = 0,
             Some(1) => self.tint = 0,
             Some(2) => self.curve[self.step - 1] = 0,
-            Some(_) => self.sat = 100,
+            Some(3) => self.sat = 100,
+            Some(_) => self.contrast = 0,
             None => {}
         }
     }
@@ -202,7 +226,7 @@ impl Default for Calibrate {
         Calibrate {
             booted: false,
             saturation: saturation_default(),
-            on_panel: false,
+            shown: Calibration { saturation: 1.0, ..Default::default() },
             console: None,
             off: false,
         }
@@ -224,48 +248,14 @@ impl Calibrate {
         let bare = Calibration { saturation: 1.0, ..Default::default() };
         let cal = if self.off && self.console.is_none() { &bare } else { cal };
         self.saturation = cal.saturation;
-        let table_neutral = Calibration {
-            saturation: saturation_default(),
-            ..*cal
-        }
-        .is_neutral();
-        if table_neutral && !self.on_panel {
-            return;
-        }
-        self.on_panel = true;
-        if let Err(e) = calibration::apply(cal) {
-            eprintln!("slot: display calibration: {e}");
-        }
+        self.shown = *cal;
     }
 
-    /// Before the deep sleep: the engine's gamma off, so the display wakes as BaseOS left it.
-    pub fn sleep(&mut self) {
-        if !self.on_panel {
-            return;
-        }
-        match calibration::release() {
-            Ok(()) => eprintln!("slot: display calibration: off for the deep sleep"),
-            Err(e) => eprintln!("slot: display calibration: could not switch off: {e}"),
-        }
+    /// White point, curves and contrast for the final blit (its saturation is `saturation()`).
+    pub fn shown(&self) -> &Calibration {
+        &self.shown
     }
 
-    /// Back from the deep sleep: the saved calibration (or the sliders) on the panel again.
-    pub fn wake(&mut self, root: Option<&Path>) {
-        if !self.on_panel {
-            return;
-        }
-        let cal = match self.console {
-            Some(console) => console.calibration(),
-            None => match root {
-                Some(root) => calibration::load(root),
-                None => return,
-            },
-        };
-        self.put(&cal);
-        eprintln!("slot: display calibration: back after the deep sleep");
-    }
-
-    /// The test picture on screen, if any.
     pub fn picture(&self) -> Option<Picture> {
         self.console.as_ref().map(Console::picture)
     }
@@ -330,18 +320,30 @@ impl Calibrate {
         if !self.booted {
             self.booted = true;
             let saved = calibration::load(root);
+            // Builds before 2026-11-18 put the calibration in the display engine's own table,
+            // which a restart of slot alone (an update) leaves switched on: off with it, or the
+            // colours would be calibrated twice.
+            if !(Calibration { saturation: saturation_default(), ..saved }).is_neutral() {
+                if let Err(e) = calibration::release() {
+                    eprintln!("slot: display calibration: old table not switched off: {e}");
+                }
+            }
             self.put(&saved);
         }
     }
 
-    pub fn draw(&self, out: &mut Vec<Draw>) {
+    pub fn draw(&self, out: &mut Vec<Draw>, now: u64) {
         let Some(picture) = self.picture() else { return };
         let (w, h) = (OUT_W as f32, OUT_H as f32);
-        // On Screen Calibration the picture's own parts sit between the bars, which may show.
+        // On Screen Calibration the picture's own parts sit between the bars while they show,
+        // and spread over the whole screen as the bars fade away.
         let (y0, rh) = match &self.console {
             Some(c) => {
+                let bars = c.bars(now);
                 let top = slot_ui::cal_panel_top(sliders(c.step).len());
-                (slot_ui::CAL_TOP, top - slot_ui::CAL_TOP)
+                let y0 = slot_ui::CAL_TOP * bars;
+                let bottom = top * bars + h * (1.0 - bars);
+                (y0, bottom - y0)
             }
             None => (0.0, h),
         };
@@ -353,7 +355,14 @@ impl Calibrate {
             colour: [c[0], c[1], c[2], 1.0],
         };
         match picture {
-            Picture::White => out.push(rect(0.0, 0.0, w, h, [1.0; 3])),
+            Picture::White => {
+                out.push(rect(0.0, 0.0, w, h, [1.0; 3]));
+                // Greys under the white: a colour cast shows best in grey.
+                let cw = (w / 3.0).ceil();
+                for (i, v) in [0.25, 0.5, 0.75].iter().enumerate() {
+                    out.push(rect(i as f32 * cw, (y0 + rh * 0.7).round(), cw, (rh * 0.3).round(), [*v; 3]));
+                }
+            }
             Picture::Colours => {
                 out.push(rect(0.0, 0.0, w, h, [0.0; 3]));
                 let bars = [
@@ -367,13 +376,22 @@ impl Calibrate {
                 ];
                 let bw = (w / bars.len() as f32).ceil();
                 for (i, c) in bars.iter().enumerate() {
-                    out.push(rect(i as f32 * bw, y0, bw, rh * 0.7, *c));
+                    out.push(rect(i as f32 * bw, y0, bw, rh * 0.55, *c));
                 }
-                // Skin and grey steps: where too much colour shows first.
                 let ramp = [[0.96, 0.8, 0.68], [0.8, 0.6, 0.48], [0.6, 0.6, 0.6], [0.4, 0.4, 0.4], [0.2, 0.2, 0.2], [0.05, 0.05, 0.05]];
                 let rw = (w / ramp.len() as f32).ceil();
                 for (i, c) in ramp.iter().enumerate() {
-                    out.push(rect(i as f32 * rw, y0 + rh * 0.7, rw, rh * 0.3, *c));
+                    out.push(rect(i as f32 * rw, y0 + rh * 0.55, rw, rh * 0.15, *c));
+                }
+                // Steps just above black and just below white: each should stand apart from
+                // its neighbour. Run together, the curve or the panel loses the shadows or
+                // the highlights.
+                for (row, steps) in [NEAR_BLACK, NEAR_WHITE].iter().enumerate() {
+                    let sw = (w / steps.len() as f32).ceil();
+                    let y = y0 + rh * (0.7 + 0.15 * row as f32);
+                    for (i, v) in steps.iter().enumerate() {
+                        out.push(rect(i as f32 * sw, y, sw, rh * 0.15, [*v as f32 / 255.0; 3]));
+                    }
                 }
             }
             Picture::Lines(ch) => {
@@ -387,26 +405,36 @@ impl Calibrate {
                     c
                 };
                 out.push(rect(0.0, 0.0, w, h, tone(0.0)));
-                // Every other line full on: half the light of full, on any panel.
-                for y in (0..OUT_H).step_by(2) {
-                    out.push(rect(0.0, y as f32, w, 1.0, tone(1.0)));
+                // Three columns, a quarter, half and three quarters of the rows lit, each
+                // round a solid patch that matches the lines in brightness when the curve
+                // is right at that level.
+                for (i, (lit, period)) in LEVELS.iter().enumerate() {
+                    let x0 = (w * i as f32 / 3.0).round();
+                    let cw = (w * (i + 1) as f32 / 3.0).round() - x0;
+                    for y in (0..OUT_H).step_by(*period as usize) {
+                        out.push(rect(x0, y as f32, cw, *lit as f32, tone(1.0)));
+                    }
+                    let level = *lit as f32 / *period as f32;
+                    let (pw, ph) = ((cw * 0.6).round(), (h * 0.36).round());
+                    out.push(rect(
+                        (x0 + (cw - pw) / 2.0).round(),
+                        (y0 + (rh - ph) / 2.0).round(),
+                        pw,
+                        ph,
+                        tone(level.powf(1.0 / TARGET_GAMMA)),
+                    ));
                 }
-                // Half the light on a panel with the standard 2.2 curve.
-                let (pw, ph) = ((w * 0.36).round(), (h * 0.36).round());
-                out.push(rect(
-                    ((w - pw) / 2.0).round(),
-                    (y0 + (rh - ph) / 2.0).round(),
-                    pw,
-                    ph,
-                    tone(MID),
-                ));
             }
         }
     }
 }
 
-/// 0.5 ^ (1 / 2.2), rounded to the 8-bit step the panel gets.
-const MID: f32 = 186.0 / 255.0;
+/// The curve the Lines pictures aim at: half the light reads as 186 of 255.
+const TARGET_GAMMA: f32 = 2.2;
+/// Lit rows out of every so many: a quarter, half, three quarters.
+const LEVELS: [(u32, u32); 3] = [(1, 4), (1, 2), (3, 4)];
+const NEAR_BLACK: [u8; 8] = [0, 3, 6, 10, 14, 19, 24, 30];
+const NEAR_WHITE: [u8; 8] = [225, 230, 235, 240, 244, 248, 252, 255];
 
 #[cfg(test)]
 mod tests {
@@ -441,24 +469,24 @@ mod tests {
     #[test]
     fn a_saved_saturation_reads_against_the_standard() {
         let c = Console::from(&Calibration { saturation: 1.6, ..Default::default() }, 0);
-        assert_eq!(c.sat, 114);
-        assert!((c.calibration().saturation - 1.6).abs() < 0.01);
+        // 1.6 is 160% of the standard: the nearest stop, 156%.
+        assert_eq!(c.sat, 156);
     }
 
     #[test]
-    fn the_saturation_slider_reaches_the_cards_range() {
+    fn the_saturation_slider_has_nine_stops_in_the_cards_range() {
         let mut c = Console::from(&Calibration::default(), 0);
         c.step = 5;
         for _ in 0..100 {
             c.nudge(1);
         }
-        assert_eq!(c.sat, 180);
-        assert!((c.calibration().saturation - saturation_range().1).abs() < 1e-3);
+        assert_eq!(c.sat, 250);
+        assert!(c.calibration().saturation <= saturation_range().1 + 1e-3);
         for _ in 0..100 {
             c.nudge(-1);
         }
-        assert_eq!(c.sat, 60);
-        assert!((c.calibration().saturation - saturation_range().0).abs() < 1e-3);
+        assert_eq!(c.sat, 40);
+        assert!(c.calibration().saturation >= saturation_range().0 - 1e-3);
     }
 
     #[test]

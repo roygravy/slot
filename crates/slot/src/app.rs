@@ -514,7 +514,7 @@ pub struct App {
     cheats: Vec<crate::cheats::Cheat>,
     cheats_for: Option<(Platform, String)>,
     cheat_page: Option<(usize, usize)>,
-    /// The achievements screens: chosen card, and whether its detail is open (test build).
+    /// The achievements screens: chosen card, and whether its detail is open.
     ra_view: Option<(usize, usize, bool)>,
     ra_tex: Option<(TexId, u32, u32)>,
     ra_dirty: bool,
@@ -1638,6 +1638,10 @@ impl App {
         let now = self.now() as u64;
         self.calibrate.open_console(self.root.as_deref(), now);
         self.phase = Phase::ScreenColors;
+        // The test pictures are judged at the panel's full light; B gives the own level back.
+        if let Some(power) = &mut self.power {
+            power.set_backlight(BRIGHTNESS_MAX + 1);
+        }
     }
 
     /// A on Screen Calibration: the colours kept on the card, the screen stays open.
@@ -1657,6 +1661,9 @@ impl App {
         self.phase = Phase::QuickMenu {
             row: QuickRow::ScreenColors,
         };
+        if let Some(power) = &mut self.power {
+            power.set_backlight(self.state.brightness + 1);
+        }
     }
 
     pub fn set_buttons_faces(&mut self, faces: slot_ui::ButtonsFaces) {
@@ -3682,6 +3689,10 @@ impl App {
             }
             return;
         }
+        // MENU outside a game goes straight back to the shelf, from any menu page (Roy 2026-11-17).
+        if action == Action::QuickMenu && self.menu_home() {
+            return;
+        }
         if self.shots.is_some() {
             return self.shots_input(action);
         }
@@ -3879,6 +3890,31 @@ impl App {
         }
     }
 
+    /// MENU on a main-menu page (General, Wi-Fi, Manager, Achievements, About, Buttons, Screen
+    /// Calibration, the clock, a list or keyboard page): everything closes and the shelf shows.
+    /// In a game, and on the shelf itself, MENU keeps its own job.
+    fn menu_home(&mut self) -> bool {
+        let in_menu = match &self.phase {
+            Phase::QuickMenu { .. } | Phase::About | Phase::Buttons { .. } | Phase::ScreenColors => true,
+            Phase::SetClock { from_menu, .. } => *from_menu,
+            _ => false,
+        };
+        if !in_menu || self.game_menu.is_some() || self.in_game_menu.is_some() {
+            return false;
+        }
+        if matches!(self.phase, Phase::ScreenColors) {
+            self.close_screen_colors();
+        }
+        // A list page stops what it runs (Manager, WPS) as on B.
+        if self.list_page.as_ref().is_some_and(|p| !p.closing()) {
+            self.list_page_input(Action::QuickMenu);
+        }
+        self.shots = None;
+        self.shot_pics.clear();
+        self.phase = Phase::Shelf;
+        true
+    }
+
     fn open_quick_menu(&mut self) {
         self.phase = Phase::QuickMenu {
             row: QuickRow::MAIN[0],
@@ -4056,7 +4092,7 @@ impl App {
         }
     }
 
-    /// RetroAchievements counts for the playing game (test build only).
+    /// RetroAchievements counts for the playing game.
     fn ra_on() -> bool {
         #[cfg(feature = "retroachievements")]
         {
@@ -4194,7 +4230,7 @@ impl App {
         self.ra_dirty = true;
     }
 
-    /// One step on the achievements pages (test build); 'x' only asks whether there is any.
+    /// One step on the achievements pages; 'x' only asks whether there is any.
     fn ra_step(page: usize, sel: usize, dir: char) -> (usize, usize) {
         #[cfg(feature = "retroachievements")]
         {
@@ -5152,6 +5188,11 @@ impl App {
     }
 
     /// The whole screen's colour, set in Screen Calibration.
+    /// Screen Calibration's white point, curves and contrast, for the final blit.
+    pub fn screen_calibration(&self) -> &slot_gfx::Calibration {
+        self.calibrate.shown()
+    }
+
     pub fn screen_saturation(&self) -> f32 {
         // The Recents memory takes most of the colour out of the whole screen.
         self.calibrate.saturation() * (1.0 - ease(self.memory) * (1.0 - MEMORY_COLOUR))
@@ -6073,7 +6114,7 @@ impl App {
         slot_ui::set_shadow_ground(ground.map(|(_, g)| g.clone()), self.canvas().w);
         // Screen Calibration's test picture covers everything.
         if self.calibrate.picture().is_some() {
-            self.calibrate.draw(out);
+            self.calibrate.draw(out, self.now() as u64);
             self.draw_screen_colors(out);
             // The black top bar over it: "saved" after A, the volume bar.
             self.hud.draw(self.canvas(), self.now(), out);
@@ -7424,11 +7465,9 @@ impl App {
         let Some(power) = &mut self.power else {
             return;
         };
-        self.calibrate.sleep();
         self.radio.deep_sleep(true);
         let woke = power.deep_sleep(BATTERY_CRITICAL);
         self.radio.deep_sleep(false);
-        self.calibrate.wake(self.root.as_deref());
         match woke {
             None => {}
             Some(Woke::LowBattery) => self.begin_power_off(),
@@ -7630,6 +7669,18 @@ impl App {
             Action::GbaDown(Btn::A) => Press::Keep,
             Action::GbaDown(Btn::Y) => Press::Remove,
             Action::GbaDown(Btn::X) => Press::NewCart,
+            // START from the cart studio goes to the slot studio, SELECT from the slot studio to
+            // the cart studio, as on the shelf (Roy 2026-11-17); the same button again closes it.
+            Action::GbaDown(Btn::Start)
+                if self.shell_picker.as_ref().and_then(|p| p.slot_mode()) == Some(false) =>
+            {
+                Press::TabRight
+            }
+            Action::GbaDown(Btn::Select)
+                if self.shell_picker.as_ref().and_then(|p| p.slot_mode()) == Some(true) =>
+            {
+                Press::TabLeft
+            }
             Action::GbaDown(Btn::B) | Action::GbaDown(Btn::Select) | Action::GbaDown(Btn::Start) => {
                 Press::Back
             }

@@ -1,4 +1,4 @@
-//! RetroAchievements on the emulator thread (test build, feature `retroachievements`).
+//! RetroAchievements on the emulator thread (feature `retroachievements`, part of every device build).
 //!
 //! The session starts a game by leaving a [`Setup`]; the emulator thread takes it, runs a
 //! [`Runner`] beside the core and publishes what the screens show in [`STATUS`].

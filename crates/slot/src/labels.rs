@@ -22,7 +22,9 @@ pub(crate) struct Labels {
 impl Labels {
     pub fn spawn(root: PathBuf, carts: Vec<Cart>) -> Self {
         // A label the player took off stays off, and a game looked for once and not found
-        // is not looked for again at every start; Y in the studio still searches for it.
+        // is not looked for again at every start; Y in the studio still searches for it, and
+        // after a month it is looked for once more.
+        slot_store::expire_no_labels(&root, std::time::SystemTime::now());
         let carts: Vec<Cart> = carts
             .into_iter()
             .filter(|c| !slot_store::label_removed(&root, c.platform, &c.stem))

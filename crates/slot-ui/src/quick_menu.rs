@@ -8,7 +8,7 @@ use crate::theme::{self, Ink};
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum QuickRow {
-    /// RetroAchievements: the big button on top of the in-game menu (test build).
+    /// RetroAchievements: the big button on top of the in-game menu.
     Achievements,
     /// Game Settings' Gameplay tab: RetroAchievements on or off (main menu only).
     RaToggle,
